@@ -66,12 +66,19 @@
       '.race-tabs{display:flex;gap:6px;flex-wrap:wrap}',
       '.race-tab{padding:6px 14px;border:1.5px solid #e2e8f0;border-radius:20px;background:#fff;font-size:13px;font-weight:700;cursor:pointer;color:#6b7280;font-family:inherit;transition:all .18s}',
       '.race-tab:hover{border-color:#1a56a0;color:#1a56a0}.race-tab.active{background:#1a56a0;color:#fff;border-color:#1a56a0}',
-      '.race-header-card{border-left:5px solid #1a56a0}',
-      '.race-title-row{display:flex;align-items:center;gap:16px;margin-bottom:16px}',
-      '.race-badge{background:#1a56a0;color:#fff;font-size:20px;font-weight:800;width:58px;height:58px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;letter-spacing:-1px}',
-      '.race-name{font-size:18px;font-weight:700;margin-bottom:4px}',
-      '.race-meta{display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:#6b7280}',
+      '.race-header-card{border-left:5px solid #1a56a0;padding-bottom:0!important}',
+      '.race-title-row{display:flex;align-items:flex-start;gap:14px;margin-bottom:12px}',
+      '.race-badge{background:linear-gradient(135deg,#1a56a0,#1565c0);color:#fff;font-size:17px;font-weight:800;min-width:52px;height:52px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;letter-spacing:-.5px;box-shadow:0 2px 8px rgba(26,86,160,.3);}',
+      '.race-name{font-size:20px;font-weight:800;margin-bottom:5px;color:#1a1a2e;line-height:1.2}',
+      '.race-meta{display:flex;gap:6px;flex-wrap:wrap;font-size:12px;color:#6b7280}',
       '.race-meta span{background:#f4f6fa;padding:2px 8px;border-radius:20px;font-weight:500;display:flex;align-items:center;gap:4px}',
+      '.race-quick-stats{display:flex;border-top:1px solid #e8eef5;margin:0 -22px;padding:8px 10px 10px;}',
+      '.rqs-item{flex:1;display:flex;flex-direction:column;align-items:center;padding:3px 6px;border-right:1px solid #f0f4fa;min-width:0;}',
+      '.rqs-item:last-child{border-right:none}',
+      '.rqs-label{font-size:9px;color:#94a3b8;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-bottom:2px;white-space:nowrap;}',
+      '.rqs-val{font-size:13px;font-weight:800;color:#1a1a2e;font-family:monospace;white-space:nowrap;}',
+      '.rqs-val.rqs-empty{color:#d1d5db;font-size:11px;font-weight:400}',
+      '.rqs-val.rqs-pace-high{color:#dc2626}.rqs-val.rqs-pace-mid{color:#d97706}.rqs-val.rqs-pace-slow{color:#2563eb}',
       '.race-class-badge{font-weight:700 !important;font-size:0.75rem !important;padding:2px 8px !important;border-radius:12px !important;display:inline-block}',
       '.class-gr{background:#b8860b !important;color:#fff !important;border:1px solid #996b00 !important}',
       '.class-a{background:#1d4ed8 !important;color:#fff !important;border:1px solid #1e40af !important}',
@@ -415,6 +422,15 @@
       /* 非管理者バナー */
       '.public-mode-bar{display:none;position:sticky;top:60px;z-index:99;background:linear-gradient(90deg,#fef3c7,#fef9ee);border-bottom:2px solid #fbbf24;padding:7px 16px;font-size:12px;color:#92400e;font-weight:600;align-items:center;gap:8px}',
       'body.public-mode .public-mode-bar{display:flex}',
+      /* 案4: 閲覧モードではペース入力エリアを完全非表示 */
+      'body.public-mode .admin-input-wrap{display:none!important}',
+      /* 管理者モード: ペース入力エリア折りたたみ */
+      '.admin-input-wrap{margin-bottom:4px;}',
+      '.admin-input-toggle-header{display:flex;align-items:center;justify-content:space-between;padding:9px 14px;background:#f0f4fb;border:1.5px solid #dbe4f0;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;color:#1a56a0;user-select:none;margin-bottom:6px;}',
+      '.admin-input-toggle-header:hover{background:#e6eef9;}',
+      '.admin-input-toggle-icon{font-size:13px;transition:transform .22s;display:inline-block;}',
+      '.admin-input-wrap.collapsed .admin-input-toggle-icon{transform:rotate(-90deg);}',
+      '.admin-input-wrap.collapsed .admin-input-body{display:none;}',
       /* === A: サイドバーレイアウト === */
       '#race-layout-wrap{display:block;}',
       '#race-tabs-section.sidebar-mode{display:flex;align-items:center;padding:5px 10px;background:#1a56a0;border-radius:10px 10px 0 0;box-shadow:none;width:100%;box-sizing:border-box;margin-bottom:0;}',
@@ -425,18 +441,41 @@
       '.race-tab-sub{display:inline;font-size:8px;font-weight:400;opacity:.75;margin-left:2px;letter-spacing:0;}',
       '#race-content-area.sidebar-mode{width:100%;}',
       /* === C: カードビュー === */
-      '.horse-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:10px;padding:12px 14px;}',
-      '.horse-card{background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;padding:10px 12px;transition:box-shadow .15s;}',
-      '.horse-card:hover{box-shadow:0 4px 14px rgba(0,0,0,.1);}',
-      '.horse-card-name{font-size:13px;font-weight:700;color:#1a1a2e;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
-      '.horse-card-top{display:flex;align-items:center;gap:5px;margin-bottom:4px;}',
-      '.horse-card-si{font-size:22px;font-weight:800;text-align:center;padding:4px 0;border-radius:6px;margin-bottom:5px;font-family:monospace;letter-spacing:-1px;}',
-      '.horse-card-bar-wrap{height:5px;background:#f0f0f0;border-radius:3px;margin-bottom:7px;overflow:hidden;}',
+      '.horse-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;padding:14px 16px;}',
+      '.horse-card{background:#fff;border:1.5px solid #e2e8f0;border-radius:12px;padding:12px 13px 10px;transition:box-shadow .18s,transform .18s;position:relative;overflow:hidden;}',
+      '.horse-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:#d1d5db;border-radius:12px 0 0 12px;}',
+      '.horse-card.hc-r1::before{background:#dc2626}.horse-card.hc-r2::before{background:#2563eb}.horse-card.hc-r3::before{background:#d97706}.horse-card.hc-r4::before{background:#9ca3af}',
+      '.horse-card:hover{box-shadow:0 8px 24px rgba(0,0,0,.13);transform:translateY(-2px);}',
+      '.horse-card-top{display:flex;align-items:center;gap:5px;margin-bottom:5px;}',
+      '.horse-card-waku{width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0;}',
+      '.horse-card-mark{font-size:16px;font-weight:900;flex-shrink:0;}',
+      '.horse-card-name{font-size:13px;font-weight:700;color:#1a1a2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;}',
+      '.horse-card-badges{display:flex;align-items:center;gap:4px;margin-bottom:7px;flex-wrap:wrap;}',
+      '.horse-card-ninki{font-size:10px;color:#6b7280;background:#f4f6fa;padding:1px 5px;border-radius:10px;}',
+      '.hc-pace{font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;}',
+      '.hc-pace-high{background:#fee2e2;color:#dc2626}.hc-pace-mid{background:#fef3c7;color:#92400e}.hc-pace-slow{background:#dbeafe;color:#1e40af}',
+      '.horse-card-si{font-size:24px;font-weight:800;text-align:center;padding:8px 4px;border-radius:8px;margin-bottom:6px;font-family:monospace;letter-spacing:-1px;position:relative;}',
+      '.horse-card-si-mark{position:absolute;top:4px;right:8px;font-size:12px;opacity:.65;}',
+      '.horse-card-bar-wrap{height:5px;background:#f0f0f0;border-radius:3px;margin-bottom:8px;overflow:hidden;}',
       '.horse-card-bar-fill{height:100%;border-radius:3px;transition:width .4s;}',
-      '.horse-card-stats{display:flex;gap:8px;justify-content:space-around;}',
+      '.horse-card-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;margin-bottom:7px;}',
       '.horse-card-stat{display:flex;flex-direction:column;align-items:center;gap:1px;}',
-      '.horse-card-stat-label{font-size:9px;color:#9ca3af;}',
+      '.horse-card-stat-label{font-size:8px;color:#9ca3af;letter-spacing:.02em;}',
       '.horse-card-stat-val{font-size:11px;font-weight:700;color:#374151;}',
+      '.horse-card-footer{display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#6b7280;border-top:1px solid #f0f4fa;padding-top:6px;margin-top:2px;}',
+      '.hc-kinryo{background:#f0f4fa;padding:1px 5px;border-radius:10px;font-weight:600;}',
+      /* === ペース分布チャート === */
+      '.pace-dist-wrap{border:1.5px solid #e2e8f0;border-radius:8px;padding:10px 14px;background:#fafafa;margin-top:12px;}',
+      '.pace-dist-title{font-size:11px;font-weight:700;color:#374151;margin-bottom:8px;display:flex;align-items:center;gap:6px;}',
+      '.pace-dist-bar{height:22px;border-radius:6px;overflow:hidden;display:flex;margin-bottom:10px;background:#f0f0f0;}',
+      '.pace-dist-seg{height:100%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;transition:width .5s ease;min-width:0;overflow:hidden;white-space:nowrap;}',
+      '.pd-seg-high{background:#dc2626}.pd-seg-mid{background:#d97706}.pd-seg-slow{background:#2563eb}.pd-seg-none{background:#cbd5e1;color:#64748b;}',
+      '.pace-dist-legend{display:flex;flex-direction:column;gap:6px;}',
+      '.pace-dist-item{display:flex;align-items:center;gap:6px;font-size:11px;line-height:1.5;}',
+      '.pace-dist-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}',
+      '.pace-dist-group-label{font-weight:700;min-width:52px;flex-shrink:0;}',
+      '.pace-dist-nums{display:flex;flex-wrap:wrap;gap:3px;}',
+      '.pace-dist-unum{width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;}',
       /* === D: サマリーバー === */
       '#race-summary-bar{position:fixed;bottom:0;left:0;right:0;z-index:90;background:#1a3a6e;color:#fff;display:none;align-items:center;height:40px;box-shadow:0 -2px 8px rgba(0,0,0,.25);}',
       '#race-summary-bar.visible{display:flex;}',
@@ -481,134 +520,184 @@
   </script>
 <style id="dark-mode-css">
 /* ===== DARK MODE ===== */
-body.dark-mode{background:#0f172a!important;color:#e2e8f0!important}
+body.dark-mode{background:#0a0f1e!important;color:#e2e8f0!important}
 
 /* カード・パネル */
 body.dark-mode .search-card,body.dark-mode .race-header-card,body.dark-mode .saved-card,
 body.dark-mode .loading-area,body.dark-mode .progress-section,body.dark-mode .race-tabs-section,
 body.dark-mode .error-area,body.dark-mode .ana-chart-card,body.dark-mode .ana-chart-card--wide,
 body.dark-mode .deban-section,body.dark-mode .saved-month-group{
-  background:#1e293b!important;border-color:#2d3f55!important;color:#e2e8f0!important;
-  box-shadow:0 2px 12px rgba(0,0,0,.45)!important}
-body.dark-mode .saved-month-header{background:#162032!important;color:#93c5fd!important}
+  background:#111827!important;border-color:#1e3048!important;color:#e2e8f0!important;
+  box-shadow:0 2px 16px rgba(0,0,0,.6)!important}
+body.dark-mode .saved-month-header{background:#0d1826!important;color:#38bdf8!important}
+
+/* セクションタイトル・アクセント */
+body.dark-mode .section-title{color:#38bdf8!important}
+body.dark-mode .race-header-card{border-left:4px solid #1e88e5!important}
+/* クイックスタッツ帯 */
+body.dark-mode .race-quick-stats{border-top-color:#1e3048!important}
+body.dark-mode .rqs-item{border-right-color:#1e3048!important}
+body.dark-mode .rqs-label{color:#4a5e76!important}
+body.dark-mode .rqs-val{color:#c8d8ec!important}
+body.dark-mode .rqs-val.rqs-empty{color:#1e3048!important}
+/* race-badge ダーク（グラデ維持） */
+body.dark-mode .race-badge{box-shadow:0 2px 8px rgba(0,0,0,.5)!important}
 
 /* フォーム・入力要素 */
 body.dark-mode .form-input,body.dark-mode input[type=text],body.dark-mode input[type=date],
 body.dark-mode input[type=password],body.dark-mode input[type=number],
 body.dark-mode select,body.dark-mode textarea,
 body.dark-mode .pace-btn,body.dark-mode .pace-select,body.dark-mode .pos-select{
-  background:#1a2540!important;color:#e2e8f0!important;border-color:#2d3f55!important}
-body.dark-mode input::placeholder,body.dark-mode textarea::placeholder{color:#64748b!important}
+  background:#0d1826!important;color:#c8d8ec!important;border-color:#1e3048!important}
+body.dark-mode input::placeholder,body.dark-mode textarea::placeholder{color:#4a5e76!important}
 body.dark-mode .pace-input--agari{color:#fb923c!important;background:#2a1a10!important;border-color:#7c4020!important}
 
 /* ボタン */
-body.dark-mode .btn-secondary{background:#1e293b!important;color:#c8d5e8!important;border-color:#2d3f55!important}
-body.dark-mode .btn-secondary:hover{background:#253448!important}
-body.dark-mode .btn-restore{background:#1a2a4a!important;color:#93c5fd!important;border-color:#2d4060!important}
+body.dark-mode .btn-secondary{background:#111827!important;color:#c8d5e8!important;border-color:#1e3048!important}
+body.dark-mode .btn-secondary:hover{background:#1a2a40!important}
+body.dark-mode .btn-restore{background:#0d1a2e!important;color:#7dd3fc!important;border-color:#1e3560!important}
 body.dark-mode .btn-restore:hover{background:#1a56a0!important;color:#fff!important}
-body.dark-mode .btn-analyze{background:#1a1a35!important;color:#c4b5fd!important;border-color:#3d2a60!important}
+body.dark-mode .btn-analyze{background:#0f0e20!important;color:#c4b5fd!important;border-color:#3d2a60!important}
 body.dark-mode .btn-analyze:hover{background:#7c3aed!important;color:#fff!important}
-body.dark-mode .btn-reload{background:#1a2540!important;color:#93c5fd!important;border-color:#2d3f55!important}
+body.dark-mode .btn-reload{background:#0d1826!important;color:#7dd3fc!important;border-color:#1e3048!important}
 body.dark-mode .btn-reload:hover{background:#1a56a0!important;color:#fff!important}
 
 /* レースタブ */
-body.dark-mode .race-tab{background:#1e293b!important;color:#8fa3be!important;border-color:#2d3f55!important}
-body.dark-mode .race-tab:hover{border-color:#3b82f6!important;color:#93c5fd!important}
+body.dark-mode .race-tab{background:#0d1826!important;color:#8fa3be!important;border-color:#1e3048!important}
+body.dark-mode .race-tab:hover{border-color:#38bdf8!important;color:#7dd3fc!important}
 body.dark-mode .race-tab.active{background:#1a56a0!important;color:#fff!important;border-color:#1a56a0!important}
-/* サイドバータブ（ダークモードでも青背景を維持）*/
-body.dark-mode #race-tabs-section.sidebar-mode .race-tab{background:rgba(255,255,255,.07)!important;color:rgba(255,255,255,.65)!important;border-color:transparent!important}
-body.dark-mode #race-tabs-section.sidebar-mode .race-tab:hover{background:rgba(255,255,255,.18)!important;color:#fff!important;border-color:transparent!important}
-body.dark-mode #race-tabs-section.sidebar-mode .race-tab.active{background:#fff!important;color:#1a56a0!important;border-color:transparent!important}
+/* 横タブバー（sidebar-mode）強化 */
+body.dark-mode #race-tabs-section.sidebar-mode{background:linear-gradient(135deg,#0d2a5a,#0a1e42)!important;box-shadow:0 3px 10px rgba(0,0,0,.5)!important}
+body.dark-mode #race-tabs-section.sidebar-mode .race-tab{background:rgba(255,255,255,.06)!important;color:rgba(255,255,255,.6)!important;border-color:transparent!important}
+body.dark-mode #race-tabs-section.sidebar-mode .race-tab:hover{background:rgba(255,255,255,.15)!important;color:#fff!important;border-color:transparent!important}
+body.dark-mode #race-tabs-section.sidebar-mode .race-tab.active{background:rgba(255,255,255,.95)!important;color:#0d2a5a!important;border-color:transparent!important;box-shadow:0 2px 6px rgba(0,0,0,.3)!important}
+
 /* カードビュー */
-body.dark-mode .horse-card{background:#1e293b!important;border-color:#2d3f55!important}
+body.dark-mode .horse-card{background:#111827!important;border-color:#1e3048!important}
+body.dark-mode .horse-card::before{opacity:.7}
 body.dark-mode .horse-card-name{color:#e2e8f0!important}
 body.dark-mode .horse-card-stat-val{color:#cbd5e1!important}
-body.dark-mode .horse-card-bar-wrap{background:#0f172a!important}
+body.dark-mode .horse-card-bar-wrap{background:#0a0f1e!important}
+body.dark-mode .horse-card-badges{color:#94a3b8!important}
+body.dark-mode .horse-card-ninki{background:#0d1826!important;color:#7dd3fc!important}
+body.dark-mode .hc-pace-high{background:#2d0000!important;color:#f87171!important}
+body.dark-mode .hc-pace-mid{background:#2a2000!important;color:#fbbf24!important}
+body.dark-mode .hc-pace-slow{background:#00152d!important;color:#60a5fa!important}
+body.dark-mode .horse-card-footer{border-top-color:#1e3048!important;color:#4a5e76!important}
+body.dark-mode .hc-kinryo{background:#0d1826!important;color:#8fa3be!important}
+
+/* 管理者入力エリアトグル */
+body.dark-mode .admin-input-toggle-header{background:#0f1b2c!important;border-color:#1e3048!important;color:#7dd3fc!important}
+body.dark-mode .admin-input-toggle-header:hover{background:#1a3a5f!important}
+
 /* 折りたたみパネル */
-body.dark-mode .collapsible-panel{background:#1e293b!important;border-color:#2d3f55!important;box-shadow:0 1px 4px rgba(0,0,0,.3)!important}
-body.dark-mode .collapse-btn{background:#1a2740!important;color:#e2e8f0!important;border-left-color:#3b82f6!important}
-body.dark-mode .collapse-btn:hover{background:#1e3555!important}
-body.dark-mode .collapse-icon{color:#94a3b8!important}
-body.dark-mode .collapse-body{color:#cbd5e1!important}
+body.dark-mode .collapsible-panel{background:#111827!important;border-color:#1e3048!important;box-shadow:0 1px 4px rgba(0,0,0,.4)!important}
+body.dark-mode .collapse-btn{background:#0d1826!important;color:#e2e8f0!important;border-left-color:#38bdf8!important}
+body.dark-mode .collapse-btn:hover{background:#1a2a40!important}
+body.dark-mode .collapse-icon{color:#4a5e76!important}
+body.dark-mode .collapse-body{color:#c8d8ec!important}
+
 /* スティッキー列ダークモード */
-body.dark-mode .deban-table td.col-mukae,body.dark-mode .deban-table td.col-straight{background:#1e293b!important}
+body.dark-mode .deban-table td.col-mukae,body.dark-mode .deban-table td.col-straight{background:#111827!important}
+
 /* 分割パネル */
-body.dark-mode .split-right-panel{background:#111827!important;border-color:#1e293b!important}
-body.dark-mode .split-right-panel h4{border-color:#1e293b!important;color:#64748b!important}
-body.dark-mode .split-horse-row{border-color:#1e293b!important}
+body.dark-mode .split-right-panel{background:#0d1826!important;border-color:#111827!important}
+body.dark-mode .split-right-panel h4{border-color:#111827!important;color:#4a5e76!important}
+body.dark-mode .split-horse-row{border-color:#111827!important}
 body.dark-mode .split-horse-name{color:#e2e8f0!important}
 
 /* テーブル全般 */
-body.dark-mode table{border-color:#2d3f55!important}
-body.dark-mode th{background:#162032!important;color:#8fa3be!important;border-color:#2d3f55!important}
-body.dark-mode td{border-color:#2d3f55!important;color:#e2e8f0!important}
+body.dark-mode table{border-color:#1e3048!important}
+/* thead: 深ネイビー＋グラデ＋シアン文字 */
+body.dark-mode th{background:#0d1a2e!important;color:#7dd3fc!important;border-color:#1e3048!important}
+body.dark-mode .deban-table thead th{background:linear-gradient(180deg,#0f2650,#0d1a2e)!important;color:#7dd3fc!important;border-color:#1e3560!important}
+body.dark-mode .deban-table thead th.col-corner{color:#7dd3fc!important}
+body.dark-mode td{border-color:#1e3048!important;color:#d4dfe8!important}
+/* tbody 偶数行に微妙なゼブラ */
+body.dark-mode .deban-table tbody tr:nth-child(even):not(.horse-comment-row){background:#0f1b2c!important}
+/* ホバー */
 body.dark-mode .keiba-table tbody tr:hover,body.dark-mode .hm-table tbody tr:hover,
-body.dark-mode .deban-table tbody tr:hover,body.dark-mode .ability-table tbody tr:hover{background:#1f3050!important}
-body.dark-mode .deban-table tbody tr{border-color:#2d3f55!important}
+body.dark-mode .deban-table tbody tr:hover,body.dark-mode .ability-table tbody tr:hover{background:#1a3a5f!important}
+body.dark-mode .deban-table tbody tr{border-color:#1e3048!important}
 body.dark-mode .hm-row-win{background:#2a2000!important}
 body.dark-mode .hm-match-cell{background:#2a2000!important;color:#fbbf24!important}
 
-/* コメント行（動的生成） */
-body.dark-mode .horse-comment-row{background:#0f2530!important;border-color:#1a4050!important}
-body.dark-mode .horse-comment-row td{color:#67e8f9!important;border-color:#1a4050!important}
+/* コメント行（動的生成）— ティール強化 */
+body.dark-mode .horse-comment-row{background:#06202e!important;border-color:#0e3a4a!important}
+body.dark-mode .horse-comment-row td{color:#38bdf8!important;border-color:#0e3a4a!important}
 
 /* 保存済みアイテム */
-body.dark-mode .saved-item,body.dark-mode .saved-item-group{background:#1e293b!important;border-color:#2d3f55!important}
+body.dark-mode .saved-item,body.dark-mode .saved-item-group{background:#111827!important;border-color:#1e3048!important}
 body.dark-mode .saved-item-date,body.dark-mode .saved-item-baba{color:#e2e8f0!important}
-body.dark-mode .saved-race-tags .race-tag{background:#162032!important;color:#8fa3be!important;border-color:#2d3f55!important}
+body.dark-mode .saved-race-tags .race-tag{background:#0d1826!important;color:#7dd3fc!important;border-color:#1e3048!important}
 
 /* 比較チェックリスト */
-body.dark-mode .compare-check-label{background:#1a2540!important;border-color:#2d3f55!important;color:#e2e8f0!important}
-body.dark-mode .compare-checklist{background:#162032!important;border-color:#2d3f55!important}
-body.dark-mode .compare-race-header{background:#1a2a3a!important;border-color:#2d3f55!important}
+body.dark-mode .compare-check-label{background:#0d1826!important;border-color:#1e3048!important;color:#e2e8f0!important}
+body.dark-mode .compare-checklist{background:#0d1826!important;border-color:#1e3048!important}
+body.dark-mode .compare-race-header{background:#0a1422!important;border-color:#1e3048!important}
 
-/* 枠番1番（白→暗いグレー） */
-body.dark-mode .waku-1{background:#334155!important;color:#e2e8f0!important;border-color:#475569!important}
-body.dark-mode .waku-mini.waku-1{background:#334155!important;color:#e2e8f0!important}
+/* 枠番1番（白→深めグレー） */
+body.dark-mode .waku-1{background:#1e2a3a!important;color:#cbd5e1!important;border-color:#2d3f55!important}
+body.dark-mode .waku-mini.waku-1{background:#1e2a3a!important;color:#cbd5e1!important}
+
+/* レース名・メタ情報 */
+body.dark-mode .race-name{color:#e2e8f0!important}
+body.dark-mode .race-meta{color:#94a3b8!important}
+body.dark-mode .race-meta span{background:#0d1826!important;color:#94a3b8!important;border-color:#1e3048!important}
+
+/* 馬番バッジ */
+body.dark-mode .umano-badge{background:#0d1826!important;border-color:#1e3048!important;color:#e2e8f0!important}
 
 /* 馬場状態バッジ */
 body.dark-mode .track-cond-good{background:#052e16!important;color:#4ade80!important;border-color:#166534!important}
 body.dark-mode .track-cond-yaya{background:#2d2000!important;color:#facc15!important;border-color:#854d0e!important}
 body.dark-mode .track-cond-heavy{background:#2d0000!important;color:#fca5a5!important;border-color:#991b1b!important}
 body.dark-mode .track-cond-bad{background:#1e1040!important;color:#c4b5fd!important;border-color:#5b21b6!important}
-body.dark-mode .track-cond-none{background:#1a2540!important;color:#8fa3be!important}
+body.dark-mode .track-cond-none{background:#0d1826!important;color:#7dd3fc!important}
 
-/* ペース系 */
-body.dark-mode .pace-high,body.dark-mode .pace-tag-high,body.dark-mode .pace-label-high{background:#2d0000!important;color:#f87171!important}
-body.dark-mode .pace-mid,body.dark-mode .pace-tag-mid,body.dark-mode .pace-label-mid{background:#2a2000!important;color:#fbbf24!important}
-body.dark-mode .pace-slow,body.dark-mode .pace-tag-slow,body.dark-mode .pace-label-slow{background:#00152d!important;color:#60a5fa!important}
-body.dark-mode .pace-none,body.dark-mode .pace-tag-none,body.dark-mode .pace-label-none{background:#1a1a1a!important;color:#6b7280!important}
+/* ペース系 — グロー効果追加 */
+body.dark-mode .pace-high,body.dark-mode .pace-tag-high,body.dark-mode .pace-label-high{background:#2d0000!important;color:#f87171!important;box-shadow:0 0 6px rgba(248,113,113,.25)!important}
+body.dark-mode .pace-mid,body.dark-mode .pace-tag-mid,body.dark-mode .pace-label-mid{background:#2a2000!important;color:#fbbf24!important;box-shadow:0 0 6px rgba(251,191,36,.25)!important}
+body.dark-mode .pace-slow,body.dark-mode .pace-tag-slow,body.dark-mode .pace-label-slow{background:#00152d!important;color:#60a5fa!important;box-shadow:0 0 6px rgba(96,165,250,.25)!important}
+body.dark-mode .pace-none,body.dark-mode .pace-tag-none,body.dark-mode .pace-label-none{background:#131313!important;color:#6b7280!important}
 body.dark-mode .pace-btn-slow.active{background:#00152d!important;border-color:#3090e0!important}
 
 /* 人気バッジ */
 body.dark-mode .ninki-1{background:#2a2000!important;color:#fbbf24!important;border-color:#854d0e!important}
-body.dark-mode .ninki-2{background:#00152d!important;color:#93c5fd!important;border-color:#1e3a5f!important}
+body.dark-mode .ninki-2{background:#00152d!important;color:#7dd3fc!important;border-color:#1e3a5f!important}
 body.dark-mode .ninki-3{background:#2a0000!important;color:#fca5a5!important;border-color:#7f1d1d!important}
 
+/* ペース分布チャート */
+body.dark-mode .pace-dist-wrap{background:#0d1826!important;border-color:#1e3048!important}
+body.dark-mode .pace-dist-title{color:#c8d8ec!important}
+body.dark-mode .pace-dist-bar{background:#0a0f1e!important}
+body.dark-mode .pace-dist-item{color:#c8d8ec!important}
+body.dark-mode .pd-seg-none{background:#1e3048!important;color:#4a5e76!important}
+
 /* プログレスバー */
-body.dark-mode .progress-bar-wrap{background:#2d3f55!important}
+body.dark-mode .progress-bar-wrap{background:#0d1826!important}
 
 /* モーダル */
-body.dark-mode #admin-login-modal>div{background:#1e293b!important;color:#e2e8f0!important}
-body.dark-mode .horse-modal-inner,body.dark-mode [class*="modal"]>div{background:#1e293b!important;color:#e2e8f0!important}
+body.dark-mode #admin-login-modal>div{background:#111827!important;color:#e2e8f0!important}
+body.dark-mode .horse-modal-inner,body.dark-mode [class*="modal"]>div{background:#111827!important;color:#e2e8f0!important}
 
 /* ===== インラインスタイル上書き ===== */
 /* 白・ほぼ白 */
 body.dark-mode [style*="background:#fff"],body.dark-mode [style*="background: #fff"],
 body.dark-mode [style*="background-color:#fff"],body.dark-mode [style*="background-color: #fff"],
 body.dark-mode [style*="background:#ffffff"],body.dark-mode [style*="background: #ffffff"]{
-  background:#1e293b!important;color:#e2e8f0!important}
+  background:#111827!important;color:#e2e8f0!important}
 /* 薄グレー系 */
 body.dark-mode [style*="background:#f4f6fa"],body.dark-mode [style*="background: #f4f6fa"],
 body.dark-mode [style*="background:#f8fafc"],body.dark-mode [style*="background: #f8fafc"],
 body.dark-mode [style*="background:#f9fafb"],body.dark-mode [style*="background:#fafafa"],
-body.dark-mode [style*="background:#f0f0f0"],body.dark-mode [style*="background:#f5f5f5"]{background:#162032!important}
+body.dark-mode [style*="background:#f0f0f0"],body.dark-mode [style*="background:#f5f5f5"]{background:#0d1826!important}
 /* 水色系（コメント行含む） */
 body.dark-mode [style*="background:#f0f9ff"],body.dark-mode [style*="background:#eff6ff"],
 body.dark-mode [style*="background:#f0fdff"],body.dark-mode [style*="background:#e0f2fe"],
-body.dark-mode [style*="background:#dbeafe"],body.dark-mode [style*="background:#e0f0ff"]{background:#0c1f35!important}
+body.dark-mode [style*="background:#dbeafe"],body.dark-mode [style*="background:#e0f0ff"]{background:#071828!important}
 body.dark-mode [style*="background:linear-gradient(135deg,#f0f9ff"],
-body.dark-mode [style*="background:linear-gradient(135deg,#eff6ff"]{background:#1a2a3a!important}
+body.dark-mode [style*="background:linear-gradient(135deg,#eff6ff"]{background:#0e1f30!important}
 /* 黄・オレンジ系 */
 body.dark-mode [style*="background:#fef3c7"],body.dark-mode [style*="background:#fffbeb"],
 body.dark-mode [style*="background:#fff8f0"],body.dark-mode [style*="background:#fef9c3"],
@@ -624,12 +713,12 @@ body.dark-mode [style*="background:#f5f3ff"],body.dark-mode [style*="background:
 /* インライン文字色 */
 body.dark-mode [style*="color:#1a1a2e"],body.dark-mode [style*="color:#1e3a5f"],
 body.dark-mode [style*="color:#374151"],body.dark-mode [style*="color:#111827"],
-body.dark-mode [style*="color:#0369a1"],body.dark-mode [style*="color:#1d4ed8"]{color:#93c5fd!important}
+body.dark-mode [style*="color:#0369a1"],body.dark-mode [style*="color:#1d4ed8"]{color:#7dd3fc!important}
 body.dark-mode [style*="color:#6b7280"],body.dark-mode [style*="color:#4b5563"],
 body.dark-mode [style*="color:#475569"],body.dark-mode [style*="color:#64748b"]{color:#8fa3be!important}
 body.dark-mode [style*="color:#9ca3af"],body.dark-mode [style*="color:#cbd5e1"],
 body.dark-mode [style*="color:#d1d5db"]{color:#4a5e76!important}
-body.dark-mode [style*="color:#0e7490"]{color:#67e8f9!important}
+body.dark-mode [style*="color:#0e7490"]{color:#38bdf8!important}
 body.dark-mode [style*="color:#065f46"],body.dark-mode [style*="color:#166534"]{color:#4ade80!important}
 body.dark-mode [style*="color:#92400e"],body.dark-mode [style*="color:#713f12"]{color:#fbbf24!important}
 body.dark-mode [style*="color:#991b1b"],body.dark-mode [style*="color:#7f1d1d"]{color:#fca5a5!important}
@@ -640,19 +729,81 @@ body.dark-mode [style*="border:1.5px solid #e2e8f0"],body.dark-mode [style*="bor
 body.dark-mode [style*="border:1.5px solid #7dd3fc"],body.dark-mode [style*="border:1px solid #bae6fd"],
 body.dark-mode [style*="border-bottom:1px solid #f0f4fa"],body.dark-mode [style*="border-top:1px solid #f0f4fa"],
 body.dark-mode [style*="border-bottom:1px solid #e0f2fe"],body.dark-mode [style*="border-bottom:1px solid #e2e8f0"]{
-  border-color:#2d3f55!important}
+  border-color:#1e3048!important}
 
 /* スクロールバー */
 body.dark-mode ::-webkit-scrollbar{width:8px;height:8px}
-body.dark-mode ::-webkit-scrollbar-track{background:#162032}
-body.dark-mode ::-webkit-scrollbar-thumb{background:#2d3f55;border-radius:4px}
-body.dark-mode ::-webkit-scrollbar-thumb:hover{background:#3d5270}
+body.dark-mode ::-webkit-scrollbar-track{background:#0d1826}
+body.dark-mode ::-webkit-scrollbar-thumb{background:#1e3048;border-radius:4px}
+body.dark-mode ::-webkit-scrollbar-thumb:hover{background:#2d4a68}
 
 /* ダークモードトグルボタン */
-#dark-mode-btn{background:rgba(255,255,255,0.12);color:#e0e7ff;border:1px solid rgba(255,255,255,0.25);
+#dark-mode-btn,#minimal-mode-btn{background:rgba(255,255,255,0.12);color:#e0e7ff;border:1px solid rgba(255,255,255,0.25);
   border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer;display:flex;align-items:center;
   gap:5px;backdrop-filter:blur(4px);transition:background .15s;white-space:nowrap;font-family:inherit;font-weight:600}
-#dark-mode-btn:hover{background:rgba(255,255,255,0.22)}
+#dark-mode-btn:hover,#minimal-mode-btn:hover{background:rgba(255,255,255,0.22)}
+#minimal-mode-btn.active{background:rgba(255,255,255,0.28);color:#fff;border-color:rgba(255,255,255,0.5)}
+</style>
+<style id="minimal-mode-css">
+/* ===== MINIMAL MODE ===== */
+/* ヘッダー: グラデ除去・フラット */
+body.minimal-mode .app-header{background:#1a56a0!important;box-shadow:none!important}
+/* カード: 影除去 → 細ボーダー・小角丸 */
+body.minimal-mode .search-card,body.minimal-mode .race-header-card,body.minimal-mode .saved-card,
+body.minimal-mode .loading-area,body.minimal-mode .progress-section,body.minimal-mode .race-tabs-section,
+body.minimal-mode .error-area,body.minimal-mode .deban-section,body.minimal-mode .saved-month-group,
+body.minimal-mode .ana-chart-card,body.minimal-mode .ana-chart-card--wide{
+  box-shadow:none!important;border-radius:4px!important;border:1px solid #dde3ea!important}
+/* 角丸統一（フラット化） */
+body.minimal-mode .btn{border-radius:3px!important}
+body.minimal-mode .form-input,body.minimal-mode input,body.minimal-mode select,body.minimal-mode textarea{border-radius:3px!important}
+body.minimal-mode .race-badge{border-radius:4px!important;width:44px!important;height:44px!important;font-size:17px!important}
+body.minimal-mode .collapsible-panel{box-shadow:none!important;border-radius:4px!important;border:1px solid #dde3ea!important}
+body.minimal-mode .progress-bar{border-radius:2px!important}
+body.minimal-mode .progress-bar-wrap{border-radius:2px!important}
+/* レースタブ: アンダーライン型に */
+body.minimal-mode .race-tabs-section{padding:0 12px!important;background:#fff!important}
+body.minimal-mode .race-tab{
+  border-radius:0!important;border:none!important;border-bottom:2px solid transparent!important;
+  background:transparent!important;color:#6b7280!important;padding:8px 10px!important;margin-bottom:-1px}
+body.minimal-mode .race-tab:hover{color:#1a56a0!important;border-bottom-color:#1a56a0!important;background:transparent!important}
+body.minimal-mode .race-tab.active{color:#1a56a0!important;border-bottom-color:#1a56a0!important;background:transparent!important}
+/* sidebar-mode タブバー（横バー）— 青背景を維持しつつフラット化 */
+body.minimal-mode #race-tabs-section.sidebar-mode{background:#1a56a0!important;border-radius:0!important;box-shadow:none!important;padding:4px 10px!important}
+body.minimal-mode #race-tabs-section.sidebar-mode .race-tab{
+  border-bottom:2px solid transparent!important;color:rgba(255,255,255,.65)!important;background:transparent!important;
+  border-radius:0!important;padding:6px 8px!important}
+body.minimal-mode #race-tabs-section.sidebar-mode .race-tab:hover{color:#fff!important;border-bottom-color:rgba(255,255,255,.5)!important}
+body.minimal-mode #race-tabs-section.sidebar-mode .race-tab.active{color:#fff!important;border-bottom-color:#fff!important;background:transparent!important}
+/* テーブルヘッダー: グラデ除去 */
+body.minimal-mode th{background:#f0f2f5!important;color:#374151!important;font-weight:600!important}
+body.minimal-mode .deban-table thead th{background:#f0f2f5!important;color:#374151!important}
+/* セクションタイトル: やや小さく */
+body.minimal-mode .section-title{font-size:13px!important;margin-bottom:10px!important}
+/* スペース削減 */
+body.minimal-mode .app-main{padding:10px 12px 36px!important;gap:10px!important}
+body.minimal-mode .search-card,body.minimal-mode .race-header-card,body.minimal-mode .saved-card{padding:13px 16px!important}
+/* バッジ・タグの角丸フラット化 */
+body.minimal-mode .race-meta span{border-radius:3px!important}
+body.minimal-mode .proxy-status,body.minimal-mode .progress-race-tag{border-radius:3px!important}
+body.minimal-mode .ninki-1,body.minimal-mode .ninki-2,body.minimal-mode .ninki-3{border-radius:2px!important}
+body.minimal-mode .pace-tag-high,body.minimal-mode .pace-tag-mid,body.minimal-mode .pace-tag-slow,body.minimal-mode .pace-tag-none{border-radius:2px!important}
+body.minimal-mode .waku-mini{border-radius:2px!important}
+body.minimal-mode .race-class-badge{border-radius:2px!important}
+body.minimal-mode .saved-race-tags .race-tag{border-radius:2px!important}
+/* hoverのtransition無効化（データ密集型ではアニメが邪魔） */
+body.minimal-mode .deban-table tbody tr:hover{transition:none!important}
+/* ダーク＋ミニマル組み合わせ */
+body.dark-mode.minimal-mode .search-card,body.dark-mode.minimal-mode .race-header-card,
+body.dark-mode.minimal-mode .saved-card,body.dark-mode.minimal-mode .deban-section,
+body.dark-mode.minimal-mode .race-tabs-section,body.dark-mode.minimal-mode .loading-area{
+  border-color:#1e3048!important;box-shadow:none!important}
+body.dark-mode.minimal-mode .race-tabs-section{background:#111827!important}
+body.dark-mode.minimal-mode th,body.dark-mode.minimal-mode .deban-table thead th{background:#0d1a2e!important;color:#7dd3fc!important}
+body.dark-mode.minimal-mode .race-tab{color:rgba(255,255,255,.5)!important;border-bottom-color:transparent!important}
+body.dark-mode.minimal-mode .race-tab:hover{color:#7dd3fc!important;border-bottom-color:#7dd3fc!important;background:transparent!important}
+body.dark-mode.minimal-mode .race-tab.active{color:#38bdf8!important;border-bottom-color:#38bdf8!important;background:transparent!important}
+body.dark-mode.minimal-mode #race-tabs-section.sidebar-mode .race-tab.active{color:#fff!important;border-bottom-color:#fff!important}
 </style>
 </head>
 <body>
@@ -712,12 +863,19 @@ body.dark-mode ::-webkit-scrollbar-thumb:hover{background:#3d5270}
     + ".race-tabs{display:flex;gap:6px;flex-wrap:wrap}"
     + ".race-tab{padding:6px 14px;border:1.5px solid #e2e8f0;border-radius:20px;background:#fff;font-size:13px;font-weight:700;cursor:pointer;color:#6b7280;font-family:inherit;transition:all .18s}"
     + ".race-tab:hover{border-color:#1a56a0;color:#1a56a0}.race-tab.active{background:#1a56a0;color:#fff;border-color:#1a56a0}"
-    + ".race-header-card{border-left:5px solid #1a56a0}"
-    + ".race-title-row{display:flex;align-items:center;gap:16px;margin-bottom:16px}"
-    + ".race-badge{background:#1a56a0;color:#fff;font-size:20px;font-weight:800;width:58px;height:58px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;letter-spacing:-1px}"
-    + ".race-name{font-size:18px;font-weight:700;margin-bottom:4px}"
-    + ".race-meta{display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:#6b7280}"
+    + ".race-header-card{border-left:5px solid #1a56a0;padding-bottom:0!important}"
+    + ".race-title-row{display:flex;align-items:flex-start;gap:14px;margin-bottom:12px}"
+    + ".race-badge{background:linear-gradient(135deg,#1a56a0,#1565c0);color:#fff;font-size:17px;font-weight:800;min-width:52px;height:52px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;letter-spacing:-.5px;box-shadow:0 2px 8px rgba(26,86,160,.3);}"
+    + ".race-name{font-size:20px;font-weight:800;margin-bottom:5px;color:#1a1a2e;line-height:1.2}"
+    + ".race-meta{display:flex;gap:6px;flex-wrap:wrap;font-size:12px;color:#6b7280}"
     + ".race-meta span{background:#f4f6fa;padding:2px 8px;border-radius:20px;font-weight:500;display:flex;align-items:center;gap:4px}"
+    + ".race-quick-stats{display:flex;border-top:1px solid #e8eef5;margin:0 -22px;padding:8px 10px 10px;}"
+    + ".rqs-item{flex:1;display:flex;flex-direction:column;align-items:center;padding:3px 6px;border-right:1px solid #f0f4fa;min-width:0;}"
+    + ".rqs-item:last-child{border-right:none}"
+    + ".rqs-label{font-size:9px;color:#94a3b8;font-weight:600;letter-spacing:.04em;text-transform:uppercase;margin-bottom:2px;white-space:nowrap;}"
+    + ".rqs-val{font-size:13px;font-weight:800;color:#1a1a2e;font-family:monospace;white-space:nowrap;}"
+    + ".rqs-val.rqs-empty{color:#d1d5db;font-size:11px;font-weight:400}"
+    + ".rqs-val.rqs-pace-high{color:#dc2626}.rqs-val.rqs-pace-mid{color:#d97706}.rqs-val.rqs-pace-slow{color:#2563eb}"
     + ".race-class-badge{font-weight:700!important;font-size:0.75rem!important;padding:2px 8px!important;border-radius:12px!important;display:inline-block}"
     + ".class-gr{background:#b8860b!important;color:#fff!important;border:1px solid #996b00!important}"
     + ".class-a{background:#1d4ed8!important;color:#fff!important;border:1px solid #1e40af!important}"
@@ -1011,18 +1169,29 @@ body.dark-mode ::-webkit-scrollbar-thumb:hover{background:#3d5270}
     + ".race-tab-sub{display:block;font-size:8px;font-weight:400;opacity:.75;margin-top:1px;letter-spacing:0;}"
     + "#race-content-area.sidebar-mode{flex:1;min-width:0;}"
     + "@media(max-width:640px){#race-layout-wrap{flex-direction:column;}#race-tabs-section.sidebar-mode{width:100%;min-width:0;border-radius:0;display:block;padding:8px 10px;}#race-tabs-section.sidebar-mode .race-tabs{flex-direction:row;flex-wrap:wrap;gap:4px;}}"
-    + ".horse-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:10px;padding:12px 14px;}"
-    + ".horse-card{background:#fff;border:1.5px solid #e2e8f0;border-radius:10px;padding:10px 12px;transition:box-shadow .15s;}"
-    + ".horse-card:hover{box-shadow:0 4px 14px rgba(0,0,0,.1);}"
-    + ".horse-card-name{font-size:13px;font-weight:700;color:#1a1a2e;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}"
-    + ".horse-card-top{display:flex;align-items:center;gap:5px;margin-bottom:4px;}"
-    + ".horse-card-si{font-size:22px;font-weight:800;text-align:center;padding:4px 0;border-radius:6px;margin-bottom:5px;font-family:monospace;letter-spacing:-1px;}"
-    + ".horse-card-bar-wrap{height:5px;background:#f0f0f0;border-radius:3px;margin-bottom:7px;overflow:hidden;}"
+    + ".horse-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;padding:14px 16px;}"
+    + ".horse-card{background:#fff;border:1.5px solid #e2e8f0;border-radius:12px;padding:12px 13px 10px;transition:box-shadow .18s,transform .18s;position:relative;overflow:hidden;}"
+    + ".horse-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:#d1d5db;border-radius:12px 0 0 12px;}"
+    + ".horse-card.hc-r1::before{background:#dc2626}.horse-card.hc-r2::before{background:#2563eb}.horse-card.hc-r3::before{background:#d97706}.horse-card.hc-r4::before{background:#9ca3af}"
+    + ".horse-card:hover{box-shadow:0 8px 24px rgba(0,0,0,.13);transform:translateY(-2px);}"
+    + ".horse-card-top{display:flex;align-items:center;gap:5px;margin-bottom:5px;}"
+    + ".horse-card-waku{width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0;}"
+    + ".horse-card-mark{font-size:16px;font-weight:900;flex-shrink:0;}"
+    + ".horse-card-name{font-size:13px;font-weight:700;color:#1a1a2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;}"
+    + ".horse-card-badges{display:flex;align-items:center;gap:4px;margin-bottom:7px;flex-wrap:wrap;}"
+    + ".horse-card-ninki{font-size:10px;color:#6b7280;background:#f4f6fa;padding:1px 5px;border-radius:10px;}"
+    + ".hc-pace{font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;}"
+    + ".hc-pace-high{background:#fee2e2;color:#dc2626}.hc-pace-mid{background:#fef3c7;color:#92400e}.hc-pace-slow{background:#dbeafe;color:#1e40af}"
+    + ".horse-card-si{font-size:24px;font-weight:800;text-align:center;padding:8px 4px;border-radius:8px;margin-bottom:6px;font-family:monospace;letter-spacing:-1px;position:relative;}"
+    + ".horse-card-si-mark{position:absolute;top:4px;right:8px;font-size:12px;opacity:.65;}"
+    + ".horse-card-bar-wrap{height:5px;background:#f0f0f0;border-radius:3px;margin-bottom:8px;overflow:hidden;}"
     + ".horse-card-bar-fill{height:100%;border-radius:3px;transition:width .4s;}"
-    + ".horse-card-stats{display:flex;gap:8px;justify-content:space-around;}"
+    + ".horse-card-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;margin-bottom:7px;}"
     + ".horse-card-stat{display:flex;flex-direction:column;align-items:center;gap:1px;}"
-    + ".horse-card-stat-label{font-size:9px;color:#9ca3af;}"
+    + ".horse-card-stat-label{font-size:8px;color:#9ca3af;letter-spacing:.02em;}"
     + ".horse-card-stat-val{font-size:11px;font-weight:700;color:#374151;}"
+    + ".horse-card-footer{display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#6b7280;border-top:1px solid #f0f4fa;padding-top:6px;margin-top:2px;}"
+    + ".hc-kinryo{background:#f0f4fa;padding:1px 5px;border-radius:10px;font-weight:600;}"
     + "#race-summary-bar{position:fixed;bottom:0;left:0;right:0;z-index:90;background:#1a3a6e;color:#fff;display:none;align-items:center;height:40px;box-shadow:0 -2px 8px rgba(0,0,0,.25);}"
     + "#race-summary-bar.visible{display:flex;}"
     + ".rsb-race{padding:0 12px;font-size:14px;font-weight:800;border-right:1px solid rgba(255,255,255,.2);height:100%;display:flex;align-items:center;gap:4px;background:rgba(0,0,0,.2);flex-shrink:0;white-space:nowrap;}"
@@ -1059,6 +1228,9 @@ body.dark-mode ::-webkit-scrollbar-thumb:hover{background:#3d5270}
     </div>
     <!-- 管理者モードボタン -->
     <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+      <button id="minimal-mode-btn" onclick="toggleMinimalMode()" title="ミニマルモード切替">
+        <span id="minimal-mode-icon">▣</span> <span id="minimal-mode-label">ミニマル</span>
+      </button>
       <button id="dark-mode-btn" onclick="toggleDarkMode()" title="ダークモード切替">
         <span id="dark-mode-icon">🌙</span> <span id="dark-mode-label">ダーク</span>
       </button>
@@ -1078,7 +1250,8 @@ body.dark-mode ::-webkit-scrollbar-thumb:hover{background:#3d5270}
   <!-- ナビゲーションタブ -->
   <nav class="header-nav">
     <div class="header-nav-inner">
-      <button class="header-nav-btn active" data-page="deban" onclick="switchPage('deban')"><i class="fas fa-list-ul"></i> 出馬表</button>
+      <button class="header-nav-btn active" data-page="search" onclick="switchPage('search')"><i class="fas fa-search"></i> 検索</button>
+      <button class="header-nav-btn" data-page="deban" onclick="switchPage('deban')"><i class="fas fa-list-ul"></i> 出馬表</button>
       <button class="header-nav-btn" data-page="bunseki" onclick="switchPage('bunseki')"><i class="fas fa-chart-bar"></i> 分析</button>
       <button class="header-nav-btn" data-page="baba" onclick="switchPage('baba')"><i class="fas fa-chart-area"></i> 馬場傾向</button>
       <button class="header-nav-btn" data-page="saved" onclick="switchPage('saved')"><i class="fas fa-database"></i> 保存データ</button>
@@ -1126,8 +1299,8 @@ body.dark-mode ::-webkit-scrollbar-thumb:hover{background:#3d5270}
 
 <main class="app-main">
 
-<!-- ページ: 出馬表 -->
-<div id="page-deban" class="page-section">
+<!-- ページ: 検索 -->
+<div id="page-search" class="page-section">
 
   <!-- 検索フォーム -->
   <section class="search-section">
@@ -1203,6 +1376,11 @@ body.dark-mode ::-webkit-scrollbar-thumb:hover{background:#3d5270}
       <button class="btn btn-primary" onclick="fetchSingleRace()"><i class="fas fa-redo"></i> 再試行</button>
     </div>
   </div>
+
+</div><!-- /page-search -->
+
+<!-- ページ: 出馬表 -->
+<div id="page-deban" class="page-section page-hidden">
 
   <div id="race-layout-wrap">
     <!-- レースタブ（サイドバー） -->
@@ -1671,7 +1849,7 @@ function fmtWeightDiff(w) {
 }
 
 function switchPage(pageId) {
-  ['deban','bunseki','baba','saved'].forEach(id => {
+  ['search','deban','bunseki','baba','saved'].forEach(id => {
     const el = document.getElementById('page-' + id);
     if (el) el.classList.toggle('page-hidden', id !== pageId);
   });
@@ -1698,6 +1876,27 @@ function _updateDarkModeBtn(isDark) {
   if (label) label.textContent = isDark ? 'ライト' : 'ダーク';
 }
 
+function toggleMinimalMode() {
+  const isMinimal = document.body.classList.toggle('minimal-mode');
+  localStorage.setItem('minimalMode', isMinimal ? '1' : '0');
+  _updateMinimalBtn(isMinimal);
+}
+
+function _updateMinimalBtn(isMinimal) {
+  const btn   = document.getElementById('minimal-mode-btn');
+  const icon  = document.getElementById('minimal-mode-icon');
+  const label = document.getElementById('minimal-mode-label');
+  if (icon)  icon.textContent  = isMinimal ? '▣' : '▣';
+  if (label) label.textContent = isMinimal ? 'リッチ' : 'ミニマル';
+  if (btn)   btn.classList.toggle('active', isMinimal);
+}
+
+function initMinimalMode() {
+  const isMinimal = localStorage.getItem('minimalMode') === '1';
+  if (isMinimal) document.body.classList.add('minimal-mode');
+  _updateMinimalBtn(isMinimal);
+}
+
 function initDarkMode() {
   const saved = localStorage.getItem('darkMode');
   // 保存値がなければ OS 設定を参照
@@ -1711,6 +1910,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // CSS注入確認（page_private環境でheadスクリプトがフィルタされた場合の保険）
   injectStyles();
   initDarkMode();
+  initMinimalMode();
 
   const t = new Date();
   document.getElementById('race-date').value =
@@ -2107,6 +2307,7 @@ async function fetchSingleRace() {
   if (allRacesData[raceNo]) result.horses = mergeHorseData(allRacesData[raceNo].horses, result.horses);
   allRacesData[raceNo] = result;
   addRaceTab(raceNo); switchRaceTab(raceNo);
+  switchPage('deban');
 }
 
 async function fetchAllRaces() {
@@ -2174,6 +2375,7 @@ async function fetchAllRaces() {
     return;
   }
   rebuildAllTabs(); switchRaceTab(obtained[0]);
+  switchPage('deban');
 
   // 公式成績を自動取得（バックグラウンドで実行、レース表示をブロックしない）
   fetchAllHorsesOfficialData(true);
@@ -2440,6 +2642,7 @@ async function fetchDebaTableSingle(raceDate, raceNo, babaCode) {
   if (allRacesData[raceNo]) result.horses = mergeHorseData(allRacesData[raceNo].horses, result.horses);
   allRacesData[raceNo] = result;
   addRaceTab(raceNo); switchRaceTab(raceNo);
+  switchPage('deban');
 }
 
 function parseRaceMarkTable(html, raceDate, raceNo, babaCode) {
@@ -2674,22 +2877,46 @@ function renderRaceContent(raceNo) {
   const _movieUrl = buildMovieUrl(raceInfo.raceDate, raceNo, raceInfo.babaCode);
   const _hasMovie  = !!_movieUrl;
   hCard.innerHTML=`
-    <div class="race-title-row" style="display:flex!important;align-items:center!important;gap:12px!important;flex-wrap:nowrap!important;justify-content:space-between!important;">
-      <div style="display:flex;align-items:center;gap:12px;min-width:0;">
-        <div class="race-badge">${raceNo}R</div>
-        <div class="race-title-info">
+    <div class="race-title-row" style="justify-content:space-between;flex-wrap:nowrap;">
+      <div style="display:flex;align-items:flex-start;gap:14px;min-width:0;flex:1;">
+        <div class="race-badge">${raceNo}<span style="font-size:10px;font-weight:600;opacity:.8;display:block;letter-spacing:0;margin-top:1px;">R</span></div>
+        <div class="race-title-info" style="min-width:0;">
           <h2 class="race-name">${raceInfo.raceName}</h2>
           <div class="race-meta">
-            <span><i class="fas fa-calendar"></i> ${raceInfo.raceDate}</span>
+            <span><i class="fas fa-calendar-alt"></i> ${raceInfo.raceDate}</span>
             <span><i class="fas fa-map-marker-alt"></i> ${getBabaName(raceInfo.babaCode)}</span>
+            <span><i class="fas fa-horse"></i> ${horses.length}頭</span>
             ${raceInfo.distance ? distanceBadgeHtml(raceInfo.distance) : ''}
             ${raceInfo.trackCond?`<span class="track-cond-badge track-cond-${trackCondClass(raceInfo.trackCond)}"><i class="fas fa-cloud-rain"></i> ${raceInfo.trackCond}</span>`:''}
             ${raceInfo.raceClass?`<span class="race-class-badge ${raceClassCssClass(raceInfo.raceClass)}">${raceInfo.raceClass}</span>`:''}
-            ${(raceInfo._isDebaTable||raceInfo._isDebaFallback)?`<span style="background:#fef3c7;color:#92400e;border:1px solid #fbbf24;border-radius:10px;font-size:11px;padding:2px 8px;font-weight:700"><i class="fas fa-clock"></i> 出馬表（レース前）</span>`:''}
+            ${(raceInfo._isDebaTable||raceInfo._isDebaFallback)?`<span style="background:#fef3c7;color:#92400e;border:1px solid #fbbf24;border-radius:10px;font-size:11px;padding:2px 8px;font-weight:700"><i class="fas fa-clock"></i> 出馬表前</span>`:''}
           </div>
         </div>
       </div>
-      ${_hasMovie ? `<button id="movie-btn-${raceNo}" class="btn btn-movie btn-sm" onclick="toggleMoviePanel(${raceNo})" style="flex-shrink:0;"><i class="fas fa-video"></i> レース映像</button>` : ''}
+      ${_hasMovie ? `<button id="movie-btn-${raceNo}" class="btn btn-movie btn-sm" onclick="toggleMoviePanel(${raceNo})" style="flex-shrink:0;margin-top:2px;"><i class="fas fa-video"></i> レース映像</button>` : ''}
+    </div>
+    <!-- クイックスタッツ帯 -->
+    <div class="race-quick-stats">
+      <div class="rqs-item">
+        <span class="rqs-label">1着タイム</span>
+        <span class="rqs-val rqs-empty" id="rqs-time-${raceNo}">—</span>
+      </div>
+      <div class="rqs-item">
+        <span class="rqs-label">前半3F</span>
+        <span class="rqs-val rqs-empty" id="rqs-f3-${raceNo}">—</span>
+      </div>
+      <div class="rqs-item">
+        <span class="rqs-label">上がり3F</span>
+        <span class="rqs-val rqs-empty" id="rqs-ag-${raceNo}">—</span>
+      </div>
+      <div class="rqs-item">
+        <span class="rqs-label">前後半差</span>
+        <span class="rqs-val rqs-empty" id="rqs-diff-${raceNo}">—</span>
+      </div>
+      <div class="rqs-item">
+        <span class="rqs-label">ペース</span>
+        <span class="rqs-val rqs-empty" id="rqs-pace-${raceNo}">—</span>
+      </div>
     </div>
     ${_hasMovie ? `
     <div id="movie-panel-${raceNo}" class="movie-panel" data-url="${_movieUrl}">
@@ -2705,6 +2932,14 @@ function renderRaceContent(raceNo) {
       </div>
     </div>` : ''}
     
+    <!-- 管理者入力エリア（閲覧モードでは非表示） -->
+    <div class="admin-input-wrap" id="admin-wrap-${raceNo}">
+      <div class="admin-input-toggle-header" onclick="toggleAdminInputWrap(${raceNo})">
+        <span><i class="fas fa-sliders-h" style="margin-right:6px;font-size:12px;"></i>📝 ペース入力エリア</span>
+        <span class="admin-input-toggle-icon" id="admin-toggle-icon-${raceNo}">▾</span>
+      </div>
+      <div class="admin-input-body">
+
     <!-- ★ 改良版ペースパネル -->
     <div class="pace-panel" id="pace-panel-${raceNo}">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
@@ -2771,6 +3006,9 @@ function renderRaceContent(raceNo) {
         <div id="lap-inputs-${raceNo}"><span style="font-size:12px;color:#9ca3af">距離情報読み込み中...</span></div>
       </div>
 
+      <!-- 馬別ペース分布チャート -->
+      <div id="pace-dist-${raceNo}" class="pace-dist-wrap" style="display:none;"></div>
+
       <div class="pace-memo-row" style="margin-top:12px">
         <label style="font-size:11px;color:#6b7280;font-weight:700;">メモ</label>
         <input type="text" id="race-memo-${raceNo}" class="form-input" placeholder="展開メモなど..." value="${raceInfo.memo||''}">
@@ -2829,7 +3067,9 @@ function renderRaceContent(raceNo) {
         </div>
       </div>
 
-    </div>`;
+    </div>
+      </div><!-- /admin-input-body -->
+    </div><!-- /admin-input-wrap -->`;
   section.appendChild(hCard);
   const tSec=document.createElement('div'); tSec.className='deban-section';
   tSec.innerHTML=`
@@ -2973,6 +3213,7 @@ function renderRaceContent(raceNo) {
   renderHorseRows(raceNo, sortedHorses);
   renderSplitPanel(raceNo);
   updateRacePace(raceNo);
+  renderPaceDistChart(raceNo);
   renderLapInputs(raceNo, raceInfo.distance, raceInfo.lapTimes || null);
   // 折りたたみパネル群：初期化時に非表示。openedCollapseSetで展開状態を管理
   renderClassDistBenchmark(raceNo);
@@ -3153,6 +3394,64 @@ function onHorsePaceChange(select, raceNo, umaBan) {
   const horse=data.horses.find(h=>h.umaBan===umaBan); if(!horse)return;
   horse.paceType=select.value;
   const dot=select.parentElement.querySelector('.pace-dot'); if(dot)dot.className=`pace-dot ${getPaceDotClass(select.value)}`;
+  renderPaceDistChart(raceNo);
+}
+
+function _wakuBg(w) {
+  const m={1:'#e5e7eb',2:'#1e40af',3:'#dc2626',4:'#2563eb',5:'#ca8a04',6:'#16a34a',7:'#ea580c',8:'#7f1d1d'};
+  return m[Math.min(Math.max(parseInt(w)||1,1),8)]||'#6b7280';
+}
+function _wakuFg(w) { return (parseInt(w)===1||parseInt(w)===5)?'#333':'#fff'; }
+
+function renderPaceDistChart(raceNo) {
+  const wrap = document.getElementById(`pace-dist-${raceNo}`);
+  if (!wrap) return;
+  const data = allRacesData[raceNo];
+  if (!data) return;
+
+  const horses = data.horses;
+  const groups = {'ハイ':[],'ミドル':[],'スロー':[],'':[]};
+  horses.forEach(h => { const p=h.paceType||''; (groups[p]!==undefined?groups[p]:groups['']).push(h); });
+
+  const entered = groups['ハイ'].length + groups['ミドル'].length + groups['スロー'].length;
+  if (!entered) { wrap.style.display='none'; return; }
+  wrap.style.display='block';
+
+  const total = horses.length;
+  const pct = n => total>0 ? Math.round(n/total*100) : 0;
+
+  const seg = (cls, arr, label) => {
+    if (!arr.length) return '';
+    const p=pct(arr.length);
+    return `<div class="pace-dist-seg pd-seg-${cls}" style="width:${p}%" title="${label} ${arr.length}頭 (${p}%)">${p>=14?arr.length+'頭':''}</div>`;
+  };
+
+  const numsHtml = (arr) => arr.map(h=>{
+    const wku=parseInt(h.wakuBan)||Math.ceil((parseInt(h.umaBan)||1)/2);
+    return `<span class="pace-dist-unum" style="background:${_wakuBg(wku)};color:${_wakuFg(wku)}" title="${h.horseName}">${h.umaBan}</span>`;
+  }).join('');
+
+  const row = (color, dotCls, label, arr) => arr.length===0?'': `
+    <div class="pace-dist-item">
+      <span class="pace-dist-dot" style="background:${color}"></span>
+      <span class="pace-dist-group-label" style="color:${color}">${label} ${arr.length}頭</span>
+      <div class="pace-dist-nums">${numsHtml(arr)}</div>
+    </div>`;
+
+  wrap.innerHTML = `
+    <div class="pace-dist-title"><i class="fas fa-chart-bar" style="color:#6366f1"></i> 馬別ペース分布 <span style="font-size:10px;color:#9ca3af;font-weight:400;">（${entered}/${total}頭入力済み）</span></div>
+    <div class="pace-dist-bar">
+      ${seg('high',groups['ハイ'],'ハイ')}
+      ${seg('mid',groups['ミドル'],'ミドル')}
+      ${seg('slow',groups['スロー'],'スロー')}
+      ${seg('none',groups[''],'未入力')}
+    </div>
+    <div class="pace-dist-legend">
+      ${row('#dc2626','pd-high','ハイ',groups['ハイ'])}
+      ${row('#d97706','pd-mid','ミドル',groups['ミドル'])}
+      ${row('#2563eb','pd-slow','スロー',groups['スロー'])}
+      ${groups[''].length?`<div class="pace-dist-item"><span class="pace-dist-dot" style="background:#cbd5e1"></span><span class="pace-dist-group-label" style="color:#94a3b8">未入力 ${groups[''].length}頭</span></div>`:''}
+    </div>`;
 }
 function onHorsePosChange(select, raceNo, umaBan, field) {
   const data=allRacesData[raceNo]; if(!data)return;
@@ -3215,14 +3514,40 @@ function _updateFinishTime(raceNo) {
   const data = allRacesData[raceNo]; if (!data) return;
   const winner = data.horses.find(h => String(h.chakujun) === '1');
   const el = document.getElementById(`finish-time-${raceNo}`);
-  if (!el) return;
-  if (winner && winner.time) {
-    el.textContent = winner.time;
-    el.style.color = '#fbbf24';
-  } else {
-    el.textContent = '—';
-    el.style.color = '#475569';
+  if (el) {
+    if (winner && winner.time) { el.textContent = winner.time; el.style.color = '#fbbf24'; }
+    else { el.textContent = '—'; el.style.color = '#475569'; }
   }
+  const rqsTime = document.getElementById(`rqs-time-${raceNo}`);
+  if (rqsTime) {
+    if (winner && winner.time) { rqsTime.textContent = winner.time; rqsTime.className = 'rqs-val'; }
+    else { rqsTime.textContent = '—'; rqsTime.className = 'rqs-val rqs-empty'; }
+  }
+}
+
+function _updateRqsStrip(raceNo, f3, ag3, pace) {
+  const _set = (id, val, paceClass) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (val != null && !isNaN(val) && val !== '') {
+      el.textContent = typeof val === 'number' ? val.toFixed(1) : val;
+      el.className = 'rqs-val' + (paceClass ? ' ' + paceClass : '');
+    } else {
+      el.textContent = '—'; el.className = 'rqs-val rqs-empty';
+    }
+  };
+  _set(`rqs-f3-${raceNo}`, f3);
+  _set(`rqs-ag-${raceNo}`, ag3);
+  if (!isNaN(f3) && !isNaN(ag3)) {
+    const diff = f3 - ag3;
+    const el = document.getElementById(`rqs-diff-${raceNo}`);
+    if (el) { el.textContent = (diff >= 0 ? '+' : '') + diff.toFixed(1); el.className = 'rqs-val' + (diff < 0 ? ' rqs-pace-high' : diff > 1 ? ' rqs-pace-slow' : ' rqs-pace-mid'); }
+  } else {
+    const el = document.getElementById(`rqs-diff-${raceNo}`);
+    if (el) { el.textContent = '—'; el.className = 'rqs-val rqs-empty'; }
+  }
+  const paceClass = pace === 'ハイ' ? 'rqs-pace-high' : pace === 'スロー' ? 'rqs-pace-slow' : pace === 'ミドル' ? 'rqs-pace-mid' : '';
+  _set(`rqs-pace-${raceNo}`, pace || null, paceClass);
 }
 
 /**
@@ -3288,6 +3613,8 @@ function updateRacePace(raceNo) {
     data.raceInfo.paceType = pace;
     document.querySelectorAll('#race-content-area .pace-btn').forEach(b => b.classList.toggle('active', b.textContent.trim() === pace));
   }
+  // クイックスタッツ帯を更新
+  _updateRqsStrip(raceNo, f3, ag3, pace || data.raceInfo.paceType);
   if (raceNo === currentRaceNo) updateRaceSummaryBar(raceNo);
 }
 
@@ -3325,6 +3652,14 @@ function calcPaceFromDistance(f3, distStr) {
 // 折りたたみパネル制御
 // ============================================================
 const _openedCollapse = {}; // { 'bench_1': true, ... }
+
+function toggleAdminInputWrap(raceNo) {
+  const wrap = document.getElementById(`admin-wrap-${raceNo}`);
+  if (!wrap) return;
+  const icon = document.getElementById(`admin-toggle-icon-${raceNo}`);
+  const collapsed = wrap.classList.toggle('collapsed');
+  if (icon) icon.textContent = collapsed ? '▸' : '▾';
+}
 
 function toggleCollapse(type, raceNo) {
   const key  = `${type}_${raceNo}`;
@@ -3452,30 +3787,41 @@ function renderCardView(raceNo) {
     return { ...h, avgSI, maxSI };
   }).sort((a,b) => (b.avgSI??-1) - (a.avgSI??-1));
 
+  const MARK_COL = ['#dc2626','#2563eb','#d97706','#9ca3af','#9ca3af'];
   grid.innerHTML = horsesWithSI.map((h, idx) => {
     const hasVal = h.avgSI != null;
-    const bg  = hasVal ? (RANK_BG[idx]  || '#f4f6fa') : '#f4f6fa';
-    const fg  = hasVal ? (RANK_FG[idx]  || '#374151') : '#9ca3af';
+    const bg     = hasVal ? (RANK_BG[idx]  || '#f4f6fa') : '#f4f6fa';
+    const fg     = hasVal ? (RANK_FG[idx]  || '#374151') : '#9ca3af';
     const barCol = hasVal ? (RANK_BAR[idx] || '#d1d5db') : '#d1d5db';
-    const mark   = hasVal ? (RANK_MRK[idx] || '')       : '';
+    const mark   = hasVal ? (RANK_MRK[idx] || '')        : '';
     const barPct = hasVal ? Math.min(100, Math.max(0, ((h.avgSI - 20) / 50) * 100)).toFixed(0) : 0;
-    const wku = parseInt(h.wakuBan)||Math.ceil((parseInt(h.umaBan)||1)/2);
-    const chaku = parseInt(h.chakujun);
-    const chakuHtml = !isNaN(chaku)&&chaku>0 ? `<span style="font-size:10px;font-weight:800;padding:1px 5px;border-radius:10px;background:${chaku===1?'#fef3c7':chaku===2?'#e2e8f0':chaku===3?'#fde8d8':'#f4f6fa'};color:${chaku===1?'#92400e':chaku===2?'#374151':chaku===3?'#c2410c':'#6b7280'};">${chaku}着</span>` : '';
-    return `<div class="horse-card">
+    const wku    = parseInt(h.wakuBan)||Math.ceil((parseInt(h.umaBan)||1)/2);
+    const chaku  = parseInt(h.chakujun);
+    const rankClass = idx < 4 ? `hc-r${idx+1}` : '';
+    const paceClass = h.paceType==='ハイ'?'hc-pace-high':h.paceType==='スロー'?'hc-pace-slow':h.paceType==='ミドル'?'hc-pace-mid':'';
+    const chakuHtml = !isNaN(chaku)&&chaku>0
+      ? `<span style="font-size:10px;font-weight:800;padding:1px 5px;border-radius:10px;background:${chaku===1?'#fef3c7':chaku===2?'#e2e8f0':chaku===3?'#fde8d8':'#f4f6fa'};color:${chaku===1?'#92400e':chaku===2?'#374151':chaku===3?'#c2410c':'#6b7280'};">${chaku}着</span>` : '';
+    return `<div class="horse-card ${rankClass}">
       <div class="horse-card-top">
-        <span style="background:${wakuBgFn(wku)};color:${wakuFgFn(wku)};width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0;">${h.umaBan||'?'}</span>
-        ${chakuHtml}
-        ${mark?`<span style="font-size:14px;font-weight:900;color:${fg};margin-left:2px;">${mark}</span>`:''}
-        ${h.ninki?`<span style="font-size:10px;color:#6b7280;margin-left:auto;">${h.ninki}人</span>`:''}
+        <span class="horse-card-waku" style="background:${wakuBgFn(wku)};color:${wakuFgFn(wku)};">${h.umaBan||'?'}</span>
+        ${mark?`<span class="horse-card-mark" style="color:${MARK_COL[idx]||'#9ca3af'}">${mark}</span>`:''}
+        <span class="horse-card-name" title="${h.horseName}">${h.horseName}</span>
       </div>
-      <div class="horse-card-name" title="${h.horseName}">${h.horseName}</div>
-      <div class="horse-card-si" style="background:${bg};color:${fg};">${hasVal?h.avgSI.toFixed(1):'—'}</div>
+      <div class="horse-card-badges">
+        ${chakuHtml}
+        ${h.ninki?`<span class="horse-card-ninki">${h.ninki}人気</span>`:''}
+        ${paceClass?`<span class="hc-pace ${paceClass}">${h.paceType}</span>`:''}
+      </div>
+      <div class="horse-card-si" style="background:${bg};color:${fg};">${hasVal?h.avgSI.toFixed(1):'—'}${mark?`<span class="horse-card-si-mark">${mark}</span>`:''}</div>
       <div class="horse-card-bar-wrap"><div class="horse-card-bar-fill" style="width:${barPct}%;background:${barCol};"></div></div>
       <div class="horse-card-stats">
+        <div class="horse-card-stat"><span class="horse-card-stat-label">前半3F</span><span class="horse-card-stat-val">${h.first3f||'—'}</span></div>
         <div class="horse-card-stat"><span class="horse-card-stat-label">上がり</span><span class="horse-card-stat-val">${h.agari3f||'—'}</span></div>
         <div class="horse-card-stat"><span class="horse-card-stat-label">最高SI</span><span class="horse-card-stat-val">${h.maxSI!=null?h.maxSI.toFixed(1):'—'}</span></div>
-        <div class="horse-card-stat"><span class="horse-card-stat-label">騎手</span><span class="horse-card-stat-val" style="font-size:10px;">${(h.jockey||'').slice(0,4)}</span></div>
+      </div>
+      <div class="horse-card-footer">
+        <span>${(h.jockey||'').slice(0,6)}</span>
+        ${h.kinryo?`<span class="hc-kinryo">${h.kinryo}kg</span>`:''}
       </div>
     </div>`;
   }).join('');
@@ -3697,6 +4043,8 @@ function renderAbilityTable(raceNo) {
     container.innerHTML = '<div style="text-align:center;padding:20px;color:#9ca3af;">データなし</div>';
     return;
   }
+
+  const isDark = document.body.classList.contains('dark-mode');
 
   // 当日馬場差を取得
   const biasInfo = calcDayTrackBias();
@@ -3948,9 +4296,11 @@ function renderAbilityTable(raceNo) {
     const _sdTrend = _mkTrend(_sdIdxList);
 
     const _mkIdxRow = (label, avg3, trend, best, labelColor) => {
-      const avgBg  = avg3 >= 55 ? '#ede9fe' : avg3 >= 50 ? '#fee2e2' : avg3 >= 45 ? '#dbeafe' : '#f1f5f9';
-      const avgClr = avg3 >= 55 ? '#7c3aed' : avg3 >= 50 ? '#dc2626' : avg3 >= 45 ? '#1d4ed8' : '#374151';
-      const bstClr = best >= 55 ? '#7c3aed' : best >= 50 ? '#dc2626' : best >= 45 ? '#1d4ed8' : '#374151';
+      const avgBg  = isDark
+        ? (avg3 >= 55 ? '#2d1a4a' : avg3 >= 50 ? '#2d0000' : avg3 >= 45 ? '#00122a' : '#0d1520')
+        : (avg3 >= 55 ? '#ede9fe' : avg3 >= 50 ? '#fee2e2' : avg3 >= 45 ? '#dbeafe' : '#f1f5f9');
+      const avgClr = avg3 >= 55 ? '#a78bfa' : avg3 >= 50 ? '#f87171' : avg3 >= 45 ? '#60a5fa' : (isDark?'#c8d8ec':'#374151');
+      const bstClr = best >= 55 ? '#a78bfa' : best >= 50 ? '#f87171' : best >= 45 ? '#60a5fa' : (isDark?'#8fa3be':'#374151');
       return `<div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;">
         <span style="font-size:7.5px;color:${labelColor};font-weight:700;flex-shrink:0;">${label}</span>
         <span style="font-size:10px;font-weight:900;color:${avgClr};background:${avgBg};border-radius:3px;padding:0 4px;">${avg3}</span>
@@ -3962,7 +4312,7 @@ function renderAbilityTable(raceNo) {
     const _idxSummaryHtml = _idxAvg3 != null ? (() => {
       const rows = [_mkIdxRow('近走', _idxAvg3, _idxTrend, _idxBest, '#94a3b8')];
       if (_sdAvg3 != null) rows.push(_mkIdxRow('同距離', _sdAvg3, _sdTrend, _sdBest, '#a78bfa'));
-      return `<div style="border-top:1px solid #e2e8f0;padding-top:3px;margin-top:2px;display:flex;flex-direction:column;gap:2px;">${rows.join('')}</div>`;
+      return `<div style="border-top:1px solid ${isDark?'#1e3048':'#e2e8f0'};padding-top:3px;margin-top:2px;display:flex;flex-direction:column;gap:2px;">${rows.join('')}</div>`;
     })() : '';
 
     // ─── 過去走カード（5走 or 全展開） ────────────────────────
@@ -3971,7 +4321,7 @@ function renderAbilityTable(raceNo) {
       const label     = i < 5 ? PAST_LABELS[i]  : EXTRA_LABELS[i - 5];
 
       if (!r) return `
-        <div style="flex:1;min-width:130px;max-width:172px;border:1.5px dashed #dde3ef;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f8fafc;padding:12px 6px;gap:3px;">
+        <div style="flex:1;min-width:130px;max-width:172px;border:1.5px dashed ${isDark?'#1e3048':'#dde3ef'};border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:${isDark?'#0d1520':'#f8fafc'};padding:12px 6px;gap:3px;">
           <span style="font-size:9px;font-weight:700;color:${accentClr};opacity:.5;">${label}</span>
           <span style="font-size:9px;color:#cbd5e1;">記録なし</span>
         </div>`;
@@ -4024,14 +4374,12 @@ function renderAbilityTable(raceNo) {
       const agariIdx  = calcAgariIndex(agv, raceAvgAg);
 
       // 着順別カード背景色（1着=金、2着=淡青、3着=淡ピンク）
-      const cardBg = isWin
-        ? 'linear-gradient(160deg,#fffbeb,#fef9c3)'
-        : chaku === 2
-          ? 'linear-gradient(160deg,#eff6ff,#dbeafe)'
-          : chaku === 3
-            ? 'linear-gradient(160deg,#fff0f6,#fce7f3)'
-            : '#fff';
-      const cardBorder = isWin ? '#f59e0b' : chaku === 2 ? '#93c5fd' : chaku === 3 ? '#f9a8d4' : '#e2e8f0';
+      const cardBg = isDark
+        ? (isWin ? 'linear-gradient(160deg,#1a1200,#252000)' : chaku===2 ? 'linear-gradient(160deg,#000a18,#001228)' : chaku===3 ? 'linear-gradient(160deg,#1a0010,#220018)' : '#0d1520')
+        : (isWin ? 'linear-gradient(160deg,#fffbeb,#fef9c3)' : chaku===2 ? 'linear-gradient(160deg,#eff6ff,#dbeafe)' : chaku===3 ? 'linear-gradient(160deg,#fff0f6,#fce7f3)' : '#fff');
+      const cardBorder = isDark
+        ? (isWin ? '#b45309' : chaku===2 ? '#1d4ed8' : chaku===3 ? '#9d174d' : '#1e3048')
+        : (isWin ? '#f59e0b' : chaku===2 ? '#93c5fd' : chaku===3 ? '#f9a8d4' : '#e2e8f0');
 
       // 1着差 → 同レースの1着タイムとの差（秒）で表示
       let diffDisp = '';
@@ -4052,8 +4400,8 @@ function renderAbilityTable(raceNo) {
       const isCardDateMatch = selDate ? r.raceDate.replace(/\//g, '-') === selDate : false;
 
       return `
-      <div style="flex:1;min-width:148px;max-width:185px;border:1.5px solid ${isCardDateMatch?'#f59e0b':cardBorder};border-top:3px solid ${accentClr};border-radius:8px;overflow:hidden;background:${cardBg};display:flex;flex-direction:column;box-shadow:${isCardDateMatch?'0 0 0 2px #fbbf24,0 2px 8px rgba(245,158,11,.4)':'0 1px 3px rgba(0,0,0,.05)'};">
-      ${isCardDateMatch ? `<div style="background:#fef9c3;text-align:center;font-size:9px;font-weight:800;color:#b45309;padding:1px 0;letter-spacing:.5px;">◀ ${r.raceDate} ▶</div>` : ''}
+      <div class="ability-past-card" style="flex:1;min-width:148px;max-width:185px;border:1.5px solid ${isCardDateMatch?'#f59e0b':cardBorder};border-top:3px solid ${accentClr};border-radius:8px;overflow:hidden;background:${cardBg};display:flex;flex-direction:column;box-shadow:${isCardDateMatch?'0 0 0 2px #fbbf24,0 2px 8px rgba(245,158,11,.4)':'0 1px 3px rgba(0,0,0,.05)'};">
+      ${isCardDateMatch ? `<div style="background:${isDark?'#252000':'#fef9c3'};text-align:center;font-size:9px;font-weight:800;color:#b45309;padding:1px 0;letter-spacing:.5px;">◀ ${r.raceDate} ▶</div>` : ''}
 
         <!-- ① ヘッダー：ラベル + レース固有馬場差 + 日付 -->
         <div style="background:${accentClr};padding:3px 8px;display:flex;align-items:center;gap:4px;">
@@ -4065,12 +4413,12 @@ function renderAbilityTable(raceNo) {
         <!-- ② クラス / 距離 / 枠番+馬番 / 馬場 -->
         <div style="padding:4px 8px 0;display:flex;align-items:center;gap:3px;flex-wrap:wrap;">
           ${r.raceClass ? `<span class="race-class-badge ${raceClassCssClass(r.raceClass)}" style="font-size:8px;padding:0 5px;line-height:17px;">${r.raceClass}</span>` : ''}
-          ${r.distance  ? `<span style="font-size:10px;font-weight:700;color:#334155;">${r.distance}</span>` : ''}
-          ${rWaku ? `<span style="display:inline-flex;align-items:center;gap:2px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:3px;padding:0 4px;height:17px;flex-shrink:0;">
+          ${r.distance  ? `<span style="font-size:10px;font-weight:700;color:${isDark?'#c8d8ec':'#334155'};">${r.distance}</span>` : ''}
+          ${rWaku ? `<span style="display:inline-flex;align-items:center;gap:2px;background:${isDark?'#0d1520':'#f1f5f9'};border:1px solid ${isDark?'#1e3048':'#e2e8f0'};border-radius:3px;padding:0 4px;height:17px;flex-shrink:0;">
             <span style="background:${WBG(rWaku)};color:${WFG(rWaku)};border:${WBD(rWaku)};font-size:9px;font-weight:800;min-width:14px;height:14px;border-radius:2px;display:inline-flex;align-items:center;justify-content:center;">${rWaku}</span>
-            <span style="font-size:9px;font-weight:700;color:#374151;">${r.umaBan||''}番</span>
+            <span style="font-size:9px;font-weight:700;color:${isDark?'#c8d8ec':'#374151'};">${r.umaBan||''}番</span>
           </span>` : ''}
-          ${r.trackCond ? `<span style="font-size:9px;color:#6b7280;font-weight:600;">${r.trackCond}</span>` : ''}
+          ${r.trackCond ? `<span style="font-size:9px;color:${isDark?'#8fa3be':'#6b7280'};font-weight:600;">${r.trackCond}</span>` : ''}
         </div>
 
         <!-- ③ 着順 + タイム + 1着差 + ペース -->
@@ -4080,7 +4428,7 @@ function renderAbilityTable(raceNo) {
             : `<span style="font-size:12px;color:#9ca3af;flex-shrink:0;">—</span>`}
           <div style="flex:1;min-width:0;">
             <div style="display:flex;align-items:baseline;gap:0;flex-wrap:nowrap;">
-              <span style="font-size:14px;font-family:monospace;font-weight:900;color:#0f172a;line-height:1;white-space:nowrap;">${tv || '—'}</span>
+              <span style="font-size:14px;font-family:monospace;font-weight:900;color:${isDark?'#e2e8f0':'#0f172a'};line-height:1;white-space:nowrap;">${tv || '—'}</span>
               ${diffDisp}
             </div>
           </div>
@@ -4091,25 +4439,25 @@ function renderAbilityTable(raceNo) {
         </div>
 
         <!-- ④ 騎手 + 厩舎（横並び）+ 斤量 + 馬体重 -->
-        <div style="padding:2px 8px 4px;border-bottom:1px solid #f0f4fa;display:flex;align-items:center;gap:2px;flex-wrap:nowrap;">
+        <div style="padding:2px 8px 4px;border-bottom:1px solid ${isDark?'#1e3048':'#f0f4fa'};display:flex;align-items:center;gap:2px;flex-wrap:nowrap;">
           <div style="flex:1;min-width:0;overflow:hidden;display:flex;align-items:baseline;gap:2px;">
-            <span style="font-size:10px;font-weight:700;color:#1e3a5f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1;min-width:0;" title="${rJockey}">${rJockey||'—'}</span>
-            ${rTrainer?`<span style="font-size:8px;color:#64748b;font-weight:600;white-space:nowrap;flex-shrink:0;" title="${rTrainer}">厩${rTrainer}</span>`:''}
+            <span style="font-size:10px;font-weight:700;color:${isDark?'#c8d8ec':'#1e3a5f'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1;min-width:0;" title="${rJockey}">${rJockey||'—'}</span>
+            ${rTrainer?`<span style="font-size:8px;color:${isDark?'#8fa3be':'#64748b'};font-weight:600;white-space:nowrap;flex-shrink:0;" title="${rTrainer}">厩${rTrainer}</span>`:''}
           </div>
           ${isJockeyChange?`<span style="font-size:8px;font-weight:800;background:#dc2626;color:#fff;border-radius:3px;padding:0 4px;height:15px;display:inline-flex;align-items:center;flex-shrink:0;white-space:nowrap;">乗替</span>`:''}
-          <span style="font-size:10px;font-weight:700;color:#374151;white-space:nowrap;flex-shrink:0;">${kr||'—'}</span>
-          <span style="font-size:10px;font-weight:600;color:#475569;white-space:nowrap;flex-shrink:0;">${fmtWeightDiff(wt)}</span>
+          <span style="font-size:10px;font-weight:700;color:${isDark?'#c8d8ec':'#374151'};white-space:nowrap;flex-shrink:0;">${kr||'—'}</span>
+          <span style="font-size:10px;font-weight:600;color:${isDark?'#8fa3be':'#475569'};white-space:nowrap;flex-shrink:0;">${fmtWeightDiff(wt)}</span>
         </div>
 
         <!-- ⑤ 前3F / 後3F (2列) -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;padding:4px 8px 4px;">
-          <div style="background:#eff6ff;border-radius:4px;padding:3px 2px;text-align:center;">
-            <div style="font-size:7px;color:#3b82f6;font-weight:700;">前3F</div>
-            <div style="font-size:13px;font-family:monospace;font-weight:800;color:#1d4ed8;">${!isNaN(f3v) ? f3v.toFixed(1) : '—'}</div>
+          <div style="background:${isDark?'#001228':'#eff6ff'};border-radius:4px;padding:3px 2px;text-align:center;">
+            <div style="font-size:7px;color:${isDark?'#60a5fa':'#3b82f6'};font-weight:700;">前3F</div>
+            <div style="font-size:13px;font-family:monospace;font-weight:800;color:${isDark?'#93c5fd':'#1d4ed8'};">${!isNaN(f3v) ? f3v.toFixed(1) : '—'}</div>
           </div>
-          <div style="background:#fff7ed;border-radius:4px;padding:3px 2px;text-align:center;">
-            <div style="font-size:7px;color:#ea580c;font-weight:700;">後3F</div>
-            <div style="font-size:13px;font-family:monospace;font-weight:800;color:#c2410c;">${!isNaN(agv) ? agv.toFixed(1) : '—'}</div>
+          <div style="background:${isDark?'#180800':'#fff7ed'};border-radius:4px;padding:3px 2px;text-align:center;">
+            <div style="font-size:7px;color:${isDark?'#f97316':'#ea580c'};font-weight:700;">後3F</div>
+            <div style="font-size:13px;font-family:monospace;font-weight:800;color:${isDark?'#fb923c':'#c2410c'};">${!isNaN(agv) ? agv.toFixed(1) : '—'}</div>
           </div>
         </div>
 
@@ -4128,9 +4476,9 @@ function renderAbilityTable(raceNo) {
 
         <!-- ⑧ 補正タイム + タイム指数 + 上がり3F指数 -->
         ${(corrStr || speedIdx != null || agariIdx != null) ? `
-        <div style="border-top:1px solid #f0f4fa;padding:3px 8px 4px;display:flex;align-items:center;gap:3px;flex-wrap:wrap;">
+        <div style="border-top:1px solid ${isDark?'#1e3048':'#f0f4fa'};padding:3px 8px 4px;display:flex;align-items:center;gap:3px;flex-wrap:wrap;">
           ${corrStr ? `<span style="font-size:8px;color:#94a3b8;flex-shrink:0;">補正</span>
-          <span style="font-size:11px;font-family:monospace;font-weight:800;color:#0369a1;">${corrStr}</span>` : ''}
+          <span style="font-size:11px;font-family:monospace;font-weight:800;color:${isDark?'#38bdf8':'#0369a1'};">${corrStr}</span>` : ''}
           <span style="margin-left:auto;display:flex;gap:3px;align-items:center;">
             ${speedIdx != null ? speedIndexBadgeHtml(speedIdx) : ''}
             ${agariIdx != null ? agariIndexBadgeHtml(agariIdx) : ''}
@@ -4142,7 +4490,7 @@ function renderAbilityTable(raceNo) {
 
     // ─── 馬名固定パネル + 4走カード横並び ──────────────────────
     return `
-    <div style="border-bottom:1.5px solid #e9eef6;padding:6px 0 4px;">
+    <div style="border-bottom:1.5px solid ${isDark?'#1e3048':'#e9eef6'};padding:6px 0 4px;">
       <div style="display:flex;gap:6px;align-items:stretch;flex-wrap:nowrap;overflow-x:auto;padding:2px 2px 4px;-webkit-overflow-scrolling:touch;">
 
         <!-- 馬名固定セル -->
@@ -4154,21 +4502,21 @@ function renderAbilityTable(raceNo) {
           // 厩舎名：過去走データから取得（なければhorse.trainerをフォールバック）
           const trainerName  = (hist.length > 0 && hist[0].trainer) ? hist[0].trainer : (horse.trainer || '');
           return `
-          <div style="flex-shrink:0;width:106px;background:${hasDateMatch?'#fefce8':'#f8fafc'};border:1.5px solid ${hasDateMatch?'#f59e0b':'#dde3ef'};border-left:4px solid ${hasDateMatch?'#f59e0b':PAST_COLORS[0]};border-radius:8px;padding:6px 7px 5px;display:flex;flex-direction:column;gap:3px;">
+          <div style="flex-shrink:0;width:106px;background:${hasDateMatch?'#fefce8':(isDark?'#0d1520':'#f8fafc')};border:1.5px solid ${hasDateMatch?'#f59e0b':(isDark?'#1e3048':'#dde3ef')};border-left:4px solid ${hasDateMatch?'#f59e0b':PAST_COLORS[0]};border-radius:8px;padding:6px 7px 5px;display:flex;flex-direction:column;gap:3px;">
             <!-- 枠番 + 馬番 + 乗替バッジ -->
             <div style="display:flex;align-items:center;gap:4px;">
               <span style="background:${WBG(waku)};color:${WFG(waku)};border:${WBD(waku)};min-width:20px;height:20px;border-radius:3px;font-size:11px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">${waku}</span>
-              <span style="font-size:12px;font-weight:800;color:#475569;">${horse.umaBan}番</span>
+              <span style="font-size:12px;font-weight:800;color:${isDark?'#8fa3be':'#475569'};">${horse.umaBan}番</span>
               ${isChangeMain ? `<span style="font-size:8px;font-weight:800;background:#dc2626;color:#fff;border-radius:3px;padding:0 4px;height:15px;display:inline-flex;align-items:center;flex-shrink:0;white-space:nowrap;">乗替</span>` : ''}
             </div>
             <!-- 馬名 -->
-            <div style="font-size:11px;font-weight:900;color:#0f172a;line-height:1.3;word-break:keep-all;">${horse.horseName}</div>
+            <div style="font-size:11px;font-weight:900;color:${isDark?'#e2e8f0':'#0f172a'};line-height:1.3;word-break:keep-all;">${horse.horseName}</div>
             <!-- 性齢（馬名と同じ値なら非表示） -->
-            ${(horse.sexAge && horse.sexAge !== horse.horseName) ? `<div style="font-size:9px;color:#64748b;font-weight:600;">${horse.sexAge}</div>` : ''}
+            ${(horse.sexAge && horse.sexAge !== horse.horseName) ? `<div style="font-size:9px;color:${isDark?'#8fa3be':'#64748b'};font-weight:600;">${horse.sexAge}</div>` : ''}
             <!-- 騎手 / 厩舎（横並び） -->
-            <div style="display:flex;align-items:center;gap:3px;border-top:1px solid #e2e8f0;padding-top:3px;">
-              <div style="font-size:9px;color:#374151;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;" title="${todayJockey}">${todayJockey || '—'}</div>
-              ${trainerName ? `<div style="font-size:8px;color:#64748b;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;" title="${trainerName}">厩 ${trainerName}</div>` : ''}
+            <div style="display:flex;align-items:center;gap:3px;border-top:1px solid ${isDark?'#1e3048':'#e2e8f0'};padding-top:3px;">
+              <div style="font-size:9px;color:${isDark?'#c8d8ec':'#374151'};font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;" title="${todayJockey}">${todayJockey || '—'}</div>
+              ${trainerName ? `<div style="font-size:8px;color:${isDark?'#8fa3be':'#64748b'};font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;" title="${trainerName}">厩 ${trainerName}</div>` : ''}
             </div>
             <!-- 近走指数サマリー -->
             ${_idxSummaryHtml}
@@ -4178,7 +4526,7 @@ function renderAbilityTable(raceNo) {
             <div class="horse-tag-badges" data-horse="${horse.horseName}" style="display:flex;flex-wrap:wrap;gap:2px;margin-top:3px;">
               ${horseTagBadgesHtml(horse.horseName)}
             </div>
-            <button onclick="event.stopPropagation();showHorseNoteEditor('${horse.horseName.replace(/'/g,"\\'")}',this)" style="margin-top:2px;font-size:8px;padding:1px 5px;border-radius:3px;border:1px solid #cbd5e1;background:#f8fafc;color:#64748b;cursor:pointer;width:100%;">+特徴</button>
+            <button onclick="event.stopPropagation();showHorseNoteEditor('${horse.horseName.replace(/'/g,"\\'")}',this)" style="margin-top:2px;font-size:8px;padding:1px 5px;border-radius:3px;border:1px solid ${isDark?'#1e3048':'#cbd5e1'};background:${isDark?'#0d1520':'#f8fafc'};color:${isDark?'#8fa3be':'#64748b'};cursor:pointer;width:100%;">+特徴</button>
           </div>`;
         })()}
 
@@ -4198,7 +4546,7 @@ function renderAbilityTable(raceNo) {
 
         <!-- 折りたたみボタン（展開中の場合） -->
         ${isExpanded ? `
-        <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:40px;padding:0 2px;position:sticky;right:0;z-index:3;background:#fff;box-shadow:-5px 0 10px rgba(0,0,0,.1);">
+        <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:40px;padding:0 2px;position:sticky;right:0;z-index:3;background:${isDark?'#0a0f1e':'#fff'};box-shadow:-5px 0 10px rgba(0,0,0,.1);">
           <button
             onclick="(function(){var m=renderAbilityTable._expandedMap;if(m&&m[${raceNo}])delete m[${raceNo}][${horse.umaBan}];renderAbilityTable(${raceNo});})()"
             style="writing-mode:vertical-rl;text-orientation:mixed;background:linear-gradient(180deg,#64748b,#475569);color:#fff;border:none;border-radius:8px;padding:12px 5px;font-size:10px;font-weight:800;cursor:pointer;line-height:1.4;min-height:60px;box-shadow:0 2px 6px rgba(71,85,105,.35);letter-spacing:.5px;"
@@ -4227,7 +4575,7 @@ function renderAbilityTable(raceNo) {
 
   // ─── テーブルヘッダー行 ────────────────────────────────────
   const headerRow = `
-  <div style="display:flex;gap:6px;align-items:center;padding:0 2px 4px;flex-wrap:nowrap;overflow-x:auto;border-bottom:2px solid #c8d6e8;margin-bottom:4px;">
+  <div style="display:flex;gap:6px;align-items:center;padding:0 2px 4px;flex-wrap:nowrap;overflow-x:auto;border-bottom:2px solid ${isDark?'#1e3048':'#c8d6e8'};margin-bottom:4px;">
     <div style="flex-shrink:0;width:106px;"></div>
     ${PAST_COLORS.map((clr, i) => `
       <div style="flex:1;min-width:148px;max-width:185px;display:flex;align-items:center;justify-content:center;gap:3px;">
@@ -4237,8 +4585,8 @@ function renderAbilityTable(raceNo) {
   </div>`;
 
   // ─── フィルターツールバー ─────────────────────────────────────
-  const filterToolbar = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:6px 10px;">
-    <span style="font-size:11px;font-weight:700;color:#374151;flex-shrink:0;">距離：</span>
+  const filterToolbar = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;background:${isDark?'#0d1520':'#f8fafc'};border:1px solid ${isDark?'#1e3048':'#e2e8f0'};border-radius:8px;padding:6px 10px;">
+    <span style="font-size:11px;font-weight:700;color:${isDark?'#c8d8ec':'#374151'};flex-shrink:0;">距離：</span>
     <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">${
       [null, ...allDistNums].map(d => {
         const isActive = d === null ? selDist === null : d === selDist;
