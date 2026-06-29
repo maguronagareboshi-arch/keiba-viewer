@@ -5067,6 +5067,23 @@ async function initDB() {
   // まず IndexedDB キャッシュをロード（LocalStorage 移行も含む）
   await loadIDBCache();
 
+  // ── 高知以外（babaCode≠'31'）のキャッシュを削除 ──
+  if (_idbCache) {
+    const _nonKochiKeys = Object.keys(_idbCache).filter(k => {
+      if (k.startsWith('race_')) {
+        const p = k.split('_'); return p[1] !== '31';
+      }
+      if (k.startsWith('offi_') || k.startsWith('daySettings_') || k.startsWith('horseNote_') || k.startsWith('official_')) return false;
+      const p = k.split('_');
+      return p.length >= 4 && p[0] !== '31' && /^\d{8}$/.test(p[1]);
+    });
+    for (const k of _nonKochiKeys) {
+      delete _idbCache[k];
+      idbDelete(k);
+    }
+    if (_nonKochiKeys.length > 0) console.log(`[initDB] 非高知データ ${_nonKochiKeys.length}件を削除`);
+  }
+
   try {
     // ── Supabase: レース情報を全件取得（1000件ずつページング） ──
     let raceOffset = 0;
@@ -5074,7 +5091,7 @@ async function initDB() {
     const LIMIT = 1000;
     while (true) {
       const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/keiba_races?select=*&order=race_date.desc&limit=${LIMIT}&offset=${raceOffset}`,
+        `${SUPABASE_URL}/rest/v1/keiba_races?select=*&baba_code=eq.31&order=race_date.desc&limit=${LIMIT}&offset=${raceOffset}`,
         { headers: SUPABASE_HEADERS }
       );
       if (!res.ok) break;
@@ -5105,7 +5122,7 @@ async function initDB() {
     let horseFetched = 0;
     while (true) {
       const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/keiba_horses?select=*&order=race_date.desc&limit=${LIMIT}&offset=${horseOffset}`,
+        `${SUPABASE_URL}/rest/v1/keiba_horses?select=*&baba_code=eq.31&order=race_date.desc&limit=${LIMIT}&offset=${horseOffset}`,
         { headers: SUPABASE_HEADERS }
       );
       if (!res.ok) break;
@@ -7676,7 +7693,8 @@ const PACE_ADJ_FACTOR = 0.5;  // 前半3F偏差1秒 → 実効タイム0.5秒補
 function calcPaceAdj(horseF3, raceAvgF3) {
   const h = parseFloat(horseF3);
   const r = parseFloat(raceAvgF3);
-  if (!isFinite(h) || !isFinite(r)) return 0;
+  // 前3Fは20〜60秒の範囲が正常。範囲外は異常値（フォーマット不正等）として無視
+  if (!isFinite(h) || !isFinite(r) || h < 20 || h > 60 || r < 20 || r > 60) return 0;
   return (h - r) * PACE_ADJ_FACTOR;
 }
 
@@ -7793,6 +7811,73 @@ function getStandardF3(dist, cls, cond) {
 
 /** 前半3F偏差1秒 → 馬場差補正量（秒）*/
 const PACE_BIAS_CORR_FACTOR = 0.5;
+
+/** 調教師別成績データ（高知競馬 2016-2026 実績） */
+const TRAINER_STATS = {
+  '打越勇児':{wr:25.32,pr:54.57},'田中守':{wr:20.07,pr:46.17},'倉兼育康':{wr:16.23,pr:44.67},
+  '雑賀正光':{wr:15.30,pr:41.10},'工藤真司':{wr:13.98,pr:38.69},'西川敏弘':{wr:12.82,pr:35.92},
+  '目迫大輔':{wr:11.49,pr:34.35},'中西達也':{wr:10.92,pr:34.23},'宮川真衣':{wr:11.66,pr:33.42},
+  '炭田健二':{wr:10.17,pr:30.81},'宮路洋一':{wr:9.33,pr:30.44},'松木啓助':{wr:9.24,pr:30.33},
+  '別府真司':{wr:8.79,pr:28.72},'田中譲二':{wr:7.79,pr:26.68},'嬉勝則':{wr:7.81,pr:26.56},
+  '川野勇馬':{wr:6.10,pr:25.83},'大関吉明':{wr:6.99,pr:25.60},'東原己俊':{wr:7.18,pr:25.31},
+  '那俄性哲':{wr:6.71,pr:24.40},'宮川浩一':{wr:6.96,pr:23.55},'國澤輝幸':{wr:6.00,pr:23.43},
+  '西山裕貴':{wr:5.31,pr:21.92},'細川忠義':{wr:6.08,pr:21.20},'胡本友晴':{wr:5.05,pr:20.00},
+  '田中伸一':{wr:4.23,pr:17.02},'平和人':{wr:4.04,pr:16.18},'宗石大':{wr:1.56,pr:9.34},
+  '雑賀秀介':{wr:0.38,pr:4.44}
+};
+function lookupTrainerStats(name) {
+  if (!name) return null;
+  const t = name.trim();
+  if (TRAINER_STATS[t]) return TRAINER_STATS[t];
+  const k = Object.keys(TRAINER_STATS).find(k => k.slice(0,3) === t.slice(0,3));
+  return k ? TRAINER_STATS[k] : null;
+}
+
+/** 枠番別勝率データ（高知競馬 実績・距離×馬場状態×枠番） */
+const DRAW_STATS = {
+  800:{
+    '不良':{1:9.76,2:18.29,3:17.28,4:12.05,5:6.45,6:8.05,7:9.89,8:15.96},
+    '稍重':{1:26.32,2:10.81,3:7.89,4:13.51,5:10.26,6:13.89,7:13.16,8:4.65},
+    '良':{1:11.32,2:9.26,3:11.54,4:11.11,5:10.34,6:9.43,7:15.62,8:15.15},
+    '重':{1:19.23,2:0,3:0,4:0,5:0,6:0,7:0,8:0}
+  },
+  1300:{
+    '不良':{1:8.94,2:9.97,3:9.61,4:9.90,5:9.26,6:8.42,7:10.52,8:11.00},
+    '稍重':{1:8.85,2:10.23,3:8.26,4:9.66,5:8.50,6:9.46,7:10.74,8:11.48},
+    '良':{1:10.01,2:12.23,3:10.59,4:8.56,5:8.67,6:9.54,7:10.10,8:10.20},
+    '重':{1:8.20,2:7.64,3:10.29,4:8.20,5:8.95,6:9.91,7:11.19,8:11.39}
+  },
+  1400:{
+    '不良':{1:8.67,2:9.53,3:9.54,4:9.08,5:8.96,6:10.35,7:10.13,8:11.28},
+    '稍重':{1:9.37,2:10.81,3:11.68,4:9.72,5:8.83,6:9.66,7:9.38,8:10.62},
+    '良':{1:8.97,2:8.78,3:11.86,4:10.09,5:10.34,6:8.66,7:10.11,8:10.91},
+    '重':{1:7.71,2:8.54,3:9.93,4:10.45,5:10.12,6:9.08,7:10.20,8:11.78}
+  },
+  1600:{
+    '不良':{1:11.84,2:11.30,3:13.70,4:8.11,5:10.79,6:13.01,7:8.41,8:11.28},
+    '稍重':{1:11.91,2:12.59,3:12.23,4:13.17,5:13.72,6:8.16,7:8.59,8:11.00},
+    '良':{1:13.83,2:14.68,3:13.51,4:10.00,5:13.89,6:6.56,7:9.44,8:9.18},
+    '重':{1:12.86,2:11.19,3:9.71,4:12.41,5:9.65,6:10.48,7:10.73,8:10.45}
+  },
+  1900:{
+    '不良':{5:6.06,6:10.53,7:7.32,8:9.30},
+    '重':{5:16.13,6:6.25,7:12.12,8:5.88}
+  }
+};
+function lookupDrawStats(dist, cond, gate) {
+  const g = parseInt(gate);
+  if (!g || g < 1 || g > 8) return null;
+  const dists = [800,1300,1400,1600,1900];
+  const nearD = dists.reduce((a,b) => Math.abs(b-dist)<Math.abs(a-dist)?b:a);
+  const condMap = DRAW_STATS[nearD];
+  if (!condMap) return null;
+  const gateMap = condMap[cond] || condMap['良'] || Object.values(condMap)[0];
+  if (!gateMap || gateMap[g] == null) return null;
+  const vals = Object.values(gateMap).filter(v=>v>0);
+  if (vals.length < 4) return null;
+  const avg = vals.reduce((s,v)=>s+v,0)/vals.length;
+  return { wr: gateMap[g], avg };
+}
 
 /** 騎手別成績データ（高知競馬 2016-2026 実績） */
 const JOCKEY_STATS = {"吉村智洋":{"all":{"wr":10.3,"pr":41.4,"n":29},"dist":{"1400":{"wr":18.2,"pr":36.4,"n":11},"1300":{"wr":0,"pr":40,"n":15}},"cond":{"不良":{"wr":0,"pr":0,"n":5},"重":{"wr":11.8,"pr":41.2,"n":17},"良":{"wr":0,"pr":57.1,"n":7}},"recent":{"wr":14.3,"pr":42.9,"n":14}},"松井伸也":{"all":{"wr":5.6,"pr":22.7,"n":321},"dist":{"1300":{"wr":7.1,"pr":22,"n":127},"1400":{"wr":4.4,"pr":23.3,"n":159},"1600":{"wr":5.7,"pr":22.9,"n":35}},"cond":{"不良":{"wr":0,"pr":29.3,"n":41},"重":{"wr":8.9,"pr":24.1,"n":79},"良":{"wr":4.9,"pr":23.8,"n":122},"稍重":{"wr":5.1,"pr":16.5,"n":79}},"recent":{"wr":5.8,"pr":21.5,"n":260}},"郷間勇太":{"all":{"wr":8.7,"pr":27.1,"n":5519},"dist":{"1300":{"wr":8.5,"pr":26.7,"n":2370},"1400":{"wr":9,"pr":27.2,"n":2461},"1600":{"wr":8.6,"pr":27.9,"n":688}},"cond":{"不良":{"wr":8.1,"pr":26.2,"n":1765},"重":{"wr":8.7,"pr":25.9,"n":1932},"良":{"wr":8.4,"pr":29.9,"n":864},"稍重":{"wr":10.1,"pr":28.6,"n":958}},"recent":{"wr":7.6,"pr":27.1,"n":1329}},"木村直輝":{"all":{"wr":4.2,"pr":16.8,"n":4371},"dist":{"1300":{"wr":4.6,"pr":17.6,"n":1971},"1400":{"wr":3.8,"pr":15.6,"n":1975},"1600":{"wr":4,"pr":18.4,"n":425}},"cond":{"不良":{"wr":3.8,"pr":16.9,"n":1483},"重":{"wr":4.9,"pr":16.9,"n":1339},"良":{"wr":3.3,"pr":17,"n":723},"稍重":{"wr":4.5,"pr":16.2,"n":826}},"recent":{"wr":3.6,"pr":15.7,"n":1179}},"林謙佑":{"all":{"wr":8.8,"pr":30.2,"n":5995},"dist":{"1300":{"wr":8.4,"pr":27.8,"n":2615},"1400":{"wr":9.4,"pr":32.3,"n":2640},"1600":{"wr":8.1,"pr":30.9,"n":740}},"cond":{"不良":{"wr":9.4,"pr":30.6,"n":1935},"重":{"wr":7.9,"pr":29.1,"n":2014},"良":{"wr":9.6,"pr":30.6,"n":1020},"稍重":{"wr":8.5,"pr":31.1,"n":1026}},"recent":{"wr":8.1,"pr":29.4,"n":1162}},"赤岡修次":{"all":{"wr":30.7,"pr":61.9,"n":5272},"dist":{"1300":{"wr":31.9,"pr":65,"n":2147},"1400":{"wr":29.7,"pr":60.5,"n":2356},"1600":{"wr":30.4,"pr":57.6,"n":769}},"cond":{"不良":{"wr":31.2,"pr":63.8,"n":1759},"重":{"wr":31.6,"pr":62.9,"n":1846},"良":{"wr":28.7,"pr":58.1,"n":728},"稍重":{"wr":29.5,"pr":59.1,"n":939}},"recent":{"wr":29.4,"pr":61.3,"n":954}},"仲原大生":{"all":{"wr":5.7,"pr":27.6,"n":123},"dist":{"1300":{"wr":7.1,"pr":28.6,"n":56},"1400":{"wr":4.1,"pr":26.5,"n":49},"1600":{"wr":0,"pr":27.8,"n":18}},"cond":{"不良":{"wr":0,"pr":26.7,"n":60},"重":{"wr":9.5,"pr":47.6,"n":21},"良":{"wr":37.5,"pr":37.5,"n":8},"稍重":{"wr":0,"pr":14.7,"n":34}},"recent":{"wr":5.8,"pr":28.1,"n":121}},"永森大智":{"all":{"wr":22.2,"pr":52.4,"n":6617},"dist":{"1300":{"wr":22.8,"pr":55.3,"n":2772},"1400":{"wr":21.4,"pr":49.9,"n":2908},"1600":{"wr":22.7,"pr":51.8,"n":937}},"cond":{"不良":{"wr":21.2,"pr":51.5,"n":2091},"重":{"wr":23.3,"pr":54.7,"n":2316},"良":{"wr":21.7,"pr":50.9,"n":1074},"稍重":{"wr":22,"pr":50.9,"n":1136}},"recent":{"wr":20.1,"pr":48.8,"n":1485}},"倉兼育康":{"all":{"wr":12.2,"pr":37.7,"n":4403},"dist":{"1300":{"wr":12.3,"pr":39.3,"n":1971},"1400":{"wr":11.5,"pr":35.2,"n":1938},"1600":{"wr":14.2,"pr":41.1,"n":494}},"cond":{"不良":{"wr":13.1,"pr":37.2,"n":1499},"重":{"wr":12.4,"pr":38.8,"n":1700},"良":{"wr":11.4,"pr":36.8,"n":562},"稍重":{"wr":10.1,"pr":36.6,"n":642}}},"山崎雅由":{"all":{"wr":7.4,"pr":26.8,"n":4952},"dist":{"1300":{"wr":8.4,"pr":27.2,"n":2213},"1400":{"wr":5.9,"pr":25.1,"n":2144},"1600":{"wr":9.4,"pr":31.8,"n":595}},"cond":{"不良":{"wr":7.6,"pr":27,"n":1566},"重":{"wr":7.1,"pr":26.2,"n":1620},"良":{"wr":8.1,"pr":27,"n":847},"稍重":{"wr":7.1,"pr":27.5,"n":919}},"recent":{"wr":8.1,"pr":29.8,"n":1522}},"中島龍也":{"all":{"wr":4,"pr":24.9,"n":503},"dist":{"1300":{"wr":4.9,"pr":28,"n":164},"1400":{"wr":3.5,"pr":19.7,"n":254},"1600":{"wr":3.5,"pr":34.1,"n":85}},"cond":{"不良":{"wr":3.5,"pr":29.6,"n":115},"重":{"wr":5.8,"pr":26.5,"n":155},"良":{"wr":2.4,"pr":19.5,"n":123},"稍重":{"wr":3.6,"pr":23.6,"n":110}},"recent":{"wr":5,"pr":24,"n":300}},"岩本怜":{"all":{"wr":4,"pr":12,"n":75},"dist":{"1300":{"wr":0,"pr":17.9,"n":28},"1400":{"wr":0,"pr":8.6,"n":35},"1600":{"wr":0,"pr":0,"n":12}},"cond":{"重":{"wr":0,"pr":10.5,"n":19},"良":{"wr":0,"pr":11.1,"n":18},"稍重":{"wr":5.6,"pr":13.9,"n":36}},"recent":{"wr":4.1,"pr":12.3,"n":73}},"葛山晃平":{"all":{"wr":2.6,"pr":23.4,"n":231},"dist":{"1300":{"wr":0,"pr":25.9,"n":81},"1400":{"wr":4.4,"pr":21.9,"n":114},"1600":{"wr":0,"pr":22.2,"n":36}},"cond":{"不良":{"wr":0,"pr":15.2,"n":46},"重":{"wr":2.5,"pr":22.8,"n":79},"良":{"wr":0,"pr":17.2,"n":29},"稍重":{"wr":2.6,"pr":31.2,"n":77}},"recent":{"wr":0,"pr":4.1,"n":49}},"近藤翔月":{"all":{"wr":8.6,"pr":23.7,"n":735},"dist":{"1300":{"wr":8,"pr":22.3,"n":274},"1400":{"wr":8,"pr":21.2,"n":312},"1600":{"wr":10.7,"pr":31.5,"n":149}},"cond":{"不良":{"wr":7.2,"pr":23.9,"n":180},"重":{"wr":7.7,"pr":21.9,"n":169},"良":{"wr":8.3,"pr":25.9,"n":205},"稍重":{"wr":11,"pr":22.7,"n":181}},"recent":{"wr":8.6,"pr":23.7,"n":735}},"上田将司":{"all":{"wr":6.8,"pr":26.5,"n":5077},"dist":{"1300":{"wr":6.4,"pr":25.9,"n":2394},"1400":{"wr":7.4,"pr":27.2,"n":2111},"1600":{"wr":5.9,"pr":26.6,"n":572}},"cond":{"不良":{"wr":6.4,"pr":25.7,"n":1635},"重":{"wr":6.4,"pr":26.3,"n":1918},"良":{"wr":7.8,"pr":29.3,"n":735},"稍重":{"wr":7.6,"pr":26,"n":789}},"recent":{"wr":6.7,"pr":25.8,"n":507}},"松本大輝":{"all":{"wr":14.3,"pr":35.7,"n":28},"dist":{"1400":{"wr":14.3,"pr":42.9,"n":21},"1300":{"wr":0,"pr":0,"n":5}},"cond":{"重":{"wr":0,"pr":41.7,"n":12},"稍重":{"wr":20,"pr":30,"n":10}},"recent":{"wr":9.1,"pr":36.4,"n":22}},"大澤誠志":{"all":{"wr":2.1,"pr":10.4,"n":4082},"dist":{"1300":{"wr":1.9,"pr":10.5,"n":2055},"1400":{"wr":2.3,"pr":10.2,"n":1669},"1600":{"wr":2.5,"pr":10.9,"n":358}},"cond":{"不良":{"wr":2.4,"pr":10.4,"n":1294},"重":{"wr":2.1,"pr":10.7,"n":1398},"良":{"wr":1,"pr":8.7,"n":667},"稍重":{"wr":2.6,"pr":11.5,"n":723}},"recent":{"wr":1.5,"pr":9.1,"n":957}},"沢田龍哉":{"all":{"wr":0,"pr":26.3,"n":19},"dist":{"1400":{"wr":0,"pr":41.7,"n":12},"1300":{"wr":0,"pr":0,"n":6}},"cond":{"良":{"wr":0,"pr":33.3,"n":12},"稍重":{"wr":0,"pr":0,"n":7}},"recent":{"wr":0,"pr":26.3,"n":19}},"塚本征吾":{"all":{"wr":8.3,"pr":30.6,"n":36},"dist":{"1400":{"wr":0,"pr":27.8,"n":18},"1300":{"wr":13.3,"pr":40,"n":15}},"cond":{"不良":{"wr":0,"pr":30,"n":10},"重":{"wr":0,"pr":16.7,"n":12},"良":{"wr":0,"pr":36.4,"n":11}},"recent":{"wr":8.6,"pr":31.4,"n":35}},"宮川実":{"all":{"wr":23.3,"pr":52.6,"n":5136},"dist":{"1300":{"wr":25,"pr":54.5,"n":2062},"1400":{"wr":21.8,"pr":51.5,"n":2339},"1600":{"wr":23,"pr":50.7,"n":735}},"cond":{"不良":{"wr":23.8,"pr":52.9,"n":1695},"重":{"wr":22.3,"pr":52,"n":1810},"良":{"wr":23,"pr":50.9,"n":812},"稍重":{"wr":24.7,"pr":54.9,"n":819}},"recent":{"wr":28,"pr":57.3,"n":810}},"佐原秀泰":{"all":{"wr":9.6,"pr":31.6,"n":5598},"dist":{"1300":{"wr":9.5,"pr":32.2,"n":2421},"1400":{"wr":9.8,"pr":30.8,"n":2460},"1600":{"wr":9.3,"pr":32.2,"n":717}},"cond":{"不良":{"wr":9.6,"pr":32.4,"n":1792},"重":{"wr":9.1,"pr":30.2,"n":2069},"良":{"wr":10.8,"pr":34.3,"n":784},"稍重":{"wr":10,"pr":31.1,"n":953}},"recent":{"wr":11.8,"pr":33.8,"n":876}},"岡遼太郎":{"all":{"wr":8.9,"pr":29.4,"n":2888},"dist":{"1300":{"wr":9.6,"pr":29.8,"n":1100},"1400":{"wr":8.5,"pr":29.5,"n":1404},"1600":{"wr":7.8,"pr":28.1,"n":384}},"cond":{"不良":{"wr":7.9,"pr":28.7,"n":895},"重":{"wr":8.4,"pr":26.4,"n":812},"良":{"wr":9.9,"pr":29.7,"n":535},"稍重":{"wr":9.9,"pr":34.1,"n":646}},"recent":{"wr":10.4,"pr":33,"n":1371}},"村上弘樹":{"all":{"wr":13,"pr":37.7,"n":154},"dist":{"1300":{"wr":11.9,"pr":35.8,"n":67},"1400":{"wr":14.9,"pr":38.8,"n":67},"1600":{"wr":10,"pr":40,"n":20}},"cond":{"不良":{"wr":9.4,"pr":35.9,"n":64},"重":{"wr":16.4,"pr":38.2,"n":55},"稍重":{"wr":14.3,"pr":40,"n":35}}},"西森将司":{"all":{"wr":2.8,"pr":15.4,"n":4687},"dist":{"1300":{"wr":2.5,"pr":15.4,"n":2358},"1400":{"wr":3.1,"pr":14.7,"n":1927},"1600":{"wr":3,"pr":18.7,"n":402}},"cond":{"不良":{"wr":3,"pr":15,"n":1478},"重":{"wr":2.8,"pr":16.4,"n":1743},"良":{"wr":2.2,"pr":13.7,"n":678},"稍重":{"wr":2.8,"pr":15.5,"n":788}},"recent":{"wr":1.9,"pr":14.5,"n":782}},"石本純也":{"all":{"wr":3.5,"pr":14.2,"n":3859},"dist":{"1300":{"wr":3.7,"pr":14.3,"n":2101},"1400":{"wr":3.3,"pr":13.7,"n":1490},"1600":{"wr":2.6,"pr":16,"n":268}},"cond":{"不良":{"wr":2.8,"pr":12.8,"n":1245},"重":{"wr":3.9,"pr":15.7,"n":1348},"良":{"wr":4,"pr":14.6,"n":603},"稍重":{"wr":3.5,"pr":13.4,"n":663}},"recent":{"wr":2.1,"pr":8.4,"n":681}},"妹尾浩一":{"all":{"wr":8,"pr":25.9,"n":4524},"dist":{"1300":{"wr":8.2,"pr":26.4,"n":2074},"1400":{"wr":7.8,"pr":24.9,"n":1931},"1600":{"wr":8.3,"pr":27.6,"n":519}},"cond":{"不良":{"wr":8.9,"pr":26.9,"n":1436},"重":{"wr":7.3,"pr":24.9,"n":1623},"良":{"wr":8.2,"pr":26.1,"n":674},"稍重":{"wr":7.7,"pr":25.9,"n":791}},"recent":{"wr":9.4,"pr":28.3,"n":1152}},"塚本直之":{"all":{"wr":0,"pr":7.3,"n":41},"dist":{"1300":{"wr":0,"pr":0,"n":13},"1400":{"wr":0,"pr":10,"n":20},"1600":{"wr":0,"pr":0,"n":8}},"cond":{"不良":{"wr":0,"pr":0,"n":17},"重":{"wr":0,"pr":0,"n":13},"稍重":{"wr":0,"pr":0,"n":11}},"recent":{"wr":0,"pr":7.3,"n":41}},"飛田愛斗":{"all":{"wr":0,"pr":30,"n":10},"dist":{"1400":{"wr":0,"pr":40,"n":5}},"cond":{"不良":{"wr":0,"pr":30,"n":10}},"recent":{"wr":0,"pr":0,"n":8}},"及川烈":{"all":{"wr":0,"pr":0,"n":28},"dist":{"1300":{"wr":0,"pr":0,"n":13},"1400":{"wr":0,"pr":0,"n":10},"1600":{"wr":0,"pr":0,"n":5}},"cond":{"良":{"wr":0,"pr":0,"n":16},"不良":{"wr":0,"pr":0,"n":10}},"recent":{"wr":0,"pr":0,"n":28}},"加藤翔馬":{"all":{"wr":8.2,"pr":26.1,"n":402},"dist":{"1300":{"wr":8.8,"pr":26.4,"n":159},"1400":{"wr":9.4,"pr":29.3,"n":191},"1600":{"wr":0,"pr":13.5,"n":52}},"cond":{"不良":{"wr":12.8,"pr":24.4,"n":78},"重":{"wr":5.8,"pr":22.1,"n":104},"良":{"wr":9.3,"pr":31.1,"n":151},"稍重":{"wr":4.3,"pr":23.2,"n":69}},"recent":{"wr":8.2,"pr":26,"n":400}},"阿部基嗣":{"all":{"wr":2.6,"pr":13.3,"n":1566},"dist":{"1300":{"wr":2.3,"pr":14.3,"n":607},"1400":{"wr":3.2,"pr":13.3,"n":750},"1600":{"wr":1,"pr":10,"n":209}},"cond":{"不良":{"wr":1.9,"pr":11.9,"n":469},"重":{"wr":2.9,"pr":14.3,"n":349},"良":{"wr":3.8,"pr":12.5,"n":368},"稍重":{"wr":1.8,"pr":14.7,"n":380}},"recent":{"wr":2.6,"pr":13.9,"n":1285}},"浜尚美":{"all":{"wr":5,"pr":18.1,"n":1087},"dist":{"1300":{"wr":6,"pr":19.5,"n":435},"1400":{"wr":4.4,"pr":17.6,"n":551},"1600":{"wr":4,"pr":14.9,"n":101}},"cond":{"不良":{"wr":3.7,"pr":16.6,"n":301},"重":{"wr":6.2,"pr":16.9,"n":307},"良":{"wr":7.1,"pr":21.3,"n":253},"稍重":{"wr":2.7,"pr":18.1,"n":226}},"recent":{"wr":6.9,"pr":22.4,"n":491}},"中島良美":{"all":{"wr":0,"pr":3.6,"n":56},"dist":{"1300":{"wr":0,"pr":6.9,"n":29},"1400":{"wr":0,"pr":0,"n":22},"1600":{"wr":0,"pr":0,"n":5}},"cond":{"不良":{"wr":0,"pr":0,"n":19},"重":{"wr":0,"pr":0,"n":11},"良":{"wr":0,"pr":0,"n":12},"稍重":{"wr":0,"pr":0,"n":14}},"recent":{"wr":0,"pr":3.8,"n":53}},"塚本雄大":{"all":{"wr":6.8,"pr":23.4,"n":4299},"dist":{"1300":{"wr":7.2,"pr":22.4,"n":2210},"1400":{"wr":6.8,"pr":24.6,"n":1747},"1600":{"wr":5,"pr":24.6,"n":342}},"cond":{"不良":{"wr":7.8,"pr":24.9,"n":1416},"重":{"wr":6.4,"pr":22.1,"n":1689},"良":{"wr":5,"pr":22.8,"n":501},"稍重":{"wr":7.4,"pr":24.2,"n":693}},"recent":{"wr":8.6,"pr":31.8,"n":151}},"田口貫太":{"all":{"wr":0,"pr":30,"n":10},"dist":{"1400":{"wr":0,"pr":33.3,"n":9}},"cond":{"重":{"wr":0,"pr":0,"n":5}},"recent":{"wr":0,"pr":28.6,"n":7}},"岡村卓弥":{"all":{"wr":9.2,"pr":32.2,"n":7144},"dist":{"1300":{"wr":9.3,"pr":32.2,"n":3151},"1400":{"wr":9.2,"pr":31,"n":3084},"1600":{"wr":8.6,"pr":36,"n":909}},"cond":{"不良":{"wr":7.9,"pr":29.5,"n":2315},"重":{"wr":9.6,"pr":33.1,"n":2448},"良":{"wr":9.5,"pr":33.8,"n":1159},"稍重":{"wr":10.6,"pr":33.6,"n":1222}},"recent":{"wr":9.9,"pr":32.2,"n":1523}},"小杉亮":{"all":{"wr":4.5,"pr":19.1,"n":157},"dist":{"1300":{"wr":4.8,"pr":24.2,"n":62},"1400":{"wr":5.1,"pr":14.1,"n":78},"1600":{"wr":0,"pr":23.5,"n":17}},"cond":{"不良":{"wr":3.8,"pr":23.1,"n":52},"重":{"wr":14.8,"pr":22.2,"n":27},"良":{"wr":0,"pr":15.2,"n":33},"稍重":{"wr":0,"pr":15.6,"n":45}},"recent":{"wr":4.5,"pr":19.1,"n":157}},"嬉勝則":{"all":{"wr":6,"pr":20.6,"n":3281},"dist":{"1300":{"wr":6.2,"pr":21.1,"n":1576},"1400":{"wr":6.1,"pr":20.4,"n":1384},"1600":{"wr":4.7,"pr":19,"n":321}},"cond":{"不良":{"wr":5.9,"pr":19.8,"n":1115},"重":{"wr":6.2,"pr":21,"n":1228},"良":{"wr":6,"pr":21.6,"n":450},"稍重":{"wr":5.5,"pr":20.5,"n":488}},"recent":{"wr":4.8,"pr":25.5,"n":208}},"山田義貴":{"all":{"wr":7.8,"pr":16.9,"n":77},"dist":{"1300":{"wr":0,"pr":16.7,"n":24},"1400":{"wr":9.3,"pr":18.6,"n":43},"1600":{"wr":0,"pr":0,"n":10}},"cond":{"不良":{"wr":13.6,"pr":22.7,"n":22},"重":{"wr":6.2,"pr":15.6,"n":32},"良":{"wr":0,"pr":0,"n":5},"稍重":{"wr":0,"pr":11.1,"n":18}},"recent":{"wr":7.8,"pr":16.9,"n":77}},"下原理":{"all":{"wr":12.7,"pr":45.5,"n":110},"dist":{"1300":{"wr":18.4,"pr":55.3,"n":38},"1400":{"wr":10.5,"pr":43.9,"n":57},"1600":{"wr":0,"pr":26.7,"n":15}},"cond":{"不良":{"wr":7.3,"pr":36.6,"n":41},"重":{"wr":16.1,"pr":51.6,"n":31},"良":{"wr":17.6,"pr":52.9,"n":17},"稍重":{"wr":14.3,"pr":47.6,"n":21}},"recent":{"wr":0,"pr":54.5,"n":11}},"城野慈尚":{"all":{"wr":6.8,"pr":20.8,"n":1298},"dist":{"1300":{"wr":7.6,"pr":22,"n":487},"1400":{"wr":6.8,"pr":21.6,"n":617},"1600":{"wr":4.6,"pr":15.5,"n":194}},"cond":{"不良":{"wr":7.8,"pr":20.8,"n":322},"重":{"wr":6.7,"pr":21.6,"n":282},"良":{"wr":7.4,"pr":22.1,"n":366},"稍重":{"wr":5.2,"pr":18.6,"n":328}},"recent":{"wr":6.8,"pr":20.8,"n":1298}},"畑中信司":{"all":{"wr":9.1,"pr":31.6,"n":2812},"dist":{"1300":{"wr":8.4,"pr":32.1,"n":1034},"1400":{"wr":8.8,"pr":30.9,"n":1338},"1600":{"wr":11.4,"pr":32.3,"n":440}},"cond":{"不良":{"wr":10.8,"pr":32.4,"n":911},"重":{"wr":7.9,"pr":30.6,"n":814},"良":{"wr":8.8,"pr":33.6,"n":456},"稍重":{"wr":8.4,"pr":30.3,"n":631}},"recent":{"wr":9.1,"pr":33.2,"n":1170}},"井上瑛太":{"all":{"wr":10.9,"pr":33.2,"n":2838},"dist":{"1300":{"wr":10.3,"pr":31.7,"n":1035},"1400":{"wr":10.7,"pr":32.8,"n":1395},"1600":{"wr":12.7,"pr":38.5,"n":408}},"cond":{"不良":{"wr":10.7,"pr":31.4,"n":821},"重":{"wr":11,"pr":32.1,"n":783},"良":{"wr":11.6,"pr":37.1,"n":550},"稍重":{"wr":10.2,"pr":33.6,"n":684}},"recent":{"wr":14.8,"pr":42,"n":1421}},"多田羅誠":{"all":{"wr":12.3,"pr":37.8,"n":4230},"dist":{"1300":{"wr":13.1,"pr":39.1,"n":1763},"1400":{"wr":11.5,"pr":36.3,"n":1890},"1600":{"wr":12.3,"pr":38.5,"n":577}},"cond":{"不良":{"wr":12.2,"pr":38,"n":1327},"重":{"wr":11.8,"pr":37.6,"n":1234},"良":{"wr":12.9,"pr":39,"n":792},"稍重":{"wr":12.4,"pr":36.6,"n":877}},"recent":{"wr":13.4,"pr":41.4,"n":1540}},"長尾翼玖":{"all":{"wr":6.2,"pr":21.2,"n":113},"dist":{"1300":{"wr":11.4,"pr":27.3,"n":44},"1400":{"wr":3.3,"pr":18.3,"n":60},"1600":{"wr":0,"pr":0,"n":9}},"cond":{"不良":{"wr":0,"pr":28.6,"n":21},"重":{"wr":12.9,"pr":22.6,"n":31},"良":{"wr":0,"pr":8.3,"n":24},"稍重":{"wr":5.4,"pr":24.3,"n":37}}},"吉原寛人":{"all":{"wr":28.5,"pr":62.1,"n":884},"dist":{"1300":{"wr":29.2,"pr":64.8,"n":233},"1400":{"wr":28.7,"pr":59.8,"n":463},"1600":{"wr":27.1,"pr":64.4,"n":188}},"cond":{"不良":{"wr":27.4,"pr":63.7,"n":179},"重":{"wr":27.7,"pr":59.1,"n":264},"良":{"wr":25.6,"pr":57.6,"n":262},"稍重":{"wr":35.2,"pr":71.5,"n":179}},"recent":{"wr":26.1,"pr":61.1,"n":532}},"岩橋勇二":{"all":{"wr":6.8,"pr":25.4,"n":59},"dist":{"1300":{"wr":9.5,"pr":19,"n":21},"1400":{"wr":7.7,"pr":38.5,"n":26},"1600":{"wr":0,"pr":0,"n":12}},"cond":{"良":{"wr":4.4,"pr":24.4,"n":45},"稍重":{"wr":18.2,"pr":27.3,"n":11}},"recent":{"wr":6.8,"pr":25.4,"n":59}},"高野誠毅":{"all":{"wr":0.9,"pr":9.8,"n":224},"dist":{"1300":{"wr":0,"pr":11.2,"n":80},"1400":{"wr":0,"pr":9,"n":122},"1600":{"wr":0,"pr":9.1,"n":22}},"cond":{"不良":{"wr":2,"pr":9.2,"n":98},"重":{"wr":0,"pr":10,"n":40},"良":{"wr":0,"pr":12.8,"n":39},"稍重":{"wr":0,"pr":8.5,"n":47}},"recent":{"wr":0,"pr":8.2,"n":97}},"所蛍":{"all":{"wr":2.2,"pr":18,"n":139},"dist":{"1300":{"wr":3.2,"pr":15.9,"n":63},"1400":{"wr":0,"pr":16.4,"n":61},"1600":{"wr":0,"pr":33.3,"n":15}},"cond":{"不良":{"wr":0,"pr":17.2,"n":58},"重":{"wr":0,"pr":19.1,"n":47},"稍重":{"wr":5.9,"pr":17.6,"n":34}}}};
@@ -7990,7 +8075,7 @@ function getRaceAvgF3(babaCode, raceDate, raceNo) {
   for (const [k, v] of Object.entries(lsData)) {
     if (v.type !== 'horse' || !k.startsWith(prefix)) continue;
     const f3 = parseFloat(v.first3f);
-    if (isFinite(f3) && f3 > 0) f3vals.push(f3);
+    if (isFinite(f3) && f3 >= 20 && f3 <= 60) f3vals.push(f3);
   }
   const result = f3vals.length >= 2
     ? +(f3vals.reduce((s, v) => s + v, 0) / f3vals.length).toFixed(2)
@@ -10615,9 +10700,12 @@ function lookupJockeyStats(name) {
 
 // ── 日数差ヘルパー（d1 > d2、両方 YYYYMMDD 文字列） ──
 function dateDiffDays(d1str, d2str) {
-  if (!d1str || !d2str || d1str.length < 8 || d2str.length < 8) return 999;
+  if (!d1str || !d2str) return 999;
+  const norm = s => String(s).replace(/\//g, '');
+  const n1 = norm(d1str), n2 = norm(d2str);
+  if (n1.length < 8 || n2.length < 8) return 999;
   const p = s => new Date(s.slice(0,4), parseInt(s.slice(4,6))-1, parseInt(s.slice(6,8))).getTime();
-  return Math.round((p(d1str) - p(d2str)) / 86400000);
+  return Math.round((p(n1) - p(n2)) / 86400000);
 }
 
 function renderPredictionPanel(raceNo) {
@@ -10705,11 +10793,8 @@ function renderPredictionPanel(raceNo) {
     let jockeyWR = FIELD_AVG_WR;
     const jStats = lookupJockeyStats(jockey);
     if (jStats) {
-      const src = jStats.recent || jStats.all;
-      const distS = jStats.dist?.[raceDist];
-      const condS = jStats.cond?.[selCond];
-      jockeyWR = distS ? (distS.wr * 0.6 + src.wr * 0.4) : src.wr;
-      if (condS && condS.n >= 10) jockeyWR = jockeyWR * 0.6 + condS.wr * 0.4;
+      const src = (jStats.recent?.n >= 30 ? jStats.recent : null) || jStats.all;
+      jockeyWR = src.wr;
     }
     const jockeyMod = Math.max(-5, Math.min(8, (jockeyWR - FIELD_AVG_WR) * 0.22));
 
@@ -10717,7 +10802,7 @@ function renderPredictionPanel(raceNo) {
     const _allSIWithCond = histEx.filter(h => h.time && h.trackCond).map(h => {
       const b = getDayBiasForDate(h.babaCode, h.raceDate) ?? (h.fromOfficial ? estimateBiasFromCond(h.distance, h.raceClass, h.trackCond) : null);
       const si = calcSpeedIndex(h.time, h.distance, h.raceClass, h.trackCond, b, h.kinryo, null);
-      return si != null ? { cond: h.trackCond, si } : null;
+      return si != null ? { cond: h.trackCond, dist: getDistNum(h.distance), si } : null;
     }).filter(Boolean);
     const _globalSIAvg = _allSIWithCond.length ? _allSIWithCond.reduce((s,x)=>s+x.si,0)/_allSIWithCond.length : null;
     const _condSIs = _allSIWithCond.filter(x => x.cond === selCond).map(x => x.si);
@@ -10727,17 +10812,25 @@ function renderPredictionPanel(raceNo) {
       condMod = Math.max(-2, Math.min(2, (_condSIAvg - _globalSIAvg) * 0.5));
     }
 
-    // ── ④ 距離適性（±100mレンジ拡張・2走から機能） ──
-    const distHist = histEx.filter(h => {
-      const hd = getDistNum(h.distance);
-      return hd && rdistNum && Math.abs(hd - rdistNum) <= 100 && h.time && /^\d+$/.test(String(h.chakujun));
-    });
+    // ── ④ 距離適性（SI差分ベース・1走から機能 + 延長/短縮補正） ──
+    // ④-a: 近距離SIavg vs 全体SIavg の差分（condModと同方式）
+    const _nearDistSIs = _allSIWithCond
+      .filter(x => x.dist && rdistNum && Math.abs(x.dist - rdistNum) <= 100)
+      .map(x => x.si);
+    const _nearDistSIAvg = _nearDistSIs.length
+      ? _nearDistSIs.reduce((a, b) => a + b, 0) / _nearDistSIs.length : null;
     let distMod = 0;
-    if (distHist.length >= 2) {
-      const wts = distHist.map(h => getDistNum(h.distance) === rdistNum ? 1.0 : 0.5);
-      const wSum = wts.reduce((a,b)=>a+b,0);
-      const placedW = distHist.reduce((s,h,i) => s + (parseInt(h.chakujun)<=3 ? wts[i] : 0), 0);
-      distMod = Math.max(-1.5, Math.min(1.5, ((placedW/wSum) - 0.33) * 2));
+    if (_globalSIAvg != null && _nearDistSIAvg != null) {
+      distMod = Math.max(-2, Math.min(2, (_nearDistSIAvg - _globalSIAvg) * 0.5));
+    }
+    // ④-b: 距離延長/短縮補正（前走比±200m以上で小ペナルティ）
+    if (histEx[0] && rdistNum) {
+      const _prevDist = getDistNum(histEx[0].distance);
+      if (_prevDist) {
+        const _distDiff = rdistNum - _prevDist;
+        if (_distDiff >= 200)       distMod = Math.max(-2, distMod - 0.3);
+        else if (_distDiff <= -200) distMod = Math.max(-2, distMod - 0.2);
+      }
     }
 
     // ── ⑤ 近況トレンド ──
@@ -10750,17 +10843,18 @@ function renderPredictionPanel(raceNo) {
       const num = vals.reduce((s, v, i) => s + (i - xMean) * (v - yMean), 0);
       const den = vals.reduce((s, v, i) => s + (i - xMean) ** 2, 0);
       const slope = den > 0 ? num / den : 0;
-      trendMod = Math.max(-3, Math.min(3, slope * 2));
+      trendMod = Math.max(-1.5, Math.min(1.5, slope * 0.625));
     }
 
-    // ── ⑥ 騎手×厩舎コンボ ──
+    // ── ⑥ 騎手×厩舎コンボ（shrinkage推定・サンプル少ないほど平均33%に引き寄せ） ──
     const trainer = (horse.trainer || '').trim();
     let comboMod = 0;
     if (jockey && trainer) {
       const ck = `${jockey}_${trainer}`;
       const cs = _comboStats[ck];
-      if (cs && cs.total >= 3) {
-        comboMod = Math.max(-2, Math.min(2, (cs.place/cs.total - 0.33) * 4));
+      if (cs && cs.total >= 1) {
+        const shrunk = (cs.place + 0.33 * 20) / (cs.total + 20);
+        comboMod = Math.max(-2, Math.min(2, (shrunk - 0.33) * 4));
       }
     }
 
@@ -10783,9 +10877,7 @@ function renderPredictionPanel(raceNo) {
       }
     }
 
-    // ── ⑨ 先行スタイル（参考表示のみ・スコアへの加算なし） ──
-    // 4コーナー通過順の平均で脚質を分類。SIとの二重評価を避けるため参考情報として表示。
-    // 高知実績: 4C1番手=勝率48.5%、2番手=13.6%、5番手以降は急落。
+    // ── ⑨ 4コーナー通過順補正（脚質適性） ──
     const _parse4C = h => {
       if (!h.corner) return null;
       const parts = String(h.corner).split('-');
@@ -10797,13 +10889,152 @@ function renderPredictionPanel(raceNo) {
     const avg4C = cornerPositions.length >= 2
       ? +(cornerPositions.reduce((s, v) => s + v, 0) / cornerPositions.length).toFixed(1)
       : null;
+    // 高知実績: 4C1番手=勝率60-75%、2-3番手=13%、4-5番手=3%、6番手以下=0.3%（129,654走実績）
+    let cornMod = 0;
+    if (avg4C != null && cornerPositions.length >= 3) {
+      if (avg4C <= 1.5)      cornMod = +2.6367;
+      else if (avg4C <= 2.5) cornMod = +1.40625;
+      else if (avg4C <= 3.5) cornMod = +0.3515625;
+      else if (avg4C <= 5.0) cornMod = -0.52734375;
+      else if (avg4C <= 7.0) cornMod = -1.40625;
+      else                   cornMod = -2.109375;
+    }
+
+    // ── ⑩ 調教師補正 ──
+    const trnStats = lookupTrainerStats(trainer);
+    const trainerMod = trnStats ? Math.max(-2, Math.min(2, (trnStats.wr - 12) * 0.12)) : 0;
+
+    // ── ⑪ 馬体重変化補正（大幅増＝太め残り、大幅減＝細め懸念） ──
+    const _parseWC = (w, prevW) => {
+      const m = String(w || '').match(/[（\(]([+\-]?\d+)[）\)]/);
+      if (m) return parseInt(m[1]);
+      const tw = parseInt(String(w || '').match(/^(\d+)/)?.[1]);
+      const pw = parseInt(String(prevW || '').match(/^(\d+)/)?.[1]);
+      return (tw && pw) ? tw - pw : null;
+    };
+    const _wc = _parseWC(horse.weight, histEx[0]?.weight);
+    let weightMod = 0;
+    if (_wc !== null) {
+      if (_wc >= 12)       weightMod = -0.6;
+      else if (_wc >= 8)   weightMod = -0.3;
+      else if (_wc <= -12) weightMod = -0.5;
+      else if (_wc <= -8)  weightMod = -0.2;
+    }
+
+    // ── ⑫ 上がり3F補正（同距離±200m・2走以上で有効） ──
+    const _agRefTbl = {800:36.0,1300:38.5,1400:38.5,1600:39.0,1900:39.5,2400:40.0};
+    const _agRefV = _agRefTbl[rdistNum] || 38.5;
+    const _haHist = histEx.slice(0,10).filter(h=>{
+      const v=parseFloat(h.agari3f), d=getDistNum(h.distance);
+      return !isNaN(v)&&v>30&&v<50&&d&&Math.abs(d-rdistNum)<=200;
+    }).map(h=>parseFloat(h.agari3f));
+    const _avgAH = _haHist.length>=2 ? _haHist.reduce((s,v)=>s+v,0)/_haHist.length : null;
+    let agariMod = 0;
+    if (_avgAH!==null) {
+      agariMod = Math.max(-1.25, Math.min(1.25, (_agRefV - _avgAH) * 1.054688));
+    }
+
+    // ── ⑬ 前走着差補正（直近2走・勝ち馬との時差平均） ──
+    let marginMod = 0;
+    const _mhRaces = histEx.slice(0, 2).filter(h => { const c=parseInt(h.chakujun); return !isNaN(c)&&c>=1; });
+    if (_mhRaces.length >= 1) {
+      const _mhGaps = _mhRaces.map(h => {
+        if (parseInt(h.chakujun)===1) return 0;
+        const d = parseFloat(String(h.diff||'').replace(/[^\d.]/g,''));
+        return isNaN(d) ? null : d;
+      }).filter(v => v!==null);
+      if (_mhGaps.length >= 1) {
+        const _avgMG = _mhGaps.reduce((s,v)=>s+v,0)/_mhGaps.length;
+        if      (_avgMG <= 0.0) marginMod = +1.8;
+        else if (_avgMG <= 0.3) marginMod = +1.35;
+        else if (_avgMG <= 0.8) marginMod = +0.675;
+        else if (_avgMG <= 1.5) marginMod =  0.0;
+        else if (_avgMG <= 3.0) marginMod = -0.675;
+        else                    marginMod = -1.35;
+      }
+    }
+
+    // ── ⑭ 勝ち馬の強さ補正（前走惜敗時・勝ち馬SIと自馬平均を比較） ──
+    let winStrMod = 0;
+    if (marginMod > 0 && histEx.length >= 1) {
+      const _ph0 = histEx[0];
+      if (parseInt(_ph0.chakujun) > 1 && _ph0.babaCode === '31' && _ph0.raceDate && _ph0.raceNo) {
+        const _ld = lsRead();
+        const _wpfx = `${_ph0.babaCode}_${_ph0.raceDate}_${_ph0.raceNo}_`;
+        let _wSI = null;
+        for (const [ck, cv] of Object.entries(_ld)) {
+          if (!ck.startsWith(_wpfx) || parseInt(cv.chakujun) !== 1 || !cv.time) continue;
+          const _wb3 = getDayBiasForDate(_ph0.babaCode, _ph0.raceDate) ?? null;
+          const _rc3 = _ld[`race_${_ph0.babaCode}_${_ph0.raceDate}_${_ph0.raceNo}`] || {};
+          _wSI = calcSpeedIndex(cv.time, _rc3.distance||_ph0.distance, _rc3.race_class||_ph0.raceClass, _rc3.track_cond||_ph0.trackCond, _wb3, cv.kinryo, null);
+          break;
+        }
+        if (_wSI !== null && recentSI.length >= 2) {
+          const _myAvg = recentSI.reduce((s,v)=>s+v,0)/recentSI.length;
+          const _siD = _wSI - _myAvg;
+          if      (_siD >= 8)  winStrMod = +0.5;
+          else if (_siD >= 4)  winStrMod = +0.2;
+          else if (_siD <= -4) winStrMod = -0.2;
+        }
+      }
+    }
+
+    // ── ⑮ 乗り替わり補正（格上/格下騎手への変更シグナル） ──
+    const _getJWR = name => { const s = lookupJockeyStats(name); if (!s) return FIELD_AVG_WR; const src = (s.recent?.n >= 30 ? s.recent : null) || s.all; return src?.wr ?? FIELD_AVG_WR; };
+    let jockeyChgMod = 0;
+    if (histEx.length >= 1 && jockey) {
+      const _prevJ = (histEx[0].jockey || '').trim();
+      if (_prevJ && _prevJ !== jockey) {
+        const _jd = _getJWR(jockey) - _getJWR(_prevJ);
+        if      (_jd >= 10) jockeyChgMod = +0.9375;
+        else if (_jd >= 5)  jockeyChgMod = +0.46875;
+        else if (_jd <= -10) jockeyChgMod = -0.46875;
+        else if (_jd <= -5)  jockeyChgMod = -0.234375;
+      }
+    }
+
+    // ── ⑯ 叩き効果（休み明け2走目・フィットネス向上補正） ──
+    let takiMod = 0;
+    if (histEx.length >= 2 && thisRaceDate && histEx[0].raceDate && histEx[1].raceDate) {
+      const _d01 = dateDiffDays(histEx[0].raceDate, histEx[1].raceDate);
+      const _d0c = dateDiffDays(thisRaceDate, histEx[0].raceDate);
+      if (_d01 >= 42 && _d0c >= 7 && _d0c <= 42) takiMod = +0.6;
+    }
+
+    // ── ⑱ コーナー一貫性補正（直近3走・3→4コーナー順位変化） ──
+    let cornConsistMod = 0;
+    const _cc3Vals = histEx.slice(0, 3).map(h => {
+      const pts = (h.corner || '').split('-').map(s => parseInt(s)).filter(n => !isNaN(n) && n > 0);
+      if (pts.length < 4) return null;
+      return pts[3] - pts[2]; // 4C - 3C: 負=改善（追い込み）、正=悪化（垂れ）
+    }).filter(v => v !== null);
+    if (_cc3Vals.length >= 1) {
+      const _ccAvg = _cc3Vals.reduce((s, v) => s + v, 0) / _cc3Vals.length;
+      if      (_ccAvg <= -2) cornConsistMod = +0.8;
+      else if (_ccAvg <= -1) cornConsistMod = +0.4;
+      else if (_ccAvg >=  2) cornConsistMod = -0.8;
+      else if (_ccAvg >=  1) cornConsistMod = -0.4;
+    }
 
     const totalScore = baseScore != null
-      ? +(baseScore + jockeyMod + condMod + distMod + trendMod + comboMod + rotMod + classMod).toFixed(2)
+      ? +(baseScore + condMod + distMod + trendMod + comboMod + rotMod + classMod + cornMod + weightMod + agariMod + marginMod + winStrMod + jockeyChgMod + takiMod + cornConsistMod).toFixed(2)
       : null;
 
-    return { horse, jockey, trainer, baseScore, jockeyMod, condMod, distMod, trendMod, comboMod, rotMod, classMod, avg4C, totalScore, siCount: recentSI.length, kochiSICount, isTransfer, jockeyWR };
+    return { horse, jockey, trainer, baseScore, jockeyMod, condMod, distMod, trendMod, comboMod, rotMod, classMod, cornMod, weightMod, agariMod, marginMod, winStrMod, jockeyChgMod, takiMod, cornConsistMod, avg4C, totalScore, siCount: recentSI.length, kochiSICount, isTransfer, jockeyWR };
   });
+
+  // ── ⑰ 相対SI補正（フィールド内での相対位置） ──
+  const _fsiArr = scored.filter(s => s.baseScore != null).map(s => s.baseScore);
+  if (_fsiArr.length >= 3) {
+    const _fsiAvg = _fsiArr.reduce((a, b) => a + b, 0) / _fsiArr.length;
+    scored.forEach(s => {
+      const _rsi = s.baseScore != null ? +((s.baseScore - _fsiAvg) * 0.05).toFixed(2) : 0;
+      s.relSIMod = _rsi;
+      if (s.totalScore != null) s.totalScore = +(s.totalScore + _rsi).toFixed(2);
+    });
+  } else {
+    scored.forEach(s => { s.relSIMod = 0; });
+  }
 
   scored.sort((a, b) => {
     if (a.totalScore == null && b.totalScore == null) return 0;
@@ -10952,7 +11183,7 @@ function renderPredictionPanel(raceNo) {
     <div style="overflow-x:auto;">${tableHtml}</div>
     <div id="yoso-backtest-${raceNo}"></div>
     <p style="font-size:10px;color:#9ca3af;margin-top:8px">
-      ◎本命 ○対抗 ▲単穴 △連下 ×注意 ／ SIベース＝高知直近10走加重平均（現在レース除外）／ 馬場適性＝SI差分ベース（1走～）／ 距離適性＝±100mレンジ（2走～）／ 脚質＝4コーナー平均通過順（参考・スコア非加算）: 高知では4C1番手の勝率48.5%
+      ◎本命 ○対抗 ▲単穴 △連下 ×注意 ／ SIベース＝高知直近10走加重平均（現在レース除外）／ 馬場適性＝SI差分ベース（1走～）／ 距離適性＝SI差分ベース±100m（1走～）＋延長/短縮補正／ 脚質補正＝4コーナー平均通過順→補正値（逃げ+1.5〜差追-1.2、3走以上で有効）：高知実績4C1番手勝率60-75%
     </p>`;
 }
 
@@ -10969,25 +11200,79 @@ function runYosoBacktest(raceNo) {
       const lsData = lsRead();
       const CLASS_RANK = { '重賞':7,'OP':6,'A':5,'B':4,'C1':3,'C2':2,'C3':1,'3歳':1,'2歳':1 };
 
-      // IDBから高知レースをグループ化
+      // IDBから高知レースをグループ化（取消馬も_scratched:trueで含む）
       const raceGroups = {};
       for (const [k, v] of Object.entries(lsData)) {
         if (v.type !== 'horse') continue;
         const parts = k.split('_');
         if (parts[0] !== '31') continue; // 高知のみ
         const chaku = parseInt(v.chakujun);
-        if (isNaN(chaku) || chaku < 1 || chaku > 20) continue;
+        const isRunner = !isNaN(chaku) && chaku >= 1 && chaku <= 20;
+        const _scratched = !isRunner;
+        // 無効な非空chakujun（例:"取消"→"" 以外の残骸）は除外
+        if (_scratched && v.chakujun !== '' && v.chakujun != null) continue;
+        // 馬名なしのスクラッチは除外
+        if (_scratched && !v.horseName) continue;
         const raceKey = `${parts[0]}_${parts[1]}_${parts[2]}`;
         if (!raceGroups[raceKey]) raceGroups[raceKey] = [];
-        raceGroups[raceKey].push({ ...v, _key: k, babaCode: parts[0], raceDate: parts[1], raceNo: parseInt(parts[2]) });
+        raceGroups[raceKey].push({ ...v, _key: k, babaCode: parts[0], raceDate: parts[1], raceNo: parseInt(parts[2]), _scratched });
       }
+
+      // 上がり3F距離別平均をIDB全データから集計（ルックアヘッド最小・平均なので問題なし）
+      const _agariByDist = {};
+      for (const [k, v] of Object.entries(lsData)) {
+        if (!v.agari3f) continue;
+        const a = parseFloat(v.agari3f);
+        if (isNaN(a) || a < 30 || a > 50) continue;
+        const d = getDistNum(v.distance);
+        if (!d) continue;
+        if (!_agariByDist[d]) _agariByDist[d] = {s:0,n:0};
+        _agariByDist[d].s += a; _agariByDist[d].n++;
+      }
+      const _getAgRefBT = d => {
+        if (_agariByDist[d]?.n >= 10) return _agariByDist[d].s / _agariByDist[d].n;
+        const ns = Object.entries(_agariByDist).filter(([,x])=>x.n>=10).sort((a,b)=>Math.abs(+a[0]-d)-Math.abs(+b[0]-d));
+        return ns.length ? ns[0][1].s/ns[0][1].n : 38.5;
+      };
+      // 騎手×厩舎コンボ複勝率（全IDBデータから）
+      const _btComboStats = {};
+      for (const [k, v] of Object.entries(lsData)) {
+        if (!v.jockey || !v.trainer) continue;
+        const chaku2 = parseInt(v.chakujun);
+        if (isNaN(chaku2)) continue;
+        const ck = `${(v.jockey||'').trim()}_${(v.trainer||'').trim()}`;
+        if (!_btComboStats[ck]) _btComboStats[ck] = {place:0,total:0};
+        _btComboStats[ck].total++;
+        if (chaku2 <= 3) _btComboStats[ck].place++;
+      }
+
+      // 前走勝ち馬SIマップ（inningStrengthMod用）
+      const _winnerSIMap = {};
+      for (const [k, v] of Object.entries(lsData)) {
+        if (v.type !== 'horse' || parseInt(v.chakujun) !== 1 || !v.time) continue;
+        const _wp = k.split('_');
+        if (_wp.length < 4 || _wp[0] !== '31') continue;
+        const _wrk = `${_wp[0]}_${_wp[1]}_${_wp[2]}`;
+        if (_winnerSIMap[_wrk] != null) continue;
+        const _wb2 = getDayBiasForDate(_wp[0], _wp[1]) ?? null;
+        const _rc2 = lsData[`race_${_wp[0]}_${_wp[1]}_${parseInt(_wp[2])}`] || {};
+        const _wsi = calcSpeedIndex(v.time, _rc2.distance||'', _rc2.race_class||'', _rc2.track_cond||v.trackCond||'', _wb2, v.kinryo, null);
+        if (_wsi != null) _winnerSIMap[_wrk] = _wsi;
+      }
+      // 係数スキャン用データ蓄積
+      const scanData = [];
 
       const oldS = { t:0, h1:0, h3:0 };
       const newS = { t:0, h1:0, h3:0 };
+      const circleS  = { t:0, h1:0, h3:0 }; // ○対抗
+      const sankakuS = { t:0, h1:0, h3:0 }; // ▲単穴
+      const top3S    = { t:0, hit:0 };       // ◎○▲いずれか1着
+      const ninkiS = { top1:{t:0,h1:0,h3:0}, top2:{t:0,h1:0,h3:0}, ana:{t:0,h1:0,h3:0} };
       const detail = [];
 
       for (const [raceKey, entries] of Object.entries(raceGroups)) {
-        if (entries.length < 4) continue;
+        // 取消除いたランナーが4頭以上必要
+        if (entries.filter(e => !e._scratched).length < 4) continue;
         const hasWinner = entries.some(e => parseInt(e.chakujun) === 1);
         if (!hasWinner) continue;
         const { babaCode, raceDate, raceNo: rNo } = entries[0];
@@ -10997,7 +11282,7 @@ function runYosoBacktest(raceNo) {
         const rdistNum = parseInt(raceDist) || 0;
         const curCR    = CLASS_RANK[getEffectiveClass(raceCls)] || 0;
 
-        const scoredOld = [], scoredNew = [];
+        const scoredOld = [], scoredNew = [], scanRaceData = [];
         for (const entry of entries) {
           const hName = entry.horseName || entry.horse_name || '';
           const fullHist = getHorseHistory(hName);
@@ -11036,25 +11321,24 @@ function runYosoBacktest(raceNo) {
           const dH_old = preHist.filter(h => String(h.distance||'').replace(/[^\d]/g,'')===raceDist && h.time && /^\d+$/.test(String(h.chakujun)));
           const distOld = dH_old.length >= 3 ? (dH_old.filter(h=>parseInt(h.chakujun)<=3).length/dH_old.length - 0.33)*2 : 0;
 
-          // 新: condMod（SI差分ベース）
-          const allSIc = preHist.filter(h=>h.time&&h.trackCond).map(h=>{
+          // 新: condMod + distMod（共通SIリストから算出）
+          const allSIcd = preHist.filter(h=>h.time&&h.trackCond).map(h=>{
             const b=getDayBiasForDate(h.babaCode,h.raceDate)??null;
             const si=calcSpeedIndex(h.time,h.distance,h.raceClass,h.trackCond,b,h.kinryo,null);
-            return si!=null?{cond:h.trackCond,si}:null;
+            return si!=null?{cond:h.trackCond,dist:getDistNum(h.distance),si}:null;
           }).filter(Boolean);
-          const gAvg = allSIc.length ? allSIc.reduce((s,x)=>s+x.si,0)/allSIc.length : null;
-          const cSIs = allSIc.filter(x=>x.cond===selCond).map(x=>x.si);
+          const gAvg = allSIcd.length ? allSIcd.reduce((s,x)=>s+x.si,0)/allSIcd.length : null;
+          const cSIs = allSIcd.filter(x=>x.cond===selCond).map(x=>x.si);
           const cAvg = cSIs.length ? cSIs.reduce((a,b)=>a+b,0)/cSIs.length : null;
-          const condNew = (gAvg!=null&&cAvg!=null&&allSIc.length>=2) ? Math.max(-2,Math.min(2,(cAvg-gAvg)*0.5)) : 0;
+          const condNew = (gAvg!=null&&cAvg!=null&&allSIcd.length>=2) ? Math.max(-2,Math.min(2,(cAvg-gAvg)*0.5)) : 0;
 
-          // 新: distMod（±100m・2走以上）
-          const dH_new = preHist.filter(h=>{const hd=getDistNum(h.distance);return hd&&rdistNum&&Math.abs(hd-rdistNum)<=100&&h.time&&/^\d+$/.test(String(h.chakujun));});
-          let distNew = 0;
-          if (dH_new.length >= 2) {
-            const dw = dH_new.map(h=>getDistNum(h.distance)===rdistNum?1.0:0.5);
-            const dwSum = dw.reduce((a,b)=>a+b,0);
-            const pw = dH_new.reduce((s,h,i)=>s+(parseInt(h.chakujun)<=3?dw[i]:0),0);
-            distNew = Math.max(-1.5,Math.min(1.5,((pw/dwSum)-0.33)*2));
+          // 新: distMod（SI差分ベース・1走から + 延長/短縮補正）
+          const ndSIs = allSIcd.filter(x=>x.dist&&rdistNum&&Math.abs(x.dist-rdistNum)<=100).map(x=>x.si);
+          const ndAvg = ndSIs.length ? ndSIs.reduce((a,b)=>a+b,0)/ndSIs.length : null;
+          let distNew = (gAvg!=null&&ndAvg!=null) ? Math.max(-2,Math.min(2,(ndAvg-gAvg)*0.5)) : 0;
+          if (preHist[0] && rdistNum) {
+            const _pd = getDistNum(preHist[0].distance);
+            if (_pd) { const _dd=rdistNum-_pd; if(_dd>=200) distNew=Math.max(-2,distNew-0.3); else if(_dd<=-200) distNew=Math.max(-2,distNew-0.2); }
           }
 
           // 新: rotMod
@@ -11070,27 +11354,211 @@ function runYosoBacktest(raceNo) {
             const pr=CLASS_RANK[getEffectiveClass(preHist[0].raceClass)]||0;
             if (pr>0) { if(curCR<pr) clsN=+1.5; else if(curCR>pr) clsN=-1.0; }
           }
+          // 新: cornMod（4コーナー通過順補正）
+          const _cps = preHist.slice(0,10).map(h=>{
+            if (!h.corner) return null;
+            const pts=String(h.corner).split('-');
+            if (pts.length<4) return null;
+            const p=parseInt(pts[3]); return isNaN(p)?null:p;
+          }).filter(p=>p!=null);
+          const _a4c = _cps.length>=2 ? _cps.reduce((s,v)=>s+v,0)/_cps.length : null;
+          let cornN = 0;
+          if (_a4c!=null && _cps.length>=3) {
+            if (_a4c<=1.5) cornN=2.6367;
+            else if (_a4c<=2.5) cornN=1.40625;
+            else if (_a4c<=3.5) cornN=0.3515625;
+            else if (_a4c<=5.0) cornN=-0.52734375;
+            else if (_a4c<=7.0) cornN=-1.40625;
+            else cornN=-2.109375;
+          }
+          // 新: trendMod（SI線形回帰トレンド）
+          const _tsi = [...siList].reverse(); // 古い順
+          let trendN = 0;
+          if (_tsi.length >= 3) {
+            const _tn=_tsi.length, _xm=(_tn-1)/2, _ym=_tsi.reduce((s,v)=>s+v,0)/_tn;
+            const _num=_tsi.reduce((s,v,i)=>s+(i-_xm)*(v-_ym),0);
+            const _den=_tsi.reduce((s,v,i)=>s+(i-_xm)**2,0);
+            trendN = _den>0 ? Math.max(-1.5,Math.min(1.5,(_num/_den)*0.625)) : 0;
+          }
+
+          // 新: weightMod（馬体重変化補正）
+          const _wce = (() => {
+            const m = String(entry.weight || '').match(/[（\(]([+\-]?\d+)[）\)]/);
+            if (m) return parseInt(m[1]);
+            const tw = parseInt(String(entry.weight||'').match(/^(\d+)/)?.[1]);
+            const pw = parseInt(String(preHist[0]?.weight||'').match(/^(\d+)/)?.[1]);
+            return (tw && pw) ? tw - pw : null;
+          })();
+          let weightN = 0;
+          if (_wce !== null) {
+            if (_wce >= 12)       weightN = -0.6;
+            else if (_wce >= 8)   weightN = -0.3;
+            else if (_wce <= -12) weightN = -0.5;
+            else if (_wce <= -8)  weightN = -0.2;
+          }
+
+          // 新: trainerMod
+          const _trnN = lookupTrainerStats((entry.trainer||'').trim());
+          const trainerN = _trnN ? Math.max(-2,Math.min(2,(_trnN.wr-12)*0.12)) : 0;
+
+          // 新: agariMod（上がり3F補正）
+          const _agRefV2 = _getAgRefBT(rdistNum);
+          const _haB = preHist.slice(0,10).filter(h=>{
+            const v=parseFloat(h.agari3f), d=getDistNum(h.distance);
+            return !isNaN(v)&&v>30&&v<50&&d&&Math.abs(d-rdistNum)<=200;
+          }).map(h=>parseFloat(h.agari3f));
+          const _avgAB = _haB.length>=2 ? _haB.reduce((s,v)=>s+v,0)/_haB.length : null;
+          let agariN = 0;
+          if (_avgAB!==null) {
+            agariN = Math.max(-1.25, Math.min(1.25, (_agRefV2 - _avgAB) * 1.054688));
+          }
+          // 新: comboN（騎手×厩舎コンボ補正）
+          const _ck2 = `${(entry.jockey||'').trim()}_${(entry.trainer||'').trim()}`;
+          const _cs2 = _btComboStats[_ck2];
+          let comboN = 0;
+          if (_cs2 && _cs2.total >= 1) {
+            const _shr = (_cs2.place + 0.33 * 20) / (_cs2.total + 20);
+            comboN = Math.max(-2, Math.min(2, (_shr - 0.33) * 4));
+          }
+
+          // 新: marginN（前走着差補正・直近2走）
+          let marginN = 0;
+          const _mBT = preHist.slice(0,2).filter(h=>{const c=parseInt(h.chakujun);return !isNaN(c)&&c>=1;});
+          if (_mBT.length>=1) {
+            const _mBTg = _mBT.map(h=>{
+              if(parseInt(h.chakujun)===1) return 0;
+              const d=parseFloat(String(h.diff||'').replace(/[^\d.]/g,''));
+              return isNaN(d)?null:d;
+            }).filter(v=>v!==null);
+            if (_mBTg.length>=1) {
+              const _avgBG=_mBTg.reduce((s,v)=>s+v,0)/_mBTg.length;
+              if      (_avgBG<=0.0) marginN=+1.8;
+              else if (_avgBG<=0.3) marginN=+1.35;
+              else if (_avgBG<=0.8) marginN=+0.675;
+              else if (_avgBG<=1.5) marginN= 0.0;
+              else if (_avgBG<=3.0) marginN=-0.675;
+              else                  marginN=-1.35;
+            }
+          }
+
+          // 新: winStrN（前走勝ち馬の強さ補正）
+          let winStrN = 0;
+          if (marginN > 0 && preHist.length >= 1 && parseInt(preHist[0].chakujun) > 1) {
+            const _ph0 = preHist[0];
+            const _wRk = `${_ph0.babaCode}_${_ph0.raceDate}_${_ph0.raceNo}`;
+            const _wSI = _winnerSIMap[_wRk];
+            if (_wSI != null && siList.length >= 2) {
+              const _myAvg = siList.reduce((s,v)=>s+v,0)/siList.length;
+              const _siD = _wSI - _myAvg;
+              if      (_siD >= 8)  winStrN = +0.5;
+              else if (_siD >= 4)  winStrN = +0.2;
+              else if (_siD <= -4) winStrN = -0.2;
+            }
+          }
+
+          // jockeyChgN（乗り替わり補正）
+          const _getJWRbt = name => { const s = lookupJockeyStats(name); if (!s) return 12; const src = (s.recent?.n >= 30 ? s.recent : null) || s.all; return src?.wr ?? 12; };
+          let jockeyChgN = 0;
+          if (preHist.length >= 1 && entry.jockey) {
+            const _pj = (preHist[0].jockey || '').trim();
+            const _cj = (entry.jockey || '').trim();
+            if (_pj && _pj !== _cj) {
+              const _jd = _getJWRbt(_cj) - _getJWRbt(_pj);
+              if      (_jd >= 10) jockeyChgN = +0.9375;
+              else if (_jd >= 5)  jockeyChgN = +0.46875;
+              else if (_jd <= -10) jockeyChgN = -0.46875;
+              else if (_jd <= -5)  jockeyChgN = -0.234375;
+            }
+          }
+
+          // takiN（叩き効果・休み明け2走目）
+          let takiN = 0;
+          if (preHist.length >= 2 && raceDate && preHist[0].raceDate && preHist[1].raceDate) {
+            const _d01 = dateDiffDays(preHist[0].raceDate, preHist[1].raceDate);
+            const _d0c = dateDiffDays(raceDate, preHist[0].raceDate);
+            if (_d01 >= 42 && _d0c >= 7 && _d0c <= 42) takiN = +0.6;
+          }
+
+          // cornConsistN（コーナー一貫性補正・直近3走の3→4C順位変化）
+          let cornConsistN = 0;
+          const _ccPre = preHist.slice(0, 3).map(h => {
+            const pts = (h.corner || '').split('-').map(s => parseInt(s)).filter(n => !isNaN(n) && n > 0);
+            if (pts.length < 4) return null;
+            return pts[3] - pts[2];
+          }).filter(v => v !== null);
+          if (_ccPre.length >= 1) {
+            const _ccAvg = _ccPre.reduce((s, v) => s + v, 0) / _ccPre.length;
+            if      (_ccAvg <= -2) cornConsistN = +0.8;
+            else if (_ccAvg <= -1) cornConsistN = +0.4;
+            else if (_ccAvg >=  2) cornConsistN = -0.8;
+            else if (_ccAvg >=  1) cornConsistN = -0.4;
+          }
 
           const chaku = parseInt(entry.chakujun);
-          scoredOld.push({ hName, chaku, score: base + condOld + distOld });
-          scoredNew.push({ hName, chaku, score: base + condNew + distNew + rotN + clsN });
+          const _sc = !!entry._scratched;
+          if (!_sc) scanRaceData.push({ chaku, base, condNew, distNew, rotN, clsN, cornN, trendN, weightN, agariN, comboN, marginN, winStrN, jockeyChgN, takiN, cornConsistN });
+          scoredOld.push({ hName, chaku, score: base + condOld + distOld, _scratched: _sc });
+          scoredNew.push({ hName, chaku, score: base + condNew + distNew + rotN + clsN + cornN + trendN + weightN + agariN + comboN + marginN + winStrN + jockeyChgN + takiN + cornConsistN, base, _scratched: _sc });
         }
 
+        // 相対SI補正（フィールド内相対位置・後処理）
+        const _btBases = scoredNew.filter(s => s.base != null).map(s => s.base);
+        if (_btBases.length >= 3) {
+          const _btFAvg = _btBases.reduce((a,b)=>a+b,0)/_btBases.length;
+          scoredNew.forEach(s => { if (s.base != null) s.score += (s.base - _btFAvg) * 0.05; });
+        }
+
+        if (scanRaceData.length >= 2) scanData.push(scanRaceData);
         if (scoredOld.length < 2) continue;
         scoredOld.sort((a,b)=>b.score-a.score);
         scoredNew.sort((a,b)=>b.score-a.score);
 
+        // 取消◎はカウント対象外（予想時点での◎が取消になった場合）
+        if (scoredNew[0]?._scratched || scoredOld[0]?._scratched) continue;
+
+        // ランナーのみのリスト（○▲用）
+        const runnersNew = scoredNew.filter(s => !s._scratched);
+        const runnersOld = scoredOld.filter(s => !s._scratched);
+
         const winner = entries.find(e=>parseInt(e.chakujun)===1);
         oldS.t++; newS.t++;
-        if (scoredOld[0].chaku===1) oldS.h1++;
-        if (scoredOld[0].chaku<=3) oldS.h3++;
-        if (scoredNew[0].chaku===1) newS.h1++;
-        if (scoredNew[0].chaku<=3) newS.h3++;
+        if (runnersOld[0].chaku===1) oldS.h1++;
+        if (runnersOld[0].chaku<=3) oldS.h3++;
+        if (runnersNew[0].chaku===1) newS.h1++;
+        if (runnersNew[0].chaku<=3) newS.h3++;
+
+        // ◎の人気を追跡（穴馬判断力測定）
+        const _hme = entries.find(e=>(e.horseName||e.horse_name||'')===runnersNew[0].hName);
+        const _hnk = parseInt(_hme?.ninki)||0;
+        const _bkt = _hnk===1?'top1':_hnk===2?'top2':_hnk>=3?'ana':null;
+        if (_bkt) {
+          ninkiS[_bkt].t++;
+          if (runnersNew[0].chaku===1) ninkiS[_bkt].h1++;
+          if (runnersNew[0].chaku<=3) ninkiS[_bkt].h3++;
+        }
+
+        // ○▲の集計（取消馬を除いた2位・3位）
+        if (runnersNew.length >= 2) {
+          circleS.t++;
+          if (runnersNew[1].chaku===1) circleS.h1++;
+          if (runnersNew[1].chaku<=3) circleS.h3++;
+        }
+        if (runnersNew.length >= 3) {
+          sankakuS.t++;
+          if (runnersNew[2].chaku===1) sankakuS.h1++;
+          if (runnersNew[2].chaku<=3) sankakuS.h3++;
+        }
+        // ◎○▲いずれか1着
+        top3S.t++;
+        if (runnersNew.slice(0,3).some(s=>s.chaku===1)) top3S.hit++;
 
         detail.push({
           race: `${raceDate.slice(0,4)}/${raceDate.slice(4,6)}/${raceDate.slice(6,8)} ${rNo}R`,
-          oldMark: scoredOld[0].hName, oldChaku: scoredOld[0].chaku,
-          newMark: scoredNew[0].hName, newChaku: scoredNew[0].chaku,
+          oldMark: runnersOld[0].hName, oldChaku: runnersOld[0].chaku,
+          newMark: runnersNew[0].hName, newChaku: runnersNew[0].chaku,
+          circleName: runnersNew[1]?.hName||'', circleChaku: runnersNew[1]?.chaku||0,
+          sankakuName: runnersNew[2]?.hName||'', sankakuChaku: runnersNew[2]?.chaku||0,
+          newNinki: _hnk,
           winner: winner?.horseName||'?'
         });
       }
@@ -11101,40 +11569,131 @@ function runYosoBacktest(raceNo) {
         return;
       }
 
+      // ── 係数スキャン ──
+      const _scanScales = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+      const _scanParams = [
+        { key:'agari',       label:'上がり3F' },
+        { key:'trend',       label:'トレンド' },
+        { key:'margin',      label:'着差' },
+        { key:'corn',        label:'4コーナー' },
+        { key:'jockeyChg',   label:'乗り替わり' },
+        { key:'taki',        label:'叩き効果' },
+        { key:'cornConsist', label:'C一貫性' },
+      ];
+      const scanResults = {};
+      for (const { key } of _scanParams) {
+        scanResults[key] = _scanScales.map(scale => {
+          let _sh1=0, _st=0;
+          for (const rc of scanData) {
+            if (rc.length < 2) continue;
+            const _sc = rc.map(c => ({
+              chaku: c.chaku,
+              score: c.base + c.condNew + c.distNew + c.rotN + c.clsN +
+                (key==='corn'      ? c.cornN*scale      : c.cornN) +
+                (key==='trend'     ? c.trendN*scale     : c.trendN) +
+                c.weightN +
+                (key==='agari'     ? c.agariN*scale     : c.agariN) +
+                c.comboN +
+                (key==='margin'    ? c.marginN*scale    : c.marginN) +
+                c.winStrN +
+                (key==='jockeyChg'   ? c.jockeyChgN*scale   : c.jockeyChgN) +
+                (key==='taki'        ? c.takiN*scale        : c.takiN) +
+                (key==='cornConsist' ? c.cornConsistN*scale : c.cornConsistN)
+            }));
+            _sc.sort((a,b)=>b.score-a.score);
+            _st++;
+            if (_sc[0].chaku===1) _sh1++;
+          }
+          return { scale, wr: _st>0 ? (_sh1/_st*100).toFixed(1) : '—' };
+        });
+      }
+
       const pct = (n, t) => t>0 ? (n/t*100).toFixed(1)+'%' : '—';
+      const _mc = (chaku) => chaku===1?'#15803d':chaku<=3?'#d97706':'#dc2626';
       const detailRows = detail.slice(-20).map(d => {
-        const oldOK = d.oldChaku <= 3;
-        const newOK = d.newChaku <= 3;
+        const ninkiLabel = d.newNinki >= 3 ? `<span style="background:#fef3c7;color:#92400e;border-radius:3px;padding:0 3px;font-size:9px">${d.newNinki}人気</span>` : d.newNinki >= 1 ? `<span style="font-size:9px;color:#6b7280">${d.newNinki}人気</span>` : '';
         return `<tr style="border-bottom:1px solid #e2e8f0;font-size:10px;">
           <td style="padding:3px 6px;color:#6b7280">${d.race}</td>
           <td style="padding:3px 6px;color:#374151">🏆${d.winner}</td>
-          <td style="padding:3px 6px;text-align:center;color:${d.oldChaku===1?'#15803d':oldOK?'#d97706':'#dc2626'};font-weight:700">${d.oldMark}<br><span style="font-size:9px">${d.oldChaku}着</span></td>
-          <td style="padding:3px 6px;text-align:center;color:${d.newChaku===1?'#15803d':newOK?'#d97706':'#dc2626'};font-weight:700">${d.newMark}<br><span style="font-size:9px">${d.newChaku}着</span></td>
+          <td style="padding:3px 6px;text-align:center;color:${_mc(d.oldChaku)};font-weight:700">${d.oldMark}<br><span style="font-size:9px">${d.oldChaku}着</span></td>
+          <td style="padding:3px 6px;text-align:center;color:${_mc(d.newChaku)};font-weight:700">◎${d.newMark} ${ninkiLabel}<br><span style="font-size:9px">${d.newChaku}着</span></td>
+          <td style="padding:3px 6px;text-align:center;color:${_mc(d.circleChaku)};font-size:10px">○${d.circleName}<br><span style="font-size:9px">${d.circleChaku}着</span></td>
+          <td style="padding:3px 6px;text-align:center;color:${_mc(d.sankakuChaku)};font-size:10px">▲${d.sankakuName}<br><span style="font-size:9px">${d.sankakuChaku}着</span></td>
         </tr>`;
       }).join('');
+
+      const ninkiRows = [
+        ['1番人気◎', ninkiS.top1, '#15803d'],
+        ['2番人気◎', ninkiS.top2, '#d97706'],
+        ['3番人気以下◎ 🎯', ninkiS.ana, '#7c3aed'],
+      ].map(([label, s, color]) => s.t > 0 ? `
+        <tr style="border-bottom:1px solid #e2e8f0">
+          <td style="padding:5px 10px;font-size:11px;color:${color};font-weight:700">${label}</td>
+          <td style="padding:5px 10px;text-align:center;font-size:12px;color:#374151">${s.t}R</td>
+          <td style="padding:5px 10px;text-align:center;font-size:13px;font-weight:700;color:${color}">${pct(s.h1,s.t)}</td>
+          <td style="padding:5px 10px;text-align:center;font-size:13px;font-weight:700;color:${color}">${pct(s.h3,s.t)}</td>
+        </tr>` : '').join('');
 
       btDiv.innerHTML = `
         <div style="margin-top:12px;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px">
           <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:8px">📈 精度バックテスト結果（高知・対象レース ${oldS.t}R）</div>
           <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px">
             <thead><tr style="background:#1a1a2e;color:#fff;font-size:11px">
-              <th style="padding:5px 10px;text-align:left"></th>
-              <th style="padding:5px 10px;text-align:center">◎1着的中率</th>
-              <th style="padding:5px 10px;text-align:center">◎複勝率（3着内）</th>
+              <th style="padding:5px 8px;text-align:left"></th>
+              <th style="padding:5px 8px;text-align:center">◎1着率</th>
+              <th style="padding:5px 8px;text-align:center">◎複勝率</th>
+              <th style="padding:5px 8px;text-align:center">○1着率</th>
+              <th style="padding:5px 8px;text-align:center">○複勝率</th>
+              <th style="padding:5px 8px;text-align:center">▲1着率</th>
+              <th style="padding:5px 8px;text-align:center">▲複勝率</th>
+              <th style="padding:5px 8px;text-align:center">◎○▲<br>いずれか1着</th>
             </tr></thead>
             <tbody>
               <tr style="border-bottom:1px solid #e2e8f0">
-                <td style="padding:6px 10px;font-size:11px;color:#6b7280">旧アルゴリズム</td>
-                <td style="padding:6px 10px;text-align:center;font-size:14px;font-weight:700;color:#374151">${pct(oldS.h1,oldS.t)}</td>
-                <td style="padding:6px 10px;text-align:center;font-size:14px;font-weight:700;color:#374151">${pct(oldS.h3,oldS.t)}</td>
+                <td style="padding:6px 8px;font-size:11px;color:#6b7280">旧アルゴリズム</td>
+                <td style="padding:6px 8px;text-align:center;font-size:13px;font-weight:700;color:#374151">${pct(oldS.h1,oldS.t)}</td>
+                <td style="padding:6px 8px;text-align:center;font-size:13px;font-weight:700;color:#374151">${pct(oldS.h3,oldS.t)}</td>
+                <td colspan="5" style="padding:6px 8px;text-align:center;font-size:11px;color:#9ca3af">—</td>
               </tr>
               <tr>
-                <td style="padding:6px 10px;font-size:11px;font-weight:700;color:#7c3aed">新アルゴリズム</td>
-                <td style="padding:6px 10px;text-align:center;font-size:14px;font-weight:900;color:${newS.h1>=oldS.h1?'#15803d':'#dc2626'}">${pct(newS.h1,newS.t)} ${newS.h1>oldS.h1?'▲':''}${newS.h1===oldS.h1?'＝':''}</td>
-                <td style="padding:6px 10px;text-align:center;font-size:14px;font-weight:900;color:${newS.h3>=oldS.h3?'#15803d':'#dc2626'}">${pct(newS.h3,newS.t)} ${newS.h3>oldS.h3?'▲':''}${newS.h3===oldS.h3?'＝':''}</td>
+                <td style="padding:6px 8px;font-size:11px;font-weight:700;color:#7c3aed">新アルゴリズム</td>
+                <td style="padding:6px 8px;text-align:center;font-size:13px;font-weight:900;color:${newS.h1>=oldS.h1?'#15803d':'#dc2626'}">${pct(newS.h1,newS.t)}${newS.h1>oldS.h1?' ▲':newS.h1<oldS.h1?' ▼':''}</td>
+                <td style="padding:6px 8px;text-align:center;font-size:13px;font-weight:900;color:${newS.h3>=oldS.h3?'#15803d':'#dc2626'}">${pct(newS.h3,newS.t)}${newS.h3>oldS.h3?' ▲':newS.h3<oldS.h3?' ▼':''}</td>
+                <td style="padding:6px 8px;text-align:center;font-size:13px;font-weight:700;color:#d97706">${pct(circleS.h1,circleS.t)}</td>
+                <td style="padding:6px 8px;text-align:center;font-size:13px;font-weight:700;color:#d97706">${pct(circleS.h3,circleS.t)}</td>
+                <td style="padding:6px 8px;text-align:center;font-size:13px;font-weight:700;color:#2563eb">${pct(sankakuS.h1,sankakuS.t)}</td>
+                <td style="padding:6px 8px;text-align:center;font-size:13px;font-weight:700;color:#2563eb">${pct(sankakuS.h3,sankakuS.t)}</td>
+                <td style="padding:6px 8px;text-align:center;font-size:13px;font-weight:900;color:#7c3aed">${pct(top3S.hit,top3S.t)}</td>
               </tr>
             </tbody>
           </table>
+          <div style="font-size:11px;font-weight:700;color:#374151;margin-bottom:4px">🎯 穴馬判断力（新◎の人気別成績）</div>
+          <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px">
+            <thead><tr style="background:#f1f5f9;font-size:10px">
+              <th style="padding:5px 10px;text-align:left"></th>
+              <th style="padding:5px 10px;text-align:center">対象R</th>
+              <th style="padding:5px 10px;text-align:center">1着率</th>
+              <th style="padding:5px 10px;text-align:center">複勝率</th>
+            </tr></thead>
+            <tbody>${ninkiRows}</tbody>
+          </table>
+          <details style="font-size:10px;margin-bottom:8px">
+            <summary style="cursor:pointer;color:#1a56a0;font-weight:700;margin-bottom:6px">🔧 係数感度スキャン（◎1着率）</summary>
+            <div style="overflow-x:auto;margin-top:4px"><table style="border-collapse:collapse;font-size:10px">
+              <thead><tr style="background:#1a1a2e;color:#fff">
+                <th style="padding:4px 8px;text-align:left">補正項目</th>
+                ${_scanScales.map(s=>`<th style="padding:4px 8px;text-align:center">${s===1.0?'<b>×1.00<br>（現在）</b>':`×${s.toFixed(2)}`}</th>`).join('')}
+              </tr></thead>
+              <tbody>${_scanParams.map(({key,label})=>{
+                const row=scanResults[key];
+                const best=row.reduce((a,b)=>parseFloat(b.wr)>parseFloat(a.wr)?b:a,row[0]);
+                return `<tr style="border-bottom:1px solid #e2e8f0">
+                  <td style="padding:4px 8px;font-weight:600;color:#374151">${label}</td>
+                  ${row.map(r=>`<td style="padding:4px 8px;text-align:center;${r===best?'background:#dcfce7;font-weight:700;color:#15803d':r.scale===1.0?'background:#f1f5f9;color:#374151':''}">${r.wr}%</td>`).join('')}
+                </tr>`;
+              }).join('')}</tbody>
+            </table></div>
+          </details>
           <details style="font-size:10px">
             <summary style="cursor:pointer;color:#6b7280;margin-bottom:4px">直近${Math.min(20,detail.length)}R 詳細</summary>
             <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">
@@ -11142,7 +11701,9 @@ function runYosoBacktest(raceNo) {
                 <th style="padding:3px 6px;text-align:left">レース</th>
                 <th style="padding:3px 6px;text-align:left">実際の勝馬</th>
                 <th style="padding:3px 6px;text-align:center">旧◎</th>
-                <th style="padding:3px 6px;text-align:center">新◎</th>
+                <th style="padding:3px 6px;text-align:center">新◎（人気）</th>
+                <th style="padding:3px 6px;text-align:center">○対抗</th>
+                <th style="padding:3px 6px;text-align:center">▲単穴</th>
               </tr></thead>
               <tbody>${detailRows}</tbody>
             </table></div>
