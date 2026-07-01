@@ -1730,6 +1730,23 @@ body.dark-mode.minimal-mode #race-tabs-section.sidebar-mode .race-tab.active{col
     </div>
   </section>
 
+  <!-- 1400m ペース別 前残り傾向 -->
+  <section class="saved-section">
+    <div class="saved-card">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+        <h2 class="section-title" style="margin-bottom:0"><i class="fas fa-gauge-high"></i> 1400m ペース別 前残り傾向</h2>
+        <span style="font-size:11px;color:#6b7280">前後半差＝前半3F − 上がり3F（マイナス＝前が速い＝ハイ）</span>
+      </div>
+      <p style="font-size:11.5px;color:#6b7280;margin:0 0 12px;line-height:1.7">
+        1400m戦のみ集計（全体時計と上がり4Fから前半3Fを自動算出）。各セルは
+        <strong style="color:#dc2626">逃げ馬（先頭通過）の複勝率</strong>を主表示し、N数・前決着率を併記。
+        <span style="color:#059669;font-weight:700">緑＝前残り傾向</span> /
+        <span style="color:#dc2626;font-weight:700">赤＝前つぶれ（差し台頭）</span>。N&lt;8は薄字（参考値）。
+      </p>
+      <div id="pace-bias-1400"></div>
+    </div>
+  </section>
+
 </div><!-- /page-baba -->
 
 <!-- ① 馬別過去成績モーダル -->
@@ -1849,7 +1866,12 @@ function fmtWeightDiff(w) {
   return String(w).replace(/\((\d+)\)/, '(+$1)');
 }
 
-function switchPage(pageId) {
+// ── ページ内ナビゲーション履歴管理 ─────────────────────────
+// ブラウザの戻るボタンでアプリが終了せず、1つ前の操作（ページ/モーダル）に戻る。
+let _currentPage = 'search';
+let _navReady = false;
+
+function switchPage(pageId, _fromPop) {
   ['search','deban','bunseki','baba','saved'].forEach(id => {
     const el = document.getElementById('page-' + id);
     if (el) el.classList.toggle('page-hidden', id !== pageId);
@@ -1858,10 +1880,34 @@ function switchPage(pageId) {
     btn.classList.toggle('active', btn.dataset.page === pageId);
   });
   window.scrollTo(0, 0);
+  _currentPage = pageId;
+  // 履歴へ積む（戻るボタン由来の呼び出し時は積まない＝二重化防止）
+  if (_navReady && !_fromPop) {
+    try { history.pushState({ kvPage: pageId }, ''); } catch(e) {}
+  }
   // 分析ページに切り替えたとき自動レンダリング
   if (pageId === 'bunseki') { setTimeout(() => { try { renderAnalysis(); } catch(e){} }, 0); }
   if (pageId === 'baba')    { setTimeout(() => { try { renderTrackTrend(); } catch(e){} }, 0); }
   if (pageId === 'saved')   { setTimeout(() => { try { renderSavedList(); } catch(e){} }, 0); }
+}
+
+// ブラウザ戻る/進むの処理
+function _initNavHistory() {
+  if (_navReady) return;
+  try { history.replaceState({ kvPage: _currentPage }, ''); } catch(e) {}
+  _navReady = true;
+  window.addEventListener('popstate', (e) => {
+    // ① モーダルが開いていれば、まず閉じる（履歴位置は補填してアプリ内に留まる）
+    const modal = document.getElementById('horse-modal');
+    if (modal && !modal.classList.contains('hidden')) {
+      closeHorseModal();
+      try { history.pushState({ kvPage: _currentPage }, ''); } catch(err) {}
+      return;
+    }
+    // ② ページ状態を復元（戻る＝1つ前のページへ）
+    const st = e.state || {};
+    switchPage(st.kvPage || 'search', true);
+  });
 }
 
 function toggleDarkMode() {
@@ -1916,6 +1962,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const t = new Date();
   document.getElementById('race-date').value =
     `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+  _initNavHistory();
   initDB();
 });
 
@@ -3525,6 +3572,7 @@ function _updateTrackBiasInline(raceNo) {
 
 /**
  * 決着時計を1着馬から自動取得して表示
+ * 1400m戦で上がり4Fが入力済みの場合は前半3Fを自動計算して補完
  */
 function _updateFinishTime(raceNo) {
   const data = allRacesData[raceNo]; if (!data) return;
@@ -3539,6 +3587,62 @@ function _updateFinishTime(raceNo) {
     if (winner && winner.time) { rqsTime.textContent = winner.time; rqsTime.className = 'rqs-val'; }
     else { rqsTime.textContent = '—'; rqsTime.className = 'rqs-val rqs-empty'; }
   }
+  // 1400m戦: 全体時計 − 上がり4F = 前半3F（未入力の場合のみ自動補完）
+  const dist = String(data.raceInfo?.distance || '').replace(/[^\d]/g, '');
+  if (dist === '1400' && winner?.time) {
+    const f3Input  = document.getElementById(`race-first3f-${raceNo}`);
+    const ag4Input = document.getElementById(`race-agari4f-${raceNo}`);
+    if (f3Input && ag4Input && !f3Input.value && ag4Input.value) {
+      const winSec = raceTimeToSec(winner.time);
+      const ag4Sec = parseFloat(ag4Input.value);
+      if (winSec && !isNaN(ag4Sec) && ag4Sec > 0) {
+        const calcF3 = +(winSec - ag4Sec).toFixed(1);
+        if (calcF3 > 0) {
+          f3Input.value = calcF3.toFixed(1);
+          updateRacePace(raceNo);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * 保存済み1400mレースの前半3Fを上がり4Fから一括補完
+ * 前半3F = 1着タイム(秒) − 上がり4F(秒)
+ * 起動時に1回だけ実行（既に値があるエントリはスキップ）
+ */
+function backfillFirst3fFrom1400m() {
+  const lsData = lsRead();
+  let count = 0;
+  for (const [k, v] of Object.entries(lsData)) {
+    if (!k.startsWith('race_')) continue;
+    const dist = String(v.distance || v.dist || '').replace(/[^\d]/g, '');
+    if (dist !== '1400') continue;
+    if (v.first3f) continue;                            // 既に値あり → スキップ
+    const ag4Sec = parseFloat(v.agari4f || '');
+    if (isNaN(ag4Sec) || ag4Sec <= 0) continue;         // 上がり4F 未入力 → スキップ
+    const babaCode = v.baba_code;
+    const raceDate = v.race_date;
+    const raceNo   = String(v.race_no || '');
+    if (!babaCode || !raceDate || !raceNo) continue;
+    // 1着馬を horse エントリから検索（キー形式: {babaCode}_{raceDate}_{raceNo}_{umaBan}）
+    const prefix = `${babaCode}_${raceDate}_${raceNo}_`;
+    let winnerTimeSec = null;
+    for (const [hk, hv] of Object.entries(lsData)) {
+      if (!hk.startsWith(prefix)) continue;
+      if (!hv || hv.type !== 'horse' || hv.fromOfficial) continue;
+      if (String(hv.chakujun) !== '1') continue;
+      const t = raceTimeToSec(hv.time);
+      if (t) { winnerTimeSec = t; break; }
+    }
+    if (!winnerTimeSec) continue;
+    const first3f = +(winnerTimeSec - ag4Sec).toFixed(1);
+    if (first3f <= 0 || first3f > 50) continue;         // 異常値ガード
+    lsWrite(k, { ...v, first3f: String(first3f) });
+    count++;
+  }
+  if (count > 0) console.log(`[backfill1400m] 前半3F を ${count} レース分補完しました`);
+  return count;
 }
 
 function _updateRqsStrip(raceNo, f3, ag3, pace) {
@@ -5063,6 +5167,120 @@ function lsRead()          { return _idbCache || {}; }
 // ============================================================
 // 起動時：API → IndexedDB へ全データをページング同期
 // ============================================================
+const _IDB_PAGE = 1000;          // 1ページあたり取得件数
+let _bgLoadActive = false;       // 背景読み込み中フラグ
+
+/** Supabase の1ページ分を取得（高知のみ・日付降順） */
+async function _fetchKochiPage(table, offset, limit = _IDB_PAGE) {
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/${table}?select=*&baba_code=eq.31&order=race_date.desc&limit=${limit}&offset=${offset}`,
+      { headers: SUPABASE_HEADERS }
+    );
+    if (!res.ok) return null;
+    const rows = await res.json();
+    return Array.isArray(rows) ? rows : null;
+  } catch(e) { return null; }
+}
+
+/** レース行を IDB キャッシュへ書き込む */
+function _putRaceRow(row) {
+  const key = `race_${row.baba_code}_${row.race_date}_${row.race_no}`;
+  let lapTimesArr = null;
+  try { if (row.lap_times) lapTimesArr = JSON.parse(row.lap_times); } catch(e) {}
+  idbPut(key, {
+    type:'race', race_date:row.race_date, race_no:row.race_no, baba_code:row.baba_code,
+    race_name:row.race_name||'', distance:row.distance||'', race_class:row.race_class||'',
+    track_cond:row.track_cond||'', first3f:row.first3f||'', agari4f:row.agari4f||'',
+    agari3f_race:row.agari3f_race||'', paceType:row.pace_type||'', memo:row.memo||'',
+    lap_times:row.lap_times||'', lapTimes:lapTimesArr,
+    _apiSaved:true,
+    savedAt:new Date(row.updated_at||row.created_at||Date.now()).toISOString()
+  });
+}
+
+/** 馬行を IDB キャッシュへ書き込む */
+function _putHorseRow(row) {
+  const key = `${row.baba_code}_${row.race_date}_${row.race_no}_${row.uma_ban}`;
+  idbPut(key, {
+    type:'horse', race_date:row.race_date, race_no:row.race_no, baba_code:row.baba_code,
+    chakujun:row.chakujun||'', wakuBan:row.waku_ban||'', horseName:row.horse_name||'',
+    belong:row.belong||'', sexAge:row.sex_age||'', kinryo:row.kinryo||'',
+    jockey:row.jockey||'', trainer:row.trainer||'', weight:row.weight||'',
+    ninki:row.ninki||'', odds:row.odds||'', time:row.time||'', diff:row.diff||'',
+    agari3f:row.agari3f||'', corner:row.corner||'', first3f:row.first3f||'',
+    paceType:row.pace_type||'', mukaeShoumen:row.mukae_shoumen||'',
+    shoumenStraight:row.shoumen_straight||'', postComment:row.post_comment||'',
+    lineageLoginCode:row.lineage_login_code||'',
+    savedAt:new Date(row.updated_at||row.created_at||Date.now()).toISOString()
+  });
+}
+
+/** テーブルを startOffset 以降まとめて取得（並列バッチ・背景用） */
+async function _fetchTablePaged(table, startOffset, onRows, onProgress) {
+  const BATCH = 4;
+  let off = startOffset, stop = false, total = 0;
+  while (!stop) {
+    const offsets = Array.from({ length: BATCH }, (_, i) => off + i * _IDB_PAGE);
+    const results = await Promise.all(offsets.map(o => _fetchKochiPage(table, o)));
+    for (const rows of results) {
+      if (!rows) { stop = true; continue; }
+      onRows(rows); total += rows.length;
+      if (rows.length < _IDB_PAGE) stop = true;
+    }
+    off += BATCH * _IDB_PAGE;
+    if (onProgress) onProgress(total);
+  }
+  return total;
+}
+
+/** 日別設定（メモ・内外バイアス）を取得 */
+async function _loadDaySettings() {
+  try {
+    const dsRes = await fetch(`${SUPABASE_URL}/rest/v1/keiba_day_settings?select=*`, { headers: SUPABASE_HEADERS });
+    if (dsRes.ok) {
+      const dsRows = await dsRes.json();
+      if (Array.isArray(dsRows)) {
+        dsRows.forEach(row => {
+          idbPut(`daySettings_${row.baba_code}_${row.race_date}`, {
+            type: 'daySettings', memo: row.memo || '', innerOuterBias: row.inner_outer_bias || '',
+          });
+        });
+        console.log(`[initDB] 日別設定 ${dsRows.length}件取得`);
+      }
+    }
+  } catch(e) { console.warn('[initDB] keiba_day_settings 取得失敗:', e); }
+}
+
+/** 背景読み込み状態をUIに表示（保存データバッジ横） */
+function _setBgLoadIndicator(active) {
+  _bgLoadActive = active;
+  const badge = document.getElementById('saved-total-badge');
+  if (!badge) return;
+  let hint = document.getElementById('saved-bg-hint');
+  if (active) {
+    if (!hint) {
+      hint = document.createElement('span');
+      hint.id = 'saved-bg-hint';
+      hint.style.cssText = 'margin-left:8px;font-size:11px;color:#7c3aed;font-weight:600';
+      badge.insertAdjacentElement('afterend', hint);
+    }
+    hint.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 過去データ読込中…';
+  } else if (hint) {
+    hint.remove();
+  }
+}
+
+// 保存リスト再描画のデバウンス（背景読み込み中の頻繁な再描画を抑制）
+let _savedRefreshTimer = null;
+function _refreshSavedDebounced() {
+  if (_savedRefreshTimer) return;
+  _savedRefreshTimer = setTimeout(() => {
+    _savedRefreshTimer = null;
+    try { loadSavedData(); } catch(e) {}
+  }, 800);
+}
+
 async function initDB() {
   // まず IndexedDB キャッシュをロード（LocalStorage 移行も含む）
   await loadIDBCache();
@@ -5084,101 +5302,54 @@ async function initDB() {
     if (_nonKochiKeys.length > 0) console.log(`[initDB] 非高知データ ${_nonKochiKeys.length}件を削除`);
   }
 
+  // ── 段階的読み込み ──────────────────────────────────────
+  // Phase 1: 直近データ（レース/馬の先頭1ページ＋日別設定）を取得して即描画。
+  // Phase 2: 残りの古いデータを背景で並列取得し、揃い次第リストを更新。
+  // 古い（数年前の）データは即時に必要ないため後回しにして初期表示を高速化する。
+  let p1RaceDone = false, p1HorseDone = false;
   try {
-    // ── Supabase: レース情報を全件取得（1000件ずつページング） ──
-    let raceOffset = 0;
-    let raceFetched = 0;
-    const LIMIT = 1000;
-    while (true) {
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/keiba_races?select=*&baba_code=eq.31&order=race_date.desc&limit=${LIMIT}&offset=${raceOffset}`,
-        { headers: SUPABASE_HEADERS }
-      );
-      if (!res.ok) break;
-      const rows = await res.json();
-      if (!Array.isArray(rows) || rows.length === 0) break;
-      rows.forEach(row => {
-        const key = `race_${row.baba_code}_${row.race_date}_${row.race_no}`;
-        let lapTimesArr = null;
-        try { if (row.lap_times) lapTimesArr = JSON.parse(row.lap_times); } catch(e) {}
-        idbPut(key, {
-          type:'race', race_date:row.race_date, race_no:row.race_no, baba_code:row.baba_code,
-          race_name:row.race_name||'', distance:row.distance||'', race_class:row.race_class||'',
-          track_cond:row.track_cond||'', first3f:row.first3f||'', agari4f:row.agari4f||'',
-          agari3f_race:row.agari3f_race||'', paceType:row.pace_type||'', memo:row.memo||'',
-          lap_times:row.lap_times||'', lapTimes:lapTimesArr,
-          _apiSaved:true,
-          savedAt:new Date(row.updated_at||row.created_at||Date.now()).toISOString()
-        });
-      });
-      raceFetched += rows.length;
-      console.log(`[initDB] レース offset=${raceOffset}: ${rows.length}件取得（累計 ${raceFetched}件）`);
-      if (rows.length < LIMIT) break;
-      raceOffset += LIMIT;
-    }
-
-    // ── Supabase: 馬情報を全件取得 ──
-    let horseOffset = 0;
-    let horseFetched = 0;
-    while (true) {
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/keiba_horses?select=*&baba_code=eq.31&order=race_date.desc&limit=${LIMIT}&offset=${horseOffset}`,
-        { headers: SUPABASE_HEADERS }
-      );
-      if (!res.ok) break;
-      const rows = await res.json();
-      if (!Array.isArray(rows) || rows.length === 0) break;
-      rows.forEach(row => {
-        const key = `${row.baba_code}_${row.race_date}_${row.race_no}_${row.uma_ban}`;
-        idbPut(key, {
-          type:'horse', race_date:row.race_date, race_no:row.race_no, baba_code:row.baba_code,
-          chakujun:row.chakujun||'', wakuBan:row.waku_ban||'', horseName:row.horse_name||'',
-          belong:row.belong||'', sexAge:row.sex_age||'', kinryo:row.kinryo||'',
-          jockey:row.jockey||'', trainer:row.trainer||'', weight:row.weight||'',
-          ninki:row.ninki||'', odds:row.odds||'', time:row.time||'', diff:row.diff||'',
-          agari3f:row.agari3f||'', corner:row.corner||'', first3f:row.first3f||'',
-          paceType:row.pace_type||'', mukaeShoumen:row.mukae_shoumen||'',
-          shoumenStraight:row.shoumen_straight||'', postComment:row.post_comment||'',
-          lineageLoginCode:row.lineage_login_code||'',
-          savedAt:new Date(row.updated_at||row.created_at||Date.now()).toISOString()
-        });
-      });
-      horseFetched += rows.length;
-      console.log(`[initDB] 馬 offset=${horseOffset}: ${rows.length}件取得（累計 ${horseFetched}件）`);
-      if (rows.length < LIMIT) break;
-      horseOffset += LIMIT;
-    }
-
-    console.log(`[initDB] 同期完了 レース:${raceFetched}件 馬:${horseFetched}件`);
-
-    // ── Supabase: 日別設定（メモ・内外バイアス）を取得 ──
-    try {
-      const dsRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/keiba_day_settings?select=*`,
-        { headers: SUPABASE_HEADERS }
-      );
-      if (dsRes.ok) {
-        const dsRows = await dsRes.json();
-        if (Array.isArray(dsRows)) {
-          dsRows.forEach(row => {
-            idbPut(`daySettings_${row.baba_code}_${row.race_date}`, {
-              type: 'daySettings',
-              memo: row.memo || '',
-              innerOuterBias: row.inner_outer_bias || '',
-            });
-          });
-          console.log(`[initDB] 日別設定 ${dsRows.length}件取得`);
-        }
-      }
-    } catch(e) {
-      console.warn('[initDB] keiba_day_settings 取得失敗:', e);
-    }
+    const [race0, horse0] = await Promise.all([
+      _fetchKochiPage('keiba_races', 0),
+      _fetchKochiPage('keiba_horses', 0),
+      _loadDaySettings(),
+    ]);
+    if (race0)  { race0.forEach(_putRaceRow);   if (race0.length  < _IDB_PAGE) p1RaceDone = true; }
+    if (horse0) { horse0.forEach(_putHorseRow); if (horse0.length < _IDB_PAGE) p1HorseDone = true; }
+    console.log(`[initDB] Phase1 直近取得 レース:${race0?.length||0}件 馬:${horse0?.length||0}件`);
   } catch(e) {
-    console.warn('[initDB] API同期失敗（オフライン？）:', e);
+    console.warn('[initDB] Phase1 同期失敗（オフライン？）:', e);
   }
 
+  // ── Phase 1 完了 → 即描画（アプリが操作可能に） ──
   loadSavedData();
   if(typeof initAnalysisDateSelect==='function') initAnalysisDateSelect();
+
+  // ── Phase 2: 残りを背景で取得（await しない＝UIをブロックしない） ──
+  (async () => {
+    _setBgLoadIndicator(true);
+    try {
+      if (!p1RaceDone) {
+        await _fetchTablePaged('keiba_races', _IDB_PAGE, rows => rows.forEach(_putRaceRow));
+      }
+      if (!p1HorseDone) {
+        await _fetchTablePaged('keiba_horses', _IDB_PAGE,
+          rows => rows.forEach(_putHorseRow),
+          () => _refreshSavedDebounced());
+      }
+      console.log('[initDB] Phase2 背景読み込み完了');
+    } catch(e) {
+      console.warn('[initDB] Phase2 背景読み込み失敗:', e);
+    }
+    _setBgLoadIndicator(false);
+    loadSavedData();
+    if(typeof initAnalysisDateSelect==='function') initAnalysisDateSelect();
+    // 1400m戦の前半3Fを上がり4Fから一括補完（全データ揃った後に実行）
+    const _bfCount = backfillFirst3fFrom1400m();
+    // 補完で1400mデータが増えたので、馬場傾向の前残り傾向パネルを最新で再描画
+    if (_bfCount > 0 && typeof renderTrackTrend === 'function') {
+      try { renderTrackTrend(); } catch(e) {}
+    }
+  })();
 }
 
 async function saveAllData() {
@@ -5594,6 +5765,198 @@ function renderTrackTrend() {
     </thead>
     <tbody>${rows}</tbody>
   </table>`;
+
+  // 1400m ペース別 前残り傾向（同じ競馬場フィルタで連動）
+  try { renderPaceBias1400(babaFilter); } catch(e) { console.warn('[paceBias1400]', e); }
+}
+
+/**
+ * renderPaceBias1400(babaFilter)
+ * 1400m戦を「馬場状態 × 前後半差ペース」で集計し、前残り/前つぶれ傾向を表示。
+ * 前半3F＝1着タイム−上がり4F（backfill済み）、上がり3F＝レース上がり(1着馬基準)。
+ */
+/**
+ * _collect1400PaceRaces(babaFilter)
+ * 1400m戦を抽出し、馬場状態・前後半差・前残り指標を返す（馬名インデックスで高速化）。
+ * renderPaceBias1400 と buildPaceBiasMatrix の共通基盤。
+ */
+function _collect1400PaceRaces(babaFilter) {
+  const all = lsRead();
+  // 馬エントリを raceKey でグルーピング（1パス）
+  const byRace = new Map();
+  for (const [k, hv] of Object.entries(all)) {
+    if (!hv || hv.type !== 'horse' || hv.fromOfficial) continue;
+    if (babaFilter && hv.baba_code !== babaFilter) continue;
+    const rk = `${hv.baba_code}_${hv.race_date}_${String(hv.race_no)}`;
+    let arr = byRace.get(rk);
+    if (!arr) { arr = []; byRace.set(rk, arr); }
+    const c = parseInt(hv.chakujun);
+    arr.push({ chaku: isNaN(c) ? 99 : c, corner: hv.corner || '' });
+  }
+  const fc = s => { const n = parseInt(String(s).split('-')[0]); return isNaN(n) ? null : n; };
+  const races = [];
+  for (const [k, v] of Object.entries(all)) {
+    if (!k.startsWith('race_')) continue;
+    if (babaFilter && v.baba_code !== babaFilter) continue;
+    if (String(v.distance || '').replace(/[^\d]/g, '') !== '1400') continue;
+    const f3 = parseFloat(v.first3f), a3 = parseFloat(v.agari3f_race);
+    if (isNaN(f3) || isNaN(a3)) continue;
+    const horses = byRace.get(`${v.baba_code}_${v.race_date}_${String(v.race_no)}`);
+    if (!horses || horses.length < 5) continue;
+    const field = horses.length;
+    const winner = horses.find(h => h.chaku === 1);
+    if (!winner || !winner.corner) continue;
+    const wc1 = fc(winner.corner); if (wc1 == null) continue;
+    const leader = horses.find(h => fc(h.corner) === 1);
+    races.push({
+      cond: v.track_cond || '',
+      diff: +(f3 - a3).toFixed(1),
+      maeKecchaku: (wc1 / field) <= 0.33,
+      leaderTop3: leader ? (leader.chaku <= 3) : null
+    });
+  }
+  return races;
+}
+
+// 前後半差 → ペース区分（マイナス＝前が速い＝ハイ）
+function _paceOfDiff(diff) { return diff <= -0.5 ? 'ハイ' : diff <= 0.5 ? '平均' : 'スロー'; }
+
+/**
+ * buildPaceBiasMatrix(babaFilter)
+ * 1400m戦から「馬場状態 × ペース」別の逃げ馬複勝率を集計。
+ * getPaceBiasFactor 用。各区分で {N, fuku, rate} を保持。
+ * ※メモ化しない：backfillで first3f が後から増えても件数(キー数)は変わらず
+ *   古い行列を返してしまうため。スキャンは軽量なので毎回構築する。
+ */
+function buildPaceBiasMatrix(babaFilter) {
+  const races = _collect1400PaceRaces(babaFilter);
+  const stat = rs => {
+    const leaders = rs.filter(r => r.leaderTop3 != null);
+    const fuku = leaders.filter(r => r.leaderTop3).length;
+    return { N: leaders.length, fuku, rate: leaders.length ? fuku / leaders.length : null };
+  };
+  const CONDS = ['良', '稍重', '重', '不良'], PACES = ['ハイ', '平均', 'スロー'];
+  const m = { overall: stat(races), byCond: {}, byPace: {}, byCondPace: {} };
+  for (const c of CONDS) m.byCond[c] = stat(races.filter(r => r.cond === c));
+  for (const p of PACES) m.byPace[p] = stat(races.filter(r => _paceOfDiff(r.diff) === p));
+  for (const c of CONDS) {
+    m.byCondPace[c] = {};
+    for (const p of PACES) m.byCondPace[c][p] = stat(races.filter(r => r.cond === c && _paceOfDiff(r.diff) === p));
+  }
+  return m;
+}
+
+/**
+ * predictRacePaceFromA4C(a4cArr, fieldSize)
+ * 出走各馬の4コーナー平均通過順から先行馬数を数え、ハイ/平均/スローを予測。
+ */
+function predictRacePaceFromA4C(a4cArr, fieldSize) {
+  const known = a4cArr.filter(v => v != null);
+  if (known.length < 3 || !fieldSize) return '平均';
+  const senkou = known.filter(v => v <= 3.5).length;
+  const rate = senkou / fieldSize;
+  return rate >= 0.45 ? 'ハイ' : rate >= 0.30 ? '平均' : 'スロー';
+}
+
+/**
+ * getPaceBiasFactor(matrix, cond, pace)
+ * 純粋なペース成分を取り出すため「その馬場の平均」を基準に正規化する。
+ * → 平均ペースはほぼ係数1（無補正）、ハイ/スローの逸脱だけが脚質補正を伸縮。
+ * 薄いセルは馬場平均へ収縮(shrinkage)。控えめにクランプ [0.8, 1.2]。1=無効。
+ */
+function getPaceBiasFactor(matrix, cond, pace) {
+  if (!matrix || !matrix.overall || matrix.overall.N < 20) return 1;
+  // 基準＝その馬場の平均複勝率（馬場データが薄ければ全体平均）
+  const condCell = matrix.byCond?.[cond];
+  const baseRate = (condCell && condCell.N >= 15 && condCell.rate != null)
+    ? condCell.rate : matrix.overall.rate;
+  if (baseRate == null) return 1;
+  const cell = matrix.byCondPace?.[cond]?.[pace];
+  if (!cell || cell.N < 1) return 1;
+  const K = 8; // 収縮の強さ（このサンプル数まで馬場平均寄り）
+  const effRate = (cell.fuku + baseRate * K) / (cell.N + K);
+  const factor = effRate / baseRate;
+  return Math.max(0.8, Math.min(1.2, +factor.toFixed(3)));
+}
+
+function renderPaceBias1400(babaFilter) {
+  const wrap = document.getElementById('pace-bias-1400');
+  if (!wrap) return;
+
+  // ── 1400m戦を抽出して指標化（共通基盤） ──
+  const races = _collect1400PaceRaces(babaFilter);
+
+  if (!races.length) {
+    wrap.innerHTML = '<p class="no-data">1400m戦のデータがありません（上がり4Fが入力された1400m戦が必要です）</p>';
+    return;
+  }
+
+  const paceOf = r => r.diff <= -0.5 ? 'ハイ' : r.diff <= 0.5 ? '平均' : 'スロー';
+  const PACES = ['ハイ', '平均', 'スロー'];
+  const CONDS = ['良', '稍重', '重', '不良'];
+  const paceHint = { 'ハイ': '前が速い', '平均': '', 'スロー': '前が遅い' };
+
+  // セル集計
+  const agg = (rs) => {
+    const N = rs.length;
+    const leaders = rs.filter(r => r.leaderTop3 != null);
+    const lf = leaders.filter(r => r.leaderTop3).length;
+    const mae = rs.filter(r => r.maeKecchaku).length;
+    return {
+      N,
+      fukuRate: leaders.length ? Math.round(100 * lf / leaders.length) : null,
+      maeRate: N ? Math.round(100 * mae / N) : null,
+    };
+  };
+
+  // 逃げ馬複勝率 → 色（緑=前残り / 赤=前つぶれ）。N<8は薄字。
+  const cellHtml = (rs) => {
+    const a = agg(rs);
+    if (!a.N) return `<td style="padding:7px 6px;text-align:center;color:#cbd5e1">—</td>`;
+    const low = a.N < 8;
+    const fr = a.fukuRate;
+    let col = '#6b7280';
+    if (fr != null) col = fr >= 70 ? '#059669' : fr >= 55 ? '#d97706' : '#dc2626';
+    const opacity = low ? '0.45' : '1';
+    return `<td style="padding:7px 6px;text-align:center;opacity:${opacity}">
+      <div style="font-size:15px;font-weight:800;color:${col}">${fr != null ? fr + '%' : '—'}</div>
+      <div style="font-size:9.5px;color:#94a3b8;margin-top:1px">N=${a.N}・前${a.maeRate != null ? a.maeRate + '%' : '—'}</div>
+    </td>`;
+  };
+
+  const headCells = PACES.map(p =>
+    `<th style="padding:8px 6px;border-bottom:2px solid #e2e8f0;text-align:center;font-size:11px;color:#6b7280;white-space:nowrap">${p}<br><span style="font-size:9px;font-weight:400;color:#9ca3af">${paceHint[p] || '　'}</span></th>`
+  ).join('');
+
+  const condRows = CONDS.map(cond => {
+    const rsC = races.filter(r => r.cond === cond);
+    const badge = `<span class="track-cond-badge track-cond-${trackCondClass(cond)}" style="padding:2px 9px;border-radius:8px;font-size:12px">${cond}</span>`;
+    const cells = PACES.map(p => cellHtml(rsC.filter(r => paceOf(r) === p))).join('');
+    const totCell = cellHtml(rsC);
+    return `<tr style="border-bottom:1px solid #f1f5f9">
+      <td style="padding:7px 10px;text-align:center;white-space:nowrap">${badge}</td>${cells}${totCell}</tr>`;
+  }).join('');
+
+  // 全体行
+  const totCells = PACES.map(p => cellHtml(races.filter(r => paceOf(r) === p))).join('');
+  const grandCell = cellHtml(races);
+  const totalRow = `<tr style="border-top:2px solid #e2e8f0;background:#f8fafc">
+    <td style="padding:8px 10px;text-align:center;font-weight:800;color:#1a1a2e">全体</td>${totCells}${grandCell}</tr>`;
+
+  wrap.innerHTML = `<div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;min-width:520px">
+      <thead><tr style="background:#f4f6fa">
+        <th style="padding:8px 10px;border-bottom:2px solid #e2e8f0;text-align:center;font-size:11px;color:#6b7280">馬場状態</th>
+        ${headCells}
+        <th style="padding:8px 6px;border-bottom:2px solid #e2e8f0;text-align:center;font-size:11px;color:#6b7280">全ペース</th>
+      </tr></thead>
+      <tbody>${condRows}${totalRow}</tbody>
+    </table>
+  </div>
+  <p style="font-size:11px;color:#94a3b8;margin:10px 0 0;line-height:1.7">
+    数値＝逃げ馬の複勝率（高い＝前残り）。「前◯◯%」＝前(逃げ・先行)で決着した割合。
+    対象1400m戦：<strong>${races.length}R</strong>。
+  </p>`;
 }
 
 function toggleSavedMonth(ym) {
@@ -5805,7 +6168,7 @@ function getHorseHistory(horseName) {
       umaBan  =parseInt(parts[3]);
     }
     const raceVal=lsData[`race_${babaCode}_${raceDate}_${raceNo}`]||{};
-    return{raceDate,raceNo,babaCode,raceName:raceVal.race_name||raceVal.raceName||`第${raceNo}レース`,distance:raceVal.distance||'',raceClass:raceVal.race_class||raceVal.raceClass||'',trackCond:raceVal.track_cond||raceVal.trackCond||v.trackCond||'',paceTypeRace:raceVal.paceType||raceVal.pace_type||'',chakujun:v.chakujun||'',wakuBan:v.waku_ban||v.wakuBan||'',umaBan:v.umaBan||umaBan,jockey:v.jockey||'',trainer:v.trainer||'',time:v.time||'',diff:v.diff||'',agari3f:v.agari3f||'',first3f:v.first3f||v.first_3f||'',paceType:v.pace_type||v.paceType||'',weight:v.weight||'',kinryo:v.kinryo||'',corner:v.corner||'',mukaeShoumen:v.mukae_shoumen||v.mukaeShoumen||'',shoumenStraight:v.shoumen_straight||v.shoumenStraight||'',postComment:v.postComment||v.post_comment||'',fromOfficial:v.fromOfficial||false};
+    return{raceDate,raceNo,babaCode,raceName:raceVal.race_name||raceVal.raceName||`第${raceNo}レース`,distance:raceVal.distance||v._dist||'',raceClass:raceVal.race_class||raceVal.raceClass||'',_raceClass:v._raceClass||'',trackCond:raceVal.track_cond||raceVal.trackCond||v.trackCond||'',paceTypeRace:raceVal.paceType||raceVal.pace_type||'',chakujun:v.chakujun||'',wakuBan:v.waku_ban||v.wakuBan||'',umaBan:v.umaBan||umaBan,jockey:v.jockey||'',trainer:v.trainer||'',time:v.time||'',diff:v.diff||'',agari3f:v.agari3f||'',first3f:v.first3f||v.first_3f||'',paceType:v.pace_type||v.paceType||'',weight:v.weight||'',kinryo:v.kinryo||'',corner:v.corner||'',mukaeShoumen:v.mukae_shoumen||v.mukaeShoumen||'',shoumenStraight:v.shoumen_straight||v.shoumenStraight||'',postComment:v.postComment||v.post_comment||'',fromOfficial:v.fromOfficial||false,_isJra:v._isJra||false};
   });
   // ── PASS 1: 完全一致（babaCode+raceDate+raceNo）でローカルデータ優先 ──
   const deduped=new Map();
@@ -7964,6 +8327,31 @@ function getEffectiveClass(raceClass) {
   if (raceClass.includes('C1')) return 'C1';
   if (raceClass.includes('B')) return 'B';
   return null;
+}
+
+// 転入元クラスを数値ランクに変換（JRA上位は高知NAR基準より大幅に高く設定）
+function getTransferOriginRank(raceClass) {
+  if (!raceClass) return 3;
+  const rc = String(raceClass);
+  // JRA 重賞（GI/GII/GIII含む）
+  if (/重賞|GI|GII|GIII/.test(rc)) return 9;
+  // JRA オープン / 4勝クラス
+  if (/オープン|OP|4勝/.test(rc)) return 8;
+  // JRA 3勝クラス / 1600万下（高知A上位相当）
+  if (/3勝|1600万/.test(rc)) return 7;
+  // JRA 2勝クラス / 1000万下（高知A〜B相当）
+  if (/2勝|1000万/.test(rc)) return 5.5;
+  // JRA 1勝クラス / 500万下（高知B〜C1相当）
+  if (/1勝|500万/.test(rc)) return 4;
+  // JRA 未勝利（高知C1〜C2相当）
+  if (/未勝利/.test(rc)) return 2.5;
+  // JRA 新馬（高知C2〜C3相当）
+  if (/新馬/.test(rc)) return 1.5;
+  // NAR / 高知系クラス（A/B/C1/C2/C3）
+  const ec = getEffectiveClass(rc);
+  const NAR_RANK = { '重賞': 7, 'OP': 6, 'A': 5, 'B': 4, 'C1': 3, 'C2': 2, 'C3': 1 };
+  if (ec && NAR_RANK[ec] != null) return NAR_RANK[ec];
+  return 3; // 不明 → ニュートラル
 }
 
 /**
@@ -10752,6 +11140,14 @@ function renderPredictionPanel(raceNo) {
   const rdistNum = parseInt(raceDist) || 0;
   const FIELD_AVG_WR = 12;
 
+  // JRA転入馬フォールバック用: official_* キャッシュを馬名でインデックス化
+  const _officialByHorse = new Map();
+  for (const [k, v] of Object.entries(lsRead())) {
+    if (k.startsWith('official_') && v.type === 'official' && v.horseName && v.races?.length) {
+      _officialByHorse.set(v.horseName, v.races);
+    }
+  }
+
   const scored = horses.map(horse => {
     const hName  = horse.horseName || '';
     const jockey = (horse.jockey || '').trim();
@@ -10767,6 +11163,7 @@ function renderPredictionPanel(raceNo) {
     const _pushSI = (histList, limit) => {
       for (const h of histList.slice(0, limit)) {
         if (recentSI.length >= 10) break;
+        if (h._isJra) continue; // JRAタイムは高知SI換算不可のためスキップ
         const f3Val = parseFloat(h.first3f);
         const bias  = getDayBiasForDate(h.babaCode, h.raceDate) ?? (h.fromOfficial ? estimateBiasFromCond(h.distance, h.raceClass, h.trackCond) : null);
         const avgF3 = getRaceAvgF3(h.babaCode, h.raceDate, h.raceNo);
@@ -10780,13 +11177,78 @@ function renderPredictionPanel(raceNo) {
     };
     _pushSI(kochiHist, 10);
     const kochiSICount = recentSI.length;
-    if (kochiSICount < 2) _pushSI(otherHist, 6);
-    const isTransfer = kochiSICount === 0 && recentSI.length > 0;
+    if (kochiSICount < 2) _pushSI(otherHist.filter(h => !h._isJra), 6);
+    let isEstimatedScore = false;
+    let isTransfer = kochiSICount === 0 && recentSI.length > 0;
     let baseScore = null;
     if (recentSI.length > 0) {
       const weights = recentSI.map((_, i) => Math.pow(0.75, i));
       const wSum    = weights.reduce((s, w) => s + w, 0);
       baseScore     = recentSI.reduce((s, si, i) => s + si * weights[i], 0) / wSum;
+    }
+    // 転入馬推定スコア（SI算出不可だが他場履歴あり = JRA・NAR他場転入等）
+    if (baseScore === null && histEx.length > 0) {
+      // ベストクラスのレースを選択（最高originRankのエントリを使用）
+      // _raceClass + _raceName を結合してJRAクラス名（「3勝クラス」等）を拾う
+      let _bestEntry = histEx[0]; let _bestEntryRank = -1;
+      for (const _h of histEx) {
+        const _clsCombined = [_h._raceClass || _h.raceClass, _h._raceName].filter(Boolean).join(' ');
+        const _r = getTransferOriginRank(_clsCombined);
+        if (_r > _bestEntryRank) { _bestEntryRank = _r; _bestEntry = _h; }
+      }
+      const _firstOther  = _bestEntry;
+      const _useClass    = [_firstOther._raceClass || _firstOther.raceClass, _firstOther._raceName].filter(Boolean).join(' ');
+      const _originRank  = getTransferOriginRank(_useClass);
+      const _curRank     = CLASS_RANK[getEffectiveClass(raceCls)] || 2;
+      const _classDiff   = _originRank - _curRank;
+      const _classBase   = 40 + _curRank * 2;
+      const _diffRaw     = parseFloat(_firstOther.diff);
+      const _diffAdj     = isNaN(_diffRaw) ? 0
+        : _diffRaw <= 0   ? +2
+        : _diffRaw <= 0.5 ? +1
+        : _diffRaw <= 1.5 ? 0
+        : _diffRaw <= 3.0 ? -1
+        : -2;
+      const _chaku    = parseInt(_firstOther.chakujun);
+      const _chakuAdj = isNaN(_chaku) ? 0 : _chaku === 1 ? +1 : _chaku <= 3 ? 0 : _chaku <= 5 ? -0.5 : -1;
+      baseScore        = +Math.max(36, Math.min(60, _classBase + _classDiff * 2.5 + _diffAdj + _chakuAdj)).toFixed(1);
+      isEstimatedScore = true;
+      isTransfer       = true;
+    }
+
+    // JRA転入馬フォールバック: offi_* エントリ未作成でも official_* キャッシュから推定
+    // （中央競馬のみ走って高知移籍した馬 = histEx が空のケース）
+    if (baseScore === null) {
+      const _offRaces = _officialByHorse.get(hName);
+      if (_offRaces?.length) {
+        // ベストクラスのレースを選択（Kochi C3等低クラスより高クラスを優先）
+        // raceClassRaw + raceName を結合してJRAクラス名（「3歳以上3勝クラス」等）を拾う
+        let _bestOffRace = null; let _bestOffRank = -1;
+        for (const _r of _offRaces) {
+          const _cls = [_r.raceClassRaw, _r.raceName, _r.raceClass].filter(Boolean).join(' ');
+          const _rk = getTransferOriginRank(_cls);
+          if (_rk > _bestOffRank) { _bestOffRank = _rk; _bestOffRace = _r; }
+        }
+        if (_bestOffRace) {
+          const _useClass2   = [_bestOffRace.raceClassRaw, _bestOffRace.raceName, _bestOffRace.raceClass].filter(Boolean).join(' ');
+          const _originRank2 = getTransferOriginRank(_useClass2);
+          const _curRank2    = CLASS_RANK[getEffectiveClass(raceCls)] || 2;
+          const _classDiff2  = _originRank2 - _curRank2;
+          const _classBase2  = 40 + _curRank2 * 2;
+          const _diffRaw2    = parseFloat(_bestOffRace.diff);
+          const _diffAdj2    = isNaN(_diffRaw2) ? 0
+            : _diffRaw2 <= 0   ? +2
+            : _diffRaw2 <= 0.5 ? +1
+            : _diffRaw2 <= 1.5 ? 0
+            : _diffRaw2 <= 3.0 ? -1
+            : -2;
+          const _chaku2    = parseInt(_bestOffRace.chakujun);
+          const _chakuAdj2 = isNaN(_chaku2) ? 0 : _chaku2 === 1 ? +1 : _chaku2 <= 3 ? 0 : _chaku2 <= 5 ? -0.5 : -1;
+          baseScore        = +Math.max(36, Math.min(60, _classBase2 + _classDiff2 * 2.5 + _diffAdj2 + _chakuAdj2)).toFixed(1);
+          isEstimatedScore = true;
+          isTransfer       = true;
+        }
+      }
     }
 
     // ── ② 騎手補正 ──
@@ -10892,12 +11354,12 @@ function renderPredictionPanel(raceNo) {
     // 高知実績: 4C1番手=勝率60-75%、2-3番手=13%、4-5番手=3%、6番手以下=0.3%（129,654走実績）
     let cornMod = 0;
     if (avg4C != null && cornerPositions.length >= 3) {
-      if (avg4C <= 1.5)      cornMod = +2.6367;
-      else if (avg4C <= 2.5) cornMod = +1.40625;
-      else if (avg4C <= 3.5) cornMod = +0.3515625;
-      else if (avg4C <= 5.0) cornMod = -0.52734375;
-      else if (avg4C <= 7.0) cornMod = -1.40625;
-      else                   cornMod = -2.109375;
+      if (avg4C <= 1.5)      cornMod = +3.295875;
+      else if (avg4C <= 2.5) cornMod = +1.7578125;
+      else if (avg4C <= 3.5) cornMod = +0.439453125;
+      else if (avg4C <= 5.0) cornMod = -0.6591796875;
+      else if (avg4C <= 7.0) cornMod = -1.7578125;
+      else                   cornMod = -2.63671875;
     }
 
     // ── ⑩ 調教師補正 ──
@@ -10931,7 +11393,7 @@ function renderPredictionPanel(raceNo) {
     const _avgAH = _haHist.length>=2 ? _haHist.reduce((s,v)=>s+v,0)/_haHist.length : null;
     let agariMod = 0;
     if (_avgAH!==null) {
-      agariMod = Math.max(-1.25, Math.min(1.25, (_agRefV - _avgAH) * 1.054688));
+      agariMod = Math.max(-1.25, Math.min(1.25, (_agRefV - _avgAH) * 1.31836));
     }
 
     // ── ⑬ 前走着差補正（直近2走・勝ち馬との時差平均） ──
@@ -10945,12 +11407,13 @@ function renderPredictionPanel(raceNo) {
       }).filter(v => v!==null);
       if (_mhGaps.length >= 1) {
         const _avgMG = _mhGaps.reduce((s,v)=>s+v,0)/_mhGaps.length;
-        if      (_avgMG <= 0.0) marginMod = +1.8;
-        else if (_avgMG <= 0.3) marginMod = +1.35;
-        else if (_avgMG <= 0.8) marginMod = +0.675;
+        // 着差補正は係数再最適化で ×1.5（時系列CVで汎化する最適値。×2.0は効かせ過ぎ・2026-06-30）
+        if      (_avgMG <= 0.0) marginMod = +1.35;
+        else if (_avgMG <= 0.3) marginMod = +1.0125;
+        else if (_avgMG <= 0.8) marginMod = +0.50625;
         else if (_avgMG <= 1.5) marginMod =  0.0;
-        else if (_avgMG <= 3.0) marginMod = -0.675;
-        else                    marginMod = -1.35;
+        else if (_avgMG <= 3.0) marginMod = -0.50625;
+        else                    marginMod = -1.0125;
       }
     }
 
@@ -10986,10 +11449,11 @@ function renderPredictionPanel(raceNo) {
       const _prevJ = (histEx[0].jockey || '').trim();
       if (_prevJ && _prevJ !== jockey) {
         const _jd = _getJWR(jockey) - _getJWR(_prevJ);
-        if      (_jd >= 10) jockeyChgMod = +0.9375;
-        else if (_jd >= 5)  jockeyChgMod = +0.46875;
-        else if (_jd <= -10) jockeyChgMod = -0.46875;
-        else if (_jd <= -5)  jockeyChgMod = -0.234375;
+        // 乗り替わり補正は係数再最適化で ×0.5（バックテストで効きすぎと判明・2026-06-30）
+        if      (_jd >= 10) jockeyChgMod = +2.8;
+        else if (_jd >= 5)  jockeyChgMod = +1.4;
+        else if (_jd <= -10) jockeyChgMod = -1.4;
+        else if (_jd <= -5)  jockeyChgMod = -0.7;
       }
     }
 
@@ -11010,18 +11474,42 @@ function renderPredictionPanel(raceNo) {
     }).filter(v => v !== null);
     if (_cc3Vals.length >= 1) {
       const _ccAvg = _cc3Vals.reduce((s, v) => s + v, 0) / _cc3Vals.length;
-      if      (_ccAvg <= -2) cornConsistMod = +0.8;
-      else if (_ccAvg <= -1) cornConsistMod = +0.4;
-      else if (_ccAvg >=  2) cornConsistMod = -0.8;
-      else if (_ccAvg >=  1) cornConsistMod = -0.4;
+      if      (_ccAvg <= -2) cornConsistMod = +1.2;
+      else if (_ccAvg <= -1) cornConsistMod = +0.6;
+      else if (_ccAvg >=  2) cornConsistMod = -1.2;
+      else if (_ccAvg >=  1) cornConsistMod = -0.6;
     }
+
+    // ⑱ 枠順バイアスは検証で◎精度を下げたため不採用（外枠有利は集計上は実在するが、
+    //    能力より弱い信号を◎選択に乗せるとノイズが勝つ。CVで訓練・検証とも悪化・2026-06-30）
+
+    // ⑲ 斤量負担率（斤量÷馬体重）も検証で不採用。EDA単体では複勝+7.7ptの強い信号だったが、
+    //    厳密5分割CVでは複勝が5分割中1回しか改善せず（枠順と同じ「弱い信号が◎選択でノイズに
+    //    負ける」パターン）。ライブモデルには組み込まない（2026-06-30）。
 
     const totalScore = baseScore != null
       ? +(baseScore + condMod + distMod + trendMod + comboMod + rotMod + classMod + cornMod + weightMod + agariMod + marginMod + winStrMod + jockeyChgMod + takiMod + cornConsistMod).toFixed(2)
       : null;
 
-    return { horse, jockey, trainer, baseScore, jockeyMod, condMod, distMod, trendMod, comboMod, rotMod, classMod, cornMod, weightMod, agariMod, marginMod, winStrMod, jockeyChgMod, takiMod, cornConsistMod, avg4C, totalScore, siCount: recentSI.length, kochiSICount, isTransfer, jockeyWR };
+    return { horse, jockey, trainer, baseScore, jockeyMod, condMod, distMod, trendMod, comboMod, rotMod, classMod, cornMod, weightMod, agariMod, marginMod, winStrMod, jockeyChgMod, takiMod, cornConsistMod, avg4C, totalScore, siCount: recentSI.length, kochiSICount, isTransfer, isEstimatedScore, jockeyWR };
   });
+
+  // ── ⑯-b ペース×馬場バイアスで脚質補正(cornMod)を伸縮 ──
+  // 出走馬の脚質構成からペースを予測し、(馬場×ペース)の前残り傾向で cornMod をスケール。
+  // 前つぶれ想定日は前の加点を抑え差しの減点を緩和、前残り想定日は前を増す（対称）。
+  const _pbMatrix = buildPaceBiasMatrix(currentBaba || '31');
+  const _pbPace   = predictRacePaceFromA4C(scored.map(s => s.avg4C), scored.length);
+  const _pbFactor = getPaceBiasFactor(_pbMatrix, raceCond, _pbPace);
+  if (_pbFactor !== 1) {
+    scored.forEach(s => {
+      if (s.totalScore != null && s.cornMod) {
+        s.totalScore = +(s.totalScore + s.cornMod * (_pbFactor - 1)).toFixed(2);
+        s.cornMod    = +(s.cornMod * _pbFactor).toFixed(4);
+      }
+    });
+  }
+  // パネル下部のヒント表示用に保持
+  scored._paceBias = { pace: _pbPace, factor: _pbFactor, cond: raceCond };
 
   // ── ⑰ 相対SI補正（フィールド内での相対位置） ──
   const _fsiArr = scored.filter(s => s.baseScore != null).map(s => s.baseScore);
@@ -11116,8 +11604,14 @@ function renderPredictionPanel(raceNo) {
       const clMod = fmt(s.classMod);
       const noData = s.siCount === 0;
       const jStatsKnown = !!lookupJockeyStats(s.jockey);
-      const transferBadge = s.isTransfer ? '<span style="font-size:9px;font-weight:800;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:3px;padding:0 4px;margin-left:4px;vertical-align:middle">転入</span>' : '';
-      const siNote = s.isTransfer ? '<br><span style="font-size:9px;color:#d97706">他場参考</span>' : (s.kochiSICount > 0 && s.kochiSICount < 2 ? '<br><span style="font-size:9px;color:#9ca3af">高知1走</span>' : '');
+      const transferBadge = s.isEstimatedScore
+        ? '<span style="font-size:9px;font-weight:800;background:#ede9fe;color:#7c3aed;border:1px solid #c4b5fd;border-radius:3px;padding:0 4px;margin-left:4px;vertical-align:middle">推定</span>'
+        : s.isTransfer
+          ? '<span style="font-size:9px;font-weight:800;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:3px;padding:0 4px;margin-left:4px;vertical-align:middle">転入</span>'
+          : '';
+      const siNote = s.isEstimatedScore ? '<br><span style="font-size:9px;color:#7c3aed">クラス推定</span>'
+        : s.isTransfer ? '<br><span style="font-size:9px;color:#d97706">他場参考</span>'
+        : (s.kochiSICount > 0 && s.kochiSICount < 2 ? '<br><span style="font-size:9px;color:#9ca3af">高知1走</span>' : '');
       const ck = `${s.jockey}_${s.trainer}`;
       const cs = _comboStats[ck];
       const comboNote = cs && cs.total >= 3 ? `<br><span style="font-size:9px;color:#9ca3af">${cs.total}戦${Math.round(cs.place/cs.total*100)}%</span>` : '<br><span style="font-size:9px;color:#cbd5e1">実績少</span>';
@@ -11127,7 +11621,7 @@ function renderPredictionPanel(raceNo) {
         <td style="padding:7px 6px;text-align:center;font-size:12px;color:#6b7280">${umaBan}</td>
         <td style="padding:7px 8px;font-size:13px;font-weight:700;color:#1a1a2e;white-space:nowrap">${s.horse.horseName||'—'}${transferBadge}</td>
         <td style="padding:7px 6px;font-size:12px;color:#374151;white-space:nowrap">${s.jockey}${jStatsKnown?'':' <span style="font-size:9px;color:#ef4444">*</span>'}</td>
-        <td style="padding:7px 8px;text-align:center;font-size:13px;font-family:monospace;font-weight:700;color:${s.baseScore!=null?(s.isTransfer?'#d97706':'#1a56a0'):'#9ca3af'}">${bs}${siNote}</td>
+        <td style="padding:7px 8px;text-align:center;font-size:13px;font-family:monospace;font-weight:700;color:${s.baseScore!=null?(s.isEstimatedScore?'#7c3aed':s.isTransfer?'#d97706':'#1a56a0'):'#9ca3af'}">${bs}${siNote}</td>
         <td style="padding:7px 6px;text-align:center;font-size:11px;color:${col(jMod)}">${jMod}<br><span style="font-size:9px;color:#9ca3af">${jwr}%</span></td>
         <td style="padding:7px 6px;text-align:center;font-size:11px;color:${s.condMod!==0?col(cMod):'#9ca3af'}">${s.condMod!==0?cMod:'—'}</td>
         <td style="padding:7px 6px;text-align:center;font-size:11px;color:${s.distMod!==0?col(dMod):'#9ca3af'}">${s.distMod!==0?dMod:'—'}</td>
@@ -11164,6 +11658,28 @@ function renderPredictionPanel(raceNo) {
     ? `<button type="button" onclick="var p=document.getElementById('yoso-panel-${raceNo}');p._viewMode=(p._viewMode||'before')==='after'?'before':'after';renderPredictionPanel(${raceNo})" style="padding:4px 10px;${afterBtnStyle};border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">${afterBtnLabel}</button>`
     : '';
 
+  // ── ペース×馬場 前残り/前崩れ判定バッジ ──
+  let paceBiasBadge = '';
+  {
+    const pb = scored._paceBias || {};
+    const f = pb.factor || 1;
+    const pace = pb.pace || '平均';
+    const condTxt = (pb.cond || raceCond) || '馬場不明';
+    const isHigh = raceDist === '1400';  // 行列は1400m由来
+    let verdict, vColor, vBg, vIcon;
+    if (f <= 0.92)      { verdict = '前崩れ警戒（差し台頭）'; vColor = '#dc2626'; vBg = '#fef2f2'; vIcon = '🔴'; }
+    else if (f >= 1.08) { verdict = '前残り有利（先行信頼）'; vColor = '#059669'; vBg = '#f0fdf4'; vIcon = '🟢'; }
+    else                { verdict = 'ほぼ中立';             vColor = '#6b7280'; vBg = '#f8fafc'; vIcon = '⚪'; }
+    const facTxt = f === 1 ? '—' : `×${f.toFixed(2)}`;
+    paceBiasBadge = `
+      <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:${vBg};border:1px solid ${vColor}33;border-radius:8px;padding:7px 12px;font-size:12px">
+        <span style="font-weight:800;color:${vColor}">${vIcon} ${verdict}</span>
+        <span style="color:#475569">${condTxt} × <strong>${pace}予想</strong></span>
+        <span style="color:#94a3b8;font-size:11px">脚質補正 ${facTxt}${isHigh ? '' : '（1400m傾向を参考適用）'}</span>
+        <span style="margin-left:auto;color:#94a3b8;font-size:10px">出走馬の脚質構成から推定</span>
+      </div>`;
+  }
+
   container.innerHTML = `
     <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <span style="font-size:13px;font-weight:700;color:#374151"><i class="fas fa-star" style="color:#d97706;margin-right:4px"></i>予想AI</span>
@@ -11180,6 +11696,7 @@ function renderPredictionPanel(raceNo) {
       <button type="button" id="yoso-fetch-all-btn-${raceNo}" onclick="fetchAllByNameForRace(${raceNo})" style="margin-left:auto;padding:4px 12px;background:#1a56a0;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;"><i class="fas fa-download"></i> データ自動取得</button>
       <span id="yoso-fetch-status-${raceNo}" style="font-size:11px;color:#6b7280;white-space:nowrap;"></span>
     </div>
+    ${paceBiasBadge}
     <div style="overflow-x:auto;">${tableHtml}</div>
     <div id="yoso-backtest-${raceNo}"></div>
     <p style="font-size:10px;color:#9ca3af;margin-top:8px">
@@ -11262,8 +11779,16 @@ function runYosoBacktest(raceNo) {
       // 係数スキャン用データ蓄積
       const scanData = [];
 
+      // 乗り替わり診断カウンター
+      const _jcDiag = { noJockey:0, sameJockey:0, smallDiff:0, fired:0 };
+
+      // ペース×馬場バイアス行列（脚質補正の伸縮係数用）
+      const _btPaceMatrix = buildPaceBiasMatrix('31');
+
       const oldS = { t:0, h1:0, h3:0 };
       const newS = { t:0, h1:0, h3:0 };
+      const newBS = { t:0, h1:0, h3:0 }; // 新＋ペース補正
+      const pbActN = { t:0, n1:0, n3:0, b1:0, b3:0 }; // 補正が効いたレースのみ（新 vs 新＋補正）
       const circleS  = { t:0, h1:0, h3:0 }; // ○対抗
       const sankakuS = { t:0, h1:0, h3:0 }; // ▲単穴
       const top3S    = { t:0, hit:0 };       // ◎○▲いずれか1着
@@ -11299,13 +11824,14 @@ function runYosoBacktest(raceNo) {
           const _push = (lst, lim) => {
             for (const h of lst.slice(0, lim)) {
               if (siList.length >= 10) break;
+              if (h._isJra) continue; // JRAはSI換算不可
               const b = getDayBiasForDate(h.babaCode, h.raceDate) ?? null;
               const si = calcSpeedIndex(h.time, h.distance, h.raceClass, h.trackCond, b, h.kinryo, null);
               if (si != null) siList.push(si);
             }
           };
           _push(kochiPre, 10);
-          if (siList.length < 2) _push(otherPre, 6);
+          if (siList.length < 2) _push(otherPre.filter(h => !h._isJra), 6);
           if (siList.length === 0) continue;
 
           const wts = siList.map((_, i) => Math.pow(0.75, i));
@@ -11364,12 +11890,12 @@ function runYosoBacktest(raceNo) {
           const _a4c = _cps.length>=2 ? _cps.reduce((s,v)=>s+v,0)/_cps.length : null;
           let cornN = 0;
           if (_a4c!=null && _cps.length>=3) {
-            if (_a4c<=1.5) cornN=2.6367;
-            else if (_a4c<=2.5) cornN=1.40625;
-            else if (_a4c<=3.5) cornN=0.3515625;
-            else if (_a4c<=5.0) cornN=-0.52734375;
-            else if (_a4c<=7.0) cornN=-1.40625;
-            else cornN=-2.109375;
+            if (_a4c<=1.5) cornN=3.295875;
+            else if (_a4c<=2.5) cornN=1.7578125;
+            else if (_a4c<=3.5) cornN=0.439453125;
+            else if (_a4c<=5.0) cornN=-0.6591796875;
+            else if (_a4c<=7.0) cornN=-1.7578125;
+            else cornN=-2.63671875;
           }
           // 新: trendMod（SI線形回帰トレンド）
           const _tsi = [...siList].reverse(); // 古い順
@@ -11410,7 +11936,7 @@ function runYosoBacktest(raceNo) {
           const _avgAB = _haB.length>=2 ? _haB.reduce((s,v)=>s+v,0)/_haB.length : null;
           let agariN = 0;
           if (_avgAB!==null) {
-            agariN = Math.max(-1.25, Math.min(1.25, (_agRefV2 - _avgAB) * 1.054688));
+            agariN = Math.max(-1.25, Math.min(1.25, (_agRefV2 - _avgAB) * 1.31836));
           }
           // 新: comboN（騎手×厩舎コンボ補正）
           const _ck2 = `${(entry.jockey||'').trim()}_${(entry.trainer||'').trim()}`;
@@ -11432,12 +11958,12 @@ function runYosoBacktest(raceNo) {
             }).filter(v=>v!==null);
             if (_mBTg.length>=1) {
               const _avgBG=_mBTg.reduce((s,v)=>s+v,0)/_mBTg.length;
-              if      (_avgBG<=0.0) marginN=+1.8;
-              else if (_avgBG<=0.3) marginN=+1.35;
-              else if (_avgBG<=0.8) marginN=+0.675;
+              if      (_avgBG<=0.0) marginN=+1.35;
+              else if (_avgBG<=0.3) marginN=+1.0125;
+              else if (_avgBG<=0.8) marginN=+0.50625;
               else if (_avgBG<=1.5) marginN= 0.0;
-              else if (_avgBG<=3.0) marginN=-0.675;
-              else                  marginN=-1.35;
+              else if (_avgBG<=3.0) marginN=-0.50625;
+              else                  marginN=-1.0125;
             }
           }
 
@@ -11459,15 +11985,20 @@ function runYosoBacktest(raceNo) {
           // jockeyChgN（乗り替わり補正）
           const _getJWRbt = name => { const s = lookupJockeyStats(name); if (!s) return 12; const src = (s.recent?.n >= 30 ? s.recent : null) || s.all; return src?.wr ?? 12; };
           let jockeyChgN = 0;
-          if (preHist.length >= 1 && entry.jockey) {
+          if (!entry.jockey) {
+            _jcDiag.noJockey++;
+          } else if (preHist.length >= 1) {
             const _pj = (preHist[0].jockey || '').trim();
             const _cj = (entry.jockey || '').trim();
-            if (_pj && _pj !== _cj) {
+            if (!_pj || _pj === _cj) {
+              _jcDiag.sameJockey++;
+            } else {
               const _jd = _getJWRbt(_cj) - _getJWRbt(_pj);
-              if      (_jd >= 10) jockeyChgN = +0.9375;
-              else if (_jd >= 5)  jockeyChgN = +0.46875;
-              else if (_jd <= -10) jockeyChgN = -0.46875;
-              else if (_jd <= -5)  jockeyChgN = -0.234375;
+              if      (_jd >= 10) { jockeyChgN = +2.8;  _jcDiag.fired++; }
+              else if (_jd >= 5)  { jockeyChgN = +1.4;  _jcDiag.fired++; }
+              else if (_jd <= -10){ jockeyChgN = -1.4;  _jcDiag.fired++; }
+              else if (_jd <= -5) { jockeyChgN = -0.7;  _jcDiag.fired++; }
+              else                { _jcDiag.smallDiff++; }
             }
           }
 
@@ -11488,17 +12019,17 @@ function runYosoBacktest(raceNo) {
           }).filter(v => v !== null);
           if (_ccPre.length >= 1) {
             const _ccAvg = _ccPre.reduce((s, v) => s + v, 0) / _ccPre.length;
-            if      (_ccAvg <= -2) cornConsistN = +0.8;
-            else if (_ccAvg <= -1) cornConsistN = +0.4;
-            else if (_ccAvg >=  2) cornConsistN = -0.8;
-            else if (_ccAvg >=  1) cornConsistN = -0.4;
+            if      (_ccAvg <= -2) cornConsistN = +1.2;
+            else if (_ccAvg <= -1) cornConsistN = +0.6;
+            else if (_ccAvg >=  2) cornConsistN = -1.2;
+            else if (_ccAvg >=  1) cornConsistN = -0.6;
           }
 
           const chaku = parseInt(entry.chakujun);
           const _sc = !!entry._scratched;
           if (!_sc) scanRaceData.push({ chaku, base, condNew, distNew, rotN, clsN, cornN, trendN, weightN, agariN, comboN, marginN, winStrN, jockeyChgN, takiN, cornConsistN });
           scoredOld.push({ hName, chaku, score: base + condOld + distOld, _scratched: _sc });
-          scoredNew.push({ hName, chaku, score: base + condNew + distNew + rotN + clsN + cornN + trendN + weightN + agariN + comboN + marginN + winStrN + jockeyChgN + takiN + cornConsistN, base, _scratched: _sc });
+          scoredNew.push({ hName, chaku, score: base + condNew + distNew + rotN + clsN + cornN + trendN + weightN + agariN + comboN + marginN + winStrN + jockeyChgN + takiN + cornConsistN, base, _scratched: _sc, _cornN: cornN, _a4c: _a4c });
         }
 
         // 相対SI補正（フィールド内相対位置・後処理）
@@ -11508,7 +12039,7 @@ function runYosoBacktest(raceNo) {
           scoredNew.forEach(s => { if (s.base != null) s.score += (s.base - _btFAvg) * 0.05; });
         }
 
-        if (scanRaceData.length >= 2) scanData.push(scanRaceData);
+        if (scanRaceData.length >= 2) { scanRaceData._date = raceDate; scanData.push(scanRaceData); }
         if (scoredOld.length < 2) continue;
         scoredOld.sort((a,b)=>b.score-a.score);
         scoredNew.sort((a,b)=>b.score-a.score);
@@ -11526,6 +12057,27 @@ function runYosoBacktest(raceNo) {
         if (runnersOld[0].chaku<=3) oldS.h3++;
         if (runnersNew[0].chaku===1) newS.h1++;
         if (runnersNew[0].chaku<=3) newS.h3++;
+
+        // ── 新＋ペース補正（cornMod を ペース×馬場係数でスケールした場合の◎） ──
+        const _btCond = raceVal.track_cond || raceVal.trackCond || '';
+        const _btPace = predictRacePaceFromA4C(runnersNew.map(s => s._a4c), runnersNew.length);
+        const _btFactor = getPaceBiasFactor(_btPaceMatrix, _btCond, _btPace);
+        const runnersB = runnersNew
+          .map(s => ({ chaku: s.chaku, _scratched: s._scratched, score: s.score + (s._cornN || 0) * (_btFactor - 1) }))
+          .sort((a, b) => b.score - a.score);
+        if (!runnersB[0]?._scratched) {
+          newBS.t++;
+          if (runnersB[0].chaku === 1) newBS.h1++;
+          if (runnersB[0].chaku <= 3) newBS.h3++;
+          // 補正が実際に効いた（係数が1から有意に外れた）レースのみを切り出して新と比較
+          if (Math.abs(_btFactor - 1) >= 0.02) {
+            pbActN.t++;
+            if (runnersNew[0].chaku === 1) pbActN.n1++;
+            if (runnersNew[0].chaku <= 3) pbActN.n3++;
+            if (runnersB[0].chaku === 1)   pbActN.b1++;
+            if (runnersB[0].chaku <= 3)    pbActN.b3++;
+          }
+        }
 
         // ◎の人気を追跡（穴馬判断力測定）
         const _hme = entries.find(e=>(e.horseName||e.horse_name||'')===runnersNew[0].hName);
@@ -11608,6 +12160,139 @@ function runYosoBacktest(raceNo) {
         });
       }
 
+      // ── 時系列クロスバリデーション（過学習検出） ──
+      // scanData を日付順で訓練70%/検証30%に分割。各補正の最適スケールを訓練で決め、
+      // それが検証(未見データ)でも改善するか確認。改善しなければ「山」はノイズ＝過学習。
+      const _cvSorted = [...scanData].sort((a,b) => (a._date<b._date?-1:a._date>b._date?1:0));
+      const _cvSplit  = Math.floor(_cvSorted.length * 0.7);
+      const _cvTrain  = _cvSorted.slice(0, _cvSplit);
+      const _cvTest   = _cvSorted.slice(_cvSplit);
+      const _cvScore = (c, key, scale) =>
+        c.base + c.condNew + c.distNew + c.rotN + c.clsN +
+        (key==='corn'?c.cornN*scale:c.cornN) + (key==='trend'?c.trendN*scale:c.trendN) + c.weightN +
+        (key==='agari'?c.agariN*scale:c.agariN) + c.comboN + (key==='margin'?c.marginN*scale:c.marginN) +
+        c.winStrN + (key==='jockeyChg'?c.jockeyChgN*scale:c.jockeyChgN) + (key==='taki'?c.takiN*scale:c.takiN) +
+        (key==='cornConsist'?c.cornConsistN*scale:c.cornConsistN);
+      const _cvWinRate = (set, key, scale) => {
+        let h=0, t=0;
+        for (const rc of set) {
+          if (rc.length<2) continue;
+          const s = rc.map(c=>({chaku:c.chaku, score:_cvScore(c,key,scale)})).sort((a,b)=>b.score-a.score);
+          t++; if (s[0].chaku===1) h++;
+        }
+        return t ? h/t*100 : 0;
+      };
+      window._cvResult = { trainN:_cvTrain.length, testN:_cvTest.length, factors:[] };
+      let _cvRows = '';
+      for (const { key, label } of _scanParams) {
+        let bestScale=1.0, bestWr=-1;
+        for (const sc of _scanScales) { const wr=_cvWinRate(_cvTrain,key,sc); if(wr>bestWr){bestWr=wr;bestScale=sc;} }
+        const testBase = _cvWinRate(_cvTest, key, 1.0);
+        const testBest = _cvWinRate(_cvTest, key, bestScale);
+        const gen = testBest > testBase + 0.001;
+        window._cvResult.factors.push({ label, bestScale, trainWr:+bestWr.toFixed(1), testBase:+testBase.toFixed(1), testBest:+testBest.toFixed(1), generalizes: gen });
+        const verdict = bestScale===1.0 ? '<span style="color:#6b7280">現状維持</span>'
+          : gen ? '<span style="color:#15803d;font-weight:700">✅汎化</span>'
+          : '<span style="color:#dc2626;font-weight:700">❌過学習</span>';
+        _cvRows += `<tr style="border-bottom:1px solid #e2e8f0">
+          <td style="padding:4px 8px;font-weight:600;color:#374151">${label}</td>
+          <td style="padding:4px 8px;text-align:center">×${bestScale.toFixed(2)}</td>
+          <td style="padding:4px 8px;text-align:center">${testBase.toFixed(1)}%</td>
+          <td style="padding:4px 8px;text-align:center;${gen?'background:#dcfce7;font-weight:700;color:#15803d':''}">${testBest.toFixed(1)}%</td>
+          <td style="padding:4px 8px;text-align:center">${verdict}</td>
+        </tr>`;
+      }
+
+      // ── 厳密検証: 5分割 時系列クロスバリデーション ──
+      // 各foldで「訓練だけで乗替×着差の最適スケールを再導出→初見の検証foldで
+      // 元係数モデル(default)・現行モデル(採用値)・再導出モデル(tuned)を比較」。
+      // scanDataのmarginN=×1.5済/jockeyChgN=×0.5済なので、元係数は mg=2/3, jc=2.0 で復元。
+      let _strictCvHtml = '';
+      {
+        const _scoreJM = (c, jc, mg) =>
+          c.base + c.condNew + c.distNew + c.rotN + c.clsN + c.cornN + c.trendN + c.weightN +
+          c.agariN + c.comboN + c.marginN*mg + c.winStrN + c.jockeyChgN*jc + c.takiN + c.cornConsistN;
+        const _rate = (set, jc, mg, place) => {
+          let h=0, t=0;
+          for (const rc of set) {
+            if (rc.length < 2) continue;
+            const s = rc.map(c=>({chaku:c.chaku, score:_scoreJM(c,jc,mg)})).sort((a,b)=>b.score-a.score);
+            t++; if (place ? s[0].chaku<=3 : s[0].chaku===1) h++;
+          }
+          return t ? 100*h/t : 0;
+        };
+        const _jcCand=[0.5,0.75,1.0,1.5,2.0], _mgCand=[0.5,0.75,1.0,1.5];
+        const K=5, N=_cvSorted.length, blk=Math.floor(N/K), folds=[];
+        for (let k=0;k<K;k++){
+          const lo=k*blk, hi=(k===K-1?N:(k+1)*blk);
+          const test=_cvSorted.slice(lo,hi);
+          const train=_cvSorted.slice(0,lo).concat(_cvSorted.slice(hi));
+          let bJc=1,bMg=1,bWr=-1;
+          for(const jc of _jcCand)for(const mg of _mgCand){const wr=_rate(train,jc,mg,false); if(wr>bWr){bWr=wr;bJc=jc;bMg=mg;}}
+          folds.push({
+            k:k+1, n:test.length, bJc, bMg,
+            origWin:+_rate(test,2.0,2/3,false).toFixed(1),  curWin:+_rate(test,1,1,false).toFixed(1),  tunedWin:+_rate(test,bJc,bMg,false).toFixed(1),
+            origFuku:+_rate(test,2.0,2/3,true).toFixed(1),  curFuku:+_rate(test,1,1,true).toFixed(1),   tunedFuku:+_rate(test,bJc,bMg,true).toFixed(1),
+          });
+        }
+        const _avg=key=>+(folds.reduce((s,x)=>s+x[key],0)/folds.length).toFixed(1);
+        window._strictCV = {
+          folds,
+          origWin:_avg('origWin'), curWin:_avg('curWin'), tunedWin:_avg('tunedWin'),
+          origFuku:_avg('origFuku'), curFuku:_avg('curFuku'), tunedFuku:_avg('tunedFuku'),
+          curWinsFolds: folds.filter(f=>f.curWin>f.origWin).length,
+          curFukuFolds: folds.filter(f=>f.curFuku>f.origFuku).length,
+        };
+        const _sv = window._strictCV;
+        const _mark = (a,b)=> a>b?`<span style="color:#15803d;font-weight:700">${a}</span>` : a<b?`<span style="color:#dc2626">${a}</span>` : `${a}`;
+        _strictCvHtml = `<details style="font-size:10px;margin-top:6px">
+          <summary style="cursor:pointer;color:#0369a1;font-weight:700;margin-bottom:6px">🔬 厳密検証：5分割 時系列CV（現行の係数が元係数に勝つか・全て初見データ）</summary>
+          <div style="font-size:10px;color:#6b7280;margin-bottom:5px;line-height:1.6">データを日付で5分割し、各回1つを初見の検証用に。元係数＝再最適化なし／現行＝採用値(乗替×0.5・着差×1.5)／再導出＝その回の訓練だけで再チューニング。<b>現行が元係数より高ければ緑</b>。</div>
+          <div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:10px;width:100%">
+            <thead><tr style="background:#1a1a2e;color:#fff">
+              <th style="padding:4px 6px">fold</th><th style="padding:4px 6px">元1着</th><th style="padding:4px 6px">現1着</th><th style="padding:4px 6px">元複勝</th><th style="padding:4px 6px">現複勝</th>
+            </tr></thead>
+            <tbody>${folds.map(f=>`<tr style="border-bottom:1px solid #e2e8f0">
+              <td style="padding:4px 6px;text-align:center;color:#6b7280">${f.k}(N=${f.n})</td>
+              <td style="padding:4px 6px;text-align:center">${f.origWin}%</td>
+              <td style="padding:4px 6px;text-align:center">${_mark(f.curWin,f.origWin)}%</td>
+              <td style="padding:4px 6px;text-align:center">${f.origFuku}%</td>
+              <td style="padding:4px 6px;text-align:center">${_mark(f.curFuku,f.origFuku)}%</td>
+            </tr>`).join('')}
+            <tr style="border-top:2px solid #e2e8f0;background:#f8fafc;font-weight:700">
+              <td style="padding:5px 6px;text-align:center">平均</td>
+              <td style="padding:5px 6px;text-align:center">${_sv.origWin}%</td>
+              <td style="padding:5px 6px;text-align:center">${_mark(_sv.curWin,_sv.origWin)}%</td>
+              <td style="padding:5px 6px;text-align:center">${_sv.origFuku}%</td>
+              <td style="padding:5px 6px;text-align:center">${_mark(_sv.curFuku,_sv.origFuku)}%</td>
+            </tr></tbody>
+          </table></div>
+          <div style="font-size:10px;color:#374151;margin-top:5px;line-height:1.6">初見データで現行が元係数に勝ったfold：<b>1着 ${_sv.curWinsFolds}/5・複勝 ${_sv.curFukuFolds}/5</b>。${_sv.curFukuFolds>=4?'<b style="color:#15803d">→ 複勝で頑健に汎化＝再最適化は本物</b>':'<span style="color:#dc2626">→ 汎化が弱い。要再考</span>'}</div>
+        </details>`;
+      }
+
+      // CVで汎化した（＝本当に採用してよい）変更だけを抽出して推奨バナー化
+      const _genFactors = window._cvResult.factors.filter(f => f.bestScale !== 1.0 && f.generalizes);
+      const _cvRecommendHtml = _genFactors.length
+        ? `<div style="margin:10px 0;padding:9px 12px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;font-size:12px;color:#166534">
+             🧪 <b>係数変更の推奨：${_genFactors.map(f=>`${f.label}×${f.bestScale.toFixed(2)}`).join('、')}</b>（CVで未見データでも改善を確認）</div>`
+        : `<div style="margin:10px 0;padding:9px 12px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;color:#475569">
+             🧪 <b>係数変更の推奨：なし</b> — 全補正がクロスバリデーションで非汎化。<b>現在が最適点</b>です。下のスキャン表の緑「best」は<u>同一データ上の見かけの山（ノイズ）</u>なので追わないでください（適用すると未見データで悪化）。</div>`;
+      const _cvHtml = `<details style="font-size:10px;margin-top:6px">
+        <summary style="cursor:pointer;color:#7c3aed;font-weight:700;margin-bottom:6px">🧪 クロスバリデーション（訓練${_cvTrain.length}R→検証${_cvTest.length}R・過学習検出）</summary>
+        <div style="font-size:10px;color:#6b7280;margin-bottom:5px;line-height:1.6">古い70%で各係数の最適スケールを決め、新しい30%（未見データ）で改善するか検証。<b style="color:#15803d">✅汎化</b>＝本物の改善／<b style="color:#dc2626">❌過学習</b>＝そのデータ限定のノイズ（採用禁物）。</div>
+        <div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:10px;width:100%">
+          <thead><tr style="background:#1a1a2e;color:#fff">
+            <th style="padding:4px 8px;text-align:left">補正項目</th>
+            <th style="padding:4px 8px">訓練best</th>
+            <th style="padding:4px 8px">検証:現行</th>
+            <th style="padding:4px 8px">検証:適用</th>
+            <th style="padding:4px 8px">判定</th>
+          </tr></thead>
+          <tbody>${_cvRows}</tbody>
+        </table></div>
+      </details>`;
+
       const pct = (n, t) => t>0 ? (n/t*100).toFixed(1)+'%' : '—';
       const _mc = (chaku) => chaku===1?'#15803d':chaku<=3?'#d97706':'#dc2626';
       const detailRows = detail.slice(-20).map(d => {
@@ -11665,8 +12350,20 @@ function runYosoBacktest(raceNo) {
                 <td style="padding:6px 8px;text-align:center;font-size:13px;font-weight:700;color:#2563eb">${pct(sankakuS.h3,sankakuS.t)}</td>
                 <td style="padding:6px 8px;text-align:center;font-size:13px;font-weight:900;color:#7c3aed">${pct(top3S.hit,top3S.t)}</td>
               </tr>
+              <tr style="background:#faf5ff;border-top:1px solid #e9d5ff">
+                <td style="padding:6px 8px;font-size:11px;font-weight:700;color:#7c3aed">新＋ペース補正<br><span style="font-size:9px;font-weight:400;color:#9ca3af">脚質補正をペース×馬場で伸縮</span></td>
+                <td style="padding:6px 8px;text-align:center;font-size:13px;font-weight:900;color:${newBS.h1>=newS.h1?'#15803d':'#dc2626'}">${pct(newBS.h1,newBS.t)}${newBS.h1>newS.h1?' ▲':newBS.h1<newS.h1?' ▼':''}</td>
+                <td style="padding:6px 8px;text-align:center;font-size:13px;font-weight:900;color:${newBS.h3>=newS.h3?'#15803d':'#dc2626'}">${pct(newBS.h3,newBS.t)}${newBS.h3>newS.h3?' ▲':newBS.h3<newS.h3?' ▼':''}</td>
+                <td colspan="5" style="padding:6px 8px;text-align:center;font-size:10px;color:#9ca3af">対 新アルゴリズム（◎のみ比較）</td>
+              </tr>
             </tbody>
           </table>
+          <div style="font-size:11px;color:#374151;background:#faf5ff;border:1px solid #e9d5ff;border-radius:6px;padding:8px 10px;margin-bottom:10px;line-height:1.7">
+            🎯 <strong>ペース補正が効いたレースのみ</strong>（ハイ/スロー予想＝係数≠1）：<strong>${pbActN.t}R</strong><br>
+            ◎1着率 ${pct(pbActN.n1,pbActN.t)} → <strong style="color:${pbActN.b1>=pbActN.n1?'#15803d':'#dc2626'}">${pct(pbActN.b1,pbActN.t)}</strong>
+            ／ ◎複勝率 ${pct(pbActN.n3,pbActN.t)} → <strong style="color:${pbActN.b3>=pbActN.n3?'#15803d':'#dc2626'}">${pct(pbActN.b3,pbActN.t)}</strong>
+            <span style="color:#9ca3af">（補正なし→あり）</span>
+          </div>
           <div style="font-size:11px;font-weight:700;color:#374151;margin-bottom:4px">🎯 穴馬判断力（新◎の人気別成績）</div>
           <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px">
             <thead><tr style="background:#f1f5f9;font-size:10px">
@@ -11677,8 +12374,9 @@ function runYosoBacktest(raceNo) {
             </tr></thead>
             <tbody>${ninkiRows}</tbody>
           </table>
+          ${_cvRecommendHtml}
           <details style="font-size:10px;margin-bottom:8px">
-            <summary style="cursor:pointer;color:#1a56a0;font-weight:700;margin-bottom:6px">🔧 係数感度スキャン（◎1着率）</summary>
+            <summary style="cursor:pointer;color:#1a56a0;font-weight:700;margin-bottom:6px">🔧 係数感度スキャン（◎1着率・<span style="color:#dc2626">緑=同一データ上の見かけの山。適用可否は上のCVで判断</span>）</summary>
             <div style="overflow-x:auto;margin-top:4px"><table style="border-collapse:collapse;font-size:10px">
               <thead><tr style="background:#1a1a2e;color:#fff">
                 <th style="padding:4px 8px;text-align:left">補正項目</th>
@@ -11694,6 +12392,17 @@ function runYosoBacktest(raceNo) {
               }).join('')}</tbody>
             </table></div>
           </details>
+          ${_cvHtml}
+          ${_strictCvHtml}
+          <details style="font-size:10px;margin-top:6px">
+            <summary style="cursor:pointer;color:#6b7280;margin-bottom:4px">🔍 乗り替わり診断</summary>
+            <div style="padding:6px 8px;background:#fefce8;border:1px solid #fef08a;border-radius:4px;font-size:11px;color:#713f12">
+              騎手なし(entry.jockey空): <b>${_jcDiag.noJockey}</b>件 ／
+              同一騎手: <b>${_jcDiag.sameJockey}</b>件 ／
+              差5%未満: <b>${_jcDiag.smallDiff}</b>件 ／
+              <span style="color:#15803d">補正発火: <b>${_jcDiag.fired}</b>件</span>
+            </div>
+          </details>
           <details style="font-size:10px">
             <summary style="cursor:pointer;color:#6b7280;margin-bottom:4px">直近${Math.min(20,detail.length)}R 詳細</summary>
             <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">
@@ -11708,7 +12417,25 @@ function runYosoBacktest(raceNo) {
               <tbody>${detailRows}</tbody>
             </table></div>
           </details>
+          <div style="text-align:right;margin-top:10px">
+            <button id="_bt_copy_btn" style="font-size:11px;padding:4px 10px;background:#1a56a0;color:#fff;border:none;border-radius:4px;cursor:pointer">📋 結果コピー</button>
+          </div>
         </div>`;
+      // コピーボタンのハンドラをセット
+      const _copyBtn = btDiv.querySelector('#_bt_copy_btn');
+      if (_copyBtn) {
+        const _scanSummary = _scanParams.map(({key, label}) => {
+          const row = scanResults[key];
+          const best = row.reduce((a, b) => parseFloat(b.wr) > parseFloat(a.wr) ? b : a, row[0]);
+          const cur = row.find(r => r.scale === 1.0);
+          return `${label}: best=×${best.scale.toFixed(2)}(${best.wr}%) cur=${cur.wr}%`;
+        }).join('\n');
+        const _copyText = `◎1着=${pct(newS.h1,newS.t)} ◎複=${pct(newS.h3,newS.t)} 旧◎1着=${pct(oldS.h1,oldS.t)} 旧◎複=${pct(oldS.h3,oldS.t)} ${newS.t}R\n${_scanSummary}`;
+        _copyBtn.onclick = () => navigator.clipboard.writeText(_copyText).then(() => {
+          _copyBtn.textContent = '✅ コピー済';
+          setTimeout(() => { _copyBtn.textContent = '📋 結果コピー'; }, 2000);
+        });
+      }
     } catch(e) {
       if (btDiv) btDiv.innerHTML = `<p style="font-size:11px;color:#dc2626;padding:8px 0">検証エラー: ${e.message}</p>`;
     }
@@ -11771,8 +12498,9 @@ function storeOfficialRacesAsHorseEntries(horseName, lineageCode, races) {
   for (const race of races) {
     if (!race.raceDate || !race.time) continue;
     const babaCode = COURSE_TO_BABA[race.course];
-    // JRA（jraXX）・未マッピング競馬場はスキップ
-    if (!babaCode || babaCode.startsWith('jra')) continue;
+    // 未マッピング競馬場はスキップ（JRAは _isJra=true で保持）
+    if (!babaCode) continue;
+    const _isJra = babaCode.startsWith('jra');
     const raceNo   = race.raceNo;
     const raceDate = race.raceDate;
     // キー: offi_{lineageCode}_{babaCode}_{raceDate}_{raceNo}
@@ -11792,6 +12520,10 @@ function storeOfficialRacesAsHorseEntries(horseName, lineageCode, races) {
     lsWrite(horseKey, {
       type: 'horse', horseName, fromOfficial: true, lineageCode,
       _babaCode: babaCode, _raceDate: raceDate, _raceNo: parseInt(raceNo) || 0,
+      _isJra,
+      _raceClass: race.raceClassRaw || race.raceClass || '', // 生クラス文字列（推定用）
+      _raceName: race.raceName || '',  // JRAクラス情報が埋め込まれている場合に使用
+      _dist: race.dist || '',
       chakujun: race.chakujun, time: race.time, agari3f: race.agari3f,
       kinryo: race.kinryo, jockey: race.jockey, trainer: race.trainer,
       weight: race.weight, diff: race.diff, trackCond: race.trackCond,
@@ -11849,13 +12581,13 @@ function cleanupJraOfficialEntries() {
   for (const [k, v] of Object.entries(lsData)) {
     if (!v || v.type !== 'horse' || !v.fromOfficial) continue;
     if (!k.startsWith('offi_')) {
-      // 旧フォーマット（_off付き等）を全削除
+      // 旧フォーマット（offi_ プレフィックスなし）を削除
       idbDelete(k);
       count++;
     } else {
-      // 新フォーマット: JRA・不明競馬場のみ削除
+      // 新フォーマット: 不明競馬場のみ削除（JRAは転入馬推定に使用するため保持）
       const bc = v._babaCode || '';
-      if (bc.startsWith('jra') || bc.startsWith('unk_')) {
+      if (bc.startsWith('unk_')) {
         idbDelete(k);
         count++;
       }
