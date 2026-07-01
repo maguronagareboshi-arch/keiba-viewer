@@ -4246,14 +4246,21 @@ function renderAbilityTable(raceNo) {
   const EXTRA_LABELS = ['6走前','7走前','8走前','9走前','10走前','11走前'];
 
   // ─── 同レース1着タイム取得（IDBキャッシュから） ─────────────
+  // 馬キーは `${babaCode}_${raceDate}_${raceNo}_${umaBan}` 形式なので、umaBan候補を
+  // 直接lookupすればO(全件数)の毎回フルスキャンを避けられる（馬ごと×過去走ごとに
+  // 呼ばれるため、全件走査だと出走馬数×表示走数×全レコード数で著しく重くなる）。
+  if (!window._winnerTimeCache) window._winnerTimeCache = {};
   const getWinnerTime = (babaCode, raceDate, raceNo) => {
+    const cacheKey = `${babaCode}_${raceDate}_${raceNo}`;
+    if (window._winnerTimeCache[cacheKey] !== undefined) return window._winnerTimeCache[cacheKey];
     const lsData = lsRead();
-    for (const [k, v] of Object.entries(lsData)) {
-      if (v.type !== 'horse') continue;
-      if (!k.startsWith(`${babaCode}_${raceDate}_${raceNo}_`)) continue;
-      if (String(v.chakujun) === '1' && v.time) return v.time;
+    let result = null;
+    for (let uma = 1; uma <= 20; uma++) {
+      const v = lsData[`${babaCode}_${raceDate}_${raceNo}_${uma}`];
+      if (v && v.type === 'horse' && String(v.chakujun) === '1' && v.time) { result = v.time; break; }
     }
-    return null;
+    window._winnerTimeCache[cacheKey] = result;
+    return result;
   };
 
   // ─── 日付ごとの「当日馬場差」をIDBから計算（キャッシュ付き） ──
@@ -5133,9 +5140,11 @@ function idbPut(key, val) {
       window._dayBiasCache = {};
       window._dayCondBiasCache = {};
       window._dayBiasDistCache = {};
+      window._dayTrackCondCache = {};
       window._raceAvgF3Cache = {};
       window._raceAvgAgariCache = {};
       window._dayRaceDataCache = {};
+      window._winnerTimeCache = {};
     }, 150);
   }
   openIDB().then(db => {
@@ -5183,26 +5192,48 @@ async function _fetchKochiPage(table, offset, limit = _IDB_PAGE) {
   } catch(e) { return null; }
 }
 
+/**
+ * 既存キャッシュ値と新しい値の中身が同じかを判定（savedAtは除く）。
+ * 同じなら idbPut（＝IndexedDB書き込みトランザクション）自体を省略し、
+ * 変化していない大多数の行を毎回再取得・再書き込みする無駄を避ける。
+ */
+function _rowUnchanged(existing, fresh) {
+  if (!existing) return false;
+  for (const k in fresh) {
+    if (k === 'savedAt') continue;
+    if (k === 'lapTimes') { if (JSON.stringify(existing.lapTimes) !== JSON.stringify(fresh.lapTimes)) return false; continue; }
+    if (existing[k] !== fresh[k]) return false;
+  }
+  return true;
+}
+
 /** レース行を IDB キャッシュへ書き込む */
 function _putRaceRow(row) {
   const key = `race_${row.baba_code}_${row.race_date}_${row.race_no}`;
   let lapTimesArr = null;
   try { if (row.lap_times) lapTimesArr = JSON.parse(row.lap_times); } catch(e) {}
-  idbPut(key, {
+  const _existing = _idbCache && _idbCache[key];
+  // 1400m自動補完(backfillFirst3fFrom1400m)で計算したfirst3fはSupabase未保存のことが多い。
+  // 空で上書きすると毎回の再計算(数百ms)を招くため、ローカル計算値があれば保持する。
+  const _first3f = row.first3f || (_existing && _existing.first3f) || '';
+  const _newVal = {
     type:'race', race_date:row.race_date, race_no:row.race_no, baba_code:row.baba_code,
     race_name:row.race_name||'', distance:row.distance||'', race_class:row.race_class||'',
-    track_cond:row.track_cond||'', first3f:row.first3f||'', agari4f:row.agari4f||'',
+    track_cond:row.track_cond||'', first3f:_first3f, agari4f:row.agari4f||'',
     agari3f_race:row.agari3f_race||'', paceType:row.pace_type||'', memo:row.memo||'',
     lap_times:row.lap_times||'', lapTimes:lapTimesArr,
     _apiSaved:true,
     savedAt:new Date(row.updated_at||row.created_at||Date.now()).toISOString()
-  });
+  };
+  if (_rowUnchanged(_existing, _newVal)) return;
+  idbPut(key, _newVal);
 }
 
 /** 馬行を IDB キャッシュへ書き込む */
 function _putHorseRow(row) {
   const key = `${row.baba_code}_${row.race_date}_${row.race_no}_${row.uma_ban}`;
-  idbPut(key, {
+  const _existing = _idbCache && _idbCache[key];
+  const _newVal = {
     type:'horse', race_date:row.race_date, race_no:row.race_no, baba_code:row.baba_code,
     chakujun:row.chakujun||'', wakuBan:row.waku_ban||'', horseName:row.horse_name||'',
     belong:row.belong||'', sexAge:row.sex_age||'', kinryo:row.kinryo||'',
@@ -5213,7 +5244,9 @@ function _putHorseRow(row) {
     shoumenStraight:row.shoumen_straight||'', postComment:row.post_comment||'',
     lineageLoginCode:row.lineage_login_code||'',
     savedAt:new Date(row.updated_at||row.created_at||Date.now()).toISOString()
-  });
+  };
+  if (_rowUnchanged(_existing, _newVal)) return;
+  idbPut(key, _newVal);
 }
 
 /** テーブルを startOffset 以降まとめて取得（並列バッチ・背景用） */
@@ -5660,19 +5693,25 @@ function getPositionAdvantage(babaCode, raceDate, mukaeShoumen, shoumenStraight)
   return Math.max(-2.0, Math.min(2.0, (stats.avgRate - comboRate) * 5));
 }
 
+// 指定日・競馬場の代表馬場状態を計算（グローバルキャッシュ付き）
+// ※以前は無キャッシュで Object.values(lsData) を毎回全走査しており、
+//   renderTrackTrend が「保存日数 × 全レコード数」でO(n²)的に重くなる主因だった。
+// _buildDayRaceData と同じ direct-lookup 方式（race_${baba}_${date}_1〜16）に統一。
+if (!window._dayTrackCondCache) window._dayTrackCondCache = {};
 function getDayTrackCond(babaCode, raceDate) {
-  const lsData = lsRead();
+  const cacheKey = `${babaCode}_${raceDate}`;
+  if (window._dayTrackCondCache[cacheKey] !== undefined) return window._dayTrackCondCache[cacheKey];
+  const { raceInfoMap } = _buildDayRaceData(babaCode, raceDate);
   const counts = {};
-  for (const v of Object.values(lsData)) {
-    if (v.type !== 'race') continue;
-    if ((v.race_date || v.raceDate) !== raceDate) continue;
-    if ((v.baba_code || v.babaCode) !== babaCode) continue;
+  for (const v of raceInfoMap.values()) {
     const c = v.track_cond || v.trackCond || '';
     if (c) counts[c] = (counts[c] || 0) + 1;
   }
   let best = '', bestN = 0;
   for (const [c, n] of Object.entries(counts)) { if (n > bestN) { bestN = n; best = c; } }
-  return best || null;
+  const result = best || null;
+  window._dayTrackCondCache[cacheKey] = result;
+  return result;
 }
 
 function renderTrackTrend() {
@@ -6884,10 +6923,10 @@ function openHorseModal(horseName, raceNo) {
     var sl = (parseInt(cnt) === 99) ? items : items.slice(0, parseInt(cnt)||10);
     if(!sl.length) return '<div style="font-size:12px;color:#9ca3af;padding:8px 4px"><i class="fas fa-comment-dots"></i> 保存済みコメントはありません</div>';
     return sl.map(function(h){
-      return '<div style="background:#ecfeff;border:1px solid #a5f3fc;border-radius:6px;padding:7px 10px;margin-bottom:6px">'
-        + '<div style="font-size:10px;color:#0e7490;font-weight:700;margin-bottom:2px"><i class="fas fa-comment-dots"></i> '
-        + h.raceDate + (h.raceNo ? ' '+h.raceNo+'R' : '') + (h.raceName ? ' <span style="font-weight:400;color:#64748b">'+h.raceName+'</span>' : '') + '</div>'
-        + '<div style="font-size:12px;color:#1e293b;line-height:1.6">'+h.postComment+'</div>'
+      return '<div style="background:#ecfeff;border:1px solid #a5f3fc;border-radius:6px;padding:7px 10px;margin-bottom:6px;font-size:12px;color:#1e293b;line-height:1.6">'
+        + '<span style="font-size:10px;color:#0e7490;font-weight:700;white-space:nowrap"><i class="fas fa-comment-dots"></i> '
+        + h.raceDate + (h.raceNo ? ' '+h.raceNo+'R' : '') + (h.raceName ? ' <span style="font-weight:400;color:#64748b">'+h.raceName+'</span>' : '') + '</span>'
+        + '　' + h.postComment
         + '</div>';
     }).join('');
   };
@@ -8390,17 +8429,22 @@ function agariIndexBadgeHtml(idx) {
   return `<span style="font-size:10px;font-weight:800;color:${clr};background:${bg};border-radius:4px;padding:1px 5px;" title="上がり3F指数">末${idx}</span>`;
 }
 
-/** レースの上がり3F平均を返す（キャッシュ付き） */
+/**
+ * レースの上がり3F平均を返す（キャッシュ付き）
+ * 馬キーは `${babaCode}_${raceDate}_${raceNo}_${umaBan}` 形式なので、umaBan候補を
+ * 直接lookupする（以前はObject.entries(lsData)を毎回全走査しており、馬×過去走ごとに
+ * 呼ばれる関数のため出走馬数増加でO(全件数)の負荷が掛け算的に増えていた）。
+ */
 if (!window._raceAvgAgariCache) window._raceAvgAgariCache = {};
 function getRaceAvgAgari3f(babaCode, raceDate, raceNo) {
   if (!babaCode || !raceDate || !raceNo) return null;
   const cacheKey = `${babaCode}_${raceDate}_${raceNo}`;
   if (window._raceAvgAgariCache[cacheKey] !== undefined) return window._raceAvgAgariCache[cacheKey];
   const lsData = lsRead();
-  const prefix = `${babaCode}_${raceDate}_${raceNo}_`;
   const vals = [];
-  for (const [k, v] of Object.entries(lsData)) {
-    if (v.type !== 'horse' || !k.startsWith(prefix)) continue;
+  for (let uma = 1; uma <= 20; uma++) {
+    const v = lsData[`${babaCode}_${raceDate}_${raceNo}_${uma}`];
+    if (!v || v.type !== 'horse') continue;
     const ag = parseFloat(v.agari3f);
     if (isFinite(ag) && ag > 0) vals.push(ag);
   }
@@ -8451,17 +8495,20 @@ function calcSpeedIndex(horseTimeStr, dist, raceClass, _trackCond, dayBias, kinr
   return Math.round(50 + diff * (10 / (distNum / 1000)));
 }
 
-/** レースの前半3F平均を返す（babaCode_raceDate_raceNo で特定、キャッシュ付き） */
+/**
+ * レースの前半3F平均を返す（babaCode_raceDate_raceNo で特定、キャッシュ付き）
+ * getRaceAvgAgari3f と同様、umaBan候補を直接lookupしてO(全件数)走査を回避する。
+ */
 if (!window._raceAvgF3Cache) window._raceAvgF3Cache = {};
 function getRaceAvgF3(babaCode, raceDate, raceNo) {
   if (!babaCode || !raceDate || !raceNo) return null;
   const cacheKey = `${babaCode}_${raceDate}_${raceNo}`;
   if (window._raceAvgF3Cache[cacheKey] !== undefined) return window._raceAvgF3Cache[cacheKey];
   const lsData = lsRead();
-  const prefix = `${babaCode}_${raceDate}_${raceNo}_`;
   const f3vals = [];
-  for (const [k, v] of Object.entries(lsData)) {
-    if (v.type !== 'horse' || !k.startsWith(prefix)) continue;
+  for (let uma = 1; uma <= 20; uma++) {
+    const v = lsData[`${babaCode}_${raceDate}_${raceNo}_${uma}`];
+    if (!v || v.type !== 'horse') continue;
     const f3 = parseFloat(v.first3f);
     if (isFinite(f3) && f3 >= 20 && f3 <= 60) f3vals.push(f3);
   }
@@ -8473,8 +8520,10 @@ function getRaceAvgF3(babaCode, raceDate, raceNo) {
 }
 
 /**
- * _buildDayRaceData — IDBを1回だけスキャンして指定日・競馬場のレース/馬データを構築。
+ * _buildDayRaceData — 指定日・競馬場のレース/馬データを構築（キャッシュ付き）。
  * getDayBiasForDate / getDayBiasByDist / getDayCondBias が共有するキャッシュ。
+ * race_${baba}_${date}_${no} / ${baba}_${date}_${no}_${uma} のキー規則を利用し、
+ * レース番号1〜16・馬番1〜20を直接lookupする（Object.entries全走査は不要）。
  */
 if (!window._dayRaceDataCache) window._dayRaceDataCache = {};
 function _buildDayRaceData(babaCode, raceDate) {
@@ -8483,23 +8532,16 @@ function _buildDayRaceData(babaCode, raceDate) {
   const lsData = lsRead();
   const raceInfoMap = new Map();   // raceNo → raceInfo object
   const horsesByRace = new Map();  // raceNo → [horse objects]
-  const horsePrefix = `${babaCode}_${raceDate}_`;
-  for (const [k, v] of Object.entries(lsData)) {
-    if (v.type === 'race') {
-      const rd = v.race_date || v.raceDate;
-      const bc = v.baba_code || v.babaCode;
-      if (rd === raceDate && bc === babaCode) {
-        const rno = v.race_no || v.raceNo;
-        if (rno != null) raceInfoMap.set(+rno, v);
-      }
-    } else if (v.type === 'horse' && k.startsWith(horsePrefix)) {
-      const parts = k.split('_');
-      const rno = parseInt(parts[2]);
-      if (!isNaN(rno)) {
-        if (!horsesByRace.has(rno)) horsesByRace.set(rno, []);
-        horsesByRace.get(rno).push(v);
-      }
+  for (let rno = 1; rno <= 16; rno++) {
+    const raceKey = `race_${babaCode}_${raceDate}_${rno}`;
+    const raceVal = lsData[raceKey];
+    if (raceVal && raceVal.type === 'race') raceInfoMap.set(rno, raceVal);
+    const horses = [];
+    for (let uma = 1; uma <= 20; uma++) {
+      const hv = lsData[`${babaCode}_${raceDate}_${rno}_${uma}`];
+      if (hv && hv.type === 'horse') horses.push(hv);
     }
+    if (horses.length) horsesByRace.set(rno, horses);
   }
   const result = { raceInfoMap, horsesByRace };
   window._dayRaceDataCache[cacheKey] = result;
