@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>門別ビューア</title>
+<style>
+/* 色は必ずCSS変数で定義する（ダークモード上書き漏れ防止・インライン色禁止） */
+:root {
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --text: #1c2330;
+  --sub: #66707f;
+  --border: #d9dee6;
+  --accent: #1a6fb5;
+  --accent-text: #ffffff;
+  --chip-bg: #e8eef5;
+  --row-alt: #f7f9fb;
+  --gold: #c9a227;
+  --silver: #8b97a5;
+  --bronze: #b0722d;
+  --hl-first3f: #d7ecff;
+  --hl-last3f: #ffe3e3;
+  --note: #8a6d00;
+  --note-bg: #fff7dd;
+  --waku1-bg:#ffffff; --waku1-tx:#333333;
+  --waku2-bg:#222222; --waku2-tx:#ffffff;
+  --waku3-bg:#d63c3c; --waku3-tx:#ffffff;
+  --waku4-bg:#2e63c4; --waku4-tx:#ffffff;
+  --waku5-bg:#e8c62b; --waku5-tx:#333333;
+  --waku6-bg:#2f9c50; --waku6-tx:#ffffff;
+  --waku7-bg:#e07f2a; --waku7-tx:#ffffff;
+  --waku8-bg:#e88fb0; --waku8-tx:#333333;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14181f;
+    --panel: #1d232d;
+    --text: #e6eaf0;
+    --sub: #97a1af;
+    --border: #333c49;
+    --accent: #4d9fe0;
+    --accent-text: #10151c;
+    --chip-bg: #26303d;
+    --row-alt: #202733;
+    --hl-first3f: #17405e;
+    --hl-last3f: #55272c;
+    --note: #e3c65b;
+    --note-bg: #33301c;
+    --waku1-bg:#e9e9e9; --waku1-tx:#222222;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo, system-ui, sans-serif; font-size: 14px; }
+header { display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+  background: var(--panel); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+header h1 { font-size: 17px; margin: 0; }
+.badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: var(--chip-bg); color: var(--sub); }
+main { padding: 10px 14px 40px; max-width: 1180px; margin: 0 auto; }
+.controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--panel); color: var(--text); font-size: 14px; }
+.racetabs { display: flex; gap: 4px; flex-wrap: wrap; margin: 8px 0; }
+.racetabs button { padding: 6px 0; width: 44px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--panel); color: var(--text); cursor: pointer; font-size: 13px; }
+.racetabs button.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: bold; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
+.raceinfo h2 { font-size: 15px; margin: 0 0 6px; }
+.raceinfo .meta { color: var(--sub); font-size: 12px; display: flex; gap: 12px; flex-wrap: wrap; }
+.raceinfo .pacebar { margin-top: 6px; display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; }
+.raceinfo .pacebar span b { color: var(--accent); }
+.note { font-size: 11px; color: var(--note); background: var(--note-bg); border-radius: 4px; padding: 2px 6px; display: inline-block; margin-top: 6px; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; white-space: nowrap; }
+th, td { border: 1px solid var(--border); padding: 4px 6px; text-align: center; font-size: 12.5px; }
+th { background: var(--chip-bg); color: var(--sub); font-weight: normal; position: sticky; top: 0; }
+tr:nth-child(even) td { background: var(--row-alt); }
+td.l { text-align: left; }
+td.num { font-variant-numeric: tabular-nums; }
+.waku { display: inline-block; width: 20px; border-radius: 4px; font-weight: bold; }
+.w1 { background: var(--waku1-bg); color: var(--waku1-tx); border: 1px solid var(--border); }
+.w2 { background: var(--waku2-bg); color: var(--waku2-tx); }
+.w3 { background: var(--waku3-bg); color: var(--waku3-tx); }
+.w4 { background: var(--waku4-bg); color: var(--waku4-tx); }
+.w5 { background: var(--waku5-bg); color: var(--waku5-tx); }
+.w6 { background: var(--waku6-bg); color: var(--waku6-tx); }
+.w7 { background: var(--waku7-bg); color: var(--waku7-tx); }
+.w8 { background: var(--waku8-bg); color: var(--waku8-tx); }
+td.f1 { background: var(--hl-first3f) !important; font-weight: bold; }
+td.a1 { background: var(--hl-last3f) !important; font-weight: bold; }
+.fin1 { color: var(--gold); font-weight: bold; }
+.fin2 { color: var(--silver); font-weight: bold; }
+.fin3 { color: var(--bronze); font-weight: bold; }
+.empty { color: var(--sub); text-align: center; padding: 30px 0; }
+.legend { font-size: 11px; color: var(--sub); margin-top: 6px; }
+.legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; }
+.legend .sw.f { background: var(--hl-first3f); }
+.legend .sw.a { background: var(--hl-last3f); }
+</style>
+</head>
+<body>
+<header>
+  <h1>門別ビューア</h1>
+  <span class="badge" id="srcBadge">データ源: -</span>
+</header>
+<main>
+  <div class="controls">
+    <label>開催日 <select id="dateSel"></select></label>
+  </div>
+  <div class="racetabs" id="raceTabs"></div>
+  <div id="raceView"><div class="empty">読み込み中…</div></div>
+</main>
+
+<script>
+'use strict';
+// ============================================================
+// Supabase（読み取りはanonキー・RLSでselectのみ許可）
+// ============================================================
+const SUPABASE_URL = 'https://jcrcftvrsgmsewwdkqha.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpjcmNmdHZyc2dtc2V3d2RrcWhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4MDY0NjgsImV4cCI6MjA5NjM4MjQ2OH0.UED2rJNsuTPqofrhhNhQ2RM0NKc2eJ6qHllfbnebMe0';
+
+async function sbGet(pathq) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${pathq}`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+  });
+  if (!res.ok) throw new Error(`supabase ${res.status}`);
+  return res.json();
+}
+
+// ============================================================
+// データプロバイダ（Supabase優先 → 失敗/空ならローカルJSON）
+// ============================================================
+const providers = {
+  supabase: {
+    label: 'Supabase',
+    async listDates() {
+      const rows = await sbGet('chihou_races?select=race_id,race_date,race_no,track,klass,race_name,distance_m,going,pace&order=race_date.desc,race_no.asc&limit=5000');
+      if (!rows.length) throw new Error('empty');
+      const dates = {};
+      for (const r of rows) {
+        (dates[r.race_date] = dates[r.race_date] || []).push({
+          race_id: r.race_id, race_no: r.race_no, track: r.track, klass: r.klass,
+          name: r.race_name, distance_m: r.distance_m, going: r.going, pace: r.pace,
+        });
+      }
+      return dates;
+    },
+    async loadRace(raceId) {
+      const [races, results] = await Promise.all([
+        sbGet(`chihou_races?race_id=eq.${raceId}&select=*`),
+        sbGet(`chihou_results?race_id=eq.${raceId}&select=*&order=finish.asc.nullslast`),
+      ]);
+      return { race: races[0] || {}, results };
+    },
+  },
+  local: {
+    label: 'ローカルJSON',
+    async listDates() {
+      const res = await fetch('data/index.json');
+      if (!res.ok) throw new Error(`index.json ${res.status}`);
+      return (await res.json()).dates;
+    },
+    async loadRace(raceId) {
+      const res = await fetch(`data/json/seiseki/${raceId}.json`);
+      if (!res.ok) throw new Error(`seiseki json ${res.status}`);
+      return res.json();
+    },
+  },
+};
+
+const state = { provider: null, dates: {}, date: null, raceId: null };
+
+// ============================================================
+// 描画
+// ============================================================
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function renderDates() {
+  const sel = $('dateSel');
+  sel.innerHTML = Object.keys(state.dates).map((d) => `<option value="${d}">${d}</option>`).join('');
+  sel.value = state.date;
+}
+
+function renderTabs() {
+  const races = state.dates[state.date] || [];
+  $('raceTabs').innerHTML = races.map((r) =>
+    `<button data-id="${r.race_id}" class="${r.race_id === state.raceId ? 'active' : ''}">${r.race_no}R</button>`
+  ).join('');
+}
+
+function fmtDiff(v) {
+  if (v == null) return '';
+  return v > 0 ? `+${v}` : `${v}`;
+}
+
+function renderRace(data) {
+  const race = data.race || {};
+  const results = (data.results || []).slice();
+  const extra = race.extra || {};
+  const isShort = race.distance_m != null && race.distance_m < 1200;
+
+  // テン3F・上り3Fのレース内順位（着外・欠測は除く）
+  const rank = (key) => {
+    const vals = results.filter((r) => r[key] != null).map((r) => r[key]).sort((a, b) => a - b);
+    return (v) => (v == null ? 99 : vals.indexOf(v) + 1);
+  };
+  const f3rank = rank('first3f');
+  const a3rank = rank('last3f');
+
+  const infoBits = [
+    ['ペース', race.pace], ['平均ハロン', race.avg_furlong],
+    ['決め手', extra['決め手']], ['発走', extra['発走状況他']],
+    ['馬装具', extra['馬装具']], ['3角', extra['３ 角']], ['4角', extra['４ 角']],
+  ].filter(([, v]) => v != null && v !== '').map(([k, v]) => `<span>${esc(k)}: <b>${esc(v)}</b></span>`).join('');
+
+  const rows = results.map((r) => {
+    const fin = r.finish != null ? r.finish : esc(r.finish_note || '-');
+    const finCls = r.finish >= 1 && r.finish <= 3 ? `fin${r.finish}` : '';
+    const f3 = r.first3f != null ? r.first3f.toFixed(1) : '';
+    const a3 = r.last3f != null ? r.last3f.toFixed(1) : '';
+    return `<tr>
+      <td class="${finCls}">${fin}</td>
+      <td><span class="waku w${r.waku || 1}">${r.waku ?? ''}</span></td>
+      <td>${r.umaban ?? ''}</td>
+      <td class="l">${esc(r.horse_name)}</td>
+      <td>${esc(r.sex_age)}</td>
+      <td class="num">${r.kinryo ?? ''}</td>
+      <td class="l">${esc(r.genryo || '')}${esc(r.jockey)}</td>
+      <td class="num">${esc(r.time_str)}</td>
+      <td>${esc(r.margin)}</td>
+      <td class="num">${esc(r.passing)}</td>
+      <td>${esc(r.corner4_pos)}</td>
+      <td class="l">${esc(r.comment)}</td>
+      <td class="num ${f3rank(r.first3f) <= 3 ? 'f1' : ''}">${f3}</td>
+      <td class="num ${a3rank(r.last3f) <= 3 ? 'a1' : ''}">${a3}</td>
+      <td>${r.pop ?? ''}</td>
+      <td class="num">${r.win_odds ?? ''}</td>
+      <td class="num">${r.body_weight ?? ''}${r.weight_diff != null ? `(${fmtDiff(r.weight_diff)})` : ''}</td>
+      <td class="l">${esc(r.trainer)}</td>
+      <td>${esc(r.honshi_mark)}</td>
+    </tr>`;
+  }).join('');
+
+  $('raceView').innerHTML = `
+  <div class="card raceinfo">
+    <h2>${esc(race.date || race.race_date)} ${esc(race.track)} ${race.race_no ?? ''}R ${esc(race.klass)} ${esc(race.name || race.race_name || '')}</h2>
+    <div class="meta">
+      <span>${race.distance_m ?? '?'}m（${esc(race.surface)}・${esc(race.direction)}）</span>
+      <span>${esc(race.weather)}・${esc(race.going)}</span>
+      <span>発走 ${esc(race.hasso_time)}</span>
+    </div>
+    <div class="pacebar">${infoBits}</div>
+    ${isShort ? '<div class="note">※このレースは1200m未満のため「前半3F」列は 距離−600m の前半タイム（1000mならテン2F相当）</div>' : ''}
+  </div>
+  <div class="card">
+    <div class="tablewrap">
+    <table>
+      <tr><th>着</th><th>枠</th><th>番</th><th>馬名</th><th>性齢</th><th>斤</th><th>騎手</th><th>タイム</th><th>着差</th>
+      <th>通過</th><th>4角</th><th>寸評</th><th>前半3F</th><th>上り3F</th><th>人気</th><th>単オッズ</th><th>馬体重</th><th>厩舎</th><th>本紙</th></tr>
+      ${rows}
+    </table>
+    </div>
+    <div class="legend"><span class="sw f"></span> 前半3F上位3頭　<span class="sw a"></span> 上り3F上位3頭</div>
+  </div>`;
+}
+
+// ============================================================
+// 制御
+// ============================================================
+async function selectRace(raceId) {
+  state.raceId = raceId;
+  renderTabs();
+  location.hash = `${state.date}/${raceId}`;
+  $('raceView').innerHTML = '<div class="empty">読み込み中…</div>';
+  try {
+    const data = await state.provider.loadRace(raceId);
+    renderRace(data);
+  } catch (e) {
+    $('raceView').innerHTML = `<div class="empty">読み込み失敗: ${esc(e.message)}</div>`;
+  }
+}
+
+function selectDate(d) {
+  state.date = d;
+  renderDates();
+  const races = state.dates[d] || [];
+  if (races.length) selectRace(races[0].race_id);
+  else { renderTabs(); $('raceView').innerHTML = '<div class="empty">レースなし</div>'; }
+}
+
+async function init() {
+  for (const name of ['supabase', 'local']) {
+    try {
+      state.dates = await providers[name].listDates();
+      state.provider = providers[name];
+      $('srcBadge').textContent = `データ源: ${providers[name].label}`;
+      break;
+    } catch (e) { /* 次のプロバイダへ */ }
+  }
+  if (!state.provider) {
+    $('raceView').innerHTML = '<div class="empty">データがありません（Supabase未設定・ローカルJSONなし）</div>';
+    $('srcBadge').textContent = 'データ源: なし';
+    return;
+  }
+  $('dateSel').addEventListener('change', (e) => selectDate(e.target.value));
+  $('raceTabs').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-id]');
+    if (b) selectRace(b.dataset.id);
+  });
+
+  const dates = Object.keys(state.dates);
+  const [hd, hr] = location.hash.slice(1).split('/');
+  if (hd && state.dates[hd]) {
+    state.date = hd;
+    renderDates();
+    if (hr && state.dates[hd].some((r) => r.race_id === hr)) { renderTabs(); await selectRace(hr); return; }
+    selectDate(hd);
+  } else {
+    selectDate(dates[0]);
+  }
+}
+init();
+</script>
+</body>
+</html>
