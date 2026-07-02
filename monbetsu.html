@@ -210,13 +210,14 @@ const providers = {
     async loadHistory(horseIds) {
       if (!horseIds.length) return {};
       const idlist = horseIds.map(encodeURIComponent).join(',');
-      const rows = await sbGet(`chihou_results?horse_id=in.(${idlist})&select=horse_id,finish,pop,first3f,last3f,passing,corner4_pos,comment,time_str,body_weight,jockey,race_id,chihou_races(race_date,distance_m,going,pace)&order=race_id.desc&limit=2000`);
+      const rows = await sbGet(`chihou_results?horse_id=in.(${idlist})&select=horse_id,finish,pop,first3f,last3f,time_sec,passing,corner4_pos,comment,time_str,body_weight,jockey,race_id,chihou_races(race_date,distance_m,going,pace,klass)&order=race_id.desc&limit=2000`);
       const map = {};
       for (const r of rows) {
         const ra = r.chihou_races || {};
         (map[r.horse_id] = map[r.horse_id] || []).push({
           date: ra.race_date, race_id: r.race_id, dist: ra.distance_m, going: ra.going,
-          pace: ra.pace, fin: r.finish, pop: r.pop, f3: r.first3f, l3: r.last3f,
+          pace: ra.pace, cls: classGroup(ra.klass), fin: r.finish, pop: r.pop,
+          f3: r.first3f, l3: r.last3f, tsec: r.time_sec,
           kyaku: kyakuFromPassing(r.passing), passing: r.passing, c4: r.corner4_pos,
           comment: r.comment, time: r.time_str, weight: r.body_weight, jockey: r.jockey,
         });
@@ -291,14 +292,36 @@ function kyakuFromPassing(passing) {
   return '追込';
 }
 
-// テン3F偏差値: 距離×馬場の基準タイムに対して（速いほど高い）
-function hensachiF3(f3, dist, going) {
+// クラス条件を 2歳/3歳/3歳以上 に正規化（build_stats.py と同じ規則）
+function classGroup(klass) {
+  const k = String(klass || '').replace(/２/g, '2').replace(/３/g, '3').replace(/４/g, '4');
+  if (k.includes('2歳')) return '2歳';
+  if (k.includes('3歳以上') || k.includes('4歳以上')) return '3歳以上';
+  if (k.includes('3歳')) return '3歳';
+  return '3歳以上';
+}
+
+// 基準タイム参照: 距離×馬場×クラス（無ければ全クラス→良にフォールバック）
+function baseEntry(dist, going, cls) {
   const bt = state.stats && state.stats.base_times;
-  if (!bt || f3 == null || !dist) return null;
+  if (!bt || !dist) return null;
   const g = going === '良' || !going ? '良' : '重系';
-  const e = bt[`${dist}_${g}`] || bt[`${dist}_良`];
-  if (!e || !e.first3f || !e.first3f.std) return null;
-  return Math.round((50 + 10 * (e.first3f.mean - f3) / e.first3f.std) * 10) / 10;
+  return bt[`${dist}_${g}_${cls || '全'}`] || bt[`${dist}_${g}_全`] || bt[`${dist}_良_全`] || null;
+}
+// 偏差値（速いほど高い）
+function devValue(value, e, fld) {
+  if (value == null || !e || !e[fld] || !e[fld].std) return null;
+  return 50 + 10 * (e[fld].mean - value) / e[fld].std;
+}
+// 1走分の総合指数: 走破タイム50% + テン3F25% + 上がり3F25%（欠測は重み再配分）
+function runShisu(run) {
+  const e = baseEntry(run.dist, run.going, run.cls);
+  const parts = [[devValue(run.tsec, e, 'time'), 0.5],
+                 [devValue(run.f3, e, 'first3f'), 0.25],
+                 [devValue(run.l3, e, 'last3f'), 0.25]].filter(([v]) => v != null);
+  if (!parts.length) return null;
+  const wsum = parts.reduce((s, [, w]) => s + w, 0);
+  return parts.reduce((s, [v, w]) => s + v * w, 0) / wsum;
 }
 
 // ============================================================
@@ -420,35 +443,36 @@ function arrowHtml(a) {
 
 function syutubaHtml(raceMeta, entries, cyokyo, history) {
   if (!entries.length) return raceHeaderHtml(raceMeta) + '<div class="empty">出馬表データがありません（day取得時に --what syutuba を含めてください）</div>';
-  // jsonbはキー順を保持しないので、トラックマン→本紙の順に並べ直す
-  const rawMarks = Object.keys(entries.find((e) => e.marks && Object.keys(e.marks).length)?.marks || {});
-  const markNames = [...rawMarks.filter((n) => n !== '本紙').sort((a, b) => a.localeCompare(b, 'ja')), ...(rawMarks.includes('本紙') ? ['本紙'] : [])];
   const cyoByUma = {};
   for (const c of cyokyo) cyoByUma[c.umaban] = c;
 
-  // テン3F偏差値: 直近5走の最速テン3F偏差値（各走の距離・馬場基準で換算）
-  const hensachiOf = (hid) => {
-    const runs = (history[hid] || []).slice(0, 5);
+  // 直近5走ベースの指数・テン偏差（各走の距離×馬場×クラス基準で換算し最良値）
+  const bestOf = (hid, fn) => {
     let best = null;
-    for (const r of runs) {
-      const h = hensachiF3(r.f3, r.dist, r.going);
-      if (h != null && (best == null || h > best)) best = h;
+    for (const r of (history[hid] || []).slice(0, 5)) {
+      const v = fn(r);
+      if (v != null && (best == null || v > best)) best = v;
     }
     return best;
   };
-  const hensachis = entries.map((e) => hensachiOf(e.horse_id)).filter((h) => h != null).sort((a, b) => b - a);
+  const shisuOf = (hid) => bestOf(hid, runShisu);
+  const hensachiOf = (hid) => bestOf(hid, (r) => devValue(r.f3, baseEntry(r.dist, r.going, r.cls), 'first3f'));
+
+  const shisus = entries.map((e) => shisuOf(e.horse_id)).filter((v) => v != null).sort((a, b) => b - a);
+  const top3S = shisus.slice(0, 3);
+  const hensachis = entries.map((e) => hensachiOf(e.horse_id)).filter((v) => v != null).sort((a, b) => b - a);
   const topH = hensachis[0];
 
   const rows = entries.map((e) => {
-    const marks = markNames.map((n) => `<td>${esc((e.marks || {})[n] || '')}</td>`).join('');
     const cyo = cyoByUma[e.umaban];
     const works = (cyo && cyo.works) || [];
     const runs = (history[e.horse_id] || []).filter((r) => r.race_id !== raceMeta.race_id).slice(0, 3);
     const h = hensachiOf(e.horse_id);
+    const s = shisuOf(e.horse_id);
     return `<tr>
       <td><span class="waku w${e.waku || 1}">${e.waku ?? ''}</span></td>
       <td>${e.umaban ?? ''}</td>
-      ${marks}
+      <td>${esc((e.marks || {})['本紙'] || '')}</td>
       <td class="l"><b>${esc(e.horse_name)}</b></td>
       <td>${esc(e.sex_age)}</td>
       <td>${esc(e.genryo || '')}</td>
@@ -457,7 +481,8 @@ function syutubaHtml(raceMeta, entries, cyokyo, history) {
       <td class="l">${esc(e.trainer)}</td>
       <td class="num">${e.body_weight ?? ''}${e.weight_diff != null ? `(${fmtDiff(e.weight_diff)})` : ''}</td>
       <td class="num">${e.win_odds ?? ''}${e.pop != null ? `(${e.pop})` : ''}</td>
-      <td class="num ${h != null && h === topH ? 'best' : ''}">${h != null ? h.toFixed(1) : '-'}</td>
+      <td class="num ${s != null && top3S.includes(s) ? 'best' : ''}">${s != null ? s.toFixed(1) : '-'}</td>
+      <td class="num ${h != null && h === topH ? 'f1' : ''}">${h != null ? h.toFixed(1) : '-'}</td>
       <td class="small">${runs.map(pastRunHtml).join('<br>') || '-'}</td>
       <td class="small">${cyo ? `${arrowHtml(cyo.arrow)} ${esc(cyo.tanpyo || '')}<br>` : ''}${works.length ? workHtml(works[0]) : '-'}</td>
     </tr>`;
@@ -466,13 +491,13 @@ function syutubaHtml(raceMeta, entries, cyokyo, history) {
   return raceHeaderHtml(raceMeta) + `
   <div class="card"><div class="tablewrap">
     <table>
-      <tr><th>枠</th><th>番</th>${markNames.map((n) => `<th>${esc(n)}</th>`).join('')}
+      <tr><th>枠</th><th>番</th><th>本紙</th>
       <th>馬名</th><th>性齢</th><th>減</th><th>騎手</th><th>斤量</th><th>厩舎</th><th>馬体重</th><th>単勝(人気)</th>
-      <th>テン偏差</th><th>近3走（テン3F/上り3F/脚質）</th><th>調教（最新追切）</th></tr>
+      <th>指数</th><th>テン偏差</th><th>近3走（テン3F/上り3F/脚質）</th><th>調教（最新追切）</th></tr>
       ${rows}
     </table>
   </div>
-  <div class="legend"><span class="sw b"></span> テン3F偏差値トップ（直近5走の最速テンを距離・馬場補正で換算）</div></div>`;
+  <div class="legend"><span class="sw b"></span> 指数上位3頭（走破タイム50%＋テン3F25%＋上がり3F25%、直近5走の最良値。距離×馬場×クラス基準で換算）　<span class="sw f"></span> テン偏差トップ</div></div>`;
 }
 
 async function renderRaceView() {
@@ -497,6 +522,7 @@ async function renderRaceView() {
       const raceMeta = Object.keys(raceData.race || {}).length > 1 ? raceData.race : { ...meta, date: state.date };
       const ids = entries.map((e) => e.horse_id).filter(Boolean);
       const history = await state.provider.loadHistory(ids);
+      if (state.statsPromise) await state.statsPromise;  // 指数計算に基準タイムが要る
       $('raceView').innerHTML = syutubaHtml(raceMeta, entries, cyokyo, history);
     }
   } catch (e) {
@@ -511,18 +537,22 @@ function analysisHtml(st) {
   if (!st) return '<div class="empty">統計データがありません（scraper/build_stats.py --push を実行してください）</div>';
   const rateBar = (r) => `${(r * 100).toFixed(1)}%`;
 
-  // 馬場バイアス（直近20日）
+  // 馬場バイアス（直近20日・門別平均との相対値）
   const dates = Object.keys(st.bias_daily).sort().reverse().slice(0, 20);
+  const fmtDev = (v) => (v == null ? '-' : `${v > 0 ? '+' : ''}${v.toFixed(2)}`);
   const biasRows = dates.map((d) => {
     const b = st.bias_daily[d];
     const cls = b.label === '前有利' ? 'bias-front' : b.label === '差し有利' ? 'bias-back' : '';
     const kk = ['逃げ', '先行', '差し', '追込'].map((k) =>
       b.kyaku[k] ? `<td class="num">${rateBar(b.kyaku[k].rate)} <span class="kyaku">${b.kyaku[k].top3}/${b.kyaku[k].n}</span></td>` : '<td>-</td>').join('');
-    return `<tr><td>${d}</td><td class="${cls}">${b.label}</td><td class="num">${b.score > 0 ? '+' : ''}${b.score}</td>${kk}</tr>`;
+    return `<tr><td>${d}</td><td class="${cls}">${b.label}</td>
+      <td class="num">${b.rel != null ? (b.rel > 0 ? '+' : '') + b.rel : '-'}</td>
+      <td class="num">${fmtDev(b.agari3_dev)}</td>
+      <td class="num">${fmtDev(b.agari4_dev)}</td>${kk}</tr>`;
   }).join('');
 
-  // ペース×脚質
-  const bands = ['1000', '1100-1200', '1500-1700', '1800+'];
+  // ペース×脚質（内回り1500-1600と外回り1700は分割）
+  const bands = ['1000', '1100', '1200', '1500-1600内', '1700外', '1800+'];
   const paces = ['ハイ', 'ミドル', 'スロー'];
   const kyakus = ['逃げ', '先行', '差し', '追込'];
   const pkTables = bands.map((band) => {
@@ -537,14 +567,21 @@ function analysisHtml(st) {
       <tr><th>ペース</th>${kyakus.map((k) => `<th>${k}</th>`).join('')}</tr>${rows}</table></div></div>`;
   }).join('');
 
-  // 基準タイム
-  const btKeys = Object.keys(st.base_times).sort((a, b) => (+a.split('_')[0]) - (+b.split('_')[0]));
+  // 基準タイム（クラス別。'全'はフォールバック用なので非表示）
+  const clsOrder = { '2歳': 0, '3歳': 1, '3歳以上': 2 };
+  const btKeys = Object.keys(st.base_times)
+    .filter((k) => k.split('_')[2] !== '全')
+    .sort((a, b) => {
+      const [da, ga, ca] = a.split('_'); const [db, gb, cb] = b.split('_');
+      return (+da) - (+db) || (clsOrder[ca] ?? 9) - (clsOrder[cb] ?? 9) || ga.localeCompare(gb);
+    });
   const btRows = btKeys.map((k) => {
-    const [d, g] = k.split('_');
+    const [d, g, c] = k.split('_');
     const e = st.base_times[k];
-    return `<tr><td>${d}m</td><td>${g}</td>
+    return `<tr><td>${d}m</td><td>${c}</td><td>${g}</td>
       <td class="num">${e.first3f ? `${e.first3f.mean} ± ${e.first3f.std}` : '-'}</td>
       <td class="num">${e.last3f ? `${e.last3f.mean} ± ${e.last3f.std}` : '-'}</td>
+      <td class="num">${e.time ? `${e.time.mean} ± ${e.time.std}` : '-'}</td>
       <td class="num">${e.first3f ? e.first3f.n : e.last3f ? e.last3f.n : ''}</td></tr>`;
   }).join('');
 
@@ -558,22 +595,22 @@ function analysisHtml(st) {
   };
 
   return `
-  <div class="note">対象: ${st.n_races}レース（〜${esc(st.generated)}）。バックフィル進行中は再生成のたびに精度が上がります。</div>
-  <h3 class="sec">開催日ごとの馬場バイアス（直近20日・脚質別複勝率）</h3>
+  <div class="note">対象: ${st.n_races}レース（〜${esc(st.generated)}）。前残り度は「その日の(前複勝率−後複勝率) − 門別平均ギャップ${st.overall_gap != null ? `(+${st.overall_gap})` : ''}」の相対値。上がり偏差は基準タイム比（負＝上がりが速い＝差しが利く馬場）。</div>
+  <h3 class="sec">開催日ごとの馬場バイアス（直近20日・門別平均との相対評価）</h3>
   <div class="card tablewrap"><table>
-    <tr><th>開催日</th><th>判定</th><th>前残り度</th><th>逃げ</th><th>先行</th><th>差し</th><th>追込</th></tr>
+    <tr><th>開催日</th><th>判定</th><th>前残り度<br>(対平均)</th><th>勝ち馬<br>上がり3F偏差</th><th>レース<br>上がり4F偏差</th><th>逃げ</th><th>先行</th><th>差し</th><th>追込</th></tr>
     ${biasRows}
   </table></div>
   <div class="grid2">${pkTables}</div>
-  <h3 class="sec">基準タイム（距離×馬場・平均±標準偏差 → テン偏差値の土台）</h3>
+  <h3 class="sec">基準タイム（距離×クラス×馬場・平均±標準偏差 → 偏差値/指数の土台）</h3>
   <div class="card tablewrap"><table>
-    <tr><th>距離</th><th>馬場</th><th>前半3F</th><th>上り3F</th><th>N</th></tr>${btRows}
+    <tr><th>距離</th><th>クラス</th><th>馬場</th><th>前半3F</th><th>上り3F</th><th>走破タイム</th><th>N</th></tr>${btRows}
   </table></div>
   <div class="grid2">${rankTable(st.jockeys, '騎手')}${rankTable(st.trainers, '厩舎')}</div>`;
 }
 
 async function renderAnalysis() {
-  if (state.stats === null) state.stats = await state.provider.loadStats();
+  if (state.statsPromise) await state.statsPromise;
   $('analysisRoot').innerHTML = analysisHtml(state.stats);
 }
 
@@ -623,8 +660,8 @@ async function init() {
     $('srcBadge').textContent = 'データ源: なし';
     return;
   }
-  // 統計は裏で読み込み（テン偏差値に使う）
-  state.provider.loadStats().then((s) => { state.stats = s; });
+  // 統計は裏で読み込み（指数・テン偏差値に使う）
+  state.statsPromise = state.provider.loadStats().then((s) => { state.stats = s; return s; });
 
   $('monthSel').addEventListener('change', (e) => {
     state.month = e.target.value;
