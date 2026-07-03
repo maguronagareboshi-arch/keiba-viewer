@@ -635,7 +635,11 @@ async function loadRace(raceId, meta) {
   state.dist = race.distance_m || meta.distance_m || 1100;
   state.inner = isInnerCourse(state.dist);
   const ids = entries.map((e) => e.horse_id).filter(Boolean);
-  const histories = await state.source.loadHistories(ids);
+  const rawHist = await state.source.loadHistories(ids);
+  // 振り返り防止: このレースの日付以降の走りは使わない（未来レースには影響なし）
+  const tgtDate = race.date || race.race_date || meta.date;
+  const histories = {};
+  for (const id in rawHist) histories[id] = rawHist[id].filter((r) => !r.date || !tgtDate || r.date < tgtDate);
   state.horses = buildHorses(entries, state.dist, race.klass || meta.klass, histories);
   state.t = 0; state.running = false; lastTs = null; state.stripDir = null;
   if (state.timer) { clearInterval(state.timer); state.timer = null; }
