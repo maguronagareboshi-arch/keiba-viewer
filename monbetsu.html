@@ -211,6 +211,13 @@ const providers = {
       } catch (e) { /* テーブル未作成 → ローカルへ */ }
       return providers.local.loadCyokyo(raceId);
     },
+    async loadNouryoku(raceId) {
+      try {
+        const rows = await sbGet(`chihou_nouryoku?race_id=eq.${raceId}&select=*&order=umaban.asc`);
+        if (rows.length) return rows;
+      } catch (e) { /* 次へ */ }
+      return providers.local.loadNouryoku(raceId);
+    },
     async loadHistory(horseIds) {
       if (!horseIds.length) return {};
       const idlist = horseIds.map(encodeURIComponent).join(',');
@@ -253,6 +260,13 @@ const providers = {
       try {
         const d = await jsonGet(`data/json/cyokyo/${raceId}.json`);
         return d.horses.map((h) => ({ ...h, race_id: d.race_id }));
+      } catch (e) { return []; }
+    },
+    async loadNouryoku(raceId) {
+      try {
+        const d = await jsonGet(`data/json/nouryoku/${raceId}.json`);
+        return d.horses.map((h) => ({ umaban: h.umaban, horse_name: h.name, rt: h.rt,
+          data: { pedigree: h.pedigree, stable: h.stable, seiseki: h.seiseki, runs: h.runs } }));
       } catch (e) { return []; }
     },
     async loadHistory(horseIds) {
@@ -483,10 +497,25 @@ function arrowHtml(a) {
   return `<span class="${cls}">${esc(a)}</span>`;
 }
 
-function syutubaHtml(raceMeta, entries, cyokyo, history) {
+// 能力表の過去走（他場・中央含む）の1行表示
+function nouRunHtml(r) {
+  const fin = r.fin != null ? `${r.fin}着` : (r.fin_note || '?');
+  return `${mmdd(r.date)} <b>${esc(r.track || '?')}</b>${esc(r.surface || '')}${r.dist || ''} ${fin}` +
+    (r.f3 != null ? ` テン${r.f3.toFixed(1)}` : '') + (r.l3 != null ? ` 上${r.l3.toFixed(1)}` : '');
+}
+// 直近走（能力表・最新順）
+function nouRuns(nouByUma, umaban, n) {
+  const d = nouByUma[umaban];
+  const runs = (d && d.data && d.data.runs) || [];
+  return runs.slice(-n).reverse();
+}
+
+function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku) {
   if (!entries.length) return raceHeaderHtml(raceMeta) + '<div class="empty">出馬表データがありません（day取得時に --what syutuba を含めてください）</div>';
   const cyoByUma = {};
   for (const c of cyokyo) cyoByUma[c.umaban] = c;
+  const nouByUma = {};
+  for (const n of (nouryoku || [])) nouByUma[n.umaban] = n;
 
   // テン偏差=直近5走の最良値 / 指数=直近5走の平均（バックテストで平均の方が的中率が高い）
   const bestOf = (hid, fn) => {
@@ -546,7 +575,9 @@ function syutubaHtml(raceMeta, entries, cyokyo, history) {
       <td class="num ${s != null && top3S.includes(s) ? 'best' : ''}">${s != null ? s.toFixed(1) : '-'}</td>
       <td class="num ${h != null && h === topH ? 'f1' : ''}">${h != null ? h.toFixed(1) : '-'}</td>
       <td class="num ${cz != null && cz === topC ? 'a1' : ''}">${cz != null ? cz.toFixed(1) : '-'}</td>
-      <td class="small">${runs.map(pastRunHtml).join('<br>') || '-'}</td>
+      <td class="small">${runs.map(pastRunHtml).join('<br>')
+        || nouRuns(nouByUma, e.umaban, 3).map((r) => nouRunHtml(r) + ' <span class="badge">能力表</span>').join('<br>')
+        || '-'}</td>
       <td class="small">${cyo ? `${arrowHtml(cyo.arrow)} ${esc(cyo.tanpyo || '')}<br>` : ''}${works.length ? workHtml(works[0]) : '-'}</td>
     </tr>`;
   }).join('');
@@ -566,10 +597,12 @@ function syutubaHtml(raceMeta, entries, cyokyo, history) {
 // ---- 予想サブビュー（A3: 自動印＋根拠＋妙味ゾーン） ----
 const MARKS = ['◎', '○', '▲', '△', '△'];
 
-function yosouHtml(raceMeta, entries, cyokyo, history) {
+function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku) {
   if (!entries.length) return raceHeaderHtml(raceMeta) + '<div class="empty">出馬表データがありません</div>';
   const cyoByUma = {};
   for (const c of cyokyo) cyoByUma[c.umaban] = c;
+  const nouByUma = {};
+  for (const n of (nouryoku || [])) nouByUma[n.umaban] = n;
 
   const hs = entries.map((e) => ({
     e,
@@ -613,13 +646,17 @@ function yosouHtml(raceMeta, entries, cyokyo, history) {
   const disp = hs.slice().sort((a, b) => (b.score ?? -99) - (a.score ?? -99));
   const rows = disp.map((r) => {
     const e = r.e;
-    const konkyo = [
+    let konkyo = [
       r.comp != null ? `指数${rk.comp(r.comp)}位` : null,
       r.si != null ? `SI${rk.si(r.si)}位` : null,
       r.cz != null ? `調教${rk.cz(r.cz)}位` : null,
       r.ten != null ? `テン${rk.ten(r.ten)}位` : null,
       r.kyaku,
     ].filter(Boolean).join('・');
+    if (r.comp == null && r.si == null) {
+      const nr = nouRuns(nouByUma, e.umaban, 1)[0];
+      konkyo = nr ? `門別実績なし（前走: ${nouRunHtml(nr).replace(/<[^>]+>/g, '')}）` : (konkyo || '実績なし');
+    }
     return `<tr>
       <td style="font-size:16px">${r.mark || ''}</td>
       <td><span class="waku w${e.waku || 1}">${e.waku ?? ''}</span></td>
@@ -660,18 +697,19 @@ async function renderRaceView() {
       $('raceView').innerHTML = seisekiHtml(data);
     } else {
       const meta = (state.dates[state.date] || []).find((r) => r.race_id === raceId) || {};
-      const [raceData, entries, cyokyo] = await Promise.all([
+      const [raceData, entries, cyokyo, nouryoku] = await Promise.all([
         state.provider.loadRace(raceId),
         state.provider.loadEntries(raceId),
         state.provider.loadCyokyo(raceId),
+        state.provider.loadNouryoku(raceId),
       ]);
       const raceMeta = Object.keys(raceData.race || {}).length > 1 ? raceData.race : { ...meta, date: state.date };
       const ids = entries.map((e) => e.horse_id).filter(Boolean);
       const history = await state.provider.loadHistory(ids);
       if (state.statsPromise) await state.statsPromise;  // 指数計算に基準タイムが要る
       $('raceView').innerHTML = state.sub === 'yosou'
-        ? yosouHtml(raceMeta, entries, cyokyo, history)
-        : syutubaHtml(raceMeta, entries, cyokyo, history);
+        ? yosouHtml(raceMeta, entries, cyokyo, history, nouryoku)
+        : syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku);
     }
   } catch (e) {
     $('raceView').innerHTML = `<div class="empty">読み込み失敗: ${esc(e.message)}</div>`;
