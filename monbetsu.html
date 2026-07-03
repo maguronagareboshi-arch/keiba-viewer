@@ -1030,27 +1030,29 @@ async function renderCyokyo() {
     return `<td class="${cls}">${w.fin}着</td>`;
   };
   // 坂路（3F順）と 本馬場（3F順）を分けて表示
+  // 坂路: 4F/3F/2F/1F（t4=4F, t3=3F, t2=2F, t1=1F）3F順・偏差値は3F(t3)基準
   const hanro = works.filter((w) => w.hanro && w.t3 != null);
-  const honba = works.filter((w) => w.honba && w.t3 != null).sort((a, b) => a.t3 - b.t3);
+  // 本馬場: 5F/4F/3F/1F（t4=5F, t3=4F=半哩, t2=3F, t1=1F）真の3F(t2)順
+  const honba = works.filter((w) => w.honba && w.t2 != null).sort((a, b) => a.t2 - b.t2);
   const other = works.length - hanro.length - honba.length;
   const hanroRows = hanro.map((w, i) => `<tr>
     <td>${i + 1}</td>
     <td class="l"><a class="horse-link" data-horse="${esc(w.name)}">${esc(w.name)}</a>${w.pb ? ' <span class="badge arrow-up">自己ベスト</span>' : ''}</td>
-    <td>${esc(w.course)}</td><td>${esc(w.baba || '')}</td>
+    <td>${esc(w.sex || '')}</td><td>${esc(w.course)}</td><td>${esc(w.baba || '')}</td>
     <td class="num">${w.t4 != null ? w.t4.toFixed(1) : ''}</td>
     <td class="num ${i < 3 ? 'f1' : ''}">${w.t3.toFixed(1)}</td>
-    <td class="num">${hensachi(w.t3) != null ? hensachi(w.t3).toFixed(1) : ''}</td>
     <td class="num">${w.t2 != null ? w.t2.toFixed(1) : ''}</td>
     <td class="num">${w.t1 != null ? w.t1.toFixed(1) : ''}</td>
+    <td class="num">${hensachi(w.t3) != null ? hensachi(w.t3).toFixed(1) : ''}</td>
     ${finCell(w)}<td>${esc(w.ashiiro || '')}</td><td class="l">${esc(w.tanpyo || '')}</td>
   </tr>`).join('');
   const honbaRows = honba.map((w, i) => `<tr>
     <td>${i + 1}</td>
     <td class="l"><a class="horse-link" data-horse="${esc(w.name)}">${esc(w.name)}</a></td>
-    <td>${esc(w.course)}</td><td>${esc(w.baba || '')}</td>
+    <td>${esc(w.sex || '')}</td><td>${esc(w.course)}</td><td>${esc(w.baba || '')}</td>
     <td class="num">${w.t4 != null ? w.t4.toFixed(1) : ''}</td>
-    <td class="num ${i < 3 ? 'f1' : ''}">${w.t3.toFixed(1)}</td>
-    <td class="num">${w.t2 != null ? w.t2.toFixed(1) : ''}</td>
+    <td class="num">${w.t3 != null ? w.t3.toFixed(1) : ''}</td>
+    <td class="num ${i < 3 ? 'f1' : ''}">${w.t2.toFixed(1)}</td>
     <td class="num">${w.t1 != null ? w.t1.toFixed(1) : ''}</td>
     ${finCell(w)}<td>${esc(w.ashiiro || '')}</td><td class="l">${esc(w.tanpyo || '')}</td>
   </tr>`).join('');
@@ -1062,15 +1064,15 @@ async function renderCyokyo() {
   <div class="card tablewrap">
     <b>坂路（${cyokyoState.date}）</b>
     <table>
-      <tr><th>#</th><th>馬名</th><th>コース</th><th>馬場</th><th>4F</th><th>3F</th><th>偏差値</th><th>2F</th><th>1F</th><th>着順</th><th>脚色</th><th>短評</th></tr>
-      ${hanroRows || '<tr><td colspan="12">この日の坂路追切はありません</td></tr>'}
+      <tr><th>#</th><th>馬名</th><th>馬齢</th><th>コース</th><th>馬場</th><th>4F</th><th>3F</th><th>2F</th><th>1F</th><th>偏差値</th><th>着順</th><th>脚色</th><th>短評</th></tr>
+      ${hanroRows || '<tr><td colspan="13">この日の坂路追切はありません</td></tr>'}
     </table>
     <div class="legend"><span class="sw f"></span> 3F上位3本。偏差値は全期間の坂路3F分布（${hb ? `${hb.mean}±${hb.std}秒・n=${hb.n.toLocaleString()}本` : '-'}）基準・50が平均。着順は各馬の次走結果。</div>
   </div>
   ${honba.length ? `<div class="card tablewrap">
     <b>本馬場（${cyokyoState.date}）</b>
     <table>
-      <tr><th>#</th><th>馬名</th><th>コース</th><th>馬場</th><th>5F</th><th>3F</th><th>2F</th><th>1F</th><th>着順</th><th>脚色</th><th>短評</th></tr>
+      <tr><th>#</th><th>馬名</th><th>馬齢</th><th>コース</th><th>馬場</th><th>5F</th><th>4F</th><th>3F</th><th>1F</th><th>着順</th><th>脚色</th><th>短評</th></tr>
       ${honbaRows}
     </table>
     <div class="legend">本馬場（門別本）の時計。<span class="sw f"></span> 3F上位3本。${other ? `他コース${other}本は非表示。` : ''}</div>
@@ -1130,6 +1132,13 @@ function renderHorseModal(results, cyokyo) {
     if (w.date && !seen.has(key)) { seen.add(key); works.push(w); }
   }
   works.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  // 自己ベスト（坂路3F=t_half の最速とその日付）
+  const hanroWorks = works.filter((w) => (w.course || '').includes('坂') && (w.times || {}).t_half != null);
+  let bestW = null;
+  for (const w of hanroWorks) if (!bestW || w.times.t_half < bestW.times.t_half) bestW = w;
+  const bestLine = bestW
+    ? `坂路3F 自己ベスト <b>${bestW.times.t_half.toFixed(1)}秒</b>（${mmdd(bestW.date)}${bestW.youbi ? `(${bestW.youbi})` : ''} ${esc(bestW.course)}）`
+    : '坂路の追切データなし';
   const cyoRows = works.slice(0, 20).map((w) => {
     const t = w.times || {};
     return `<tr><td>${mmdd(w.date)}${w.youbi ? `(${w.youbi})` : ''}</td><td>${esc(w.course || '')}</td>
@@ -1148,8 +1157,9 @@ function renderHorseModal(results, cyokyo) {
       ${resRows || '<tr><td colspan="16">成績なし</td></tr>'}
     </table></div>
     <h3 class="sec">調教履歴（新しい順）</h3>
+    <div class="note">${bestLine}</div>
     <div class="tablewrap"><table>
-      <tr><th>日付</th><th>コース</th><th>馬場</th><th>4F</th><th>3F</th><th>2F</th><th>1F</th><th>脚色</th><th>短評</th></tr>
+      <tr><th>日付</th><th>コース</th><th>馬場</th><th>坂4F/本5F</th><th>坂3F/本4F</th><th>坂2F/本3F</th><th>1F</th><th>脚色</th><th>短評</th></tr>
       ${cyoRows || '<tr><td colspan="9">調教データなし</td></tr>'}
     </table></div>`;
 }
