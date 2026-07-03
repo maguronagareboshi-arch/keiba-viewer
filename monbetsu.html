@@ -166,9 +166,9 @@ tr.clickable:hover td { background: var(--chip-bg); }
   <div id="analysisRoot" hidden><div class="empty">読み込み中…</div></div>
   <div id="cyokyoRoot" hidden><div class="empty">読み込み中…</div></div>
 </main>
-<div id="horseModal" class="modal" hidden>
+<div id="horseModal" class="modal" hidden onclick="if(event.target.id==='horseModal')this.hidden=true">
   <div class="modal-box">
-    <div class="modal-head"><b id="horseModalTitle">-</b><button id="horseModalClose">✕</button></div>
+    <div class="modal-head"><b id="horseModalTitle">-</b><button id="horseModalClose" onclick="document.getElementById('horseModal').hidden=true">✕ 閉じる</button></div>
     <div id="horseModalBody"><div class="empty">読み込み中…</div></div>
   </div>
 </div>
@@ -1054,23 +1054,26 @@ async function renderCyokyo() {
 // ============================================================
 // 馬詳細モーダル（成績＋調教履歴）
 // ============================================================
+const withTimeout = (p, ms) => Promise.race([p,
+  new Promise((_, rej) => setTimeout(() => rej(new Error('タイムアウト（通信が遅い可能性）')), ms))]);
+
 async function openHorseModal(nameOrId, byId, displayName) {
   const modal = $('horseModal');
   modal.hidden = false;
-  $('horseModalTitle').textContent = (displayName || (byId ? '' : nameOrId)) + ' の成績・調教';
+  $('horseModalTitle').textContent = (displayName || (byId ? '' : nameOrId) || '') + ' の成績・調教';
   $('horseModalBody').innerHTML = '<div class="empty">読み込み中…</div>';
   try {
     const sel = 'horse_name,finish,pop,win_odds,time_str,first3f,last3f,passing,corner4_pos,comment,sex_age,jockey,body_weight,weight_diff,race_id,chihou_races(race_date,track,race_no,klass,distance_m,going)';
     const filt = byId ? `horse_id=eq.${encodeURIComponent(nameOrId)}` : `horse_name=eq.${encodeURIComponent(nameOrId)}`;
-    const results = await sbGet(`chihou_results?${filt}&select=${sel}&order=race_id.desc&limit=40`);
+    const results = await withTimeout(sbGet(`chihou_results?${filt}&select=${sel}&order=race_id.desc&limit=40`), 10000);
     const name = displayName || (results[0] && results[0].horse_name) || (byId ? null : nameOrId);
     const cyokyo = name
-      ? await sbGet(`chihou_cyokyo?horse_name=eq.${encodeURIComponent(name)}&select=race_id,works&order=race_id.desc&limit=20`).catch(() => [])
+      ? await withTimeout(sbGet(`chihou_cyokyo?horse_name=eq.${encodeURIComponent(name)}&select=race_id,works&order=race_id.desc&limit=20`), 10000).catch(() => [])
       : [];
-    $('horseModalTitle').textContent = name + ' の成績・調教';
+    if (name) $('horseModalTitle').textContent = name + ' の成績・調教';
     renderHorseModal(results, cyokyo);
   } catch (e) {
-    $('horseModalBody').innerHTML = `<div class="empty">読み込み失敗: ${esc(e.message)}</div>`;
+    $('horseModalBody').innerHTML = `<div class="empty">読み込み失敗: ${esc(e.message)}<br><button class="foldbtn" onclick="document.getElementById('horseModal').hidden=true">閉じる</button></div>`;
   }
 }
 
@@ -1211,6 +1214,7 @@ async function init() {
   });
   $('horseModalClose').addEventListener('click', () => { $('horseModal').hidden = true; });
   $('horseModal').addEventListener('click', (e) => { if (e.target.id === 'horseModal') $('horseModal').hidden = true; });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('horseModal').hidden = true; });
   $('analysisRoot').addEventListener('click', (e) => {
     const rc = e.target.closest('a[data-rec]');
     if (rc) { e.preventDefault(); openRecordDetail(rc.dataset.rec, rc.dataset.kind); return; }
