@@ -409,7 +409,7 @@ function daysBetween(d1, d2) {
 }
 const MODEL_FEATS = ['time_mean', 'time_best', 'time_last', 'f3_best', 'l3_best', 'n_runs',
   'days_off', 'dist_change', 'same_band_z', 'cls_up', 'cls_down', 'wt_change', 'draw_bias',
-  'jockey_r', 'trainer_r', 'trip_adj', 'exact_dist_r', 'waku_rate'];
+  'jockey_r', 'trainer_r', 'trip_adj', 'exact_dist_r', 'waku_rate', 'sire_rate'];
 const dbandOf = (d) => !d ? null : d <= 1000 ? '1000' : d <= 1100 ? '1100' : d <= 1200 ? '1200'
   : d <= 1600 ? '15-16' : d <= 1700 ? '1700' : '1800+';
 
@@ -460,6 +460,7 @@ function modelScore(e, history, race) {
       return exd.length >= 2 ? exd.filter((r) => r.fin <= 3).length / exd.length : 0.28;
     })(),
     waku_rate: (m.waku_r && m.waku_r[`${dbandOf(d)}|${e.waku}`]) ?? 0.28,  // 距離帯×枠の複勝率
+    sire_rate: (m.sire_r && m.horse_sire && m.sire_r[m.horse_sire[e.horse_id]]) ?? (m.sire_mean ?? 0.30),  // 父の門別複勝率（砂適性）
   };
   let s = m.b;
   for (let i = 0; i < MODEL_FEATS.length; i++) {
@@ -985,6 +986,22 @@ function analysisHtml(st) {
       <tr><th>距離</th>${[1, 2, 3, 4, 5, 6, 7, 8].map((w) => `<th>${w}枠</th>`).join('')}</tr>${wakuRows}
     </table><div class="legend">青=その距離で平均+3%以上有利／オレンジ=平均-3%以上不利。門別1000mは内枠不利の傾向。</div></div>`;
 
+  // 血統別成績（父の門別複勝率・砂適性・馬場別・距離帯別）
+  const sst = st.sire_stats || {};
+  const bandOrder = ['1000', '1100', '1200', '15-16', '1700', '1800+'];
+  const sireList = Object.entries(sst).filter(([, e]) => e.n >= 25).sort((a, b) => (b[1].rate || 0) - (a[1].rate || 0));
+  const pct = (v) => v == null ? '-' : `${Math.round(v * 100)}%`;
+  const sireRow = ([name, e]) => {
+    const bd = bandOrder.filter((b) => e.bands[b]).map((b) => `${b.replace('15-16', '1500/1600')}:${pct(e.bands[b].rate)}`).join('　');
+    return `<tr><td class="l">${esc(name)}</td><td class="num">${e.n}</td><td class="num">${rateBar(e.rate)}</td>
+      <td class="num">${pct(e.good)}</td><td class="num">${pct(e.omo)}</td><td class="small l">${bd}</td></tr>`;
+  };
+  const sireTable = `<h3 class="sec">血統別成績（父の門別複勝率・砂適性／複勝率順・25走以上）</h3>
+    <div class="card tablewrap"><table>
+      <tr><th>父</th><th>出走</th><th>複勝率</th><th>良(白砂)</th><th>重</th><th>距離帯別 複勝率</th></tr>
+      ${sireList.slice(0, 30).map(sireRow).join('')}
+    </table><div class="legend">門別の砂で複勝率が高い父＝砂適性の高い血統。良(白砂)と重で差がある父、距離帯で得意不得意がある父も。AI予想にも <b>sire_rate</b>（父の砂適性）として反映済み。下位も参考: ${sireList.slice(-4).map(([n]) => esc(n)).join('・')} など芝血統は苦戦傾向。</div></div>`;
+
   // 基準タイム（クラス別。'全'はフォールバック用なので非表示）
   const clsOrder = { '2歳': 0, '3歳': 1, '3歳以上': 2 };
   const btKeys = Object.keys(st.base_times)
@@ -1021,6 +1038,7 @@ function analysisHtml(st) {
   </table></div>
   <div class="grid2">${pkTables}</div>
   ${wakuTable}
+  ${sireTable}
   <h3 class="sec">基準タイム（距離×クラス×馬場・平均±標準偏差 → 偏差値/指数の土台）</h3>
   <div class="card tablewrap"><table>
     <tr><th>距離</th><th>クラス</th><th>馬場</th><th>前半3F</th><th>上り3F</th><th>走破タイム</th><th>N</th></tr>${btRows}
