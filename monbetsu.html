@@ -132,6 +132,8 @@ h3.sec { font-size: 14px; margin: 16px 0 6px; }
   <div class="viewtabs" id="viewTabs">
     <button data-view="race" class="active">レース</button>
     <button data-view="analysis">分析</button>
+    <button data-view="cyokyo">調教</button>
+    <button onclick="location.href='simulator.html'">🎲 シミュレータ</button>
   </div>
 </header>
 <main>
@@ -142,12 +144,14 @@ h3.sec { font-size: 14px; margin: 16px 0 6px; }
     </div>
     <div class="racetabs" id="raceTabs"></div>
     <div class="subtabs" id="subTabs" hidden>
+      <button data-sub="yosou">🎯 予想</button>
       <button data-sub="syutuba">出馬表</button>
       <button data-sub="seiseki">成績</button>
     </div>
     <div id="raceView"><div class="empty">読み込み中…</div></div>
   </div>
   <div id="analysisRoot" hidden><div class="empty">読み込み中…</div></div>
+  <div id="cyokyoRoot" hidden><div class="empty">読み込み中…</div></div>
 </main>
 
 <script>
@@ -210,14 +214,14 @@ const providers = {
     async loadHistory(horseIds) {
       if (!horseIds.length) return {};
       const idlist = horseIds.map(encodeURIComponent).join(',');
-      const rows = await sbGet(`chihou_results?horse_id=in.(${idlist})&select=horse_id,finish,pop,first3f,last3f,time_sec,passing,corner4_pos,comment,time_str,body_weight,jockey,race_id,chihou_races(race_date,distance_m,going,pace,klass)&order=race_id.desc&limit=2000`);
+      const rows = await sbGet(`chihou_results?horse_id=in.(${idlist})&select=horse_id,finish,pop,first3f,last3f,time_sec,kinryo,passing,corner4_pos,comment,time_str,body_weight,jockey,race_id,chihou_races(race_date,distance_m,going,pace,klass)&order=race_id.desc&limit=2000`);
       const map = {};
       for (const r of rows) {
         const ra = r.chihou_races || {};
         (map[r.horse_id] = map[r.horse_id] || []).push({
           date: ra.race_date, race_id: r.race_id, dist: ra.distance_m, going: ra.going,
           pace: ra.pace, cls: classGroup(ra.klass), fin: r.finish, pop: r.pop,
-          f3: r.first3f, l3: r.last3f, tsec: r.time_sec,
+          f3: r.first3f, l3: r.last3f, tsec: r.time_sec, kin: r.kinryo,
           kyaku: kyakuFromPassing(r.passing), passing: r.passing, c4: r.corner4_pos,
           comment: r.comment, time: r.time_str, weight: r.body_weight, jockey: r.jockey,
         });
@@ -322,6 +326,44 @@ function runShisu(run) {
   if (!parts.length) return null;
   const wsum = parts.reduce((s, [, w]) => s + w, 0);
   return parts.reduce((s, [v, w]) => s + v * w, 0) / wsum;
+}
+
+// スピード指数（門別適合版・妙味ゾーン検出用）
+function distIndexJs(d) {
+  const pts = [[1600, 1.02], [2000, 0.79], [3000, 0.50]];
+  const [[x1, y1], [x2, y2]] = d <= 2000 ? [pts[0], pts[1]] : [pts[1], pts[2]];
+  return y1 + (y2 - y1) * (d - x1) / (x2 - x1);
+}
+function runSI(run) {
+  const sb = state.stats && state.stats.si_base;
+  const bb = (state.stats && state.stats.baba_daily) || {};
+  if (!sb || !run.dist || sb[String(run.dist)] == null || run.tsec == null) return null;
+  const kin = run.kin != null ? run.kin : 55;
+  return (sb[String(run.dist)] - run.tsec) * distIndexJs(run.dist) * 10 + (bb[run.date] || 0) + (kin - 55) * 2 + 80;
+}
+// 直近5走の指標（mean/max）
+function metricOf(history, hid, fn, mode) {
+  const vals = (history[hid] || []).slice(0, 5).map(fn).filter((v) => v != null);
+  if (!vals.length) return null;
+  return mode === 'max' ? Math.max(...vals) : vals.reduce((s, v) => s + v, 0) / vals.length;
+}
+function zscoresJs(vals) {
+  const xs = vals.filter((v) => v != null);
+  if (xs.length < 2) return vals.map(() => null);
+  const m = xs.reduce((s, v) => s + v, 0) / xs.length;
+  const sd = Math.sqrt(xs.reduce((s, v) => s + (v - m) ** 2, 0) / (xs.length - 1)) || 1e-9;
+  return vals.map((v) => (v == null ? null : (v - m) / sd));
+}
+// 坂路3F最速の偏差値（調教）
+function cyoZFromWorks(cyo) {
+  const hb = state.stats && state.stats.hanro;
+  if (!cyo || !hb || !hb.std) return null;
+  let best = null;
+  for (const w of (cyo.works || [])) {
+    const t3 = w.times && w.times.t_half;
+    if (t3 && (w.course || '').includes('坂')) best = best == null || t3 < best ? t3 : best;
+  }
+  return best == null ? null : 50 + 10 * (hb.mean - best) / hb.std;
 }
 
 // ============================================================
@@ -446,7 +488,7 @@ function syutubaHtml(raceMeta, entries, cyokyo, history) {
   const cyoByUma = {};
   for (const c of cyokyo) cyoByUma[c.umaban] = c;
 
-  // 直近5走ベースの指数・テン偏差（各走の距離×馬場×クラス基準で換算し最良値）
+  // テン偏差=直近5走の最良値 / 指数=直近5走の平均（バックテストで平均の方が的中率が高い）
   const bestOf = (hid, fn) => {
     let best = null;
     for (const r of (history[hid] || []).slice(0, 5)) {
@@ -455,7 +497,11 @@ function syutubaHtml(raceMeta, entries, cyokyo, history) {
     }
     return best;
   };
-  const shisuOf = (hid) => bestOf(hid, runShisu);
+  const meanOf = (hid, fn) => {
+    const vals = (history[hid] || []).slice(0, 5).map(fn).filter((v) => v != null);
+    return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+  };
+  const shisuOf = (hid) => meanOf(hid, runShisu);
   const hensachiOf = (hid) => bestOf(hid, (r) => devValue(r.f3, baseEntry(r.dist, r.going, r.cls), 'first3f'));
 
   const shisus = entries.map((e) => shisuOf(e.horse_id)).filter((v) => v != null).sort((a, b) => b - a);
@@ -463,12 +509,28 @@ function syutubaHtml(raceMeta, entries, cyokyo, history) {
   const hensachis = entries.map((e) => hensachiOf(e.horse_id)).filter((v) => v != null).sort((a, b) => b - a);
   const topH = hensachis[0];
 
+  // 調教偏差値: 直近追切の坂路3F最速を全期間分布で換算
+  const hb = state.stats && state.stats.hanro;
+  const cyoZOf = (umaban) => {
+    const cyo = cyoByUma[umaban];
+    if (!cyo || !hb || !hb.std) return null;
+    let best = null;
+    for (const w of (cyo.works || [])) {
+      const t3 = w.times && w.times.t_half;
+      if (t3 && (w.course || '').includes('坂')) best = best == null || t3 < best ? t3 : best;
+    }
+    return best == null ? null : 50 + 10 * (hb.mean - best) / hb.std;
+  };
+  const cyoZs = entries.map((e) => cyoZOf(e.umaban)).filter((v) => v != null).sort((a, b) => b - a);
+  const topC = cyoZs[0];
+
   const rows = entries.map((e) => {
     const cyo = cyoByUma[e.umaban];
     const works = (cyo && cyo.works) || [];
     const runs = (history[e.horse_id] || []).filter((r) => r.race_id !== raceMeta.race_id).slice(0, 3);
     const h = hensachiOf(e.horse_id);
     const s = shisuOf(e.horse_id);
+    const cz = cyoZOf(e.umaban);
     return `<tr>
       <td><span class="waku w${e.waku || 1}">${e.waku ?? ''}</span></td>
       <td>${e.umaban ?? ''}</td>
@@ -483,6 +545,7 @@ function syutubaHtml(raceMeta, entries, cyokyo, history) {
       <td class="num">${e.win_odds ?? ''}${e.pop != null ? `(${e.pop})` : ''}</td>
       <td class="num ${s != null && top3S.includes(s) ? 'best' : ''}">${s != null ? s.toFixed(1) : '-'}</td>
       <td class="num ${h != null && h === topH ? 'f1' : ''}">${h != null ? h.toFixed(1) : '-'}</td>
+      <td class="num ${cz != null && cz === topC ? 'a1' : ''}">${cz != null ? cz.toFixed(1) : '-'}</td>
       <td class="small">${runs.map(pastRunHtml).join('<br>') || '-'}</td>
       <td class="small">${cyo ? `${arrowHtml(cyo.arrow)} ${esc(cyo.tanpyo || '')}<br>` : ''}${works.length ? workHtml(works[0]) : '-'}</td>
     </tr>`;
@@ -493,11 +556,94 @@ function syutubaHtml(raceMeta, entries, cyokyo, history) {
     <table>
       <tr><th>枠</th><th>番</th><th>本紙</th>
       <th>馬名</th><th>性齢</th><th>減</th><th>騎手</th><th>斤量</th><th>厩舎</th><th>馬体重</th><th>単勝(人気)</th>
-      <th>指数</th><th>テン偏差</th><th>近3走（テン3F/上り3F/脚質）</th><th>調教（最新追切）</th></tr>
+      <th>指数</th><th>テン偏差</th><th>調教偏差</th><th>近3走（テン3F/上り3F/脚質）</th><th>調教（最新追切）</th></tr>
       ${rows}
     </table>
   </div>
-  <div class="legend"><span class="sw b"></span> 指数上位3頭（走破タイム50%＋テン3F25%＋上がり3F25%、直近5走の最良値。距離×馬場×クラス基準で換算）　<span class="sw f"></span> テン偏差トップ</div></div>`;
+  <div class="legend"><span class="sw b"></span> 指数上位3頭（走破50%＋テン25%＋上がり25%、直近5走平均）　<span class="sw f"></span> テン偏差トップ（直近5走最良）　<span class="sw a"></span> 調教偏差トップ（直近追切の坂路3F最速を全期間分布で換算・50が平均）</div></div>`;
+}
+
+// ---- 予想サブビュー（A3: 自動印＋根拠＋妙味ゾーン） ----
+const MARKS = ['◎', '○', '▲', '△', '△'];
+
+function yosouHtml(raceMeta, entries, cyokyo, history) {
+  if (!entries.length) return raceHeaderHtml(raceMeta) + '<div class="empty">出馬表データがありません</div>';
+  const cyoByUma = {};
+  for (const c of cyokyo) cyoByUma[c.umaban] = c;
+
+  const hs = entries.map((e) => ({
+    e,
+    comp: metricOf(history, e.horse_id, runShisu, 'mean'),
+    si: metricOf(history, e.horse_id, runSI, 'mean'),
+    ten: metricOf(history, e.horse_id, (r) => devValue(r.f3, baseEntry(r.dist, r.going, r.cls), 'first3f'), 'max'),
+    cz: cyoZFromWorks(cyoByUma[e.umaban]),
+    kyaku: (() => {
+      const ks = (history[e.horse_id] || []).slice(0, 5).map((r) => r.kyaku).filter(Boolean);
+      if (!ks.length) return null;
+      const cnt = {};
+      for (const k of ks) cnt[k] = (cnt[k] || 0) + 1;
+      return Object.entries(cnt).sort((a, b) => b[1] - a[1])[0][0];
+    })(),
+  }));
+
+  // 総合スコア = レース内z値の加重和（composite45% + SI30% + 調教15% + テン10%、欠測は再配分）
+  const zc = zscoresJs(hs.map((r) => r.comp));
+  const zs = zscoresJs(hs.map((r) => r.si));
+  const zt = zscoresJs(hs.map((r) => r.ten));
+  const zy = zscoresJs(hs.map((r) => r.cz));
+  hs.forEach((r, i) => {
+    const parts = [[zc[i], 0.45], [zs[i], 0.30], [zy[i], 0.15], [zt[i], 0.10]].filter(([v]) => v != null);
+    r.score = parts.length ? parts.reduce((s, [v, w]) => s + v * w, 0) / parts.reduce((s, [, w]) => s + w, 0) : null;
+  });
+  const rankOf = (key) => {
+    const sorted = hs.filter((r) => r[key] != null).map((r) => r[key]).sort((a, b) => b - a);
+    return (v) => (v == null ? null : sorted.indexOf(v) + 1);
+  };
+  const rk = { comp: rankOf('comp'), si: rankOf('si'), ten: rankOf('ten'), cz: rankOf('cz') };
+  const ranked = hs.filter((r) => r.score != null).sort((a, b) => b.score - a.score);
+  ranked.forEach((r, i) => { r.mark = MARKS[i] || ''; });
+  const siTop = hs.filter((r) => r.si != null).sort((a, b) => b.si - a.si)[0];
+  for (const r of hs) r.myomi = siTop && r === siTop && r.e.pop != null && r.e.pop >= 4;
+
+  // 直近の馬場傾向（過去3開催日）
+  const bd = (state.stats && state.stats.bias_daily) || {};
+  const recentBias = Object.keys(bd).sort().reverse().slice(0, 3)
+    .map((d) => `${d.slice(5)}: <b>${bd[d].label}</b>(${bd[d].rel > 0 ? '+' : ''}${bd[d].rel})`).join('　');
+
+  const disp = hs.slice().sort((a, b) => (b.score ?? -99) - (a.score ?? -99));
+  const rows = disp.map((r) => {
+    const e = r.e;
+    const konkyo = [
+      r.comp != null ? `指数${rk.comp(r.comp)}位` : null,
+      r.si != null ? `SI${rk.si(r.si)}位` : null,
+      r.cz != null ? `調教${rk.cz(r.cz)}位` : null,
+      r.ten != null ? `テン${rk.ten(r.ten)}位` : null,
+      r.kyaku,
+    ].filter(Boolean).join('・');
+    return `<tr>
+      <td style="font-size:16px">${r.mark || ''}</td>
+      <td><span class="waku w${e.waku || 1}">${e.waku ?? ''}</span></td>
+      <td>${e.umaban ?? ''}</td>
+      <td class="l"><b>${esc(e.horse_name)}</b></td>
+      <td class="num ${r.mark === '◎' ? 'best' : ''}">${r.score != null ? (50 + r.score * 10).toFixed(1) : '-'}</td>
+      <td class="num">${r.comp != null ? r.comp.toFixed(1) : '-'}</td>
+      <td class="num">${r.si != null ? r.si.toFixed(0) : '-'}</td>
+      <td class="num">${r.cz != null ? r.cz.toFixed(1) : '-'}</td>
+      <td class="num">${e.win_odds ?? '-'}${e.pop != null ? `(${e.pop})` : ''}</td>
+      <td>${r.myomi ? '💰' : ''}</td>
+      <td class="small">${esc(konkyo)}</td>
+    </tr>`;
+  }).join('');
+
+  return raceHeaderHtml(raceMeta) + `
+  <div class="note">直近の馬場: ${recentBias || 'データなし'}</div>
+  <div class="card"><div class="tablewrap">
+    <table>
+      <tr><th>印</th><th>枠</th><th>番</th><th>馬名</th><th>総合</th><th>指数</th><th>SI</th><th>調教</th><th>単勝(人気)</th><th>妙味</th><th>根拠</th></tr>
+      ${rows}
+    </table>
+  </div>
+  <div class="legend">総合 = 指数45%＋スピード指数30%＋調教偏差15%＋テン偏差10%（レース内相対評価）。過去4シーズンの検証: ◎の勝率37.0%・複勝率69.7%。💰 = スピード指数1位×4番人気以下（検証で単勝回収率108%）。オッズは取得時点のもの。</div></div>`;
 }
 
 async function renderRaceView() {
@@ -523,7 +669,9 @@ async function renderRaceView() {
       const ids = entries.map((e) => e.horse_id).filter(Boolean);
       const history = await state.provider.loadHistory(ids);
       if (state.statsPromise) await state.statsPromise;  // 指数計算に基準タイムが要る
-      $('raceView').innerHTML = syutubaHtml(raceMeta, entries, cyokyo, history);
+      $('raceView').innerHTML = state.sub === 'yosou'
+        ? yosouHtml(raceMeta, entries, cyokyo, history)
+        : syutubaHtml(raceMeta, entries, cyokyo, history);
     }
   } catch (e) {
     $('raceView').innerHTML = `<div class="empty">読み込み失敗: ${esc(e.message)}</div>`;
@@ -533,6 +681,41 @@ async function renderRaceView() {
 // ============================================================
 // 分析ビュー
 // ============================================================
+// 予想AIの運用成績（chihou_meta → ローカルの順で取得）
+async function loadRecord() {
+  try {
+    const rows = await sbGet('chihou_meta?key=eq.monbetsu_record&select=value');
+    if (rows.length) return rows[0].value;
+  } catch (e) { /* 次へ */ }
+  try { return await jsonGet('data/yosou_record.json'); } catch (e) { return null; }
+}
+
+function recordHtml(rec) {
+  if (!rec) return '';
+  const o = rec.overall;
+  const pct = (a, b) => (b ? `${(a / b * 100).toFixed(1)}%` : '-');
+  const roi = (ret, n) => (n ? `${(ret / (n * 100) * 100).toFixed(1)}%` : '-');
+  const months = rec.monthly.slice().reverse().slice(0, 13);
+  const rows = months.map((m) => `<tr>
+    <td>${m.ym}</td><td class="num">${m.races}</td>
+    <td class="num">${pct(m.hon_win, m.races)}</td><td class="num">${pct(m.hon_top3, m.races)}</td>
+    <td class="num ${m.hon_ret >= m.races * 100 ? 'best' : ''}">${roi(m.hon_ret, m.races)}</td>
+    <td class="num">${m.myo_bets}</td>
+    <td class="num ${m.myo_ret >= m.myo_bets * 100 && m.myo_bets ? 'best' : ''}">${roi(m.myo_ret, m.myo_bets)}</td>
+  </tr>`).join('');
+  return `
+  <h3 class="sec">🎯 予想AIの運用成績（全過去レースでの答え合わせ・各レース前情報のみ使用）</h3>
+  <div class="card tablewrap">
+    <div class="note">通算: ◎ ${o.races}Rで勝率 ${pct(o.hon_win, o.races)}・複勝率 ${pct(o.hon_top3, o.races)}・単勝回収率 ${roi(o.hon_ret, o.races)}
+    ／ 💰妙味ゾーン ${o.myo_bets}Rで複勝率 ${pct(o.myo_top3, o.myo_bets)}・<b>単勝回収率 ${roi(o.myo_ret, o.myo_bets)}</b></div>
+    <table>
+      <tr><th>月</th><th>R数</th><th>◎勝率</th><th>◎複勝率</th><th>◎単勝回収</th><th>💰対象</th><th>💰単勝回収</th></tr>
+      ${rows}
+    </table>
+    <div class="legend">直近13ヶ月を表示。緑=回収率100%超え。💰=スピード指数1位×4番人気以下の単勝。</div>
+  </div>`;
+}
+
 function analysisHtml(st) {
   if (!st) return '<div class="empty">統計データがありません（scraper/build_stats.py --push を実行してください）</div>';
   const rateBar = (r) => `${(r * 100).toFixed(1)}%`;
@@ -611,7 +794,67 @@ function analysisHtml(st) {
 
 async function renderAnalysis() {
   if (state.statsPromise) await state.statsPromise;
-  $('analysisRoot').innerHTML = analysisHtml(state.stats);
+  if (state.record === undefined) state.record = await loadRecord();
+  $('analysisRoot').innerHTML = recordHtml(state.record) + analysisHtml(state.stats);
+}
+
+// ============================================================
+// 調教ビュー（坂路タイムランキング）
+// ============================================================
+const cyokyoState = { data: null, date: null, youbi: '全' };
+
+async function renderCyokyo() {
+  const root = $('cyokyoRoot');
+  if (!cyokyoState.data) {
+    root.innerHTML = '<div class="empty">読み込み中…（調教データ 約13MB）</div>';
+    try { cyokyoState.data = await jsonGet('data/cyokyo_works.json'); }
+    catch (e) {
+      root.innerHTML = `<div class="empty">調教データを読み込めませんでした（${esc(e.message)}）。<br>
+        ローカルサーバ（localhost:3020）経由で開いているか確認してください。公開サイトでは調教一覧は未対応です。<br><br>
+        <button onclick="renderCyokyo()">↻ 再試行</button></div>`;
+      return;
+    }
+  }
+  const all = cyokyoState.data;
+  const youbis = ['全', '月', '火', '水', '木', '金', '土', '日'];
+  const dateKeys = Object.keys(all.dates);
+  const youbiOf = (d) => (all.dates[d][0] || {}).youbi || '';
+  const filtered = dateKeys.filter((d) => cyokyoState.youbi === '全' || youbiOf(d) === cyokyoState.youbi).slice(0, 28);
+  if (!cyokyoState.date || !filtered.includes(cyokyoState.date)) cyokyoState.date = filtered[0];
+
+  const hb = all.base;
+  const hensachi = (t3) => (hb && hb.std ? 50 + 10 * (hb.mean - t3) / hb.std : null);
+  const works = all.dates[cyokyoState.date] || [];
+  const hanro = works.filter((w) => w.hanro && w.t3 != null);
+  const others = works.length - hanro.length;
+  const rows = hanro.map((w, i) => `<tr>
+    <td>${i + 1}</td>
+    <td class="l">${esc(w.name)}${w.pb ? ' <span class="badge arrow-up">自己ベスト</span>' : ''}</td>
+    <td>${esc(w.course)}</td>
+    <td>${esc(w.baba || '')}</td>
+    <td class="num">${w.t4 != null ? w.t4.toFixed(1) : ''}</td>
+    <td class="num ${i < 3 ? 'f1' : ''}">${w.t3.toFixed(1)}</td>
+    <td class="num">${hensachi(w.t3) != null ? hensachi(w.t3).toFixed(1) : ''}</td>
+    <td class="num">${w.t2 != null ? w.t2.toFixed(1) : ''}</td>
+    <td class="num">${w.t1 != null ? w.t1.toFixed(1) : ''}</td>
+    <td>${esc(w.ashiiro || '')}</td>
+    <td class="l">${esc(w.tanpyo || '')}</td>
+  </tr>`).join('');
+
+  root.innerHTML = `
+  <div class="controls">曜日
+    <div class="racetabs">${youbis.map((y) => `<button data-youbi="${y}" class="${cyokyoState.youbi === y ? 'active' : ''}">${y}</button>`).join('')}</div>
+  </div>
+  <div class="controls">調教日（直近${filtered.length}日）
+    <div class="racetabs">${filtered.map((d) => `<button data-cdate="${d}" class="${cyokyoState.date === d ? 'active' : ''}" style="width:auto;padding:6px 8px">${d.slice(5)}(${youbiOf(d)})</button>`).join('')}</div>
+  </div>
+  <div class="card tablewrap">
+    <table>
+      <tr><th>#</th><th>馬名</th><th>コース</th><th>馬場</th><th>4F</th><th>3F</th><th>偏差値</th><th>2F</th><th>1F</th><th>脚色</th><th>短評</th></tr>
+      ${rows || '<tr><td colspan="11">この日の坂路追切はありません</td></tr>'}
+    </table>
+    <div class="legend">${esc(cyokyoState.date)} の坂路追切 ${hanro.length}本（坂路以外 他${others}本は除外）。<span class="sw f"></span> 3F上位3本。偏差値は全期間の坂路3F分布（${hb ? `${hb.mean}±${hb.std}秒・n=${hb.n.toLocaleString()}本` : '-'}）基準・50が平均。</div>
+  </div>`;
 }
 
 // ============================================================
@@ -621,15 +864,17 @@ function switchView(v) {
   state.view = v;
   $('raceRoot').hidden = v !== 'race';
   $('analysisRoot').hidden = v !== 'analysis';
+  $('cyokyoRoot').hidden = v !== 'cyokyo';
   for (const b of $('viewTabs').querySelectorAll('button'))
     b.classList.toggle('active', b.dataset.view === v);
   if (v === 'analysis') renderAnalysis();
+  if (v === 'cyokyo') renderCyokyo();
 }
 
 async function selectRace(raceId, sub) {
   state.raceId = raceId;
   const meta = (state.dates[state.date] || []).find((r) => r.race_id === raceId);
-  state.sub = sub || (meta && meta.entries_only ? 'syutuba' : state.sub || 'seiseki');
+  state.sub = sub || (meta && meta.entries_only ? 'yosou' : state.sub || 'seiseki');
   renderTabs();
   renderSubTabs();
   location.hash = `${state.date}/${raceId}`;
@@ -680,6 +925,12 @@ async function init() {
   $('viewTabs').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-view]');
     if (b) switchView(b.dataset.view);
+  });
+  $('cyokyoRoot').addEventListener('click', (e) => {
+    const y = e.target.closest('button[data-youbi]');
+    if (y) { cyokyoState.youbi = y.dataset.youbi; renderCyokyo(); return; }
+    const d = e.target.closest('button[data-cdate]');
+    if (d) { cyokyoState.date = d.dataset.cdate; renderCyokyo(); }
   });
 
   const dates = Object.keys(state.dates);
