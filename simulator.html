@@ -70,7 +70,8 @@ td.l { text-align: left; }
 <header>
   <h1>門別 展開シミュレータ <span class="badge">試作版</span></h1>
   <span class="badge" id="raceLabel">-</span>
-  <button onclick="location.href='index.html'" style="margin-left:auto">📋 ビューアへ戻る</button>
+  <!-- ローカルは index.html＝門別ビューア / 公開サイトは monbetsu.html（index.htmlは高知ビューア） -->
+  <button onclick="location.href=(location.hostname==='localhost'||location.hostname==='127.0.0.1')?'index.html':'monbetsu.html'" style="margin-left:auto">📋 ビューアへ戻る</button>
 </header>
 <main>
   <div class="controls">
