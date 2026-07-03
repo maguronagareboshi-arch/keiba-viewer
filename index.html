@@ -1066,9 +1066,16 @@ const KV_APP_CSS = [
       '.kv-sim-iframe{width:100%;height:min(76vh,760px);border:none;border-radius:18px;background:#0a0f1e;display:block}',
       // ── レースタブの上部固定（2026-07-02）：スクロールしてもタブバーがヘッダー直下に吸着 ──
       '#race-tabs-section.sidebar-mode{position:sticky;top:calc(var(--kv-header-h,88px) - 2px);z-index:50;box-shadow:0 3px 12px rgba(15,23,42,.18)}',
-      '@media(max-width:640px){#race-tabs-section.sidebar-mode .race-tabs{flex-wrap:nowrap!important;overflow-x:auto;scrollbar-width:none}}',
-      // ── スマホ：レースヘッダーを折返し許可（2026-07-02）映像ボタンが下段に落ち、メタ情報が横に流れる ──
-      '@media(max-width:640px){.race-title-row{flex-wrap:wrap!important}.race-title-row>div:first-child{min-width:240px!important}.race-title-row .race-title-info{flex:1 1 auto!important}.race-badge{min-width:44px;height:44px;font-size:15px}.race-name{font-size:17px}}',
+      // スマホ：レースタブは折り返して全レースを一覧表示（横スクロールだと4Rまでしか見えず気づかれない）。多段sticky回避のため通常配置。
+      '@media(max-width:640px){#race-tabs-section.sidebar-mode{position:static!important;box-shadow:none}#race-tabs-section.sidebar-mode .race-tabs{flex-wrap:wrap!important;overflow-x:visible;gap:5px}#race-tabs-section.sidebar-mode .race-tab{flex:0 0 auto}}',
+      // レース名＋映像ボタンを同じ行に（名前左・映像ボタン右上）
+      '.race-name-row{display:flex;align-items:center;gap:8px;justify-content:space-between;margin-bottom:5px}',
+      '.race-name-row .race-name{flex:1;min-width:0;margin-bottom:0;overflow:hidden;text-overflow:ellipsis}',
+      '.race-name-row .btn-movie{flex-shrink:0;padding:5px 10px;font-size:12px}',
+      // ── スマホ：レースヘッダー（2026-07-04）メタは横流れ・映像は名前の右・クイックスタッツは3列グリッドで整列 ──
+      '@media(max-width:640px){.race-badge{min-width:44px;height:44px;font-size:15px}.race-name{font-size:16px}.race-name-row .btn-movie span{display:none}.race-name-row .btn-movie{padding:6px 9px}',
+      '.race-quick-stats{display:grid!important;grid-template-columns:repeat(3,1fr);gap:1px 0;margin:0 -22px!important;padding:8px 8px 10px!important}',
+      '.rqs-item{border-right:none!important;border-bottom:1px solid #f0f4fa;padding:5px 4px!important}.rqs-item:nth-child(3n){border-right:none}.rqs-item:nth-last-child(-n+3){border-bottom:none}}',
       // ── スマホ：ビュータブバー（出馬表/能力表/予想AI/ランキング/カード）を横スクロール化し、
       //    コメント操作を下段へ（右側260px固定領域がタブを画面外に押し出していた） ──
       '@media(max-width:640px){[id^="kv-tabbar-"]{height:auto!important;overflow:visible!important}[id^="kv-tabbar-"]>div:first-child{padding-right:0!important;height:44px;overflow-x:auto;scrollbar-width:none}[id^="kv-tabbar-"]>div:first-child::-webkit-scrollbar{display:none}[id^="kv-tabbar-"] button[id^="tab-btn-"]{padding:0 12px!important;font-size:12px!important}[id^="deban-controls-"]{position:static!important;height:auto!important;border-left:none!important;justify-content:flex-end;padding:6px 10px!important;border-top:1px solid #e8edf5}}',
@@ -2742,14 +2749,16 @@ function renderRaceContent(raceNo) {
   const _movieUrl = buildMovieUrl(raceInfo.raceDate, raceNo, raceInfo.babaCode);
   const _hasMovie  = !!_movieUrl;
   hCard.innerHTML=`
-    <div class="race-title-row" style="justify-content:space-between;flex-wrap:nowrap;">
+    <div class="race-title-row" style="flex-wrap:nowrap;">
       <div style="display:flex;align-items:flex-start;gap:14px;min-width:0;flex:1;">
         <div class="race-badge">${raceNo}<span style="font-size:10px;font-weight:600;opacity:.8;display:block;letter-spacing:0;margin-top:1px;">R</span></div>
-        <div class="race-title-info" style="min-width:0;">
-          <h2 class="race-name">${raceInfo.raceName}</h2>
+        <div class="race-title-info" style="min-width:0;flex:1;">
+          <div class="race-name-row">
+            <h2 class="race-name">${raceInfo.raceName}</h2>
+            ${_hasMovie ? `<button id="movie-btn-${raceNo}" class="btn btn-movie btn-sm" onclick="toggleMoviePanel(${raceNo})" style="flex-shrink:0;"><i class="fas fa-video"></i> 映像</button>` : ''}
+          </div>
           <div class="race-meta">
             <span><i class="fas fa-calendar-alt"></i> ${raceInfo.raceDate}</span>
-            <span><i class="fas fa-map-marker-alt"></i> ${getBabaName(raceInfo.babaCode)}</span>
             <span><i class="fas fa-horse"></i> ${horses.length}頭</span>
             ${raceInfo.distance ? distanceBadgeHtml(raceInfo.distance) : ''}
             ${raceInfo.trackCond?`<span class="track-cond-badge track-cond-${trackCondClass(raceInfo.trackCond)}"><i class="fas fa-cloud-rain"></i> ${raceInfo.trackCond}</span>`:''}
@@ -2758,7 +2767,6 @@ function renderRaceContent(raceNo) {
           </div>
         </div>
       </div>
-      ${_hasMovie ? `<button id="movie-btn-${raceNo}" class="btn btn-movie btn-sm" onclick="toggleMoviePanel(${raceNo})" style="flex-shrink:0;margin-top:2px;"><i class="fas fa-video"></i> レース映像</button>` : ''}
     </div>
     <!-- クイックスタッツ帯 -->
     <div class="race-quick-stats">
@@ -3158,6 +3166,8 @@ async function fetchLiveOddsBtn(raceNo) {
   try {
     const n = await fetchLiveOdds(raceNo);
     renderHorseRows(raceNo, allRacesData[raceNo].horses);
+    // 表を再構築するとコメント行が消えるので、保存済みコメントを再描画（オッズ取得でコメントが消えるバグ修正）
+    if (allRacesData[raceNo]?.horses.some(h => h.postComment)) _renderCommentsInTable(raceNo);
     if (btn) btn.innerHTML = `💹 更新済（${n}頭）`;
   } catch(e) {
     if (btn) btn.innerHTML = '💹 未発売/取得失敗';
@@ -3525,8 +3535,9 @@ function _updateFinishTime(raceNo) {
 /**
  * 前半3Fの自動補完（1300/1400/1600m・未入力レースのみ）
  *   1400m: 決着タイム − 上がり4F（前3F＋後4F＝7Fの厳密な逆算）
- *   1300m: 決着タイム − (上がり4F＋上がり3F)÷2（前2.5F＋中間0.5F推定。
- *          手入力済み38件との突合で平均差+0.14秒・最大0.3秒を確認済み）
+ *   1300m: (決着タイム − 上がり4F)で前半2.5Fを出し、残り100m分＝(上がり4F − 上がり3F)÷2を加算。
+ *          式を整理すると 決着タイム − (上がり4F + 上がり3F)/2 と同値（下の実装はこの整理後の形）。
+ *          手入力済み38件との突合で平均差+0.14秒・最大0.3秒を確認済み。
  *   1600m: 決着タイム − 上がり4F − 4F目仮置き（良14.5→不良13.5秒。
  *          前半800mの内訳が計測されないため推定精度は±0.3秒程度）
  * ローカルIDBのみ書き込み（サーバーへは保存操作時に反映）。
@@ -3586,7 +3597,9 @@ function _updateRqsStrip(raceNo, f3, ag3, pace) {
   const _set = (id, val, paceClass) => {
     const el = document.getElementById(id);
     if (!el) return;
-    if (val != null && !isNaN(val) && val !== '') {
+    // 数値のみNaN判定（ペース等の文字列は isNaN('スロー')=true で弾かれていたのを修正）
+    const ok = val != null && val !== '' && !(typeof val === 'number' && isNaN(val));
+    if (ok) {
       el.textContent = typeof val === 'number' ? val.toFixed(1) : val;
       el.className = 'rqs-val' + (paceClass ? ' ' + paceClass : '');
     } else {
@@ -6019,7 +6032,7 @@ function renderF3Averages() {
   }).join('');
   body.innerHTML = distSec + `<div class="f3avg-note">
     保存データから自動計算（現在 ${totalN}R）。データが増えるたびに開くだけで最新の平均に更新されます。薄い表示＝5レース未満（参考値）。<br>
-    前半3Fの由来：実測値＋自動補完（1400m＝決着タイム−上がり4F／1300m＝決着タイム−(上がり4F＋上がり3F)÷2／1600m＝決着タイム−上がり4F−4F目仮置き 良14.5〜不良13.5秒）。1600mは前半800mの内訳が計測されないため、稍重の逆転など±0.3秒程度の不確実性が残ります。</div>`;
+    前半3Fの由来：実測値＋自動補完（1400m＝決着タイム−上がり4F／1300m＝(決着タイム−上がり4F)で前半2.5Fを出し、残り100m分＝(上がり4F−上がり3F)÷2を加算／1600m＝決着タイム−上がり4F−4F目仮置き 良14.5〜不良13.5秒）。1600mは前半800mの内訳が計測されないため、稍重の逆転など±0.3秒程度の不確実性が残ります。</div>`;
 }
 
 function renderTrackTrend() {
