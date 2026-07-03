@@ -787,7 +787,11 @@ async function renderRaceView() {
       ]);
       const raceMeta = Object.keys(raceData.race || {}).length > 1 ? raceData.race : { ...meta, date: state.date };
       const ids = entries.map((e) => e.horse_id).filter(Boolean);
-      const history = await state.provider.loadHistory(ids);
+      const rawHistory = await state.provider.loadHistory(ids);
+      // 振り返り防止: このレースの日付以降の走りは予想に使わない（未来予想には影響なし）
+      const tgtDate = raceMeta.date || raceMeta.race_date || state.date;
+      const history = {};
+      for (const id in rawHistory) history[id] = rawHistory[id].filter((r) => !r.date || !tgtDate || r.date < tgtDate);
       if (state.statsPromise) await state.statsPromise;  // 指数計算に基準タイムが要る
       $('raceView').innerHTML = state.sub === 'yosou'
         ? yosouHtml(raceMeta, entries, cyokyo, history, nouryoku)
