@@ -806,13 +806,19 @@ const cyokyoState = { data: null, date: null, youbi: '全' };
 async function renderCyokyo() {
   const root = $('cyokyoRoot');
   if (!cyokyoState.data) {
-    root.innerHTML = '<div class="empty">読み込み中…（調教データ 約13MB）</div>';
-    try { cyokyoState.data = await jsonGet('data/cyokyo_works.json'); }
-    catch (e) {
-      root.innerHTML = `<div class="empty">調教データを読み込めませんでした（${esc(e.message)}）。<br>
-        ローカルサーバ（localhost:3020）経由で開いているか確認してください。公開サイトでは調教一覧は未対応です。<br><br>
-        <button onclick="renderCyokyo()">↻ 再試行</button></div>`;
-      return;
+    root.innerHTML = '<div class="empty">読み込み中…（調教データ）</div>';
+    // Supabase（直近200日）→ ローカル全期間 の順で取得
+    try {
+      const rows = await sbGet('chihou_meta?key=eq.monbetsu_cyokyo&select=value');
+      if (rows.length && rows[0].value && rows[0].value.dates) cyokyoState.data = rows[0].value;
+    } catch (e) { /* 次へ */ }
+    if (!cyokyoState.data) {
+      try { cyokyoState.data = await jsonGet('data/cyokyo_works.json'); }
+      catch (e) {
+        root.innerHTML = `<div class="empty">調教データを読み込めませんでした（${esc(e.message)}）。<br>
+          <button onclick="renderCyokyo()">↻ 再試行</button></div>`;
+        return;
+      }
     }
   }
   const all = cyokyoState.data;
