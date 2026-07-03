@@ -1239,6 +1239,19 @@ const KV_APP_CSS = [
     </div>
   </section>
 
+  <!-- 月間一括取得（管理者専用） -->
+  <section class="search-card admin-only" id="bulk-fetch-card">
+    <h2 class="section-title"><i class="fas fa-calendar-alt"></i> 月間一括取得＆保存（管理者）</h2>
+    <p style="font-size:12px;color:#6b7280;margin-bottom:10px;line-height:1.7">指定した月の高知の全開催日・全レースを再取得し、<b>単勝オッズ・人気・着順・コメント</b>まで含めてサーバーに保存します。古いレースのオッズ欠落もこれで埋まります。データ量が多いので1か月ずつ実行してください（1か月あたり数分かかります）。</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <input type="month" id="bulk-month" class="form-input" style="max-width:170px">
+      <label style="display:flex;align-items:center;gap:5px;font-size:13px;color:#374151;cursor:pointer"><input type="checkbox" id="bulk-comments" checked style="width:15px;height:15px;accent-color:#1a56a0"> コメントも取得</label>
+      <button type="button" id="bulk-start-btn" class="btn btn-primary" onclick="bulkFetchMonth()"><i class="fas fa-cloud-download-alt"></i> この月を一括取得＆保存</button>
+      <button type="button" id="bulk-cancel-btn" class="btn btn-secondary hidden" onclick="bulkCancel()"><i class="fas fa-stop"></i> 中止</button>
+    </div>
+    <div id="bulk-progress" style="font-size:13px;color:#374151;min-height:20px;line-height:1.7"></div>
+  </section>
+
   <!-- 進捗バー -->
   <div id="progress-section" class="progress-section hidden">
     <div class="progress-header">
@@ -5611,6 +5624,145 @@ async function saveAllData() {
   loadSavedData();
   if(typeof initAnalysisDateSelect==='function') initAnalysisDateSelect();
 }
+
+// ============================================================
+// 月間一括取得＆保存（管理者）
+// 指定月の全開催日・全レースを再取得（成績＝単勝オッズ・人気込み）＋コメント取得してSupabase保存。
+// 古いレースはオッズ抽出前に保存されオッズ欠落 → 再取得で埋まる。データ量が多いため月単位で回す。
+// ============================================================
+let _bulkCancel = false;
+const _bulkSleep = ms => new Promise(r => setTimeout(r, ms));
+
+/** 1レース分（parsed）を直接Supabase＋IDBへ保存（グローバルに依存しないヘッドレス版）。戻り値=保存頭数 */
+async function _saveRaceDirect(date, baba, rn, parsed) {
+  const info = parsed.raceInfo || {};
+  const raceId = `race_${baba}_${date}_${rn}`;
+  const raceRow = { race_date:date, race_no:rn, baba_code:baba, race_name:info.raceName||'', distance:info.distance||'', race_class:info.raceClass||'', track_cond:info.trackCond||'', first3f:info.first3f||'', agari4f:info.agari4f||'', agari3f_race:info.agari3f_race||'', pace_type:info.paceType||'', memo:info.memo||'', lap_times:'' };
+  await apiUpsert('keiba_races', raceId, raceRow);
+  lsWrite(raceId, { type:'race', ...raceRow, paceType:info.paceType||'', lapTimes:null, _apiSaved:true, savedAt:new Date().toISOString() });
+  let hc = 0;
+  for (const h of (parsed.horses||[])) {
+    if (h.umaBan == null) continue;
+    const horseId = `${baba}_${date}_${rn}_${h.umaBan}`;
+    const horseRow = { race_date:date, race_no:rn, baba_code:baba, uma_ban:h.umaBan, waku_ban:h.wakuBan||'', horse_name:h.horseName||'', belong:h.belong||'', sex_age:h.sexAge||'', kinryo:h.kinryo||'', jockey:h.jockey||'', trainer:h.trainer||'', weight:h.weight||'', chakujun:h.chakujun||'', ninki:h.ninki||'', odds:h.odds||'', time:h.time||'', diff:h.diff||'', agari3f:h.agari3f||'', corner:h.corner||'', first3f:h.first3f||'', pace_type:h.paceType||'', mukae_shoumen:h.mukaeShoumen||'', shoumen_straight:h.shoumenStraight||'', post_comment:h.postComment||'', lineage_login_code:h.lineageLoginCode||'' };
+    await apiUpsert('keiba_horses', horseId, horseRow);
+    lsWrite(horseId, { type:'horse', chakujun:horseRow.chakujun, wakuBan:horseRow.waku_ban, horseName:horseRow.horse_name, belong:horseRow.belong, sexAge:horseRow.sex_age, kinryo:horseRow.kinryo, jockey:horseRow.jockey, trainer:horseRow.trainer, weight:horseRow.weight, ninki:horseRow.ninki, odds:horseRow.odds, time:horseRow.time, diff:horseRow.diff, agari3f:horseRow.agari3f, corner:horseRow.corner, first3f:horseRow.first3f, paceType:horseRow.pace_type, mukaeShoumen:horseRow.mukae_shoumen, shoumenStraight:horseRow.shoumen_straight, postComment:h.postComment||'', lineageLoginCode:h.lineageLoginCode||'', savedAt:new Date().toISOString() });
+    hc++;
+  }
+  return hc;
+}
+
+/**
+ * 払戻ページ(RefundMoneyList)から日別の勝ち馬・複勝馬の単勝/複勝オッズを取得。
+ * 古いレースは成績ページの単勝オッズ列が空になるため、勝ち馬オッズはここから復元する。
+ * 戻り値: { raceNo: { win:{umaBan:odds}, place:{umaBan:odds} } }
+ */
+async function _fetchRefundOddsDay(date) {
+  const out = {};
+  let html;
+  try { html = await fetchHtmlWithProxy(`https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RefundMoneyList?k_raceDate=${encodeURIComponent(date)}&k_babaCode=31`, 15000); }
+  catch(e) { return out; }
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const heads = [...doc.querySelectorAll('h1,h2,h3,h4')].map(e => e.textContent.replace(/\s+/g, '')).filter(t => /^\d{1,2}R/.test(t)).map(t => parseInt(t));
+  const tables = [...doc.querySelectorAll('table')];
+  let raceIdx = -1;
+  for (const t of tables) {
+    const first = (t.querySelector('th,td')?.textContent || '').replace(/\s+/g, '');
+    if (first === '着順') { raceIdx++; continue; }
+    if (first !== '単勝') continue;
+    const rno = heads[raceIdx];
+    if (rno == null) continue;
+    const rec = out[rno] || { win: {}, place: {} };
+    let mode = '';
+    for (const tr of [...t.querySelectorAll('tr')]) {
+      const c = [...tr.querySelectorAll('th,td')].map(x => (x.textContent || '').replace(/\s+/g, ''));
+      if (!c.length) continue;
+      if (c[0]) mode = c[0];
+      if (mode !== '単勝' && mode !== '複勝') continue;
+      if (!/^\d+$/.test(c[1] || '')) continue;
+      const uma = parseInt(c[1]);
+      const pay = parseFloat((c[2] || '').replace(/[円,]/g, ''));
+      if (!(pay > 0)) continue;
+      const odds = +(pay / 100).toFixed(1);
+      if (mode === '単勝') rec.win[uma] = odds; else rec.place[uma] = odds;
+    }
+    out[rno] = rec;
+  }
+  return out;
+}
+
+function _bulkLog(html) { const el = document.getElementById('bulk-progress'); if (el) el.innerHTML = html; }
+
+async function bulkFetchMonth() {
+  if (!isAdminMode()) { alert('月間一括取得は管理者のみ可能です。'); return; }
+  const ym = document.getElementById('bulk-month')?.value; // "2025-12"
+  if (!ym) { alert('年月を選択してください。'); return; }
+  const withComments = document.getElementById('bulk-comments')?.checked;
+  const [y, m] = ym.split('-').map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const startBtn = document.getElementById('bulk-start-btn');
+  const cancelBtn = document.getElementById('bulk-cancel-btn');
+  _bulkCancel = false;
+  if (startBtn) startBtn.disabled = true;
+  if (cancelBtn) cancelBtn.classList.remove('hidden');
+  _proxyHealth.forEach(h => { h.blockedUntil = 0; });
+
+  try {
+    // ① 開催日を探す（各日をRaceListで軽量プローブ）
+    const raceDays = [];
+    for (let d = 1; d <= daysInMonth && !_bulkCancel; d++) {
+      const date = `${y}/${String(m).padStart(2,'0')}/${String(d).padStart(2,'0')}`;
+      _bulkLog(`<i class="fas fa-spinner fa-spin"></i> 開催日を確認中… ${d}/${daysInMonth}日（開催 ${raceDays.length}日発見）`);
+      let chk; try { chk = await checkRaceListExists(date, '31'); } catch(e) { chk = { exists:null }; }
+      if (chk.exists) raceDays.push({ date, raceNos: chk.raceNos });
+      await _bulkSleep(280);
+    }
+    if (_bulkCancel) { _bulkLog(`中止しました（開催日確認まで）。`); return; }
+    if (!raceDays.length) { _bulkLog(`${y}年${m}月に高知の開催は見つかりませんでした。`); return; }
+
+    // ② 各開催日・各レースを再取得＆保存
+    let savedR = 0, savedH = 0, cmt = 0, err = 0;
+    const totalRaces = raceDays.reduce((s, d) => s + d.raceNos.length, 0);
+    let processed = 0;
+    for (let i = 0; i < raceDays.length && !_bulkCancel; i++) {
+      const { date, raceNos } = raceDays[i];
+      // その日の払戻オッズを1回だけ取得（古いレースの単勝オッズ空欄を勝ち馬分だけ復元）
+      let refund = {}; try { refund = await _fetchRefundOddsDay(date); } catch(e) {}
+      await _bulkSleep(300);
+      for (const rn of raceNos) {
+        if (_bulkCancel) break;
+        processed++;
+        _bulkLog(`<i class="fas fa-download"></i> ${date} ${rn}R 取得中…<br><span style="font-size:11px;color:#6b7280">進捗 ${processed}/${totalRaces}R（${i+1}/${raceDays.length}日）／保存 ${savedR}R ${savedH}頭・コメント${cmt}件・エラー${err}</span>`);
+        try {
+          const parsed = await fetchOneRace(date, rn, '31');
+          if (!parsed || !parsed.horses || !parsed.horses.length) { err++; continue; }
+          // 成績ページのオッズが空なら払戻の勝ち馬オッズで補完
+          const rf = refund[rn];
+          if (rf) parsed.horses.forEach(h => { const u = parseInt(h.umaBan); if (!(parseFloat(h.odds) > 0) && rf.win[u] > 0) h.odds = String(rf.win[u]); });
+          if (withComments) {
+            try {
+              const cr = await fetchPostRaceComments(date, rn, parsed.horses.map(h => h.horseName));
+              if (cr && cr.map) { let n=0; parsed.horses.forEach(h => { if (cr.map[h.horseName]) { h.postComment = cr.map[h.horseName]; n++; } }); cmt += n; }
+            } catch(e) {}
+            await _bulkSleep(350);
+          }
+          const hc = await _saveRaceDirect(date, '31', rn, parsed);
+          savedR++; savedH += hc;
+        } catch(e) { err++; console.warn('[bulk]', date, rn, e); }
+        await _bulkSleep(400);
+      }
+    }
+    // first3f自動補完（今回保存分に効く）
+    try { backfillFirst3fFrom1400m(); backfillPaceLabels(); } catch(e) {}
+    loadSavedData();
+    if (typeof initAnalysisDateSelect === 'function') initAnalysisDateSelect();
+    _bulkLog(`${_bulkCancel ? '⏹ 中止しました。' : '✅ 完了！'} ${y}年${m}月：<b>${savedR}レース・${savedH}頭</b>を保存${withComments?`（コメント${cmt}件）`:''}${err?`／エラー${err}`:''}`);
+  } finally {
+    if (startBtn) startBtn.disabled = false;
+    if (cancelBtn) cancelBtn.classList.add('hidden');
+  }
+}
+function bulkCancel() { _bulkCancel = true; _bulkLog('⏳ 中止処理中…現在のレース完了後に停止します。'); }
 
 function getSavedRacePace(key){const d=lsRead()[key];if(!d)return null;return{first3f:d.first3f||'',agari4f:d.agari4f||'',agari3f_race:d.agari3f_race||'',paceType:d.paceType||d.pace_type||'',memo:d.memo||''};}
 function getSavedHorsePace(key){const d=lsRead()[key];if(!d)return null;return{first3f:d.first3f||'',paceType:d.paceType||d.pace_type||'',mukaeShoumen:d.mukaeShoumen||d.mukae_shoumen||'',shoumenStraight:d.shoumenStraight||d.shoumen_straight||''};}
