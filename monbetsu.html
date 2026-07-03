@@ -406,7 +406,9 @@ function daysBetween(d1, d2) {
 }
 const MODEL_FEATS = ['time_mean', 'time_best', 'time_last', 'f3_best', 'l3_best', 'n_runs',
   'days_off', 'dist_change', 'same_band_z', 'cls_up', 'cls_down', 'wt_change', 'draw_bias',
-  'jockey_r', 'trainer_r', 'trip_adj', 'exact_dist_r'];
+  'jockey_r', 'trainer_r', 'trip_adj', 'exact_dist_r', 'waku_rate'];
+const dbandOf = (d) => !d ? null : d <= 1000 ? '1000' : d <= 1100 ? '1100' : d <= 1200 ? '1200'
+  : d <= 1600 ? '15-16' : d <= 1700 ? '1700' : '1800+';
 
 // 予想対象レースでの各馬の予測スコア（高いほど勝ちやすい）
 function modelScore(e, history, race) {
@@ -454,6 +456,7 @@ function modelScore(e, history, race) {
       const exd = runs.slice(0, 8).filter((r) => r.dist === d && r.fin != null);
       return exd.length >= 2 ? exd.filter((r) => r.fin <= 3).length / exd.length : 0.28;
     })(),
+    waku_rate: (m.waku_r && m.waku_r[`${dbandOf(d)}|${e.waku}`]) ?? 0.28,  // 距離帯×枠の複勝率
   };
   let s = m.b;
   for (let i = 0; i < MODEL_FEATS.length; i++) {
@@ -656,7 +659,7 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku) {
 
   const rows = entries.map((e) => {
     const cyo = cyoByUma[e.umaban];
-    const works = (cyo && cyo.works) || [];
+    const works = ((cyo && cyo.works) || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     const runs = (history[e.horse_id] || []).filter((r) => r.race_id !== raceMeta.race_id).slice(0, 3);
     const h = hensachiOf(e.horse_id);
     const s = shisuOf(e.horse_id);
@@ -943,6 +946,26 @@ function analysisHtml(st) {
       <tr><th>ペース</th>${kyakus.map((k) => `<th>${k}</th>`).join('')}</tr>${rows}</table></div></div>`;
   }).join('');
 
+  // 枠別成績（距離帯別 複勝率）
+  const ws = st.waku_stats || {};
+  const wakuRows = bands.map((band) => {
+    const cells = [];
+    for (let w = 1; w <= 8; w++) {
+      const e = ws[`${band}|${w}`];
+      if (!e) { cells.push('<td>-</td>'); continue; }
+      const rates = [];
+      for (let x = 1; x <= 8; x++) if (ws[`${band}|${x}`]) rates.push(ws[`${band}|${x}`].rate);
+      const mean = rates.reduce((s, v) => s + v, 0) / rates.length;
+      const cls = e.rate >= mean + 0.03 ? 'bias-back' : e.rate <= mean - 0.03 ? 'bias-front' : '';
+      cells.push(`<td class="num ${cls}">${rateBar(e.rate)} <span class="kyaku">${e.n}</span></td>`);
+    }
+    return `<tr><td>${band}m</td>${cells.join('')}</tr>`;
+  }).join('');
+  const wakuTable = `<h3 class="sec">枠別成績（距離帯×枠番・複勝率）</h3>
+    <div class="card tablewrap"><table>
+      <tr><th>距離</th>${[1, 2, 3, 4, 5, 6, 7, 8].map((w) => `<th>${w}枠</th>`).join('')}</tr>${wakuRows}
+    </table><div class="legend">青=その距離で平均+3%以上有利／オレンジ=平均-3%以上不利。門別1000mは内枠不利の傾向。</div></div>`;
+
   // 基準タイム（クラス別。'全'はフォールバック用なので非表示）
   const clsOrder = { '2歳': 0, '3歳': 1, '3歳以上': 2 };
   const btKeys = Object.keys(st.base_times)
@@ -978,6 +1001,7 @@ function analysisHtml(st) {
     ${biasRows}
   </table></div>
   <div class="grid2">${pkTables}</div>
+  ${wakuTable}
   <h3 class="sec">基準タイム（距離×クラス×馬場・平均±標準偏差 → 偏差値/指数の土台）</h3>
   <div class="card tablewrap"><table>
     <tr><th>距離</th><th>クラス</th><th>馬場</th><th>前半3F</th><th>上り3F</th><th>走破タイム</th><th>N</th></tr>${btRows}
@@ -1139,9 +1163,23 @@ function renderHorseModal(results, cyokyo) {
   const bestLine = bestW
     ? `坂路3F 自己ベスト <b>${bestW.times.t_half.toFixed(1)}秒</b>（${mmdd(bestW.date)}${bestW.youbi ? `(${bestW.youbi})` : ''} ${esc(bestW.course)}）`
     : '坂路の追切データなし';
+  // 各レースの最終追い（そのレース直前で最も新しい追切日）を特定
+  const finalDates = {};   // 追切日 → その追切が最終追いだったレース日リスト
+  const workDates = [...new Set(works.map((w) => w.date).filter(Boolean))].sort();
+  for (const r of results) {
+    const rd = (r.chihou_races || {}).race_date;
+    if (!rd) continue;
+    let last = null;
+    for (const wd of workDates) if (wd < rd) last = wd; else break;
+    if (last && (new Date(rd) - new Date(last)) <= 20 * 86400000) {
+      (finalDates[last] = finalDates[last] || []).push(rd);
+    }
+  }
   const cyoRows = works.slice(0, 20).map((w) => {
     const t = w.times || {};
-    return `<tr><td>${mmdd(w.date)}${w.youbi ? `(${w.youbi})` : ''}</td><td>${esc(w.course || '')}</td>
+    const fd = finalDates[w.date];
+    const finalBadge = fd ? ` <span class="badge arrow-up">最終追い→${mmdd(fd[fd.length - 1])}</span>` : '';
+    return `<tr><td>${mmdd(w.date)}${w.youbi ? `(${w.youbi})` : ''}${finalBadge}</td><td>${esc(w.course || '')}</td>
       <td>${esc(w.baba || '')}</td>
       <td class="num">${t.t_5f != null ? t.t_5f.toFixed(1) : ''}</td>
       <td class="num">${t.t_half != null ? t.t_half.toFixed(1) : ''}</td>
