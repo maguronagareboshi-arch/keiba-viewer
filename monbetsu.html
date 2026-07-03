@@ -59,6 +59,7 @@
   }
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }  /* display:flex等のクラス指定にhidden属性が負けないよう保証 */
 body { margin: 0; background: var(--bg); color: var(--text);
   font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo, system-ui, sans-serif; font-size: 14px; }
 header { display: flex; align-items: center; gap: 10px; padding: 8px 14px;
