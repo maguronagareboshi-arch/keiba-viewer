@@ -91,7 +91,8 @@ td.l { text-align: left; }
       <canvas id="strip" width="900" height="100"></canvas>
       <div class="note">↑ 拡大ビュー: 1馬身（2.4m）単位の正確な差で表示（目盛り5馬身刻み・最大22px/馬身）。先頭の位置は走行方向に連動 — 向正面では右端、正面（ゴール前）では左端に自動反転。ゴールが近づくと赤線が現れます。</div>
       <div class="note">門別競馬場実寸比: 1周1,600m(外)/1,376m(内)・直線330m(外)/218m(内)・右回り・1200m/2000mは引き込み線から発走。
-      過去5走のテン3F・上がり3Fを<b>距離×馬場×クラスの基準タイムに対する偏差値</b>に換算し、この距離の標準タイム±能力差で走らせる（距離延長で生スピードを持ち込まない）。※試作: 道中のペース配分・馬群の駆け引き・スタミナは未実装</div>
+      過去5走のテン3F・上がり3Fを<b>距離×馬場×クラスの基準タイムに対する偏差値</b>に換算し、この距離の標準タイム±能力差で走らせる（距離延長で生スピードを持ち込まない）。
+      <b>展開モデル</b>: 出走各馬のテン速度から先行争い→<b>ペース</b>（ハイ/ミドル/スロー）を推定し、ハイでは先行馬が上がりで失速・スローは前残り、距離延長で先行馬ほど<b>スタミナ</b>消耗、後方馬は外を回るロス、を反映（門別＝前有利がベース）。</div>
     </div>
     <div class="card">
       <b>隊列（リアルタイム）</b>
@@ -363,20 +364,89 @@ function sampleSpeeds(h, D, tb) {
   return { vFront: frontSeg(D) / Math.max(f3, 1), vLast: 600 / Math.max(l3, 1) };
 }
 
-// モンテカルロ: n回走らせて勝率・複勝率を集計
+// ---------------- ペース×脚質×スタミナ モデル ----------------
+// 門別（南関）は前有利がベース。ハイペースで差しがやや台頭、スローは前残り、
+// 距離が延びるほどスタミナ消耗（特に先行馬）。実データの傾向 [[kochi-yoso-ai-pace-bias]] に整合。
+const PACE = {
+  contendRatio: 0.985, // 先頭前速のこの比率以上＝先行争いに加わる（頭数でペースを判定）
+  frontFatigue: 0.045, // ハイペースで先行馬が上がりを失速する強さ
+  closerSwing: 0.022,  // ペース×脚質スイング（ハイ→差し／スロー→前残り、前有利ゆえ控えめ）
+  distFatigue: 0.012,  // 100m延長ごとの上がり消耗（先行ほど大きい＝スタミナ）
+  widePenalty: 0.45,   // 後方馬が外を回るロスの最大（秒・上がり600mに加算）
+};
+const paceLabelOf = (z) => z >= 0.7 ? 'ハイ' : z <= -0.5 ? 'スロー' : 'ミドル';
+
+// フィールドの前速配列 → ペースz(+速い/−遅い)・隊列位置eNorm(0=逃げ,1=後方)・先行争い頭数
+function fieldPace(vF) {
+  const n = vF.length;
+  const order = vF.map((v, i) => [v, i]).sort((a, b) => b[0] - a[0]);
+  const eNorm = new Array(n);
+  order.forEach(([, i], rank) => { eNorm[i] = n > 1 ? rank / (n - 1) : 0; });
+  const lead = order[0][0];
+  const mean = vF.reduce((a, b) => a + b, 0) / n;
+  const sd = Math.sqrt(vF.reduce((s, v) => s + (v - mean) ** 2, 0) / n) || 0.1;
+  const contenders = vF.filter((v) => v >= lead * PACE.contendRatio).length;
+  // 先行争いの頭数が主因（1頭=単騎楽逃げ→スロー / 2頭=標準 / 3頭以上→ハイ）＋先頭の抜け具合
+  let paceZ = 0.5 * (contenders - 2) + 0.3 * ((lead - mean) / sd);
+  paceZ = Math.max(-1.5, Math.min(1.8, paceZ));
+  return { paceZ, eNorm, contenders };
+}
+
+// 上がり速度の補正係数（スタミナ＋ペース×脚質）。1.0が基準。
+function lateMod(paceZ, eNorm, D) {
+  const front = 1 - eNorm;   // 先行度（1=逃げ）
+  const distF = PACE.distFatigue * Math.max(0, (D - 1000) / 100);
+  const m = 1
+    - PACE.frontFatigue * Math.max(0, paceZ) * front   // 先行馬：ハイペースで失速
+    + PACE.closerSwing * paceZ * eNorm                 // ハイ→差し台頭／スロー→差し不利(前残り)
+    - distF * (0.5 + 0.5 * front);                     // 距離：先行ほど消耗
+  return Math.max(0.80, Math.min(1.08, m));
+}
+
+// ペース補正後の 中間速度v2 と 実効上がり速度vLastEff（外回りロスを速度へ織り込む）
+function paceAdjust(vFront, vLast, D, paceZ, eNorm) {
+  const vLastBase = vLast * lateMod(paceZ, eNorm, D);
+  const wide = PACE.widePenalty * eNorm * (D / 1600);      // 後方は外を回るロス（秒）
+  const vLastEff = 600 / (600 / vLastBase + wide);          // ロスを上がり速度に反映
+  const v2 = (vFront + vLastEff) / 2 * (0.96 + 0.02 * Math.max(0, paceZ));  // ハイなら道中も速い
+  return { vLastEff, v2 };
+}
+
+function segTime(vFront, v2, vLastEff, D) {
+  const seg1 = frontSeg(D), seg2 = D - seg1 - 600;
+  return seg1 / vFront + (seg2 > 0 ? seg2 / v2 : 0) + 600 / vLastEff;
+}
+
+// アニメ用：現在の平均速度からフィールドのペースを計算し、各馬に実効速度を焼き込む
+function applyPaceMean() {
+  const D = state.dist;
+  const fp = fieldPace(state.horses.map((h) => h.vFront));
+  state.paceZ = fp.paceZ; state.contenders = fp.contenders;
+  state.horses.forEach((h, i) => {
+    const a = paceAdjust(h.vFront, h.vLast, D, fp.paceZ, fp.eNorm[i]);
+    h.v2 = a.v2; h.vLastEff = a.vLastEff; h.eNorm = fp.eNorm[i];
+  });
+}
+
+// モンテカルロ: n回走らせて勝率・複勝率を集計（各試行でフィールドのペースを算出＝馬群相互作用）
 function monteCarlo(n = 1000) {
   const D = state.dist, tb = state.tb;
   const res = state.horses.map(() => ({ win: 0, top3: 0, ftSum: 0 }));
+  let paceSum = 0;
   for (let t = 0; t < n; t++) {
-    const fts = state.horses.map((h) => {
-      const sp = sampleSpeeds(h, D, tb);
-      return finishTime({ vFront: sp.vFront, vLast: sp.vLast }, D);
+    const sp = state.horses.map((h) => sampleSpeeds(h, D, tb));
+    const fp = fieldPace(sp.map((s) => s.vFront));
+    paceSum += fp.paceZ;
+    const fts = sp.map((s, i) => {
+      const a = paceAdjust(s.vFront, s.vLast, D, fp.paceZ, fp.eNorm[i]);
+      return segTime(s.vFront, a.v2, a.vLastEff, D);
     });
     const order = fts.map((ft, i) => [ft, i]).sort((a, b) => a[0] - b[0]);
     res[order[0][1]].win++;
     for (let k = 0; k < Math.min(3, order.length); k++) res[order[k][1]].top3++;
     fts.forEach((ft, i) => { res[i].ftSum += ft; });
   }
+  state.mcPaceZ = paceSum / n;
   return state.horses.map((h, i) => ({
     h, winP: res[i].win / n, top3P: res[i].top3 / n,
     ev: h.odds != null && h.odds > 0 ? (res[i].win / n) * h.odds : null,
@@ -385,17 +455,18 @@ function monteCarlo(n = 1000) {
 
 function distanceAt(h, t, D) {
   const seg1 = frontSeg(D), seg2 = D - seg1 - 600;
-  const v2 = (h.vFront + h.vLast) / 2 * 0.96;
+  const v2 = h.v2 != null ? h.v2 : (h.vFront + h.vLast) / 2 * 0.96;
+  const vLast = h.vLastEff != null ? h.vLastEff : h.vLast;
   const t1 = seg1 / h.vFront, t2 = seg2 > 0 ? seg2 / v2 : 0;
   if (t <= t1) return h.vFront * t;
   if (t <= t1 + t2) return seg1 + v2 * (t - t1);
-  return Math.min(D, seg1 + seg2 + h.vLast * (t - t1 - t2));
+  return Math.min(D, seg1 + seg2 + vLast * (t - t1 - t2));
 }
 
 function finishTime(h, D) {
-  const seg1 = frontSeg(D), seg2 = D - seg1 - 600;
-  const v2 = (h.vFront + h.vLast) / 2 * 0.96;
-  return seg1 / h.vFront + (seg2 > 0 ? seg2 / v2 : 0) + 600 / h.vLast;
+  const v2 = h.v2 != null ? h.v2 : (h.vFront + h.vLast) / 2 * 0.96;
+  const vLast = h.vLastEff != null ? h.vLastEff : h.vLast;
+  return segTime(h.vFront, v2, vLast, D);
 }
 
 // ---------------- 描画 ----------------
@@ -644,14 +715,22 @@ async function loadRace(raceId, meta) {
   const histories = {};
   for (const id in rawHist) histories[id] = rawHist[id].filter((r) => !r.date || !tgtDate || r.date < tgtDate);
   state.horses = buildHorses(entries, state.dist, race.klass || meta.klass, histories);
+  applyPaceMean();   // 想定ペースと各馬の実効速度を算出
   state.t = 0; state.running = false; lastTs = null; state.stripDir = null;
   if (state.timer) { clearInterval(state.timer); state.timer = null; }
   $('raceLabel').textContent = `${race.date || ''} 門別${meta.race_no}R ${state.dist}m（${state.inner ? '内回り' : '外回り'}）${state.horses.length}頭`;
   $('startBtn').textContent = '▶ スタート';
   $('clock').textContent = '';
   drawTrack(); drawHorses(); drawStrip(); renderOrder();
-  $('params').innerHTML = `<table><tr><th>馬番</th><th>馬名</th><th>予測テン3F</th><th>予測上がり3F</th><th>実績</th></tr>` +
+  const posLabel = (e) => e == null ? '' : e < 0.2 ? '逃げ' : e < 0.45 ? '先行' : e < 0.75 ? '差し' : '追込';
+  const pz = state.paceZ ?? 0;
+  $('params').innerHTML =
+    `<div class="note">想定ペース: <b>${paceLabelOf(pz)}</b>（先行争い${state.contenders ?? 1}頭・pace ${pz >= 0 ? '+' : ''}${pz.toFixed(2)}）—
+      ${pz >= 0.7 ? 'ハイなら差し・先行がやや台頭' : pz <= -0.5 ? 'スローは前残り濃厚' : '標準的な流れ'}。
+      隊列は予測テン速度から推定（前有利がベース）。</div>` +
+    `<table><tr><th>馬番</th><th>馬名</th><th>隊列</th><th>予測テン3F</th><th>予測上がり3F</th><th>実績</th></tr>` +
     state.horses.map((h) => `<tr><td><span class="waku w${h.waku}">${h.umaban}</span></td><td class="l">${esc(h.name)}</td>` +
+      `<td>${posLabel(h.eNorm)}</td>` +
       `<td>${h.f3sec != null ? h.f3sec.toFixed(1) + '秒' : h.vFront.toFixed(2) + ' m/s'}</td>` +
       `<td>${h.l3sec != null ? h.l3sec.toFixed(1) + '秒' : h.vLast.toFixed(2) + ' m/s'}</td>` +
       `<td>${h.noData ? '無し（平均以下と仮定）' : 'あり'}</td></tr>`).join('') + '</table>';
@@ -710,6 +789,7 @@ async function initMain(dates) {
       const sp = sampleSpeeds(h, state.dist, state.tb);
       h.vFront = sp.vFront; h.vLast = sp.vLast;
     }
+    applyPaceMean();   // この試行のペース・実効速度を反映
     state.running = true; lastTs = null;
     $('startBtn').textContent = '走行中…';
     if (state.timer) clearInterval(state.timer);
@@ -730,7 +810,7 @@ async function initMain(dates) {
         <td>${r.h.odds ?? '-'}</td>
         <td class="${r.ev != null && r.ev >= 1 ? 'best' : ''}">${r.ev != null ? r.ev.toFixed(2) : '-'}</td>
       </tr>`).join('') + `</table>
-      <div class="note">1,000回試行（${ms}ms）。期待値 = 勝率 × 単勝オッズ。<b>1.00以上（緑）が理論上プラスの買い目</b>。オッズは出馬表取得時点のもの。</div>`;
+      <div class="note">1,000回試行（${ms}ms）・平均ペース <b>${paceLabelOf(state.mcPaceZ ?? 0)}</b>（${(state.mcPaceZ ?? 0) >= 0 ? '+' : ''}${(state.mcPaceZ ?? 0).toFixed(2)}）。各試行でフィールドの先行争い→ペースを算出し、ハイは先行馬のスタミナ消耗・スローは前残りを反映。期待値 = 勝率 × 単勝オッズ。<b>1.00以上（緑）が理論上プラスの買い目</b>。オッズは出馬表取得時点のもの。</div>`;
   });
   $('speedBtn').addEventListener('click', () => {
     state.speed = state.speed === 6 ? 3 : state.speed === 3 ? 12 : 6;
