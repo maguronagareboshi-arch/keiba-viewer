@@ -1,2 +1,1368 @@
-cd "C:\Users\kouki\AppData\Local\Temp\claude-deploy-keiba"
-git push origin main
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>門別ビューア</title>
+<style>
+/* 色は必ずCSS変数で定義する（ダークモード上書き漏れ防止・インライン色禁止） */
+:root {
+  --bg: #f4f5f7;
+  --panel: #ffffff;
+  --text: #1c2330;
+  --sub: #66707f;
+  --border: #d9dee6;
+  --accent: #1a6fb5;
+  --accent-text: #ffffff;
+  --chip-bg: #e8eef5;
+  --row-alt: #f7f9fb;
+  --gold: #c9a227;
+  --silver: #8b97a5;
+  --bronze: #b0722d;
+  --hl-first3f: #d7ecff;
+  --hl-last3f: #ffe3e3;
+  --hl-best: #dff5e1;
+  --note: #8a6d00;
+  --note-bg: #fff7dd;
+  --bias-front: #b95e12;
+  --bias-back: #1a6fb5;
+  --arrow-up: #1f9c3f;
+  --arrow-down: #d63c3c;
+  --waku1-bg:#ffffff; --waku1-tx:#333333;
+  --waku2-bg:#222222; --waku2-tx:#ffffff;
+  --waku3-bg:#d63c3c; --waku3-tx:#ffffff;
+  --waku4-bg:#2e63c4; --waku4-tx:#ffffff;
+  --waku5-bg:#e8c62b; --waku5-tx:#333333;
+  --waku6-bg:#2f9c50; --waku6-tx:#ffffff;
+  --waku7-bg:#e07f2a; --waku7-tx:#ffffff;
+  --waku8-bg:#e88fb0; --waku8-tx:#333333;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14181f;
+    --panel: #1d232d;
+    --text: #e6eaf0;
+    --sub: #97a1af;
+    --border: #333c49;
+    --accent: #4d9fe0;
+    --accent-text: #10151c;
+    --chip-bg: #26303d;
+    --row-alt: #202733;
+    --hl-first3f: #17405e;
+    --hl-last3f: #55272c;
+    --hl-best: #1e4226;
+    --note: #e3c65b;
+    --note-bg: #33301c;
+    --bias-front: #e8964d;
+    --bias-back: #4d9fe0;
+    --waku1-bg:#e9e9e9; --waku1-tx:#222222;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }  /* display:flex等のクラス指定にhidden属性が負けないよう保証 */
+body { margin: 0; background: var(--bg); color: var(--text);
+  font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo, system-ui, sans-serif; font-size: 14px; }
+header { display: flex; align-items: center; gap: 10px; padding: 8px 14px;
+  background: var(--panel); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+header h1 { font-size: 17px; margin: 0; }
+.badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: var(--chip-bg); color: var(--sub); }
+.conf-S { background: var(--hl-best); color: var(--arrow-up); font-weight: bold; }
+.conf-A { background: var(--hl-first3f); color: var(--bias-back); font-weight: bold; }
+.conf-C { background: var(--note-bg); color: var(--note); font-weight: bold; }
+.viewtabs { display: flex; gap: 4px; margin-left: auto; }
+.viewtabs button, .subtabs button {
+  padding: 5px 14px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--panel); color: var(--text); cursor: pointer; font-size: 13px; }
+.viewtabs button.active, .subtabs button.active {
+  background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: bold; }
+main { padding: 10px 14px 40px; max-width: 1280px; margin: 0 auto; }
+.controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--panel); color: var(--text); font-size: 14px; }
+.racetabs { display: flex; gap: 4px; flex-wrap: wrap; margin: 8px 0; }
+.racetabs button { padding: 6px 0; width: 44px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--panel); color: var(--text); cursor: pointer; font-size: 13px; }
+.racetabs button.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: bold; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
+.raceinfo h2 { font-size: 15px; margin: 0 0 6px; }
+.raceinfo .meta { color: var(--sub); font-size: 12px; display: flex; gap: 12px; flex-wrap: wrap; }
+.raceinfo .pacebar { margin-top: 6px; display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; }
+.raceinfo .pacebar span b { color: var(--accent); }
+.note { font-size: 11px; color: var(--note); background: var(--note-bg); border-radius: 4px; padding: 2px 6px; display: inline-block; margin-top: 6px; }
+.subtabs { display: flex; gap: 4px; margin: 8px 0; }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; white-space: nowrap; }
+th, td { border: 1px solid var(--border); padding: 4px 6px; text-align: center; font-size: 12.5px; }
+th { background: var(--chip-bg); color: var(--sub); font-weight: normal; }
+tr:nth-child(even) td { background: var(--row-alt); }
+td.l { text-align: left; }
+td.num { font-variant-numeric: tabular-nums; }
+td.small { font-size: 11px; line-height: 1.5; text-align: left; }
+.waku { display: inline-block; width: 20px; border-radius: 4px; font-weight: bold; }
+.w1 { background: var(--waku1-bg); color: var(--waku1-tx); border: 1px solid var(--border); }
+.w2 { background: var(--waku2-bg); color: var(--waku2-tx); }
+.w3 { background: var(--waku3-bg); color: var(--waku3-tx); }
+.w4 { background: var(--waku4-bg); color: var(--waku4-tx); }
+.w5 { background: var(--waku5-bg); color: var(--waku5-tx); }
+.w6 { background: var(--waku6-bg); color: var(--waku6-tx); }
+.w7 { background: var(--waku7-bg); color: var(--waku7-tx); }
+.w8 { background: var(--waku8-bg); color: var(--waku8-tx); }
+td.f1 { background: var(--hl-first3f) !important; font-weight: bold; }
+td.a1 { background: var(--hl-last3f) !important; font-weight: bold; }
+td.best { background: var(--hl-best) !important; font-weight: bold; }
+.fin1 { color: var(--gold); font-weight: bold; }
+.fin2 { color: var(--silver); font-weight: bold; }
+.fin3 { color: var(--bronze); font-weight: bold; }
+.empty { color: var(--sub); text-align: center; padding: 30px 0; }
+.legend { font-size: 11px; color: var(--sub); margin-top: 6px; }
+.legend .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; }
+.legend .sw.f { background: var(--hl-first3f); }
+.legend .sw.a { background: var(--hl-last3f); }
+.legend .sw.b { background: var(--hl-best); }
+.arrow-up { color: var(--arrow-up); font-weight: bold; }
+.arrow-down { color: var(--arrow-down); font-weight: bold; }
+.bias-front { color: var(--bias-front); font-weight: bold; }
+.bias-back { color: var(--bias-back); font-weight: bold; }
+.kyaku { display: inline-block; font-size: 10px; padding: 0 4px; border-radius: 3px; background: var(--chip-bg); color: var(--sub); }
+h3.sec { font-size: 14px; margin: 16px 0 6px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+a.horse-link { color: var(--accent); text-decoration: none; cursor: pointer; }
+a.horse-link:hover { text-decoration: underline; }
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex;
+  align-items: flex-start; justify-content: center; padding: 20px; z-index: 50; overflow-y: auto; }
+.modal-box { background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  max-width: 920px; width: 100%; padding: 12px 14px; }
+.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.modal-head button { border: 1px solid var(--border); background: var(--panel); color: var(--text);
+  border-radius: 6px; padding: 3px 10px; cursor: pointer; font-size: 15px; }
+.foldbtn { border: 1px solid var(--border); background: var(--chip-bg); color: var(--text);
+  border-radius: 6px; padding: 5px 12px; cursor: pointer; font-size: 13px; margin: 6px 0; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: var(--chip-bg); }
+</style>
+</head>
+<body>
+<header>
+  <h1>門別ビューア</h1>
+  <span class="badge" id="srcBadge">データ源: -</span>
+  <div class="viewtabs" id="viewTabs">
+    <button data-view="race" class="active">レース</button>
+    <button data-view="analysis">分析</button>
+    <button data-view="cyokyo">調教</button>
+    <button onclick="location.href='simulator.html'">🎲 シミュレータ</button>
+  </div>
+</header>
+<main>
+  <div id="raceRoot">
+    <div class="controls">
+      <label>月 <select id="monthSel"></select></label>
+      <label>日 <select id="dateSel"></select></label>
+    </div>
+    <div class="racetabs" id="raceTabs"></div>
+    <div class="subtabs" id="subTabs" hidden>
+      <button data-sub="yosou">🎯 予想</button>
+      <button data-sub="syutuba">出馬表</button>
+      <button data-sub="seiseki">成績</button>
+    </div>
+    <div id="raceView"><div class="empty">読み込み中…</div></div>
+  </div>
+  <div id="analysisRoot" hidden><div class="empty">読み込み中…</div></div>
+  <div id="cyokyoRoot" hidden><div class="empty">読み込み中…</div></div>
+</main>
+<div id="horseModal" class="modal" hidden onclick="if(event.target.id==='horseModal')this.hidden=true">
+  <div class="modal-box">
+    <div class="modal-head"><b id="horseModalTitle">-</b><button id="horseModalClose" onclick="document.getElementById('horseModal').hidden=true">✕ 閉じる</button></div>
+    <div id="horseModalBody"><div class="empty">読み込み中…</div></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ============================================================
+// Supabase（読み取りはanonキー・RLSでselectのみ許可）
+// ============================================================
+const SUPABASE_URL = 'https://jcrcftvrsgmsewwdkqha.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpjcmNmdHZyc2dtc2V3d2RrcWhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA4MDY0NjgsImV4cCI6MjA5NjM4MjQ2OH0.UED2rJNsuTPqofrhhNhQ2RM0NKc2eJ6qHllfbnebMe0';
+
+async function sbGet(pathq) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${pathq}`, {
+    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+  });
+  if (!res.ok) throw new Error(`supabase ${res.status}`);
+  return res.json();
+}
+async function jsonGet(path) {
+  const res = await fetch(path);
+  if (!res.ok) throw new Error(`${path} ${res.status}`);
+  return res.json();
+}
+
+// ============================================================
+// データプロバイダ（Supabase優先 → ローカルJSON）
+// ============================================================
+const providers = {
+  supabase: {
+    label: 'Supabase',
+    async listDates() {
+      const rows = await sbGet('chihou_races?select=race_id,race_date,race_no,track,klass,race_name,distance_m,going,pace&order=race_date.desc,race_no.asc&limit=10000');
+      if (!rows.length) throw new Error('empty');
+      const dates = {};
+      for (const r of rows) {
+        (dates[r.race_date] = dates[r.race_date] || []).push({
+          race_id: r.race_id, race_no: r.race_no, track: r.track, klass: r.klass,
+          name: r.race_name, distance_m: r.distance_m, going: r.going, pace: r.pace,
+        });
+      }
+      return dates;
+    },
+    async loadRace(raceId) {
+      const [races, results] = await Promise.all([
+        sbGet(`chihou_races?race_id=eq.${raceId}&select=*`),
+        sbGet(`chihou_results?race_id=eq.${raceId}&select=*&order=finish.asc.nullslast`),
+      ]);
+      return { race: races[0] || {}, results };
+    },
+    async loadEntries(raceId) {
+      try { return await sbGet(`chihou_entries?race_id=eq.${raceId}&select=*&order=umaban.asc`); }
+      catch (e) { return []; }
+    },
+    async loadCyokyo(raceId) {
+      try {
+        const rows = await sbGet(`chihou_cyokyo?race_id=eq.${raceId}&select=*&order=umaban.asc`);
+        if (rows.length) return rows;
+      } catch (e) { /* テーブル未作成 → ローカルへ */ }
+      return providers.local.loadCyokyo(raceId);
+    },
+    async loadNouryoku(raceId) {
+      try {
+        const rows = await sbGet(`chihou_nouryoku?race_id=eq.${raceId}&select=*&order=umaban.asc`);
+        if (rows.length) return rows;
+      } catch (e) { /* 次へ */ }
+      return providers.local.loadNouryoku(raceId);
+    },
+    async loadHistory(horseIds) {
+      if (!horseIds.length) return {};
+      const idlist = horseIds.map(encodeURIComponent).join(',');
+      const rows = await sbGet(`chihou_results?horse_id=in.(${idlist})&select=horse_id,finish,pop,first3f,last3f,time_sec,kinryo,sex_age,passing,corner4_pos,comment,time_str,body_weight,jockey,race_id,chihou_races(race_date,distance_m,going,pace,klass)&order=race_id.desc&limit=2000`);
+      const map = {};
+      for (const r of rows) {
+        const ra = r.chihou_races || {};
+        (map[r.horse_id] = map[r.horse_id] || []).push({
+          date: ra.race_date, race_id: r.race_id, dist: ra.distance_m, going: ra.going,
+          pace: ra.pace, cls: classGroup(ra.klass), fin: r.finish, pop: r.pop, sex: r.sex_age,
+          f3: r.first3f, l3: r.last3f, tsec: r.time_sec, kin: r.kinryo,
+          kyaku: kyakuFromPassing(r.passing), passing: r.passing, c4: r.corner4_pos,
+          comment: r.comment, time: r.time_str, weight: r.body_weight, jockey: r.jockey,
+        });
+      }
+      for (const k in map) map[k].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      return map;
+    },
+    async loadStats() {
+      try {
+        const rows = await sbGet('chihou_meta?key=eq.monbetsu_stats&select=value');
+        if (rows.length) return rows[0].value;
+      } catch (e) { /* テーブル未作成 → ローカルへ */ }
+      return providers.local.loadStats();
+    },
+    async loadModel() {
+      try {
+        const rows = await sbGet('chihou_meta?key=eq.monbetsu_model&select=value');
+        if (rows.length) return rows[0].value;
+      } catch (e) { /* 次へ */ }
+      return providers.local.loadModel();
+    },
+  },
+  local: {
+    label: 'ローカルJSON',
+    _horses: null,
+    async listDates() { return (await jsonGet('data/index.json')).dates; },
+    async loadRace(raceId) {
+      try { return await jsonGet(`data/json/seiseki/${raceId}.json`); }
+      catch (e) { return { race: {}, results: [] }; }
+    },
+    async loadEntries(raceId) {
+      try { return (await jsonGet(`data/json/syutuba/${raceId}.json`)).entries; }
+      catch (e) { return []; }
+    },
+    async loadCyokyo(raceId) {
+      try {
+        const d = await jsonGet(`data/json/cyokyo/${raceId}.json`);
+        return d.horses.map((h) => ({ ...h, race_id: d.race_id }));
+      } catch (e) { return []; }
+    },
+    async loadNouryoku(raceId) {
+      try {
+        const d = await jsonGet(`data/json/nouryoku/${raceId}.json`);
+        return d.horses.map((h) => ({ umaban: h.umaban, horse_name: h.name, rt: h.rt,
+          data: { pedigree: h.pedigree, stable: h.stable, seiseki: h.seiseki, runs: h.runs } }));
+      } catch (e) { return []; }
+    },
+    async loadHistory(horseIds) {
+      if (this._horses === null) {
+        try { this._horses = await jsonGet('data/horses.json'); } catch (e) { this._horses = {}; }
+      }
+      const map = {};
+      for (const id of horseIds) if (this._horses[id]) map[id] = this._horses[id];
+      return map;
+    },
+    async loadStats() {
+      try { return await jsonGet('data/stats.json'); } catch (e) { return null; }
+    },
+    async loadModel() {
+      try { return await jsonGet('data/model.json'); } catch (e) { return null; }
+    },
+  },
+};
+
+const state = { provider: null, dates: {}, month: null, date: null, raceId: null,
+  sub: 'seiseki', stats: null, model: null, view: 'race' };
+
+// ============================================================
+// ユーティリティ
+// ============================================================
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmtDiff = (v) => (v == null ? '' : v > 0 ? `+${v}` : `${v}`);
+const mmdd = (iso) => (iso ? `${+iso.slice(5, 7)}/${+iso.slice(8, 10)}` : '');
+
+// 通過順位は各コーナー位置の連結（例 '5744' = 5→7→4→4）。10以上は丸数字（⑩⑪…）
+function kyakuFromPassing(passing) {
+  if (!passing) return null;
+  let p = null;
+  for (const ch of String(passing)) {
+    const cp = ch.codePointAt(0);
+    if (cp >= 0x2460 && cp <= 0x2473) { p = cp - 0x2460 + 1; break; }  // ①〜⑳
+    if (ch >= '1' && ch <= '9') { p = +ch; break; }
+  }
+  if (p == null) return null;
+  if (p === 1) return '逃げ';
+  if (p <= 3) return '先行';
+  if (p <= 7) return '差し';
+  return '追込';
+}
+
+// クラス条件を 2歳/3歳/3歳以上 に正規化（build_stats.py と同じ規則）
+function classGroup(klass) {
+  const k = String(klass || '').replace(/２/g, '2').replace(/３/g, '3').replace(/４/g, '4');
+  if (k.includes('2歳')) return '2歳';
+  if (k.includes('3歳以上') || k.includes('4歳以上')) return '3歳以上';
+  if (k.includes('3歳')) return '3歳';
+  return '3歳以上';
+}
+
+// 基準タイム参照: 距離×馬場×クラス（無ければ全クラス→良にフォールバック）
+function baseEntry(dist, going, cls) {
+  const bt = state.stats && state.stats.base_times;
+  if (!bt || !dist) return null;
+  const g = going === '良' || !going ? '良' : '重系';
+  return bt[`${dist}_${g}_${cls || '全'}`] || bt[`${dist}_${g}_全`] || bt[`${dist}_良_全`] || null;
+}
+// 偏差値（速いほど高い）
+function devValue(value, e, fld) {
+  if (value == null || !e || !e[fld] || !e[fld].std) return null;
+  return 50 + 10 * (e[fld].mean - value) / e[fld].std;
+}
+// 1走分の総合指数: 走破タイム50% + テン3F25% + 上がり3F25%（欠測は重み再配分）
+function runShisu(run) {
+  const e = baseEntry(run.dist, run.going, run.cls);
+  const parts = [[devValue(run.tsec, e, 'time'), 0.5],
+                 [devValue(run.f3, e, 'first3f'), 0.25],
+                 [devValue(run.l3, e, 'last3f'), 0.25]].filter(([v]) => v != null);
+  if (!parts.length) return null;
+  const wsum = parts.reduce((s, [, w]) => s + w, 0);
+  return parts.reduce((s, [v, w]) => s + v * w, 0) / wsum;
+}
+
+// スピード指数（門別適合版・妙味ゾーン検出用）
+function distIndexJs(d) {
+  const pts = [[1600, 1.02], [2000, 0.79], [3000, 0.50]];
+  const [[x1, y1], [x2, y2]] = d <= 2000 ? [pts[0], pts[1]] : [pts[1], pts[2]];
+  return y1 + (y2 - y1) * (d - x1) / (x2 - x1);
+}
+function runSI(run) {
+  const sb = state.stats && state.stats.si_base;
+  const bb = (state.stats && state.stats.baba_daily) || {};
+  if (!sb || !run.dist || sb[String(run.dist)] == null || run.tsec == null) return null;
+  const kin = run.kin != null ? run.kin : 55;
+  return (sb[String(run.dist)] - run.tsec) * distIndexJs(run.dist) * 10 + (bb[run.date] || 0) + (kin - 55) * 2 + 80;
+}
+// 直近5走の指標（mean/max）
+function metricOf(history, hid, fn, mode) {
+  const vals = (history[hid] || []).slice(0, 5).map(fn).filter((v) => v != null);
+  if (!vals.length) return null;
+  return mode === 'max' ? Math.max(...vals) : vals.reduce((s, v) => s + v, 0) / vals.length;
+}
+function zscoresJs(vals) {
+  const xs = vals.filter((v) => v != null);
+  if (xs.length < 2) return vals.map(() => null);
+  const m = xs.reduce((s, v) => s + v, 0) / xs.length;
+  const sd = Math.sqrt(xs.reduce((s, v) => s + (v - m) ** 2, 0) / (xs.length - 1)) || 1e-9;
+  return vals.map((v) => (v == null ? null : (v - m) / sd));
+}
+// ===== 学習モデル（リッジ回帰）による勝ちやすさ予測 =====
+const POS4 = { '最内': -2, '内': -1, '中': 0, '外': 1, '大外': 2 };
+const clsRank = (klass) => ({ '2歳': 0, '3歳': 1, '3歳以上': 2 }[classGroup(klass)] ?? 2);
+function daysBetween(d1, d2) {
+  return Math.round((new Date(d1) - new Date(d2)) / 86400000);
+}
+const MODEL_FEATS = ['time_mean', 'time_best', 'time_last', 'f3_best', 'l3_best', 'n_runs',
+  'days_off', 'dist_change', 'same_band_z', 'cls_up', 'cls_down', 'wt_change', 'draw_bias',
+  'jockey_r', 'trainer_r', 'trip_adj', 'exact_dist_r', 'waku_rate'];
+const dbandOf = (d) => !d ? null : d <= 1000 ? '1000' : d <= 1100 ? '1100' : d <= 1200 ? '1200'
+  : d <= 1600 ? '15-16' : d <= 1700 ? '1700' : '1800+';
+
+// 予想対象レースでの各馬の予測スコア（高いほど勝ちやすい）
+function modelScore(e, history, race) {
+  const m = state.model;
+  if (!m) return null;
+  const runs = (history[e.horse_id] || []).filter((r) => r.race_id !== race.race_id);
+  if (!runs.length) return null;
+  const cbias = (state.stats && state.stats.corner4_daily) || {};
+  // 各過去走を z 値化（新しい順→計算では最新を last に）
+  const P = runs.slice(0, 8).map((r) => {
+    const be = baseEntry(r.dist, r.going, r.cls);
+    const d = r.dist || 1000;
+    const pos = POS4[r.c4];
+    const trip = (pos != null && cbias[r.date] != null) ? cbias[r.date] * Math.max(-1, Math.min(1, pos)) : 0;
+    return {
+      tz: devValue(r.tsec, be, 'time'), fz: devValue(r.f3, be, 'first3f'), lz: devValue(r.l3, be, 'last3f'),
+      date: r.date, dist: d, band: d <= 1100 ? 1 : d <= 1200 ? 2 : 3, clsRank: clsRank(r.cls === '2歳' ? '2歳' : r.cls), trip,
+      clsR: { '2歳': 0, '3歳': 1, '3歳以上': 2 }[r.cls] ?? 2,
+    };
+  });
+  const tz = P.map((p) => p.tz).filter((v) => v != null);
+  if (!tz.length) return null;
+  const fz = P.map((p) => p.fz).filter((v) => v != null);
+  const lz = P.map((p) => p.lz).filter((v) => v != null);
+  const last = P[0];  // 最新走
+  const d = race.distance_m || race.dist || 1000;
+  const band = d <= 1100 ? 1 : d <= 1200 ? 2 : 3;
+  const sameBand = P.filter((p) => p.band === band && p.tz != null).map((p) => p.tz);
+  const mean = (a) => a.reduce((s, v) => s + v, 0) / a.length;
+  const tRank = clsRank(race.klass);
+  const f = {
+    time_mean: mean(tz), time_best: Math.max(...tz), time_last: last.tz != null ? last.tz : mean(tz),
+    f3_best: fz.length ? Math.max(...fz) : 0, l3_best: lz.length ? Math.max(...lz) : 0,
+    n_runs: Math.min(P.length, 8) / 8,
+    days_off: last.date ? Math.min(daysBetween(race.date || race.race_date, last.date), 90) / 90 : 0.3,
+    dist_change: Math.max(-1, Math.min(1, (d - (last.dist || d)) / 400)),
+    same_band_z: sameBand.length ? mean(sameBand) : mean(tz),
+    cls_up: tRank > last.clsR ? 1 : 0, cls_down: tRank < last.clsR ? 1 : 0,
+    wt_change: Math.max(-1, Math.min(1, (e.weight_diff || 0) / 15)),
+    draw_bias: ((e.waku || 4) - 4.5) / 3.5,
+    jockey_r: (m.jockey_r && m.jockey_r[e.jockey]) ?? 0.28,
+    trainer_r: (m.trainer_r && m.trainer_r[e.trainer]) ?? 0.28,
+    trip_adj: mean(P.map((p) => p.trip)),
+    exact_dist_r: (() => {  // 同距離ちょうどの複勝率（直近8走内・2走以上）
+      const exd = runs.slice(0, 8).filter((r) => r.dist === d && r.fin != null);
+      return exd.length >= 2 ? exd.filter((r) => r.fin <= 3).length / exd.length : 0.28;
+    })(),
+    waku_rate: (m.waku_r && m.waku_r[`${dbandOf(d)}|${e.waku}`]) ?? 0.28,  // 距離帯×枠の複勝率
+  };
+  let s = m.b;
+  for (let i = 0; i < MODEL_FEATS.length; i++) {
+    s += ((f[MODEL_FEATS[i]] - m.mu[i]) / m.sd[i]) * m.w[i];
+  }
+  return s;
+}
+
+// ◎信頼度：レース内で予測1位が2位をどれだけ引き離しているか（レース内stdで正規化）。
+// しきい値は過去4年の時系列5分割CVで検証（高信頼>低信頼＝5/5fold）。複勝率 S81%/A73%/B65%/C62%。
+const CONF_TIERS = { S: '鉄板', A: '有力', B: '標準', C: '波乱' };
+function aiConfidence(scores) {
+  const v = scores.filter((x) => x != null);
+  if (v.length < 2) return null;
+  const sorted = [...v].sort((a, b) => b - a);
+  const mean = sorted.reduce((s, x) => s + x, 0) / sorted.length;
+  const std = Math.sqrt(sorted.reduce((s, x) => s + (x - mean) ** 2, 0) / sorted.length) || 1;
+  const gap = (sorted[0] - sorted[1]) / std;
+  const tier = gap >= 0.70 ? 'S' : gap >= 0.40 ? 'A' : gap >= 0.15 ? 'B' : 'C';
+  return { gap, tier, label: CONF_TIERS[tier] };
+}
+
+// 坂路3F最速の偏差値（調教）
+function cyoZFromWorks(cyo) {
+  const hb = state.stats && state.stats.hanro;
+  if (!cyo || !hb || !hb.std) return null;
+  let best = null;
+  for (const w of (cyo.works || [])) {
+    const t3 = w.times && w.times.t_half;
+    if (t3 && (w.course || '').includes('坂')) best = best == null || t3 < best ? t3 : best;
+  }
+  return best == null ? null : 50 + 10 * (hb.mean - best) / hb.std;
+}
+
+// ============================================================
+// レースビュー
+// ============================================================
+function renderMonths() {
+  const months = [...new Set(Object.keys(state.dates).map((d) => d.slice(0, 7)))];
+  $('monthSel').innerHTML = months.map((m) => `<option value="${m}">${m.replace('-', '年')}月</option>`).join('');
+  $('monthSel').value = state.month;
+}
+function renderDates() {
+  const ds = Object.keys(state.dates).filter((d) => d.startsWith(state.month));
+  $('dateSel').innerHTML = ds.map((d) => `<option value="${d}">${d.slice(5)}</option>`).join('');
+  $('dateSel').value = state.date;
+}
+function renderTabs() {
+  const races = state.dates[state.date] || [];
+  $('raceTabs').innerHTML = races.map((r) =>
+    `<button data-id="${r.race_id}" class="${r.race_id === state.raceId ? 'active' : ''}">${r.race_no}R</button>`).join('');
+}
+function renderSubTabs() {
+  $('subTabs').hidden = false;
+  for (const b of $('subTabs').querySelectorAll('button'))
+    b.classList.toggle('active', b.dataset.sub === state.sub);
+}
+
+function raceHeaderHtml(race, extraBits) {
+  const extra = race.extra || {};
+  const infoBits = [
+    ['ペース', race.pace], ['平均ハロン', race.avg_furlong],
+    ['決め手', extra['決め手']], ['発走', extra['発走状況他']],
+    ['馬装具', extra['馬装具']], ['3角', extra['３ 角']], ['4角', extra['４ 角']],
+    ...(extraBits || []),
+  ].filter(([, v]) => v != null && v !== '').map(([k, v]) => `<span>${esc(k)}: <b>${esc(v)}</b></span>`).join('');
+  return `
+  <div class="card raceinfo">
+    <h2>${esc(race.date || race.race_date)} ${esc(race.track)} ${race.race_no ?? ''}R ${esc(race.klass)} ${esc(race.name || race.race_name || '')}</h2>
+    <div class="meta">
+      <span>${race.distance_m ?? '?'}m${race.surface ? `（${esc(race.surface)}・${esc(race.direction)}）` : ''}</span>
+      ${race.weather ? `<span>${esc(race.weather)}・${esc(race.going)}</span>` : ''}
+      <span>発走 ${esc(race.hasso_time || '')}</span>
+    </div>
+    <div class="pacebar">${infoBits}</div>
+  </div>`;
+}
+
+// ---- 成績サブビュー ----
+function seisekiHtml(data, aiMark) {
+  const race = data.race || {};
+  const results = (data.results || []).slice();
+  if (!results.length) return raceHeaderHtml(race) + '<div class="empty">成績はまだありません（未発走）</div>';
+  aiMark = aiMark || new Map();
+  const isShort = race.distance_m != null && race.distance_m < 1200;
+  const rank = (key) => {
+    const vals = results.filter((r) => r[key] != null).map((r) => r[key]).sort((a, b) => a - b);
+    return (v) => (v == null ? 99 : vals.indexOf(v) + 1);
+  };
+  const f3rank = rank('first3f');
+  const a3rank = rank('last3f');
+  const rows = results.map((r) => {
+    const fin = r.finish != null ? r.finish : esc(r.finish_note || '-');
+    const finCls = r.finish >= 1 && r.finish <= 3 ? `fin${r.finish}` : '';
+    const kyaku = kyakuFromPassing(r.passing);
+    return `<tr>
+      <td class="${finCls}">${fin}</td>
+      <td><span class="waku w${r.waku || 1}">${r.waku ?? ''}</span></td>
+      <td>${r.umaban ?? ''}</td>
+      <td class="l"><a class="horse-link" ${r.horse_id ? `data-hid="${esc(r.horse_id)}"` : `data-horse="${esc(r.horse_name)}"`}>${esc(r.horse_name)}</a></td>
+      <td>${kyaku ? `<span class="kyaku">${kyaku}</span>` : ''}</td>
+      <td>${esc(r.sex_age)}</td>
+      <td class="num">${r.kinryo ?? ''}</td>
+      <td class="l">${esc(r.genryo || '')}${esc(r.jockey)}</td>
+      <td class="num">${esc(r.time_str)}</td>
+      <td>${esc(r.margin)}</td>
+      <td class="num">${esc(r.passing)}</td>
+      <td>${esc(r.corner4_pos)}</td>
+      <td class="l">${esc(r.comment)}</td>
+      <td class="num ${f3rank(r.first3f) <= 3 ? 'f1' : ''}">${r.first3f != null ? r.first3f.toFixed(1) : ''}</td>
+      <td class="num ${a3rank(r.last3f) <= 3 ? 'a1' : ''}">${r.last3f != null ? r.last3f.toFixed(1) : ''}</td>
+      <td>${r.pop ?? ''}</td>
+      <td class="num">${r.win_odds ?? ''}</td>
+      <td class="num">${r.body_weight ?? ''}${r.weight_diff != null ? `(${fmtDiff(r.weight_diff)})` : ''}</td>
+      <td class="l">${esc(r.trainer)}</td>
+      <td style="font-size:15px">${aiMark.get(r.umaban) || ''}</td>
+    </tr>`;
+  }).join('');
+  return raceHeaderHtml(race) + `
+  ${isShort ? '<div class="note">※1200m未満のため「前半3F」列は 距離−600m の前半タイム（1000mならテン2F相当）</div>' : ''}
+  <div class="card"><div class="tablewrap">
+    <table>
+      <tr><th>着</th><th>枠</th><th>番</th><th>馬名</th><th>脚質</th><th>性齢</th><th>斤</th><th>騎手</th><th>タイム</th><th>着差</th>
+      <th>通過</th><th>4角</th><th>寸評</th><th>前半3F</th><th>上り3F</th><th>人気</th><th>単オッズ</th><th>馬体重</th><th>厩舎</th><th>AI印</th></tr>
+      ${rows}
+    </table>
+  </div>
+  <div class="legend"><span class="sw f"></span> 前半3F上位3頭　<span class="sw a"></span> 上り3F上位3頭</div></div>`;
+}
+
+// ---- 出馬表サブビュー（keibabook風＋能力表＋調教） ----
+function pastRunHtml(run) {
+  if (!run) return '';
+  const fin = run.fin != null ? `${run.fin}着` : '除/取';
+  return `${mmdd(run.date)}${run.sex ? ` <span class="kyaku">${esc(run.sex)}</span>` : ''} ${run.dist ?? '?'}m ${fin}` +
+    (run.f3 != null ? ` テン${run.f3.toFixed(1)}` : '') +
+    (run.l3 != null ? ` 上${run.l3.toFixed(1)}` : '') +
+    (run.kyaku ? ` <span class="kyaku">${run.kyaku}</span>` : '');
+}
+function workHtml(w) {
+  if (!w) return '';
+  const t = w.times || {};
+  const times = [t.t_5f, t.t_half, t.t_3f, t.t_1f].filter((x) => x != null).map((x) => x.toFixed(1)).join('-');
+  return `${w.date ? mmdd(w.date) : ''}${w.youbi ? `(${w.youbi})` : ''} ${esc(w.course || '')} ${times}` +
+    (w.ashiiro ? ` ${esc(w.ashiiro)}` : '') + (w.tanpyo ? `<br>${esc(w.tanpyo)}` : '');
+}
+function arrowHtml(a) {
+  if (!a) return '';
+  const cls = a.includes('↑') ? 'arrow-up' : a.includes('↓') ? 'arrow-down' : '';
+  return `<span class="${cls}">${esc(a)}</span>`;
+}
+
+// 能力表の過去走（他場・中央含む）の1行表示
+function nouRunHtml(r) {
+  const fin = r.fin != null ? `${r.fin}着` : (r.fin_note || '?');
+  return `${mmdd(r.date)} <b>${esc(r.track || '?')}</b>${esc(r.surface || '')}${r.dist || ''} ${fin}` +
+    (r.f3 != null ? ` テン${r.f3.toFixed(1)}` : '') + (r.l3 != null ? ` 上${r.l3.toFixed(1)}` : '');
+}
+// 直近走（能力表・最新順）
+function nouRuns(nouByUma, umaban, n) {
+  const d = nouByUma[umaban];
+  const runs = (d && d.data && d.data.runs) || [];
+  return runs.slice(-n).reverse();
+}
+
+function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku) {
+  if (!entries.length) return raceHeaderHtml(raceMeta) + '<div class="empty">出馬表データがありません（day取得時に --what syutuba を含めてください）</div>';
+  const cyoByUma = {};
+  for (const c of cyokyo) cyoByUma[c.umaban] = c;
+  const nouByUma = {};
+  for (const n of (nouryoku || [])) nouByUma[n.umaban] = n;
+
+  // テン偏差=直近5走の最良値 / 指数=直近5走の平均（バックテストで平均の方が的中率が高い）
+  const bestOf = (hid, fn) => {
+    let best = null;
+    for (const r of (history[hid] || []).slice(0, 5)) {
+      const v = fn(r);
+      if (v != null && (best == null || v > best)) best = v;
+    }
+    return best;
+  };
+  const meanOf = (hid, fn) => {
+    const vals = (history[hid] || []).slice(0, 5).map(fn).filter((v) => v != null);
+    return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null;
+  };
+  const shisuOf = (hid) => meanOf(hid, runShisu);
+  const hensachiOf = (hid) => bestOf(hid, (r) => devValue(r.f3, baseEntry(r.dist, r.going, r.cls), 'first3f'));
+
+  const shisus = entries.map((e) => shisuOf(e.horse_id)).filter((v) => v != null).sort((a, b) => b - a);
+  const top3S = shisus.slice(0, 3);
+  const hensachis = entries.map((e) => hensachiOf(e.horse_id)).filter((v) => v != null).sort((a, b) => b - a);
+  const topH = hensachis[0];
+
+  // 調教偏差値: 直近追切の坂路3F最速を全期間分布で換算
+  const hb = state.stats && state.stats.hanro;
+  const cyoZOf = (umaban) => {
+    const cyo = cyoByUma[umaban];
+    if (!cyo || !hb || !hb.std) return null;
+    let best = null;
+    for (const w of (cyo.works || [])) {
+      const t3 = w.times && w.times.t_half;
+      if (t3 && (w.course || '').includes('坂')) best = best == null || t3 < best ? t3 : best;
+    }
+    return best == null ? null : 50 + 10 * (hb.mean - best) / hb.std;
+  };
+  const cyoZs = entries.map((e) => cyoZOf(e.umaban)).filter((v) => v != null).sort((a, b) => b - a);
+  const topC = cyoZs[0];
+
+  // AI予想印（学習モデル順・出馬表にも表示）
+  const aiScores = new Map(entries.map((e) => [e.umaban, modelScore(e, history, raceMeta)]));
+  const aiRanked = [...aiScores.entries()].filter(([, v]) => v != null).sort((a, b) => b[1] - a[1]);
+  const aiMark = new Map();
+  aiRanked.forEach(([um], i) => { if (i < MARKS.length) aiMark.set(um, MARKS[i]); });
+  const aiTopUma = aiRanked.length ? aiRanked[0][0] : null;
+  const aiConf = aiConfidence(aiRanked.map(([, v]) => v));
+
+  const rows = entries.map((e) => {
+    const cyo = cyoByUma[e.umaban];
+    const works = ((cyo && cyo.works) || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const runs = (history[e.horse_id] || []).filter((r) => r.race_id !== raceMeta.race_id).slice(0, 3);
+    const h = hensachiOf(e.horse_id);
+    const s = shisuOf(e.horse_id);
+    const cz = cyoZOf(e.umaban);
+    return `<tr>
+      <td><span class="waku w${e.waku || 1}">${e.waku ?? ''}</span></td>
+      <td>${e.umaban ?? ''}</td>
+      <td style="font-size:15px">${aiMark.get(e.umaban) || ''}${(e.umaban === aiTopUma && aiConf) ? `<br><span class="badge conf-${aiConf.tier}" title="◎信頼度：予測1位が2位をどれだけ引き離しているか（複勝率の目安 S81%/A73%/B65%/C62%）">${aiConf.label}</span>` : ''}</td>
+      <td class="l"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a></td>
+      <td>${esc(e.sex_age)}</td>
+      <td>${esc(e.genryo || '')}</td>
+      <td class="l">${esc(e.jockey)}</td>
+      <td class="num">${e.kinryo ?? ''}</td>
+      <td class="l">${esc(e.trainer)}</td>
+      <td class="num">${e.body_weight ?? ''}${e.weight_diff != null ? `(${fmtDiff(e.weight_diff)})` : ''}</td>
+      <td class="num">${e.win_odds ?? ''}${e.pop != null ? `(${e.pop})` : ''}</td>
+      <td class="num ${s != null && top3S.includes(s) ? 'best' : ''}">${s != null ? s.toFixed(1) : '-'}</td>
+      <td class="num ${h != null && h === topH ? 'f1' : ''}">${h != null ? h.toFixed(1) : '-'}</td>
+      <td class="num ${cz != null && cz === topC ? 'a1' : ''}">${cz != null ? cz.toFixed(1) : '-'}</td>
+      <td class="small">${runs.map(pastRunHtml).join('<br>')
+        || nouRuns(nouByUma, e.umaban, 3).map((r) => nouRunHtml(r) + ' <span class="badge">能力表</span>').join('<br>')
+        || '-'}</td>
+      <td class="small">${cyo ? `${arrowHtml(cyo.arrow)} ${esc(cyo.tanpyo || '')}<br>` : ''}${works.length ? workHtml(works[0]) : '-'}</td>
+    </tr>`;
+  }).join('');
+
+  return raceHeaderHtml(raceMeta) + `
+  <div class="card"><div class="tablewrap">
+    <table>
+      <tr><th>枠</th><th>番</th><th>AI印</th>
+      <th>馬名</th><th>性齢</th><th>減</th><th>騎手</th><th>斤量</th><th>厩舎</th><th>馬体重</th><th>単勝(人気)</th>
+      <th>指数</th><th>テン偏差</th><th>調教偏差</th><th>近3走（テン3F/上り3F/脚質）</th><th>調教（最新追切）</th></tr>
+      ${rows}
+    </table>
+  </div>
+  <div class="legend"><span class="sw b"></span> 指数上位3頭（走破50%＋テン25%＋上がり25%、直近5走平均）　<span class="sw f"></span> テン偏差トップ（直近5走最良）　<span class="sw a"></span> 調教偏差トップ（直近追切の坂路3F最速を全期間分布で換算・50が平均）<br>◎の下のバッジ＝AI信頼度（予測1位と2位のスコア差・過去4年CV検証済）：<span class="badge conf-S">鉄板</span>複勝81%　<span class="badge conf-A">有力</span>73%　<span class="badge conf-B">標準</span>65%　<span class="badge conf-C">波乱</span>62%</div></div>`;
+}
+
+// ---- 予想サブビュー（A3: 自動印＋根拠＋妙味ゾーン） ----
+const MARKS = ['◎', '○', '▲', '△', '△'];
+
+function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku) {
+  if (!entries.length) return raceHeaderHtml(raceMeta) + '<div class="empty">出馬表データがありません</div>';
+  const cyoByUma = {};
+  for (const c of cyokyo) cyoByUma[c.umaban] = c;
+  const nouByUma = {};
+  for (const n of (nouryoku || [])) nouByUma[n.umaban] = n;
+
+  const hs = entries.map((e) => ({
+    e,
+    ai: modelScore(e, history, raceMeta),
+    comp: metricOf(history, e.horse_id, runShisu, 'mean'),
+    si: metricOf(history, e.horse_id, runSI, 'mean'),
+    ten: metricOf(history, e.horse_id, (r) => devValue(r.f3, baseEntry(r.dist, r.going, r.cls), 'first3f'), 'max'),
+    cz: cyoZFromWorks(cyoByUma[e.umaban]),
+    kyaku: (() => {
+      const ks = (history[e.horse_id] || []).slice(0, 5).map((r) => r.kyaku).filter(Boolean);
+      if (!ks.length) return null;
+      const cnt = {};
+      for (const k of ks) cnt[k] = (cnt[k] || 0) + 1;
+      return Object.entries(cnt).sort((a, b) => b[1] - a[1])[0][0];
+    })(),
+  }));
+
+  // 総合スコア = レース内z値の加重和（composite45% + SI30% + 調教15% + テン10%、欠測は再配分）
+  const zc = zscoresJs(hs.map((r) => r.comp));
+  const zs = zscoresJs(hs.map((r) => r.si));
+  const zt = zscoresJs(hs.map((r) => r.ten));
+  const zy = zscoresJs(hs.map((r) => r.cz));
+  hs.forEach((r, i) => {
+    const parts = [[zc[i], 0.45], [zs[i], 0.30], [zy[i], 0.15], [zt[i], 0.10]].filter(([v]) => v != null);
+    r.score = parts.length ? parts.reduce((s, [v, w]) => s + v * w, 0) / parts.reduce((s, [, w]) => s + w, 0) : null;
+  });
+  const rankOf = (key) => {
+    const sorted = hs.filter((r) => r[key] != null).map((r) => r[key]).sort((a, b) => b - a);
+    return (v) => (v == null ? null : sorted.indexOf(v) + 1);
+  };
+  const rk = { comp: rankOf('comp'), si: rankOf('si'), ten: rankOf('ten'), cz: rankOf('cz') };
+  // AI予想印: 学習モデルのスコア順（モデル未取得や実績なしは総合スコアで代替）
+  const markKey = hs.some((r) => r.ai != null) ? 'ai' : 'score';
+  const ranked = hs.filter((r) => r[markKey] != null).sort((a, b) => b[markKey] - a[markKey]);
+  ranked.forEach((r, i) => { r.mark = MARKS[i] || ''; });
+  const aiVals = hs.map((r) => r.ai).filter((v) => v != null).sort((a, b) => b - a);
+  const zAi = zscoresJs(hs.map((r) => r.ai));   // 表示用に偏差値化
+  hs.forEach((r, i) => { r.aiDev = zAi[i] != null ? 50 + zAi[i] * 10 : null; });
+  const siTop = hs.filter((r) => r.si != null).sort((a, b) => b.si - a.si)[0];
+  for (const r of hs) r.myomi = siTop && r === siTop && r.e.pop != null && r.e.pop >= 4;
+
+  // 直近の馬場傾向（過去3開催日）
+  const bd = (state.stats && state.stats.bias_daily) || {};
+  const recentBias = Object.keys(bd).sort().reverse().slice(0, 3)
+    .map((d) => `${d.slice(5)}: <b>${bd[d].label}</b>(${bd[d].rel > 0 ? '+' : ''}${bd[d].rel})`).join('　');
+
+  const disp = hs.slice().sort((a, b) => (b[markKey] ?? -99) - (a[markKey] ?? -99));
+  const rows = disp.map((r) => {
+    const e = r.e;
+    let konkyo = [
+      r.comp != null ? `指数${rk.comp(r.comp)}位` : null,
+      r.si != null ? `SI${rk.si(r.si)}位` : null,
+      r.cz != null ? `調教${rk.cz(r.cz)}位` : null,
+      r.ten != null ? `テン${rk.ten(r.ten)}位` : null,
+      r.kyaku,
+    ].filter(Boolean).join('・');
+    if (r.comp == null && r.si == null) {
+      const nr = nouRuns(nouByUma, e.umaban, 1)[0];
+      konkyo = nr ? `門別実績なし（前走: ${nouRunHtml(nr).replace(/<[^>]+>/g, '')}）` : (konkyo || '実績なし');
+    }
+    return `<tr>
+      <td style="font-size:16px">${r.mark || ''}</td>
+      <td><span class="waku w${e.waku || 1}">${e.waku ?? ''}</span></td>
+      <td>${e.umaban ?? ''}</td>
+      <td class="l"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a></td>
+      <td class="num ${r.mark === '◎' ? 'best' : ''}">${r.aiDev != null ? r.aiDev.toFixed(1) : '-'}</td>
+      <td class="num">${r.score != null ? (50 + r.score * 10).toFixed(1) : '-'}</td>
+      <td class="num">${r.si != null ? r.si.toFixed(0) : '-'}</td>
+      <td class="num">${r.cz != null ? r.cz.toFixed(1) : '-'}</td>
+      <td class="num">${e.win_odds ?? '-'}${e.pop != null ? `(${e.pop})` : ''}</td>
+      <td>${r.myomi ? '💰' : ''}</td>
+      <td class="small">${esc(konkyo)}</td>
+    </tr>`;
+  }).join('');
+
+  return raceHeaderHtml(raceMeta) + `
+  <div class="note">直近の馬場: ${recentBias || 'データなし'}　印は学習モデル（勝ちやすさ）順。</div>
+  <div class="card"><div class="tablewrap">
+    <table>
+      <tr><th>AI印</th><th>枠</th><th>番</th><th>馬名</th><th>AI予測</th><th>総合</th><th>SI</th><th>調教</th><th>単勝(人気)</th><th>妙味</th><th>根拠</th></tr>
+      ${rows}
+    </table>
+  </div>
+  <div class="legend"><b>AI印・AI予測</b>＝学習モデル（リッジ回帰）の勝ちやすさ。検証（後半990R）で◎勝率39.3%・複勝率71.5%（従来指数36.2%・67.5%を上回る）。総合＝指数/SI/調教/テンの加重。💰＝スピード指数1位×4番人気以下（回収率108%）。</div></div>`;
+}
+
+async function renderRaceView() {
+  $('raceView').innerHTML = '<div class="empty">読み込み中…</div>';
+  const raceId = state.raceId;
+  try {
+    if (state.sub === 'seiseki') {
+      const data = await state.provider.loadRace(raceId);
+      if (!(data.results || []).length && state.sub === 'seiseki') {
+        state.sub = 'syutuba';  // 未発走レースは出馬表へ
+        renderSubTabs();
+        return renderRaceView();
+      }
+      // 成績表にもAI印（レース前情報のみで再現）
+      if (state.statsPromise) await state.statsPromise;
+      const ids = data.results.map((r) => r.horse_id).filter(Boolean);
+      const tgtDate = data.race.race_date || data.race.date || state.date;
+      const raw = await state.provider.loadHistory(ids);
+      const hist = {};
+      for (const id in raw) hist[id] = raw[id].filter((r) => !r.date || !tgtDate || r.date < tgtDate);
+      const scored = data.results.filter((r) => r.horse_id)
+        .map((r) => [r.umaban, modelScore(r, hist, data.race)]).filter(([, v]) => v != null)
+        .sort((a, b) => b[1] - a[1]);
+      const aiMark = new Map();
+      scored.forEach(([um], i) => { if (i < MARKS.length) aiMark.set(um, MARKS[i]); });
+      $('raceView').innerHTML = seisekiHtml(data, aiMark);
+    } else {
+      const meta = (state.dates[state.date] || []).find((r) => r.race_id === raceId) || {};
+      const [raceData, entries, cyokyo, nouryoku] = await Promise.all([
+        state.provider.loadRace(raceId),
+        state.provider.loadEntries(raceId),
+        state.provider.loadCyokyo(raceId),
+        state.provider.loadNouryoku(raceId),
+      ]);
+      const raceMeta = Object.keys(raceData.race || {}).length > 1 ? raceData.race : { ...meta, date: state.date };
+      const ids = entries.map((e) => e.horse_id).filter(Boolean);
+      const rawHistory = await state.provider.loadHistory(ids);
+      // 振り返り防止: このレースの日付以降の走りは予想に使わない（未来予想には影響なし）
+      const tgtDate = raceMeta.date || raceMeta.race_date || state.date;
+      const history = {};
+      for (const id in rawHistory) history[id] = rawHistory[id].filter((r) => !r.date || !tgtDate || r.date < tgtDate);
+      if (state.statsPromise) await state.statsPromise;  // 指数計算に基準タイムが要る
+      $('raceView').innerHTML = state.sub === 'yosou'
+        ? yosouHtml(raceMeta, entries, cyokyo, history, nouryoku)
+        : syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku);
+    }
+  } catch (e) {
+    $('raceView').innerHTML = `<div class="empty">読み込み失敗: ${esc(e.message)}</div>`;
+  }
+}
+
+// ============================================================
+// 分析ビュー
+// ============================================================
+// 予想AIの運用成績（chihou_meta → ローカルの順で取得）
+async function loadRecord() {
+  try {
+    const rows = await sbGet('chihou_meta?key=eq.monbetsu_record&select=value');
+    if (rows.length) return rows[0].value;
+  } catch (e) { /* 次へ */ }
+  try { return await jsonGet('data/yosou_record.json'); } catch (e) { return null; }
+}
+
+function recordHtml(rec) {
+  if (!rec) return '';
+  const o = rec.overall;
+  const pct = (a, b) => (b ? `${(a / b * 100).toFixed(1)}%` : '-');
+  const roi = (ret, n) => (n ? `${(ret / (n * 100) * 100).toFixed(1)}%` : '-');
+  const allMonths = rec.monthly.slice().reverse();
+  const rowHtml = (m) => `<tr>
+    <td>${m.ym}</td>
+    <td class="num"><a class="horse-link" data-rec="${m.ym}" data-kind="hon">${m.races}</a></td>
+    <td class="num">${pct(m.hon_win, m.races)}</td><td class="num">${pct(m.hon_top3, m.races)}</td>
+    <td class="num ${m.hon_ret >= m.races * 100 ? 'best' : ''}">${roi(m.hon_ret, m.races)}</td>
+    <td class="num">${m.myo_bets ? `<a class="horse-link" data-rec="${m.ym}" data-kind="myo">${m.myo_bets}</a>` : 0}</td>
+    <td class="num ${m.myo_ret >= m.myo_bets * 100 && m.myo_bets ? 'best' : ''}">${roi(m.myo_ret, m.myo_bets)}</td>
+  </tr>`;
+  const first12 = allMonths.slice(0, 12).map(rowHtml).join('');
+  const rest = allMonths.slice(12).map(rowHtml).join('');
+  return `
+  <h3 class="sec">🎯 予想AIの運用成績（全過去レースでの答え合わせ・各レース前情報のみ使用）</h3>
+  <div class="card tablewrap">
+    <div class="note">通算: ◎ ${o.races}Rで勝率 ${pct(o.hon_win, o.races)}・複勝率 ${pct(o.hon_top3, o.races)}・単勝回収率 ${roi(o.hon_ret, o.races)}
+    ／ 💰妙味ゾーン ${o.myo_bets}Rで複勝率 ${pct(o.myo_top3, o.myo_bets)}・<b>単勝回収率 ${roi(o.myo_ret, o.myo_bets)}</b></div>
+    <table>
+      <tr><th>月</th><th>R数</th><th>◎勝率</th><th>◎複勝率</th><th>◎単勝回収</th><th>💰対象</th><th>💰単勝回収</th></tr>
+      ${first12}
+      <tbody id="recRest" ${rest ? 'hidden' : ''}>${rest}</tbody>
+    </table>
+    ${rest ? `<button class="foldbtn" id="recFold">▼ 過去の月も表示（残り${allMonths.length - 12}ヶ月）</button>` : ''}
+    <div class="legend">R数・💰対象をクリックするとその月の内訳が見られます。緑=回収率100%超え。💰=スピード指数1位×4番人気以下の単勝。</div>
+  </div>`;
+}
+
+// 運用成績の月別内訳モーダル（◎ or 💰 の各レース結果）
+function openRecordDetail(ym, kind) {
+  const rec = state.record;
+  const m = rec && rec.monthly.find((x) => x.ym === ym);
+  if (!m) return;
+  const list = (kind === 'myo' ? m.myo_races : m.hon_races) || [];
+  const label = kind === 'myo' ? '💰妙味ゾーン' : '◎本命';
+  const hit = list.filter((x) => x.fin <= 3).length;
+  const win = list.filter((x) => x.fin === 1).length;
+  const rows = list.map((x) => {
+    const finCls = x.fin >= 1 && x.fin <= 3 ? `fin${x.fin}` : '';
+    return `<tr><td>${mmdd(x.date)}</td><td>${x.r}R</td><td>${x.uma}番</td>
+      <td class="l">${esc(x.name)}</td><td class="${finCls}">${x.fin}着</td>
+      <td class="num">${x.odds ?? '-'}</td>${kind === 'myo' ? `<td class="num">${x.pop ?? ''}人</td>` : ''}</tr>`;
+  }).join('');
+  $('horseModalTitle').textContent = `${ym} の${label}（${list.length}R 勝${win}・複${hit}）`;
+  $('horseModalBody').innerHTML = `<div class="tablewrap"><table>
+    <tr><th>日付</th><th>R</th><th>馬番</th><th>${kind === 'myo' ? '💰' : '◎'}馬</th><th>結果</th><th>単勝</th>${kind === 'myo' ? '<th>人気</th>' : ''}</tr>
+    ${rows || '<tr><td colspan="7">データなし</td></tr>'}</table></div>`;
+  $('horseModal').hidden = false;
+}
+
+function analysisHtml(st) {
+  if (!st) return '<div class="empty">統計データがありません（scraper/build_stats.py --push を実行してください）</div>';
+  const rateBar = (r) => `${(r * 100).toFixed(1)}%`;
+
+  // 馬場バイアス（直近20日・門別平均との相対値）＋4角位置バイアス
+  const dates = Object.keys(st.bias_daily).sort().reverse().slice(0, 20);
+  const fmtDev = (v) => (v == null ? '-' : `${v > 0 ? '+' : ''}${v.toFixed(2)}`);
+  const c4d = st.corner4_daily || {};
+  const c4label = (v) => (v == null ? '-' : v >= 0.15 ? '内有利' : v <= -0.15 ? '外有利' : 'フラット');
+  const biasRows = dates.map((d) => {
+    const b = st.bias_daily[d];
+    const cls = b.label === '前有利' ? 'bias-front' : b.label === '差し有利' ? 'bias-back' : '';
+    const c4 = c4d[d];
+    const c4cls = c4 == null ? '' : c4 >= 0.15 ? 'bias-back' : c4 <= -0.15 ? 'bias-front' : '';
+    const kk = ['逃げ', '先行', '差し', '追込'].map((k) =>
+      b.kyaku[k] ? `<td class="num">${rateBar(b.kyaku[k].rate)} <span class="kyaku">${b.kyaku[k].top3}/${b.kyaku[k].n}</span></td>` : '<td>-</td>').join('');
+    return `<tr><td>${d}</td><td class="${cls}">${b.label}</td>
+      <td class="num">${b.rel != null ? (b.rel > 0 ? '+' : '') + b.rel : '-'}</td>
+      <td class="${c4cls}">${c4label(c4)}${c4 != null ? `<span class="kyaku">${fmtDev(c4)}</span>` : ''}</td>
+      <td class="num">${fmtDev(b.agari3_dev)}</td>
+      <td class="num">${fmtDev(b.agari4_dev)}</td>${kk}</tr>`;
+  }).join('');
+
+  // ペース×脚質（内回り1500-1600と外回り1700は分割）
+  const bands = ['1000', '1100', '1200', '1500-1600内', '1700外', '1800+'];
+  const paces = ['ハイ', 'ミドル', 'スロー'];
+  const kyakus = ['逃げ', '先行', '差し', '追込'];
+  const pkTables = bands.map((band) => {
+    const rows = paces.map((p) => {
+      const cells = kyakus.map((k) => {
+        const e = st.pace_kyaku[`${band}|${p}|${k}`];
+        return e ? `<td class="num">${rateBar(e.rate)} <span class="kyaku">${e.n}</span></td>` : '<td>-</td>';
+      }).join('');
+      return `<tr><td>${p}</td>${cells}</tr>`;
+    }).join('');
+    return `<div><h3 class="sec">${band}m ペース×脚質（複勝率）</h3><div class="card tablewrap"><table>
+      <tr><th>ペース</th>${kyakus.map((k) => `<th>${k}</th>`).join('')}</tr>${rows}</table></div></div>`;
+  }).join('');
+
+  // 枠別成績（距離帯別 複勝率）
+  const ws = st.waku_stats || {};
+  const wakuRows = bands.map((band) => {
+    const cells = [];
+    for (let w = 1; w <= 8; w++) {
+      const e = ws[`${band}|${w}`];
+      if (!e) { cells.push('<td>-</td>'); continue; }
+      const rates = [];
+      for (let x = 1; x <= 8; x++) if (ws[`${band}|${x}`]) rates.push(ws[`${band}|${x}`].rate);
+      const mean = rates.reduce((s, v) => s + v, 0) / rates.length;
+      const cls = e.rate >= mean + 0.03 ? 'bias-back' : e.rate <= mean - 0.03 ? 'bias-front' : '';
+      cells.push(`<td class="num ${cls}">${rateBar(e.rate)} <span class="kyaku">${e.n}</span></td>`);
+    }
+    return `<tr><td>${band}m</td>${cells.join('')}</tr>`;
+  }).join('');
+  const wakuTable = `<h3 class="sec">枠別成績（距離帯×枠番・複勝率）</h3>
+    <div class="card tablewrap"><table>
+      <tr><th>距離</th>${[1, 2, 3, 4, 5, 6, 7, 8].map((w) => `<th>${w}枠</th>`).join('')}</tr>${wakuRows}
+    </table><div class="legend">青=その距離で平均+3%以上有利／オレンジ=平均-3%以上不利。門別1000mは内枠不利の傾向。</div></div>`;
+
+  // 基準タイム（クラス別。'全'はフォールバック用なので非表示）
+  const clsOrder = { '2歳': 0, '3歳': 1, '3歳以上': 2 };
+  const btKeys = Object.keys(st.base_times)
+    .filter((k) => k.split('_')[2] !== '全')
+    .sort((a, b) => {
+      const [da, ga, ca] = a.split('_'); const [db, gb, cb] = b.split('_');
+      return (+da) - (+db) || (clsOrder[ca] ?? 9) - (clsOrder[cb] ?? 9) || ga.localeCompare(gb);
+    });
+  const btRows = btKeys.map((k) => {
+    const [d, g, c] = k.split('_');
+    const e = st.base_times[k];
+    return `<tr><td>${d}m</td><td>${c}</td><td>${g}</td>
+      <td class="num">${e.first3f ? `${e.first3f.mean} ± ${e.first3f.std}` : '-'}</td>
+      <td class="num">${e.last3f ? `${e.last3f.mean} ± ${e.last3f.std}` : '-'}</td>
+      <td class="num">${e.time ? `${e.time.mean} ± ${e.time.std}` : '-'}</td>
+      <td class="num">${e.first3f ? e.first3f.n : e.last3f ? e.last3f.n : ''}</td></tr>`;
+  }).join('');
+
+  // 騎手・厩舎（勝率順）
+  const rankTable = (obj, label) => {
+    const rows = Object.entries(obj).sort((a, b) => b[1].win_rate - a[1].win_rate).slice(0, 30)
+      .map(([n, e], i) => `<tr><td>${i + 1}</td><td class="l">${esc(n)}</td><td class="num">${e.starts}</td>
+        <td class="num">${e.wins}</td><td class="num">${rateBar(e.win_rate)}</td><td class="num">${rateBar(e.top3_rate)}</td></tr>`).join('');
+    return `<div><h3 class="sec">${label}（勝率順・10走以上）</h3><div class="card tablewrap"><table>
+      <tr><th>#</th><th>${label}</th><th>騎乗/出走</th><th>勝利</th><th>勝率</th><th>複勝率</th></tr>${rows}</table></div></div>`;
+  };
+
+  return `
+  <div class="note">対象: ${st.n_races}レース（〜${esc(st.generated)}）。前残り度は「その日の(前複勝率−後複勝率) − 門別平均ギャップ${st.overall_gap != null ? `(+${st.overall_gap})` : ''}」の相対値。上がり偏差は基準タイム比（負＝上がりが速い＝差しが利く馬場）。</div>
+  <h3 class="sec">開催日ごとの馬場バイアス（直近20日・門別平均との相対評価）</h3>
+  <div class="card tablewrap"><table>
+    <tr><th>開催日</th><th>判定</th><th>前残り度<br>(対平均)</th><th>4角<br>位置</th><th>勝ち馬<br>上がり3F偏差</th><th>レース<br>上がり4F偏差</th><th>逃げ</th><th>先行</th><th>差し</th><th>追込</th></tr>
+    ${biasRows}
+  </table></div>
+  <div class="grid2">${pkTables}</div>
+  ${wakuTable}
+  <h3 class="sec">基準タイム（距離×クラス×馬場・平均±標準偏差 → 偏差値/指数の土台）</h3>
+  <div class="card tablewrap"><table>
+    <tr><th>距離</th><th>クラス</th><th>馬場</th><th>前半3F</th><th>上り3F</th><th>走破タイム</th><th>N</th></tr>${btRows}
+  </table></div>
+  <div class="grid2">${rankTable(st.jockeys, '騎手')}${rankTable(st.trainers, '厩舎')}</div>`;
+}
+
+async function renderAnalysis() {
+  if (state.statsPromise) await state.statsPromise;
+  if (state.record === undefined) state.record = await loadRecord();
+  $('analysisRoot').innerHTML = recordHtml(state.record) + analysisHtml(state.stats);
+}
+
+// ============================================================
+// 調教ビュー（坂路タイムランキング）
+// ============================================================
+const cyokyoState = { data: null, date: null, year: null, twoOnly: false, byYear: {}, years: [], base: null, local: null };
+const cyoAge = (s) => { const m = String(s || '').match(/(\d+)/); return m ? +m[1] : null; };
+
+// 指定年の調教日データを取得（既定メタ＝最新年、過去年はキー別に遅延ロード、ローカルは全期間から抽出）
+async function cyoLoadYear(y) {
+  if (cyokyoState.byYear[y]) return cyokyoState.byYear[y];
+  if (cyokyoState.local) {
+    const dd = {};
+    for (const d in cyokyoState.local) if (d.slice(0, 4) === y) dd[d] = cyokyoState.local[d];
+    return (cyokyoState.byYear[y] = dd);
+  }
+  try {
+    const rows = await sbGet(`chihou_meta?key=eq.monbetsu_cyokyo_${y}&select=value`);
+    return (cyokyoState.byYear[y] = (rows.length && rows[0].value && rows[0].value.dates) || {});
+  } catch (e) { return (cyokyoState.byYear[y] = {}); }
+}
+
+async function renderCyokyo() {
+  const root = $('cyokyoRoot');
+  if (!cyokyoState.data) {
+    root.innerHTML = '<div class="empty">読み込み中…（調教データ）</div>';
+    // Supabase（既定＝最新年＋年リスト）→ ローカル全期間 の順で取得
+    try {
+      const rows = await sbGet('chihou_meta?key=eq.monbetsu_cyokyo&select=value');
+      if (rows.length && rows[0].value && rows[0].value.dates) cyokyoState.data = rows[0].value;
+    } catch (e) { /* 次へ */ }
+    if (!cyokyoState.data) {
+      try { cyokyoState.data = await jsonGet('data/cyokyo_works.json'); cyokyoState.local = cyokyoState.data.dates; }
+      catch (e) {
+        root.innerHTML = `<div class="empty">調教データを読み込めませんでした（${esc(e.message)}）。<br>
+          <button onclick="renderCyokyo()">↻ 再試行</button></div>`;
+        return;
+      }
+    }
+    cyokyoState.base = cyokyoState.data.base;
+    cyokyoState.years = cyokyoState.data.years
+      || [...new Set(Object.keys(cyokyoState.data.dates).map((d) => d.slice(0, 4)))].sort().reverse();
+    cyokyoState.year = cyokyoState.years[0];
+    cyokyoState.byYear[cyokyoState.year] = cyokyoState.data.dates;   // 既定メタ＝最新年
+  }
+
+  root.innerHTML = '<div class="empty">読み込み中…（調教データ）</div>';
+  const yearDates = await cyoLoadYear(cyokyoState.year);
+  const hb = cyokyoState.base;
+  const hensachi = (t3) => (hb && hb.std ? 50 + 10 * (hb.mean - t3) / hb.std : null);
+  const two = cyokyoState.twoOnly;
+  const filt = (ws) => two ? ws.filter((w) => cyoAge(w.sex) === 2) : ws;
+  // その年の調教日（2歳フィルタ時は2歳追切がある日だけ）を新しい順に
+  const dateKeys = Object.keys(yearDates).sort().reverse().filter((d) => filt(yearDates[d]).length);
+  const youbiOf = (d) => (yearDates[d][0] || {}).youbi || '';
+  if (!cyokyoState.date || !dateKeys.includes(cyokyoState.date)) cyokyoState.date = dateKeys[0];
+  if (!cyokyoState.date) { root.innerHTML = `<div class="empty">${esc(cyokyoState.year)}年${two ? 'の2歳' : ''}の調教データがありません。</div>`; return; }
+  const works = filt(yearDates[cyokyoState.date] || []);
+  const finCell = (w) => {
+    if (w.fin == null) return '<td></td>';
+    const cls = w.fin >= 1 && w.fin <= 3 ? `fin${w.fin}` : '';
+    return `<td class="${cls}">${w.fin}着</td>`;
+  };
+  // 坂路（3F順）と 本馬場（3F順）を分けて表示
+  // 坂路: 4F/3F/2F/1F（t4=4F, t3=3F, t2=2F, t1=1F）3F順・偏差値は3F(t3)基準
+  const hanro = works.filter((w) => w.hanro && w.t3 != null);
+  // 本馬場: 5F/4F/3F/1F（t4=5F, t3=4F=半哩, t2=3F, t1=1F）真の3F(t2)順
+  const honba = works.filter((w) => w.honba && w.t2 != null).sort((a, b) => a.t2 - b.t2);
+  const other = works.length - hanro.length - honba.length;
+  const hanroRows = hanro.map((w, i) => `<tr>
+    <td>${i + 1}</td>
+    <td class="l"><a class="horse-link" data-horse="${esc(w.name)}">${esc(w.name)}</a>${w.pb ? ' <span class="badge arrow-up">自己ベスト</span>' : ''}</td>
+    <td>${esc(w.sex || '')}</td><td>${esc(w.course)}</td><td>${esc(w.baba || '')}</td>
+    <td class="num">${w.t4 != null ? w.t4.toFixed(1) : ''}</td>
+    <td class="num ${i < 3 ? 'f1' : ''}">${w.t3.toFixed(1)}</td>
+    <td class="num">${w.t2 != null ? w.t2.toFixed(1) : ''}</td>
+    <td class="num">${w.t1 != null ? w.t1.toFixed(1) : ''}</td>
+    <td class="num">${hensachi(w.t3) != null ? hensachi(w.t3).toFixed(1) : ''}</td>
+    ${finCell(w)}<td>${esc(w.ashiiro || '')}</td><td class="l">${esc(w.tanpyo || '')}</td>
+  </tr>`).join('');
+  const honbaRows = honba.map((w, i) => `<tr>
+    <td>${i + 1}</td>
+    <td class="l"><a class="horse-link" data-horse="${esc(w.name)}">${esc(w.name)}</a></td>
+    <td>${esc(w.sex || '')}</td><td>${esc(w.course)}</td><td>${esc(w.baba || '')}</td>
+    <td class="num">${w.t4 != null ? w.t4.toFixed(1) : ''}</td>
+    <td class="num">${w.t3 != null ? w.t3.toFixed(1) : ''}</td>
+    <td class="num ${i < 3 ? 'f1' : ''}">${w.t2.toFixed(1)}</td>
+    <td class="num">${w.t1 != null ? w.t1.toFixed(1) : ''}</td>
+    ${finCell(w)}<td>${esc(w.ashiiro || '')}</td><td class="l">${esc(w.tanpyo || '')}</td>
+  </tr>`).join('');
+
+  root.innerHTML = `
+  <div class="controls">
+    <span>年</span>
+    <div class="racetabs">${cyokyoState.years.map((y) => `<button data-cyear="${y}" class="${cyokyoState.year === y ? 'active' : ''}" style="width:auto;padding:6px 12px">${y}</button>`).join('')}</div>
+    <button data-cyo-two class="${two ? 'active' : ''}" style="padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text);cursor:pointer">2歳限定${two ? ' ✓' : ''}</button>
+  </div>
+  <div class="controls">調教日
+    <div class="racetabs">${dateKeys.map((d) => `<button data-cdate="${d}" class="${cyokyoState.date === d ? 'active' : ''}" style="width:auto;padding:6px 8px">${d.slice(5).replace('-', '.')}(${youbiOf(d)})</button>`).join('')}</div>
+  </div>
+  <div class="card tablewrap">
+    <b>坂路（${cyokyoState.date}）</b>
+    <table>
+      <tr><th>#</th><th>馬名</th><th>馬齢</th><th>コース</th><th>馬場</th><th>4F</th><th>3F</th><th>2F</th><th>1F</th><th>偏差値</th><th>着順</th><th>脚色</th><th>短評</th></tr>
+      ${hanroRows || '<tr><td colspan="13">この日の坂路追切はありません</td></tr>'}
+    </table>
+    <div class="legend"><span class="sw f"></span> 3F上位3本。偏差値は全期間の坂路3F分布（${hb ? `${hb.mean}±${hb.std}秒・n=${hb.n.toLocaleString()}本` : '-'}）基準・50が平均。着順は各馬の次走結果。</div>
+  </div>
+  ${honba.length ? `<div class="card tablewrap">
+    <b>本馬場（${cyokyoState.date}）</b>
+    <table>
+      <tr><th>#</th><th>馬名</th><th>馬齢</th><th>コース</th><th>馬場</th><th>5F</th><th>4F</th><th>3F</th><th>1F</th><th>着順</th><th>脚色</th><th>短評</th></tr>
+      ${honbaRows}
+    </table>
+    <div class="legend">本馬場（門別本）の時計。<span class="sw f"></span> 3F上位3本。${other ? `他コース${other}本は非表示。` : ''}</div>
+  </div>` : (other ? `<div class="note">この日は本馬場の追切はありません（他コース${other}本）。</div>` : '')}`;
+}
+
+// ============================================================
+// 馬詳細モーダル（成績＋調教履歴）
+// ============================================================
+const withTimeout = (p, ms) => Promise.race([p,
+  new Promise((_, rej) => setTimeout(() => rej(new Error('タイムアウト（通信が遅い可能性）')), ms))]);
+
+async function openHorseModal(nameOrId, byId, displayName) {
+  const modal = $('horseModal');
+  modal.hidden = false;
+  $('horseModalTitle').textContent = (displayName || (byId ? '' : nameOrId) || '') + ' の成績・調教';
+  $('horseModalBody').innerHTML = '<div class="empty">読み込み中…</div>';
+  try {
+    const sel = 'horse_name,finish,pop,win_odds,time_str,first3f,last3f,passing,corner4_pos,comment,sex_age,jockey,body_weight,weight_diff,race_id,chihou_races(race_date,track,race_no,klass,distance_m,going)';
+    const filt = byId ? `horse_id=eq.${encodeURIComponent(nameOrId)}` : `horse_name=eq.${encodeURIComponent(nameOrId)}`;
+    const results = await withTimeout(sbGet(`chihou_results?${filt}&select=${sel}&order=race_id.desc&limit=40`), 10000);
+    const name = displayName || (results[0] && results[0].horse_name) || (byId ? null : nameOrId);
+    const cyokyo = name
+      ? await withTimeout(sbGet(`chihou_cyokyo?horse_name=eq.${encodeURIComponent(name)}&select=race_id,works&order=race_id.desc&limit=20`), 10000).catch(() => [])
+      : [];
+    if (name) $('horseModalTitle').textContent = name + ' の成績・調教';
+    renderHorseModal(results, cyokyo);
+  } catch (e) {
+    $('horseModalBody').innerHTML = `<div class="empty">読み込み失敗: ${esc(e.message)}<br><button class="foldbtn" onclick="document.getElementById('horseModal').hidden=true">閉じる</button></div>`;
+  }
+}
+
+function renderHorseModal(results, cyokyo) {
+  const resRows = results.map((r) => {
+    const ra = r.chihou_races || {};
+    const finCls = r.finish >= 1 && r.finish <= 3 ? `fin${r.finish}` : '';
+    return `<tr>
+      <td>${mmdd(ra.race_date)}</td><td>${esc(ra.track)}${ra.race_no ?? ''}R</td>
+      <td>${esc(r.sex_age || '')}</td><td class="l">${esc(ra.klass || '')}</td>
+      <td>${ra.distance_m ?? ''}m</td><td>${esc(ra.going || '')}</td>
+      <td class="${finCls}">${r.finish != null ? r.finish + '着' : '-'}</td>
+      <td class="l">${esc(r.jockey || '')}</td><td class="num">${esc(r.time_str || '')}</td>
+      <td class="num">${r.first3f != null ? r.first3f.toFixed(1) : ''}</td>
+      <td class="num">${r.last3f != null ? r.last3f.toFixed(1) : ''}</td>
+      <td class="num">${esc(r.passing || '')}</td><td>${esc(r.corner4_pos || '')}</td>
+      <td class="num">${r.pop != null ? r.pop + '人' : ''}</td>
+      <td class="num">${r.win_odds ?? ''}</td>
+      <td class="num">${r.body_weight ?? ''}${r.weight_diff != null ? `(${fmtDiff(r.weight_diff)})` : ''}</td>
+    </tr>`;
+  }).join('');
+
+  // 調教履歴（全レースの works を日付降順に統合・重複除去）
+  const seen = new Set();
+  const works = [];
+  for (const c of cyokyo) for (const w of (c.works || [])) {
+    const key = `${w.date}_${(w.times || {}).t_half}`;
+    if (w.date && !seen.has(key)) { seen.add(key); works.push(w); }
+  }
+  works.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  // 自己ベスト（坂路3F=t_half の最速とその日付）
+  const hanroWorks = works.filter((w) => (w.course || '').includes('坂') && (w.times || {}).t_half != null);
+  let bestW = null;
+  for (const w of hanroWorks) if (!bestW || w.times.t_half < bestW.times.t_half) bestW = w;
+  const bestLine = bestW
+    ? `坂路3F 自己ベスト <b>${bestW.times.t_half.toFixed(1)}秒</b>（${mmdd(bestW.date)}${bestW.youbi ? `(${bestW.youbi})` : ''} ${esc(bestW.course)}）`
+    : '坂路の追切データなし';
+  // 各レースの最終追い（そのレース直前で最も新しい追切日）を特定
+  const finalDates = {};   // 追切日 → その追切が最終追いだったレース日リスト
+  const workDates = [...new Set(works.map((w) => w.date).filter(Boolean))].sort();
+  for (const r of results) {
+    const rd = (r.chihou_races || {}).race_date;
+    if (!rd) continue;
+    let last = null;
+    for (const wd of workDates) if (wd < rd) last = wd; else break;
+    if (last && (new Date(rd) - new Date(last)) <= 20 * 86400000) {
+      (finalDates[last] = finalDates[last] || []).push(rd);
+    }
+  }
+  const cyoRows = works.slice(0, 20).map((w) => {
+    const t = w.times || {};
+    const fd = finalDates[w.date];
+    const finalBadge = fd ? ` <span class="badge arrow-up">最終追い→${mmdd(fd[fd.length - 1])}</span>` : '';
+    return `<tr><td>${mmdd(w.date)}${w.youbi ? `(${w.youbi})` : ''}${finalBadge}</td><td>${esc(w.course || '')}</td>
+      <td>${esc(w.baba || '')}</td>
+      <td class="num">${t.t_5f != null ? t.t_5f.toFixed(1) : ''}</td>
+      <td class="num">${t.t_half != null ? t.t_half.toFixed(1) : ''}</td>
+      <td class="num">${t.t_3f != null ? t.t_3f.toFixed(1) : ''}</td>
+      <td class="num">${t.t_1f != null ? t.t_1f.toFixed(1) : ''}</td>
+      <td>${esc(w.ashiiro || '')}</td><td class="l">${esc(w.tanpyo || '')}</td></tr>`;
+  }).join('');
+
+  $('horseModalBody').innerHTML = `
+    <h3 class="sec">成績（新しい順）</h3>
+    <div class="tablewrap"><table>
+      <tr><th>日付</th><th>場R</th><th>馬齢</th><th>クラス</th><th>距離</th><th>馬場</th><th>着</th><th>騎手</th><th>タイム</th><th>前3F</th><th>上3F</th><th>通過</th><th>4角</th><th>人気</th><th>単勝</th><th>馬体重</th></tr>
+      ${resRows || '<tr><td colspan="16">成績なし</td></tr>'}
+    </table></div>
+    <h3 class="sec">調教履歴（新しい順）</h3>
+    <div class="note">${bestLine}</div>
+    <div class="tablewrap"><table>
+      <tr><th>日付</th><th>コース</th><th>馬場</th><th>坂4F/本5F</th><th>坂3F/本4F</th><th>坂2F/本3F</th><th>1F</th><th>脚色</th><th>短評</th></tr>
+      ${cyoRows || '<tr><td colspan="9">調教データなし</td></tr>'}
+    </table></div>`;
+}
+
+// ============================================================
+// 制御
+// ============================================================
+function switchView(v) {
+  state.view = v;
+  $('raceRoot').hidden = v !== 'race';
+  $('analysisRoot').hidden = v !== 'analysis';
+  $('cyokyoRoot').hidden = v !== 'cyokyo';
+  for (const b of $('viewTabs').querySelectorAll('button'))
+    b.classList.toggle('active', b.dataset.view === v);
+  if (v === 'analysis') renderAnalysis();
+  if (v === 'cyokyo') renderCyokyo();
+}
+
+async function selectRace(raceId, sub) {
+  state.raceId = raceId;
+  const meta = (state.dates[state.date] || []).find((r) => r.race_id === raceId);
+  state.sub = sub || (meta && meta.entries_only ? 'yosou' : state.sub || 'seiseki');
+  renderTabs();
+  renderSubTabs();
+  location.hash = `${state.date}/${raceId}`;
+  await renderRaceView();
+}
+
+function selectDate(d) {
+  state.date = d;
+  state.month = d.slice(0, 7);
+  renderMonths();
+  renderDates();
+  const races = state.dates[d] || [];
+  if (races.length) selectRace(races[0].race_id);
+  else { renderTabs(); $('raceView').innerHTML = '<div class="empty">レースなし</div>'; }
+}
+
+async function init() {
+  for (const name of ['supabase', 'local']) {
+    try {
+      state.dates = await providers[name].listDates();
+      state.provider = providers[name];
+      $('srcBadge').textContent = `データ源: ${providers[name].label}`;
+      break;
+    } catch (e) { /* 次のプロバイダへ */ }
+  }
+  if (!state.provider) {
+    $('raceView').innerHTML = '<div class="empty">データがありません</div>';
+    $('srcBadge').textContent = 'データ源: なし';
+    return;
+  }
+  // 統計は裏で読み込み（指数・テン偏差値に使う）
+  state.statsPromise = Promise.all([
+    state.provider.loadStats().then((s) => { state.stats = s; }),
+    state.provider.loadModel().then((mo) => { state.model = mo; }),
+  ]);
+
+  $('monthSel').addEventListener('change', (e) => {
+    state.month = e.target.value;
+    const ds = Object.keys(state.dates).filter((d) => d.startsWith(state.month));
+    if (ds.length) selectDate(ds[0]);
+  });
+  $('dateSel').addEventListener('change', (e) => selectDate(e.target.value));
+  $('raceTabs').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-id]');
+    if (b) selectRace(b.dataset.id);
+  });
+  $('subTabs').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-sub]');
+    if (b) { state.sub = b.dataset.sub; renderSubTabs(); renderRaceView(); }
+  });
+  $('viewTabs').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-view]');
+    if (b) switchView(b.dataset.view);
+  });
+  $('cyokyoRoot').addEventListener('click', (e) => {
+    const hl = e.target.closest('a.horse-link');
+    if (hl) { e.preventDefault(); openHorseModal(hl.dataset.horse); return; }
+    const y = e.target.closest('button[data-cyear]');
+    if (y) { cyokyoState.year = y.dataset.cyear; cyokyoState.date = null; renderCyokyo(); return; }
+    const t = e.target.closest('button[data-cyo-two]');
+    if (t) { cyokyoState.twoOnly = !cyokyoState.twoOnly; cyokyoState.date = null; renderCyokyo(); return; }
+    const d = e.target.closest('button[data-cdate]');
+    if (d) { cyokyoState.date = d.dataset.cdate; renderCyokyo(); }
+  });
+  // 馬名リンク（レース各ビュー）と モーダルを閉じる
+  $('raceView').addEventListener('click', (e) => {
+    const hl = e.target.closest('a.horse-link');
+    if (hl) { e.preventDefault(); const nm = hl.textContent.trim();
+      hl.dataset.hid ? openHorseModal(hl.dataset.hid, true, nm) : openHorseModal(hl.dataset.horse, false, nm); }
+  });
+  $('horseModalClose').addEventListener('click', () => { $('horseModal').hidden = true; });
+  $('horseModal').addEventListener('click', (e) => { if (e.target.id === 'horseModal') $('horseModal').hidden = true; });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('horseModal').hidden = true; });
+  $('analysisRoot').addEventListener('click', (e) => {
+    const rc = e.target.closest('a[data-rec]');
+    if (rc) { e.preventDefault(); openRecordDetail(rc.dataset.rec, rc.dataset.kind); return; }
+    if (e.target.id === 'recFold') {
+      const rest = $('recRest'); rest.hidden = !rest.hidden;
+      e.target.textContent = rest.hidden ? '▼ 過去の月も表示' : '▲ 閉じる';
+    }
+  });
+
+  const dates = Object.keys(state.dates);
+  const [hd, hr] = location.hash.slice(1).split('/');
+  if (hd && state.dates[hd]) {
+    state.date = hd;
+    state.month = hd.slice(0, 7);
+    renderMonths();
+    renderDates();
+    if (hr && state.dates[hd].some((r) => r.race_id === hr)) { renderTabs(); await selectRace(hr); return; }
+    selectDate(hd);
+  } else {
+    selectDate(dates[0]);
+  }
+}
+init();
+</script>
+</body>
+</html>
