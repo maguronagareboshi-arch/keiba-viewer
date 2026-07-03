@@ -386,7 +386,7 @@ function daysBetween(d1, d2) {
 }
 const MODEL_FEATS = ['time_mean', 'time_best', 'time_last', 'f3_best', 'l3_best', 'n_runs',
   'days_off', 'dist_change', 'same_band_z', 'cls_up', 'cls_down', 'wt_change', 'draw_bias',
-  'jockey_r', 'trainer_r', 'trip_adj'];
+  'jockey_r', 'trainer_r', 'trip_adj', 'exact_dist_r'];
 
 // 予想対象レースでの各馬の予測スコア（高いほど勝ちやすい）
 function modelScore(e, history, race) {
@@ -430,6 +430,10 @@ function modelScore(e, history, race) {
     jockey_r: (m.jockey_r && m.jockey_r[e.jockey]) ?? 0.28,
     trainer_r: (m.trainer_r && m.trainer_r[e.trainer]) ?? 0.28,
     trip_adj: mean(P.map((p) => p.trip)),
+    exact_dist_r: (() => {  // 同距離ちょうどの複勝率（直近8走内・2走以上）
+      const exd = runs.slice(0, 8).filter((r) => r.dist === d && r.fin != null);
+      return exd.length >= 2 ? exd.filter((r) => r.fin <= 3).length / exd.length : 0.28;
+    })(),
   };
   let s = m.b;
   for (let i = 0; i < MODEL_FEATS.length; i++) {
