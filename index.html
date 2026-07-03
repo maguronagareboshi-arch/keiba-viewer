@@ -263,6 +263,41 @@ body.dark-mode .ai-rx{color:#8fa3be!important}
 body.dark-mode .rf-o{background:#1e2a3a!important;color:#8fa3be!important}
 body.dark-mode .rf-x{background:#0d1826!important;color:#4a5e76!important}
 body.dark-mode .rf-none{color:#4a5e76!important}
+body.dark-mode .psf-value-bar{background:#062a33!important;border-color:#0e5a6b!important;color:#7dd3fc!important}
+body.dark-mode .kv-sp-row>td{border-color:#1e3048!important}
+body.dark-mode .spr-name{color:#e2e8f0!important}
+body.dark-mode .spr-odds{color:#f87171!important}
+body.dark-mode .spr-l2{color:#8fa3be!important}
+body.dark-mode .spr-l2 b{color:#c8d8ec!important}
+body.dark-mode .spr-score{color:#c4b5fd!important}
+body.dark-mode .spr-result{color:#8fa3be!important}
+body.dark-mode .spr-result b{color:#e2e8f0!important}
+body.dark-mode .spr-pace{color:#fbbf24!important}
+body.dark-mode #kv-bottom-nav{background:#0d1826!important;border-top-color:#1e3048!important;box-shadow:0 -2px 14px rgba(0,0,0,.5)!important}
+body.dark-mode .kbn-btn{color:#8fa3be!important}
+body.dark-mode .kbn-btn.active{color:#38bdf8!important}
+body.dark-mode #kbn-more-menu{background:#111827!important;border-color:#1e3048!important;box-shadow:0 8px 30px rgba(0,0,0,.6)!important}
+body.dark-mode #kbn-more-menu button{color:#c8d8ec!important}
+body.dark-mode #kbn-more-menu button:active{background:#1a2a40!important}
+body.dark-mode .deban-date-item{background:#0d1826!important;border-color:#1e3048!important}
+body.dark-mode .deban-date-item:hover{border-color:#38bdf8!important;background:#0d2a5a!important}
+body.dark-mode .ddi-date{color:#e2e8f0!important}
+body.dark-mode .ddi-count{background:#0d2a5a!important;color:#7dd3fc!important}
+body.dark-mode .ddi-tag{background:#052e16!important;color:#4ade80!important}
+body.dark-mode #deban-back-bar button{color:#38bdf8!important}
+body.dark-mode .psf-chip{background:#0d1826!important;border-color:#1e3048!important}
+body.dark-mode .psf-chip--hl{background:#062a33!important;border-color:#0e5a6b!important}
+body.dark-mode .psf-chip-label{color:#8fa3be!important}
+body.dark-mode .psf-chip-val{color:#e2e8f0!important}
+body.dark-mode .psf-chip--hl .psf-chip-val{color:#7dd3fc!important}
+body.dark-mode .f3avg-h{color:#38bdf8!important}
+body.dark-mode .f3avg-table thead tr{background:#0d1a2e!important}
+body.dark-mode .f3avg-n{color:#4a5e76!important}
+body.dark-mode .f3avg-note{color:#4a5e76!important}
+body.dark-mode .hb-detail{background:#0d1826!important;border-color:#1e3048!important}
+body.dark-mode .hb-detail-row b{color:#7dd3fc!important}
+body.dark-mode .hb-detail-row i,body.dark-mode .hb-detail-note{color:#4a5e76!important}
+body.dark-mode .hb-detail-note{border-top-color:#1e3048!important}
 
 /* 通過順ボックス・分析空状態・ラップ入力セクション（2026-07-02 ダーク残課題の修正） */
 body.dark-mode .pass-box{background:#16233a!important;color:#a8c4e8!important;border-color:#2a3f5f!important}
@@ -309,6 +344,14 @@ body.dark-mode .btn-primary:hover{background:linear-gradient(135deg,#2470d4,#1d5
   gap:5px;backdrop-filter:blur(4px);transition:background .15s;white-space:nowrap;font-family:inherit;font-weight:600}
 #dark-mode-btn:hover,#minimal-mode-btn:hover,#sim-mode-btn:hover{background:rgba(255,255,255,0.22)}
 #minimal-mode-btn.active{background:rgba(255,255,255,0.28);color:#fff;border-color:rgba(255,255,255,0.5)}
+/* 【開発用】管理者/閲覧者トグル（完成後は削除）。管理者=琥珀・閲覧者=グレー */
+#dev-admin-btn{background:rgba(245,158,11,0.85);color:#fff;border:1px solid rgba(245,158,11,0.6);
+  border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:5px;
+  transition:background .15s;white-space:nowrap;font-family:inherit;font-weight:700}
+#dev-admin-btn::before{content:"🛠";font-size:12px}
+#dev-admin-btn:hover{background:rgba(245,158,11,1)}
+#dev-admin-btn.dev-admin-public{background:rgba(255,255,255,0.14);color:#cbd5e1;border-color:rgba(255,255,255,0.25)}
+#dev-admin-btn.dev-admin-public:hover{background:rgba(255,255,255,0.24)}
 </style>
 <style id="minimal-mode-css">
 /* ===== MINIMAL MODE ===== */
@@ -406,6 +449,28 @@ const KV_APP_CSS = [
       '.search-card,.race-header-card,.saved-card{background:#fff;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,.08);padding:18px 22px}',
       '.section-title{font-size:15px;font-weight:700;color:#1a56a0;margin-bottom:14px;display:flex;align-items:center;gap:8px}',
       '.search-form{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px}',
+      // 検索フォーム単一列版（高知固定・縦積み・幅上限で間延び防止）
+      '.search-form--col{flex-direction:column;align-items:stretch;max-width:380px;gap:10px}',
+      '.search-form--col .form-group{min-width:0}',
+      '.search-btns--col{flex-direction:column;align-items:stretch;gap:8px;width:100%}',
+      '.search-btns--col .btn{width:100%;justify-content:center}',
+      // 管理者専用UI（非管理者=public-modeでは非表示）
+      'body.public-mode .admin-only{display:none!important}',
+      // 出馬表タブ：開催日リスト
+      '.ddi-month{font-size:12px;font-weight:800;color:#6b7280;margin:12px 0 6px}',
+      '.ddi-month:first-child{margin-top:0}',
+      '.ddi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}',
+      '.deban-date-item{display:flex;align-items:center;gap:8px;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;padding:11px 12px;cursor:pointer;font-family:inherit;transition:all .12s;text-align:left;width:100%}',
+      '.deban-date-item:hover{border-color:#1a56a0;background:#eef4fc}',
+      '.deban-date-item:active{transform:scale(.98)}',
+      '.ddi-date{font-size:16px;font-weight:800;color:#1a1a2e}',
+      '.ddi-date small{font-size:11px;font-weight:600;color:#94a3b8;margin-left:2px}',
+      '.ddi-count{font-size:12px;font-weight:700;color:#1a56a0;background:#e8f0fb;border-radius:8px;padding:2px 8px}',
+      '.ddi-tag{font-size:10px;font-weight:800;color:#15803d;background:#dcfce7;border-radius:6px;padding:2px 6px}',
+      '.ddi-arrow{margin-left:auto;color:#cbd5e1;font-size:12px}',
+      '#deban-back-bar{margin-bottom:10px}',
+      '#deban-back-bar button{background:none;border:none;color:#1a56a0;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;padding:4px 2px;display:inline-flex;align-items:center;gap:6px}',
+      '#deban-back-bar button:active{opacity:.6}',
       '.form-group{display:flex;flex-direction:column;gap:4px;flex:1;min-width:120px}',
       '.form-group label{font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.04em}',
       '.form-input{padding:7px 11px;border:1.5px solid #e2e8f0;border-radius:6px;font-size:14px;font-family:inherit;color:#1a1a2e;background:#fff;transition:border-color .2s;width:100%}',
@@ -430,7 +495,6 @@ const KV_APP_CSS = [
       '.spinner{width:38px;height:38px;border:4px solid #e2e8f0;border-top-color:#1a56a0;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}',
       '@keyframes spin{to{transform:rotate(360deg)}}',
       '.proxy-status{font-size:12px;font-weight:600;margin-top:8px;padding:4px 12px;border-radius:20px;display:inline-block}',
-      '.proxy-status-trying{background:#fef3c7;color:#92400e}.proxy-status-success{background:#d1fae5;color:#065f46}.proxy-status-failed{background:#fee2e2;color:#991b1b}',
       '.error-area{background:#fff8f0;border:1.5px solid #fbd38d;border-radius:10px;padding:18px 22px;text-align:center;color:#92400e}',
       '.error-area i{font-size:22px;color:#e8a020;margin-bottom:6px;display:block}',
       '.error-hint{font-size:12px;color:#6b7280;margin:8px 0;line-height:1.8}',
@@ -478,8 +542,6 @@ const KV_APP_CSS = [
       '.agari-rank-badge{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:#e2e8f0;color:#475569;font-size:12px;font-weight:700}',
       '.agari-rank-badge.agari-rank-top{background:linear-gradient(135deg,#b8860b,#f0c040);color:#fff}',
       '.agari-rank-1{background:#fffbeb !important}',
-      '.agari-f3-tag{display:inline-block;margin-left:6px;padding:1px 6px;background:#dbeafe;color:#1d4ed8;border-radius:10px;font-size:11px;font-weight:700;font-family:monospace}',
-      '.th-sub{font-weight:400;font-size:10px;opacity:0.8}',
       '.compare-race-header{display:flex;align-items:baseline;gap:10px;margin-bottom:8px;padding:8px 10px;background:#eff6ff;border-radius:6px;border-left:3px solid #1a56a0}',
       '.compare-race-name{font-weight:700;font-size:14px;color:#1a56a0}',
       '.compare-race-meta{font-size:12px;color:#6b7280}',
@@ -502,7 +564,6 @@ const KV_APP_CSS = [
       '.track-cond-none{background:#f4f6fa !important;color:#6b7280 !important}',
       '.pace-panel{background:#f4f6fa;border-radius:6px;padding:14px 16px}',
       '.pace-panel-title{font-size:13px;font-weight:700;color:#1a56a0;margin-bottom:10px;display:flex;align-items:center;gap:6px}',
-      '.pace-inputs{display:flex;gap:20px;flex-wrap:wrap;align-items:center;margin-bottom:10px}',
       '.pace-input-group{display:flex;flex-direction:column;gap:5px}',
       '.pace-input-group label{font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase}',
       ".pace-input{width:90px;padding:6px 8px;border:1.5px solid #e2e8f0;border-radius:6px;font-size:17px;font-weight:700;text-align:center;font-family:'Courier New',monospace}",
@@ -597,11 +658,6 @@ const KV_APP_CSS = [
       '.movie-close-btn{background:none;border:none;color:#aaa;cursor:pointer;font-size:16px;line-height:1;padding:2px 6px;border-radius:4px}.movie-close-btn:hover{color:#fff;background:rgba(255,255,255,.15)}',
       '.movie-iframe-wrap{position:relative;padding-top:56.25%;background:#000}',
       '.movie-iframe-wrap iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:none}',
-      '.movie-unavail{padding:28px;text-align:center;color:#aaa;font-size:13px}',
-      '.movie-unavail i{font-size:22px;color:#555;display:block;margin-bottom:8px}',
-      '.col-movie{width:54px;text-align:center}',
-      '.movie-row-btn{background:none;border:1.5px solid #444;color:#ccc;border-radius:4px;padding:2px 7px;font-size:11px;cursor:pointer;transition:all .15s;white-space:nowrap}',
-      '.movie-row-btn:hover{background:#e84040;border-color:#e84040;color:#fff}',
       '.analysis-card{background:#fff;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,.08);padding:20px 22px;border-top:4px solid #7c3aed}',
       '.analysis-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px}',
       '.analysis-header .section-title{margin-bottom:0;color:#7c3aed}',
@@ -701,7 +757,6 @@ const KV_APP_CSS = [
       '.hm-stat-label{font-size:10px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.04em}',
       '.hm-stat-value{font-size:20px;font-weight:800;color:#1a1a2e;line-height:1.2}',
       '.hm-stat-sub{font-size:11px;color:#6b7280}',
-      '.hm-pace-high{color:#e84040!important}.hm-pace-mid{color:#e8a020!important}.hm-pace-slow{color:#3090e0!important}',
       '.hm-hint{font-size:11px;color:#6b7280;margin-bottom:6px;display:flex;align-items:center;gap:6px}',
       /* hm-tableはスクショ対象。overflow-xなし・全カラムを収める小サイズ設定 */
       '.hm-table{font-size:10.5px;width:100%;min-width:900px;table-layout:fixed;border-collapse:collapse}',
@@ -733,19 +788,9 @@ const KV_APP_CSS = [
       '.bench-val{font-size:16px;font-weight:800;color:#15803d;font-family:monospace}',
       '.bench-diff{font-size:12px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:auto;white-space:nowrap}',
       '.bench-diff-fast{background:#fee2e2;color:#dc2626}.bench-diff-slow{background:#e0f0ff;color:#2563eb}.bench-diff-avg{background:#f0fdf4;color:#16a34a}',
-      '.bench-nodata{font-size:12px;color:#9ca3af;display:flex;align-items:center;gap:6px;padding:8px 4px}',
       /* ── ポジションクリック詳細エリア ── */
       '.ana-click-hint{font-size:10px;font-weight:400;color:#7c3aed;margin-left:auto;display:inline-flex;align-items:center;gap:3px;opacity:.7}',
       '.ana-pos-detail{margin-top:8px;background:#fff;border:1.5px solid #c4b5fd;border-radius:6px;padding:10px 12px;animation:fadeIn .2s ease}',
-      '.ana-pos-detail-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}',
-      '.ana-pos-detail-title{font-size:12px;font-weight:700;color:#7c3aed}',
-      '.ana-pos-detail-close{background:none;border:none;color:#9ca3af;cursor:pointer;font-size:14px;line-height:1;padding:1px 4px;border-radius:3px}',
-      '.ana-pos-detail-close:hover{color:#7c3aed;background:#f5f3ff}',
-      '.ana-pos-detail-table{width:100%;border-collapse:collapse;font-size:11px}',
-      '.ana-pos-detail-table th{background:#7c3aed;color:#fff;padding:4px 6px;font-weight:600;text-align:center}',
-      '.ana-pos-detail-table td{padding:4px 6px;text-align:center;border-bottom:1px solid #ede9fe}',
-      '.ana-pos-detail-table tr:last-child td{border-bottom:none}',
-      '.ana-pos-detail-table tr:hover td{background:#f5f3ff}',
       /* ── ポジションマトリクス ── */
       '.ana-matrix-wrap{overflow-x:auto;margin-top:4px}',
       '.ana-matrix-table{border-collapse:collapse;font-size:12px;min-width:300px}',
@@ -796,14 +841,15 @@ const KV_APP_CSS = [
       'body.public-mode .pos-select{pointer-events:none;background:#f8fafc!important;color:#94a3b8!important;border-color:#e2e8f0!important}',
       'body.public-mode .lap-input{pointer-events:none;background:#f8fafc!important;color:#94a3b8!important;border-color:#e2e8f0!important}',
       'body.public-mode .threef-input{pointer-events:none;background:#f8fafc!important;color:#94a3b8!important;border-color:#e2e8f0!important}',
-      'body.public-mode input[type=text].form-input,body.public-mode input[type=number].form-input{pointer-events:none;background:#f8fafc!important;color:#94a3b8!important}',
+      'body.public-mode input[type=text].form-input:not(.url-input),body.public-mode input[type=number].form-input{pointer-events:none;background:#f8fafc!important;color:#94a3b8!important}',
       'body.public-mode .pace-btn,.public-mode .pace-btn-reset{pointer-events:none!important;opacity:.45!important}',
-      'body.public-mode .btn-primary,.public-mode .btn-secondary{pointer-events:none!important;opacity:.4!important}',
+      // 閲覧者は「取得（表示のみ・書き込みなし）」は可・「保存/公式成績/コメント（書き込み）」は不可。
+      // viewer-okを付けた取得系ボタンだけ無効化から除外する（B案・2026-07-04）
+      'body.public-mode .btn-primary:not(.viewer-ok),.public-mode .btn-secondary:not(.viewer-ok){pointer-events:none!important;opacity:.4!important}',
       'body.public-mode #comment-btn-1,body.public-mode [id^=comment-btn-]{pointer-events:none!important;opacity:.4!important}',
       'body.public-mode #fetch-all-official-btn{pointer-events:none!important;opacity:.4!important}',
-      'body.public-mode .search-btns .btn{pointer-events:none!important;opacity:.4!important}',
-      'body.public-mode .url-input-row .btn{pointer-events:none!important;opacity:.4!important}',
-      'body.public-mode .url-input{pointer-events:none!important;background:#f8fafc!important;color:#94a3b8!important}',
+      'body.public-mode .search-btns .btn:not(.viewer-ok){pointer-events:none!important;opacity:.4!important}',
+      'body.public-mode .url-input-row .btn:not(.viewer-ok){pointer-events:none!important;opacity:.4!important}',
       /* 非管理者バナー */
       '.public-mode-bar{display:none;position:sticky;top:60px;z-index:99;background:linear-gradient(90deg,#fef3c7,#fef9ee);border-bottom:2px solid #fbbf24;padding:7px 16px;font-size:12px;color:#92400e;font-weight:600;align-items:center;gap:8px}',
       'body.public-mode .public-mode-bar{display:flex}',
@@ -889,22 +935,15 @@ const KV_APP_CSS = [
       '.collapse-icon{font-size:12px;color:#64748b;transition:transform .2s;flex-shrink:0;}',
       '.collapse-body{padding:0 14px 12px;}',
       /* ビュータブ */
-      '.view-tab-btn{display:inline-flex;align-items:center;gap:5px;padding:7px 16px;border:1.5px solid #e2e8f0;border-radius:8px 8px 0 0;background:#f4f6fa;font-size:13px;font-weight:700;color:#6b7280;cursor:pointer;font-family:inherit;transition:all .15s;margin-bottom:-1px;}',
       '.view-tab-btn.active{background:#1a56a0;color:#fff;border-color:#1a56a0;}',
       '.view-tab-btn:not(.active):hover{background:#e8f0fb;color:#1a56a0;border-color:#93c5fd;}',
       /* コーナー列ヘッダーを白文字に */
       '.deban-table thead th.col-corner{color:#fff;}',
       // ── 以下、旧body先頭/injectStylesコピーにのみ存在した救出ルール（基準タイムタブ・ラップ入力・能力表・タブバー等） ──
       '.lap-section{margin-top:12px;border-top:1px solid #e2e8f0;padding-top:12px}',
-      '.lap-section-title{font-size:12px;font-weight:700;color:#6b7280;margin-bottom:8px;display:flex;align-items:center;gap:6px}',
-      '.lap-inputs-wrap{display:flex;flex-wrap:nowrap;align-items:flex-end;gap:0 3px;padding:4px 0;overflow-x:auto}',
-      '.lap-seg{display:flex;flex-direction:column;align-items:center;gap:1px;flex-shrink:0}',
-      '.lap-seg-label{font-size:10px;color:#6b7280;font-weight:600;white-space:nowrap;text-align:center}',
       '.lap-input{width:46px;padding:3px 2px;border:1.5px solid #e2e8f0;border-radius:5px;font-size:12px;font-weight:700;text-align:center;font-family:inherit;color:#1a1a2e;transition:border-color .2s}',
       '.lap-input:focus{outline:none;border-color:#1a56a0;box-shadow:0 0 0 2px rgba(26,86,160,.1)}',
-      '.lap-sep{font-size:12px;color:#d1d5db;line-height:1;align-self:flex-end;padding-bottom:9px;margin:0 1px;flex-shrink:0}',
       '.lap-cumul{font-size:9px;color:#3090e0;font-weight:700;white-space:nowrap}',
-      '.lap-total-badge{background:#1a56a0;color:#fff;border-radius:5px;padding:3px 8px;font-size:12px;font-weight:700;align-self:flex-end;white-space:nowrap;flex-shrink:0;margin-left:6px}',
       '.bench-track-tabs{display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap}',
       '.bench-track-tab{padding:3px 12px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;border:1.5px solid #e2e8f0;background:#f4f6fa;color:#6b7280;transition:all .15s}',
       '.bench-track-tab.active{border-color:#1a56a0;background:#1a56a0;color:#fff}',
@@ -914,10 +953,8 @@ const KV_APP_CSS = [
       '.bench-track-tab.tab-bad{border-color:#7c3aed}.bench-track-tab.tab-bad.active{background:#7c3aed;border-color:#7c3aed}',
       '.bench-track-nodata{font-size:12px;color:#9ca3af;padding:8px 0;font-style:italic}',
       '.lap-chart-panel{background:#f4f6fa;border:1.5px solid #e2e8f0;border-radius:8px;padding:14px 16px;margin-top:14px}',
-      '.lap-chart-title{font-size:13px;font-weight:700;color:#7c3aed;margin-bottom:10px;display:flex;align-items:center;gap:6px}',
       '.lap-chart-legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;font-size:11px}',
       '.lap-legend-item{display:flex;align-items:center;gap:4px}',
-      '.lap-legend-dot{width:10px;height:10px;border-radius:50%}',
       '.lap-section-new{margin-top:14px;background:linear-gradient(135deg,#f5f3ff,#ede9fe);border:1.5px solid #c4b5fd;border-radius:10px;padding:12px 14px}',
       '.lap-input-new{width:54px!important;min-width:54px!important;max-width:54px!important;padding:5px 4px!important;border:1.5px solid #c4b5fd!important;border-radius:6px!important;font-size:13px!important;font-weight:700!important;text-align:center!important;font-family:monospace!important;color:#4c1d95!important;background:#fff!important;transition:border-color .15s,box-shadow .15s}',
       '.lap-input-new:focus{outline:none;border-color:#7c3aed!important;box-shadow:0 0 0 3px rgba(124,58,237,.15)!important}',
@@ -925,32 +962,19 @@ const KV_APP_CSS = [
       '.lap-cumul-new{font-size:9px;color:#7c3aed;font-weight:700;white-space:nowrap;text-align:center}',
       '.lap-total-badge-new{background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;border-radius:8px;padding:5px 12px;font-size:13px;font-weight:800;align-self:flex-end;white-space:nowrap;flex-shrink:0;margin-left:8px;font-family:monospace}',
       '.kv-tabbar{display:flex;align-items:center;justify-content:space-between;background:#f8fafc;padding:0 10px;gap:8px;flex-wrap:nowrap;border-bottom:2px solid #e2e8f0;min-height:40px;}',
-      '.kv-tabs-left{display:flex;align-items:stretch;gap:0;}',
-      '.kv-tabs-right{display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:auto;}',
       '.kv-tab{display:inline-flex;align-items:center;gap:5px;padding:0 16px;height:40px;background:transparent;border:none;border-bottom:3px solid transparent;color:#64748b;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap;position:relative;}',
       '.kv-tab:hover{color:#1a56a0;background:rgba(26,86,160,.04);}',
       '.kv-tab.active.kv-tab-deban{color:#1a56a0;border-bottom-color:#1a56a0;background:rgba(26,86,160,.06);}',
       '.kv-tab.active.kv-tab-ability{color:#7c3aed;border-bottom-color:#7c3aed;background:rgba(124,58,237,.06);}',
       '.kv-tab i{font-size:12px;opacity:.8;}',
-      '.kv-tab-sub{font-size:8px;background:#e2e8f0;border-radius:8px;padding:1px 5px;margin-left:2px;font-weight:700;color:#64748b;}',
       '.kv-tab.active.kv-tab-deban .kv-tab-sub{background:#dbeafe;color:#1d4ed8;}',
       '.kv-tab.active.kv-tab-ability .kv-tab-sub{background:#ede9fe;color:#7c3aed;}',
-      '.kv-comment-toggle{display:flex;align-items:center;gap:5px;font-size:12px;color:#374151;cursor:pointer;user-select:none;font-weight:600;}',
-      '.kv-comment-btn{background:#1a56a0;color:#fff;border:none;border-radius:5px;padding:5px 12px;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;font-weight:600;font-family:inherit;transition:background .15s;}',
-      '.kv-comment-btn:hover{background:#1e40af;}',
-      '.ability-table-wrap{overflow-x:auto;padding-bottom:4px}',
       '.ability-table{width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap}',
       '.ability-table th{background:#1a56a0;color:#fff;padding:5px 6px;text-align:center;font-size:10px;font-weight:700;white-space:nowrap}',
       '.ability-table td{padding:4px 6px;border-bottom:1px solid #f0f0f0;vertical-align:middle;text-align:center}',
       '.ability-table tbody tr:hover{background:#f0f4ff!important}',
-      '.ability-horse-cell{text-align:left!important;position:sticky;left:0;z-index:1;background:#f8fafc;border-right:2px solid #e2e8f0;min-width:100px}',
       '@media(max-width:640px){#race-layout-wrap{flex-direction:column;}#race-tabs-section.sidebar-mode{width:100%;min-width:0;border-radius:0;display:block;padding:8px 10px;}#race-tabs-section.sidebar-mode .race-tabs{flex-direction:row;flex-wrap:wrap;gap:4px;}}',
       '@media(max-width:1399px){.split-right-panel{display:none;}}',
-      ".ability-past-group{border-left:2px solid #e2e8f0}",
-      ".ability-past-header{background:linear-gradient(135deg,#3b82f6,#1d4ed8)!important}",
-      ".ability-2past-header{background:linear-gradient(135deg,#6366f1,#4338ca)!important}",
-      ".ability-3past-header{background:linear-gradient(135deg,#8b5cf6,#6d28d9)!important}",
-      ".ability-4past-header{background:linear-gradient(135deg,#a78bfa,#7c3aed)!important}",
       // ── 出馬表レース前モード（2026-07-02）：記録列（着順/タイム/上がり/コーナー/前半3F/ペース/位置取り/所属）を隠し、
       //    AI印・オッズ・AIスコア列を表示するnetkeiba風ビュー。deban-preクラスで切替 ──
       '.deban-table .col-ai,.deban-table .col-aiscore,.deban-table .col-odds,.deban-table .col-recent{display:none}',
@@ -963,18 +987,74 @@ const KV_APP_CSS = [
       '.col-odds{font-family:monospace;font-weight:800;color:#dc2626}',
       '.col-aiscore{font-family:monospace;font-weight:700;color:#7c3aed;white-space:nowrap}',
       '.ai-rank-chip{display:inline-block;background:#ede9fe;color:#7c3aed;border-radius:8px;font-size:9px;font-weight:800;padding:1px 5px;vertical-align:middle;font-family:\'Noto Sans JP\',sans-serif}',
+      // 💎PSF妙味バッジ（位置構造モデルの単独推し表示・印には影響しない）
+      '.psf-badge{margin-left:3px;font-size:12px;vertical-align:middle;cursor:help}',
+      '.psf-value-bar{margin-bottom:10px;background:#ecfeff;border:1px solid #67e8f9;border-radius:8px;padding:7px 12px;font-size:12px;color:#155e75}',
+      // PSF履歴タブのサマリーチップ
+      '.psf-chip{flex:1;min-width:110px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;text-align:center}',
+      '.psf-chip--hl{background:#ecfeff;border-color:#67e8f9}',
+      '.psf-chip-label{font-size:10px;color:#6b7280}',
+      '.psf-chip-val{font-size:16px;font-weight:800;color:#1a1a2e;font-family:monospace}',
+      '.psf-chip--hl .psf-chip-val{color:#0e7490}',
       // 近5走チップ（能力表のエッセンスを出馬表に直接埋め込み。クリックで能力表タブへ）
       '.col-recent{white-space:nowrap;cursor:pointer}',
       '.rf-chip{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:5px;font-size:11px;font-weight:800;margin-right:2px}',
       '.rf-1{background:#dc2626;color:#fff}.rf-2{background:#2563eb;color:#fff}.rf-3{background:#d97706;color:#fff}',
       '.rf-o{background:#e2e8f0;color:#475569}.rf-x{background:#f4f6fa;color:#9ca3af}',
       '.rf-none{font-size:10px;color:#9ca3af}',
+      // 馬基準差セルの人気帯別内訳（クリックで開閉・メンバー汚染チェック）
+      '.hb-cell{cursor:pointer}',
+      '.hb-detail{margin-top:5px;padding:6px 8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;text-align:left;font-size:10px;line-height:1.7;min-width:150px}',
+      '.hb-detail-row{display:flex;gap:6px;align-items:baseline;justify-content:space-between}',
+      '.hb-detail-row b{font-family:monospace;color:#1d4ed8}',
+      '.hb-detail-row i{font-style:normal;color:#94a3b8;font-size:9px}',
+      '.hb-detail-note{margin-top:4px;color:#9ca3af;font-size:9px;line-height:1.5;border-top:1px dashed #e2e8f0;padding-top:3px}',
+      // 前半3F基準表ページ（クラス×馬場状態・自動計算）
+      '.f3avg-h{font-size:13px;font-weight:800;color:#0f766e;margin:14px 0 6px}',
+      '.f3avg-table{width:100%;border-collapse:collapse;font-size:12px}',
+      '.f3avg-table thead tr{background:#1a56a0;color:#fff}',
+      '.f3avg-table th{padding:7px 10px;font-size:11px;white-space:nowrap;text-align:center}',
+      '.f3avg-table td{padding:7px 10px;text-align:center;border-bottom:1px solid #eef2f7;font-family:monospace;font-weight:700;color:#1a1a2e}',
+      '.f3avg-table td.f3-cls{font-family:inherit;text-align:left;color:#374151}',
+      '.f3avg-n{font-size:9px;color:#94a3b8;font-weight:400;font-family:\'Noto Sans JP\',sans-serif}',
+      '.f3-thin{opacity:.45}',
+      '.f3avg-note{font-size:10px;color:#9ca3af;margin-top:12px;line-height:1.8}',
       // 通過順ボックス（能力表・高知競馬スタイル：最終コーナーを青ハイライト）
       '.pass-box{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 3px;background:#e8edf5;color:#1e3a5f;border:1px solid #c8d6e8;border-radius:4px;font-size:11px;font-weight:600;font-family:monospace;line-height:1}',
       '.pass-box--last{background:#1a56a0;color:#fff;border-color:transparent;font-weight:800}',
       '.pass-sep{color:#c8d6e8;font-size:9px;margin:0 1px;align-self:center}',
       '.pass-none{font-size:10px;color:#cbd5e1;letter-spacing:.5px}',
       '.pass-raw{font-size:10px;color:#94a3b8}',
+      // ── スマホ下部固定ナビ（2026-07-03・keeeeeeba.com方式）：上部ナビの見切れ問題を解消。
+      //    <=640pxでは上部ナビ・サブタイトル・ミニマル/スマホ表示ボタンを隠し、
+      //    下部固定バー（検索/出馬表/分析/馬場/その他）に全7ページを集約 ──
+      '#kv-bottom-nav{display:none}',
+      '.kbn-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:none;color:#6b7280;font-size:10px;font-weight:700;padding:7px 0 5px;cursor:pointer;font-family:inherit;line-height:1}',
+      '.kbn-btn i{font-size:17px}',
+      '.kbn-btn.active{color:#1a56a0}',
+      '#kbn-more-menu{position:fixed;right:10px;bottom:64px;z-index:201;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 8px 30px rgba(15,23,42,.18);padding:6px;display:flex;flex-direction:column;min-width:170px}',
+      '#kbn-more-menu.hidden{display:none}',
+      '#kbn-more-menu button{background:none;border:none;text-align:left;padding:11px 14px;font-size:13px;font-weight:700;color:#374151;cursor:pointer;font-family:inherit;border-radius:8px;display:flex;align-items:center;gap:8px}',
+      '#kbn-more-menu button:active{background:#f4f6fa}',
+      '@media(max-width:640px){#kv-bottom-nav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:200;background:#fff;border-top:1px solid #e2e8f0;box-shadow:0 -2px 12px rgba(15,23,42,.10);padding:0 0 env(safe-area-inset-bottom,0)}.header-nav{display:none}.header-sub{display:none}#minimal-mode-btn{display:none}#sim-mode-btn{display:none}#dark-mode-label{display:none}.header-inner{padding:8px 14px}.header-title h1{font-size:16px}.app-main{padding-bottom:80px}}',
+      // ── スマホ専用カード行（2026-07-03・keeeeeeba.com方式）：レース前ビュー×640px以下では
+      //    通常の横長行を隠し、1馬=1カード（枠・馬番・印・馬名・オッズ／騎手・斤量・馬体重・AI／近5走）で表示。
+      //    横スクロールを撲滅する。記録モードとPCは従来のまま ──
+      '.kv-sp-row{display:none}',
+      '.kv-sp-row>td{padding:9px 10px 8px;border-bottom:1px solid #eef2f7}',
+      '.spr-l1{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;min-width:0}',
+      '.spr-name{font-size:15px;font-weight:800;color:#1a1a2e;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}',
+      '.spr-odds{font-family:monospace;font-weight:800;color:#dc2626;font-size:16px;flex-shrink:0}',
+      '.spr-odds small{font-size:9px;font-weight:600;margin-left:1px}',
+      '.spr-l2{margin-top:3px;font-size:11px;color:#6b7280;display:flex;gap:10px;flex-wrap:wrap;align-items:baseline}',
+      '.spr-l2 b{color:#374151;font-weight:700}',
+      '.spr-score{color:#7c3aed;font-weight:700;font-family:monospace}',
+      '.spr-l3{margin-top:4px;cursor:pointer}',
+      '.spr-result{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:#374151}',
+      '.spr-result b{font-family:monospace;font-weight:800;color:#1a1a2e}',
+      '.spr-pace{font-weight:700;color:#d97706}',
+      // スマホ(<=640px)では記録/レース前どちらのモードでも常にカード表示（横スクロール撲滅・閲覧専用）
+      '@media(max-width:640px){.deban-table thead{display:none}.deban-table tbody tr.horse-row{display:none}.deban-table tbody tr.kv-sp-row{display:table-row}[id^="deban-mode-btn-"]{display:none}}',
       // ── スマホ：出馬表の馬名列を左固定（2026-07-02）横スクロールしても馬名が見える ──
       '@media(max-width:640px){.deban-table th.col-umaname,.deban-table td.col-umaname{position:sticky;left:0;z-index:3;box-shadow:3px 0 8px rgba(15,23,42,.14)}.deban-table td.col-umaname{background:#fff}.deban-table thead th.col-umaname{z-index:4;background:#1a56a0}.deban-table tbody tr:hover td.col-umaname{background:#e8f0fb}}',
       // ── スマホ表示プレビュー（2026-07-02）：アプリ自身を390px幅iframeで表示（メディアクエリが本物の幅で発火） ──
@@ -1024,6 +1104,9 @@ const KV_APP_CSS = [
     </div>
     <!-- 管理者モードボタン -->
     <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+      <button id="dev-admin-btn" onclick="toggleDevAdmin()" title="【開発用】管理者/閲覧者モードを切替（完成後は削除予定）">
+        <span id="dev-admin-label">管理者</span>
+      </button>
       <button id="sim-mode-btn" onclick="toggleSimMode()" title="スマホ表示プレビュー">
         📱 <span>スマホ表示</span>
       </button>
@@ -1054,6 +1137,8 @@ const KV_APP_CSS = [
       <button class="header-nav-btn" data-page="bunseki" onclick="switchPage('bunseki')"><i class="fas fa-chart-bar"></i> 分析</button>
       <button class="header-nav-btn" data-page="baba" onclick="switchPage('baba')"><i class="fas fa-chart-area"></i> 馬場傾向</button>
       <button class="header-nav-btn" data-page="saved" onclick="switchPage('saved')"><i class="fas fa-database"></i> 保存データ</button>
+      <button class="header-nav-btn" data-page="f3avg" onclick="switchPage('f3avg')"><i class="fas fa-stopwatch"></i> 前半3F基準</button>
+      <button class="header-nav-btn" data-page="psfhist" onclick="switchPage('psfhist')"><i class="fas fa-gem"></i> PSF履歴</button>
     </div>
   </nav>
 </header>
@@ -1115,23 +1200,12 @@ const KV_APP_CSS = [
   <section class="search-section">
     <div class="search-card">
       <h2 class="section-title"><i class="fas fa-search"></i> レース検索</h2>
-      <div class="search-form">
+      <div class="search-form search-form--col">
+        <!-- 高知専用ビューアのため競馬場は高知(31)固定 -->
+        <input type="hidden" id="baba-code" value="31">
         <div class="form-group">
-          <label for="race-date">開催日</label>
+          <label for="race-date">開催日 <span style="font-weight:400;color:#94a3b8">（高知）</span></label>
           <input type="date" id="race-date" class="form-input">
-        </div>
-        <div class="form-group">
-          <label for="baba-code">競馬場</label>
-          <select id="baba-code" class="form-input">
-            <option value="31">高知</option>
-            <option value="01">帯広(ばんえい)</option>
-            <option value="06">盛岡</option><option value="07">水沢</option>
-            <option value="09">浦和</option><option value="10">船橋</option>
-            <option value="11">大井</option><option value="12">川崎</option>
-            <option value="13">金沢</option><option value="14">笠松</option>
-            <option value="15">名古屋</option><option value="16">園田</option>
-            <option value="17">姫路</option><option value="21">佐賀</option>
-          </select>
         </div>
         <div class="form-group">
           <label for="race-no-single">レース番号（単独取得）</label>
@@ -1142,17 +1216,17 @@ const KV_APP_CSS = [
             <option value="10">10R</option><option value="11">11R</option><option value="12">12R</option>
           </select>
         </div>
-        <div class="search-btns">
-          <button class="btn btn-secondary" onclick="fetchSingleRace()"><i class="fas fa-horse"></i> 1レース取得</button>
-          <button class="btn btn-primary" onclick="fetchAllRaces()" title="出馬表を全レース取得後、公式成績を自動取得します"><i class="fas fa-layer-group"></i> 全レース一括取得（1〜12R）<span style="font-size:10px;opacity:.8;margin-left:4px;">＋公式成績自動</span></button>
-          <button class="btn btn-sm" onclick="fetchAllComments()" style="background:#0e7490;color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-weight:600;" title="取得済み全レースのコメントをまとめて取得"><i class="fas fa-comments"></i> 全レースコメント一括取得</button>
+        <div class="search-btns search-btns--col">
+          <button class="btn btn-secondary viewer-ok" onclick="fetchSingleRace()"><i class="fas fa-horse"></i> 1レース取得</button>
+          <button class="btn btn-primary viewer-ok" onclick="fetchAllRaces()" title="出馬表を全レース取得します（管理者は公式成績も自動取得）"><i class="fas fa-layer-group"></i> 全レース一括取得（1〜12R）<span class="admin-only" style="font-size:10px;opacity:.8;margin-left:4px;">＋公式成績自動</span></button>
+          <button class="btn btn-sm admin-only" onclick="fetchAllComments()" style="background:#0e7490;color:#fff;border:none;border-radius:6px;padding:9px 14px;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:5px;font-weight:600;" title="取得済み全レースのコメントをまとめて取得（管理者のみ）"><i class="fas fa-comments"></i> 全レースコメント一括取得</button>
         </div>
       </div>
       <div class="direct-url-area">
         <label>または keiba.go.jp の URL を直接貼り付け <span style="background:#e0f0ff;color:#1a56a0;font-size:11px;padding:1px 7px;border-radius:10px;font-weight:700">RaceMarkTable（競走成績）も DebaTable（出馬表）も自動判別</span></label>
         <div class="url-input-row">
           <input type="text" id="direct-url" class="form-input url-input" placeholder="RaceMarkTable または DebaTable の URL を貼り付け...">
-          <button class="btn btn-secondary" onclick="parseAndFetchUrl()"><i class="fas fa-link"></i> URLから取得</button>
+          <button class="btn btn-secondary viewer-ok" onclick="parseAndFetchUrl()"><i class="fas fa-link"></i> URLから取得</button>
         </div>
       </div>
     </div>
@@ -1182,7 +1256,7 @@ const KV_APP_CSS = [
     <div id="proxy-result-list" class="proxy-result-list"></div>
     <p class="error-hint" id="error-hint">全プロキシで失敗しました。時間をおいて再試行してください。</p>
     <div class="error-actions">
-      <button class="btn btn-primary" onclick="fetchSingleRace()"><i class="fas fa-redo"></i> 再試行</button>
+      <button class="btn btn-primary viewer-ok" onclick="fetchSingleRace()"><i class="fas fa-redo"></i> 再試行</button>
     </div>
   </div>
 
@@ -1191,7 +1265,17 @@ const KV_APP_CSS = [
 <!-- ページ: 出馬表 -->
 <div id="page-deban" class="page-section page-hidden">
 
+  <!-- 保存データの日付リスト（レース未読込時に表示・タップで開く） -->
+  <section class="search-card" id="deban-date-list-card">
+    <h2 class="section-title"><i class="fas fa-list-ul"></i> 開催日を選ぶ（高知・保存済み）</h2>
+    <div id="deban-date-list"><p style="color:#9ca3af;font-size:13px">読込中...</p></div>
+  </section>
+
   <div id="race-layout-wrap">
+    <!-- 戻るバー（レース表示中に日付一覧へ戻る） -->
+    <div id="deban-back-bar">
+      <button type="button" onclick="showDebanDateList()"><i class="fas fa-chevron-left"></i> 開催日一覧へ</button>
+    </div>
     <!-- レースタブ（サイドバー） -->
     <div id="race-tabs-section" class="race-tabs-section hidden">
       <div class="race-tabs" id="race-tabs"></div>
@@ -1475,6 +1559,22 @@ const KV_APP_CSS = [
 
 </div><!-- /page-bunseki -->
 
+<!-- ページ: 前半3F基準表 -->
+<div id="page-f3avg" class="page-section page-hidden">
+  <section class="search-card">
+    <h2 class="section-title"><i class="fas fa-stopwatch"></i> 前半3F基準表（クラス×馬場状態・保存データから自動計算）</h2>
+    <div id="f3avg-body"><p style="color:#9ca3af;font-size:13px">計算中...</p></div>
+  </section>
+</div>
+
+<!-- ページ: PSF妙味履歴 -->
+<div id="page-psfhist" class="page-section page-hidden">
+  <section class="search-card">
+    <h2 class="section-title"><i class="fas fa-gem"></i> 💎PSF妙味 過去履歴（PSFと現行AIの意見が割れたレース）</h2>
+    <div id="psfhist-body"><p style="color:#9ca3af;font-size:13px">計算中...</p></div>
+  </section>
+</div>
+
 <!-- ページ: 保存データ -->
 <div id="page-saved" class="page-section page-hidden">
 
@@ -1613,6 +1713,20 @@ const KV_APP_CSS = [
   <p>高知競馬ビューア | データ出典: <a href="https://www.keiba.go.jp/" target="_blank" rel="noopener">地方競馬情報サイト keiba.go.jp</a></p>
 </footer>
 
+<!-- スマホ用下部固定ナビ（<=640pxのみ表示・上部ナビの代替。keeeeeeba.com方式） -->
+<nav id="kv-bottom-nav">
+  <button type="button" class="kbn-btn active" data-page="search" onclick="switchPage('search')"><i class="fas fa-search"></i><span>検索</span></button>
+  <button type="button" class="kbn-btn" data-page="deban" onclick="switchPage('deban')"><i class="fas fa-list-ul"></i><span>出馬表</span></button>
+  <button type="button" class="kbn-btn" data-page="bunseki" onclick="switchPage('bunseki')"><i class="fas fa-chart-bar"></i><span>分析</span></button>
+  <button type="button" class="kbn-btn" data-page="baba" onclick="switchPage('baba')"><i class="fas fa-chart-area"></i><span>馬場</span></button>
+  <button type="button" class="kbn-btn" id="kbn-more" onclick="toggleKbnMore()"><i class="fas fa-ellipsis-h"></i><span>その他</span></button>
+</nav>
+<div id="kbn-more-menu" class="hidden">
+  <button type="button" onclick="switchPage('saved')"><i class="fas fa-database"></i> 保存データ</button>
+  <button type="button" onclick="switchPage('f3avg')"><i class="fas fa-stopwatch"></i> 前半3F基準</button>
+  <button type="button" onclick="switchPage('psfhist')"><i class="fas fa-gem"></i> PSF履歴</button>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 // ============================================================
@@ -1687,13 +1801,17 @@ let _currentPage = 'search';
 let _navReady = false;
 
 function switchPage(pageId, _fromPop) {
-  ['search','deban','bunseki','baba','saved'].forEach(id => {
+  ['search','deban','bunseki','baba','saved','f3avg','psfhist'].forEach(id => {
     const el = document.getElementById('page-' + id);
     if (el) el.classList.toggle('page-hidden', id !== pageId);
   });
-  document.querySelectorAll('.header-nav-btn').forEach(btn => {
+  document.querySelectorAll('.header-nav-btn, .kbn-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.page === pageId);
   });
+  // 「その他」配下のページでは下部ナビの⋯をアクティブに
+  const _moreBtn = document.getElementById('kbn-more');
+  if (_moreBtn) _moreBtn.classList.toggle('active', ['saved', 'f3avg', 'psfhist'].includes(pageId));
+  if (typeof toggleKbnMore === 'function') toggleKbnMore(false);
   window.scrollTo(0, 0);
   _currentPage = pageId;
   // 履歴へ積む（戻るボタン由来の呼び出し時は積まない＝二重化防止）
@@ -1702,8 +1820,11 @@ function switchPage(pageId, _fromPop) {
   }
   // 分析ページに切り替えたとき自動レンダリング
   if (pageId === 'bunseki') { setTimeout(() => { try { renderAnalysis(); } catch(e){} }, 0); }
+  if (pageId === 'deban')   { setTimeout(() => { try { (Object.keys(allRacesData).length ? showDebanRaceView : showDebanDateList)(); } catch(e){} }, 0); }
   if (pageId === 'baba')    { setTimeout(() => { try { renderTrackTrend(); } catch(e){} }, 0); }
   if (pageId === 'saved')   { setTimeout(() => { try { renderSavedList(); } catch(e){} }, 0); }
+  if (pageId === 'f3avg')   { setTimeout(() => { try { renderF3Averages(); } catch(e){} }, 0); }
+  if (pageId === 'psfhist') { setTimeout(() => { try { renderPsfHistory(); } catch(e){} }, 0); }
 }
 
 // ブラウザ戻る/進むの処理
@@ -1729,6 +1850,25 @@ function toggleDarkMode() {
   const isDark = document.body.classList.toggle('dark-mode');
   localStorage.setItem('darkMode', isDark ? '1' : '0');
   _updateDarkModeBtn(isDark);
+}
+
+/** スマホ下部ナビの「その他」メニュー開閉（開いた時は外側タップで閉じる） */
+function toggleKbnMore(force) {
+  const m = document.getElementById('kbn-more-menu');
+  if (!m) return;
+  const willShow = force != null ? force : m.classList.contains('hidden');
+  m.classList.toggle('hidden', !willShow);
+  if (willShow) {
+    setTimeout(() => {
+      const h = e => {
+        if (!m.contains(e.target) && !e.target.closest('#kbn-more')) {
+          m.classList.add('hidden');
+          document.removeEventListener('click', h);
+        }
+      };
+      document.addEventListener('click', h);
+    }, 0);
+  }
 }
 
 // スマホ表示プレビュー：?sim=1 付きの自アプリを390px幅iframeで開く。
@@ -1799,6 +1939,7 @@ document.addEventListener('DOMContentLoaded', () => {
   injectStyles();
   initDarkMode();
   initMinimalMode();
+  _updateDevAdminBtn();
   _setHeaderHVar();
   // sim内（プレビューiframe）では入れ子防止のためスマホ表示ボタンを隠す
   if (KV_IS_SIM) document.getElementById('sim-mode-btn')?.classList.add('hidden');
@@ -1950,8 +2091,8 @@ async function fetchAllRaces() {
   rebuildAllTabs(); switchRaceTab(obtained[0]);
   switchPage('deban');
 
-  // 公式成績を自動取得（バックグラウンドで実行、レース表示をブロックしない）
-  fetchAllHorsesOfficialData(true);
+  // 公式成績を自動取得（管理者のみ：Supabaseへ保存されるデータ入力操作のため）
+  if (isAdminMode()) fetchAllHorsesOfficialData(true);
 }
 
 async function fetchRaceList(raceDate, babaCode) {
@@ -2641,6 +2782,10 @@ function renderRaceContent(raceNo) {
         <span class="rqs-label">ペース</span>
         <span class="rqs-val rqs-empty" id="rqs-pace-${raceNo}">—</span>
       </div>
+      <div class="rqs-item" title="前半3Fのクラス×馬場×距離基準との差。ハイ=−1.0秒以下（差し台頭）／スロー=+0.3秒以上（前残り）：1,212Rの結果統計由来">
+        <span class="rqs-label">基準比</span>
+        <span class="rqs-val rqs-empty" id="rqs-dev-${raceNo}">—</span>
+      </div>
     </div>
     ${_hasMovie ? `
     <div id="movie-panel-${raceNo}" class="movie-panel" data-url="${_movieUrl}">
@@ -2859,8 +3004,8 @@ function renderRaceContent(raceNo) {
         <div class="split-table-area">
           <div class="table-wrapper">
             <div style="display:flex;justify-content:flex-end;gap:8px;padding:6px 8px 4px;">
-              <button type="button" id="odds-btn-${raceNo}" onclick="fetchLiveOddsBtn(${raceNo})" class="btn btn-secondary btn-sm" title="公式サイトから単勝オッズ・馬体重を取得（開催日はリアルタイム更新）">💹 オッズ取得</button>
-              <button type="button" id="deban-mode-btn-${raceNo}" onclick="toggleDebanMode(${raceNo})" class="btn btn-secondary btn-sm" title="レース前の出馬表と、結果・記録入力用の表を切り替え">📝 記録表示へ</button>
+              <button type="button" id="odds-btn-${raceNo}" onclick="fetchLiveOddsBtn(${raceNo})" class="btn btn-secondary btn-sm viewer-ok" title="公式サイトから単勝オッズ・馬体重を取得（開催日はリアルタイム更新）">💹 オッズ取得</button>
+              <button type="button" id="deban-mode-btn-${raceNo}" onclick="toggleDebanMode(${raceNo})" class="btn btn-secondary btn-sm viewer-ok" title="レース前の出馬表と、結果・記録入力用の表を切り替え">📝 記録表示へ</button>
             </div>
             <table class="deban-table" id="deban-table-${raceNo}">
               <thead><tr id="thead-row-${raceNo}">
@@ -2974,27 +3119,6 @@ function renderRaceContent(raceNo) {
  * 馬名セル用：距離適性スコアバッジ（S/A/B/C）
  * horseName: 馬名, curDist: 現在レースの距離
  */
-function _distScoreBadge(horseName, curDist) {
-  if(!curDist) return '';
-  const history = getHorseHistory(horseName);
-  if(!history.length) return '';
-  const curDistNum = getDistNum(curDist);
-  let runs=0,places=0;
-  history.forEach(h=>{
-    if(getDistNum(h.distance) !== curDistNum) return;
-    runs++;
-    const c=parseInt(h.chakujun)||999;
-    if(c<=3) places++;
-  });
-  if(runs===0) return '';
-  const r=places/runs;
-  let label,bg;
-  if(r>=0.6){label='S';bg='#7c3aed';}
-  else if(r>=0.4){label='A';bg='#1d4ed8';}
-  else if(r>=0.2){label='B';bg='#15803d';}
-  else{label='C';bg='#6b7280';}
-  return ` <span title="${curDist} ${places}/${runs}走 (${Math.round(r*100)}%)" style="background:${bg};color:#fff;font-size:10px;font-weight:800;padding:1px 5px;border-radius:8px;margin-left:3px;vertical-align:middle;cursor:default">${label}</span>`;
-}
 
 /**
  * 単勝オッズ・馬体重・人気を公式OddsTanFukuページから取得して出馬表に反映。
@@ -3066,6 +3190,10 @@ function renderHorseRows(raceNo, horses) {
   if (_cy) _cy.scored.forEach((s, i) => {
     _aiMap[s.horse.horseName] = { mark: _AI_MARKS[i] || '', rank: s.totalScore != null ? i + 1 : null, score: s.totalScore };
   });
+  // 💎PSF妙味：位置構造モデル(PSF)の1位が現行AI◎と不一致なら表示（検証：意見割れ635RでROI112.9%）
+  const _psfTop = (typeof computePsfScores === 'function') ? (computePsfScores(raceNo)?.top ?? null) : null;
+  const _aiTopName = (_cy && _cy.scored[0] && _cy.scored[0].totalScore != null) ? _cy.scored[0].horse.horseName : null;
+  const _psfValueName = (_psfTop && _psfTop !== _aiTopName) ? _psfTop : null;
   // 全行を一括innerHTML（12回のappendChildを1回に削減）
   tbody.innerHTML=horses.map(horse=>{
     const waku=parseInt(horse.wakuBan)||Math.ceil(horse.umaBan/2);
@@ -3075,23 +3203,28 @@ function renderHorseRows(raceNo, horses) {
     const _ai=_aiMap[horse.horseName]||{mark:'',rank:null,score:null};
     const _aiCls=_ai.rank==null?'ai-rx':_ai.rank<=4?`ai-r${_ai.rank}`:'ai-rx';
     const _oddsV=parseFloat(horse.odds);
+    // 近5走チップ（PC表の列とスマホカード行の両方で使用）
+    const _rfHtml=(()=>{
+      const _rf=getHorseHistoryBefore(horse.horseName,allRacesData[raceNo]?.raceInfo?.raceDate||'',parseInt(raceNo)).slice(0,5);
+      if(!_rf.length) return '<span class="rf-none">初出走</span>';
+      return _rf.map(h=>{
+        const ch=parseInt(h.chakujun);
+        const cls=isNaN(ch)?'rf-x':ch===1?'rf-1':ch===2?'rf-2':ch===3?'rf-3':'rf-o';
+        const tip=`${h.raceDate||''} ${h.raceClass||''} ${h.distance||''} ${isNaN(ch)?'':ch+'着'}`.trim();
+        return `<span class="rf-chip ${cls}" title="${tip}">${isNaN(ch)?'－':ch}</span>`;
+      }).join('');
+    })();
+    const _psfGem=_psfValueName===horse.horseName?`<span class="psf-badge" title="PSF妙味：位置構造モデルの単独推し。オッズ3〜10倍が本域">💎</span>`:'';
+    const _nameEsc=horse.horseName.replace(/'/g,"\\'");
+    const _raced=/^\d+$/.test(String(horse.chakujun));
     return `<tr class="horse-row">
       <td class="col-chakujun">${horse.chakujun?`<span class="chakujun-badge ${chakujunClass(horse.chakujun)}">${horse.chakujun}</span>`:'<span class="data-empty">—</span>'}</td>
       <td class="col-waku"><span class="waku-badge ${wCls}">${horse.wakuBan}</span></td>
       <td class="col-ninki">${horse.ninki?ninkiBadge(horse.ninki):'－'}</td>
       <td class="col-umano"><span class="umano-badge">${horse.umaBan}</span></td>
-      <td class="col-ai">${_ai.mark?`<span class="ai-mark ${_aiCls}">${_ai.mark}</span>`:'<span class="data-empty">—</span>'}</td>
-      <td class="col-umaname"><span class="horse-name horse-name-link" onclick="openHorseModal('${horse.horseName.replace(/'/g,"\\'")}',${raceNo})"><i class="fas fa-history horse-hist-icon"></i>${horse.horseName}</span></td>
-      <td class="col-recent" onclick="switchViewTab(${raceNo},'ability')">${(()=>{
-        const _rf=getHorseHistoryBefore(horse.horseName,allRacesData[raceNo]?.raceInfo?.raceDate||'',parseInt(raceNo)).slice(0,5);
-        if(!_rf.length) return '<span class="rf-none">初出走</span>';
-        return _rf.map(h=>{
-          const ch=parseInt(h.chakujun);
-          const cls=isNaN(ch)?'rf-x':ch===1?'rf-1':ch===2?'rf-2':ch===3?'rf-3':'rf-o';
-          const tip=`${h.raceDate||''} ${h.raceClass||''} ${h.distance||''} ${isNaN(ch)?'':ch+'着'}`.trim();
-          return `<span class="rf-chip ${cls}" title="${tip}">${isNaN(ch)?'－':ch}</span>`;
-        }).join('');
-      })()}</td>
+      <td class="col-ai">${_ai.mark?`<span class="ai-mark ${_aiCls}">${_ai.mark}</span>`:'<span class="data-empty">—</span>'}${_psfGem}</td>
+      <td class="col-umaname"><span class="horse-name horse-name-link" onclick="openHorseModal('${_nameEsc}',${raceNo})"><i class="fas fa-history horse-hist-icon"></i>${horse.horseName}</span></td>
+      <td class="col-recent" onclick="switchViewTab(${raceNo},'ability')">${_rfHtml}</td>
       <td class="col-belong">${horse.belong||'－'}</td>
       <td class="col-sexage">${horse.sexAge||'－'}</td>
       <td class="col-kinryo">${horse.kinryo||'－'}</td>
@@ -3107,6 +3240,30 @@ function renderHorseRows(raceNo, horses) {
       <td class="col-pace"><div class="horse-pace-cell"><select class="pace-select" onchange="onHorsePaceChange(this,${raceNo},${horse.umaBan})"><option value="">－</option><option value="ハイ" ${horse.paceType==='ハイ'?'selected':''}>ハイ</option><option value="ミドル" ${horse.paceType==='ミドル'?'selected':''}>ミドル</option><option value="スロー" ${horse.paceType==='スロー'?'selected':''}>スロー</option></select><span class="pace-dot ${getPaceDotClass(horse.paceType)}"></span></div></td>
       <td class="col-mukae${mukaeCls}"><select class="pos-select" onchange="onHorsePosChange(this,${raceNo},${horse.umaBan},'mukaeShoumen')" tabindex="0"><option value="">－</option><option value="最内" ${horse.mukaeShoumen==='最内'?'selected':''}>最内</option><option value="内" ${horse.mukaeShoumen==='内'?'selected':''}>内</option><option value="外2" ${horse.mukaeShoumen==='外2'?'selected':''}>外2</option><option value="外3" ${horse.mukaeShoumen==='外3'?'selected':''}>外3</option><option value="大外" ${horse.mukaeShoumen==='大外'?'selected':''}>大外</option></select></td>
       <td class="col-straight${strCls}"><select class="pos-select" onchange="onHorsePosChange(this,${raceNo},${horse.umaBan},'shoumenStraight')" tabindex="0"><option value="">－</option><option value="内" ${horse.shoumenStraight==='内'?'selected':''}>内</option><option value="中" ${horse.shoumenStraight==='中'?'selected':''}>中</option><option value="外" ${horse.shoumenStraight==='外'?'selected':''}>外</option></select></td>
+    </tr>
+    <tr class="kv-sp-row">
+      <td colspan="21">
+        <div class="spr-l1">
+          ${_raced?`<span class="chakujun-badge ${chakujunClass(horse.chakujun)}">${horse.chakujun}</span>`:`<span class="waku-badge ${wCls}">${horse.wakuBan}</span>`}
+          <span class="umano-badge">${horse.umaBan}</span>
+          ${_ai.mark?`<span class="ai-mark ${_aiCls}">${_ai.mark}</span>`:''}${_psfGem}
+          <span class="spr-name" onclick="openHorseModal('${_nameEsc}',${raceNo})">${horse.horseName}</span>
+          ${(!isNaN(_oddsV)&&_oddsV>0)?`<span class="spr-odds">${_oddsV.toFixed(1)}<small>倍</small></span>`:''}
+          ${horse.ninki?ninkiBadge(horse.ninki):''}
+        </div>
+        <div class="spr-l2">
+          <span><b>${horse.jockey||'－'}</b>${horse.kinryo?` ${horse.kinryo}`:''}</span>
+          <span>${horse.sexAge||''}${horse.weight?` ${horse.weight}`:''}</span>
+          ${!_raced&&_ai.score!=null?`<span class="spr-score">AI ${_ai.rank}位 ${_ai.score.toFixed(1)}</span>`:''}
+        </div>
+        ${_raced?`<div class="spr-l3 spr-result">
+          ${horse.time?`<span>タイム <b>${horse.time}</b></span>`:''}
+          ${horse.agari3f?`<span>上がり ${horse.agari3f}</span>`:''}
+          ${horse.corner?`<span>通過 ${horse.corner}</span>`:''}
+          ${horse.first3f?`<span>前半 ${horse.first3f}</span>`:''}
+          ${horse.paceType?`<span class="spr-pace">${horse.paceType}</span>`:''}
+        </div>`:`<div class="spr-l3" onclick="switchViewTab(${raceNo},'ability')">${_rfHtml}</div>`}
+      </td>
     </tr>`;
   }).join('');
   // 初期モード：結果が無いレースはレース前ビュー、結果ありは記録ビュー（手動切替は記憶される）
@@ -3365,13 +3522,33 @@ function _updateFinishTime(raceNo) {
  * 前半3F = 1着タイム(秒) − 上がり4F(秒)
  * 起動時に1回だけ実行（既に値があるエントリはスキップ）
  */
+/**
+ * 前半3Fの自動補完（1300/1400/1600m・未入力レースのみ）
+ *   1400m: 決着タイム − 上がり4F（前3F＋後4F＝7Fの厳密な逆算）
+ *   1300m: 決着タイム − (上がり4F＋上がり3F)÷2（前2.5F＋中間0.5F推定。
+ *          手入力済み38件との突合で平均差+0.14秒・最大0.3秒を確認済み）
+ *   1600m: 決着タイム − 上がり4F − 4F目仮置き（良14.5→不良13.5秒。
+ *          前半800mの内訳が計測されないため推定精度は±0.3秒程度）
+ * ローカルIDBのみ書き込み（サーバーへは保存操作時に反映）。
+ */
 function backfillFirst3fFrom1400m() {
   const lsData = lsRead();
-  let count = 0;
+  // 勝ち馬タイムを一括マップ化（レースごとの全件スキャンを避ける）
+  const winTime = {};
+  for (const [hk, hv] of Object.entries(lsData)) {
+    if (!hv || hv.type !== 'horse' || hv.fromOfficial) continue;
+    if (String(hv.chakujun) !== '1') continue;
+    const t = raceTimeToSec(hv.time);
+    if (!t) continue;
+    const p = hk.split('_');
+    if (p.length >= 4) winTime[`${p[0]}_${p[1]}_${p[2]}`] = t;
+  }
+  const A4_1600 = { '良': 14.5, '稍重': 14.2, '重': 13.8, '不良': 13.5 };
+  const count = { 1300: 0, 1400: 0, 1600: 0 };
   for (const [k, v] of Object.entries(lsData)) {
     if (!k.startsWith('race_')) continue;
     const dist = String(v.distance || v.dist || '').replace(/[^\d]/g, '');
-    if (dist !== '1400') continue;
+    if (dist !== '1400' && dist !== '1300' && dist !== '1600') continue;
     if (v.first3f) continue;                            // 既に値あり → スキップ
     const ag4Sec = parseFloat(v.agari4f || '');
     if (isNaN(ag4Sec) || ag4Sec <= 0) continue;         // 上がり4F 未入力 → スキップ
@@ -3379,24 +3556,30 @@ function backfillFirst3fFrom1400m() {
     const raceDate = v.race_date;
     const raceNo   = String(v.race_no || '');
     if (!babaCode || !raceDate || !raceNo) continue;
-    // 1着馬を horse エントリから検索（キー形式: {babaCode}_{raceDate}_{raceNo}_{umaBan}）
-    const prefix = `${babaCode}_${raceDate}_${raceNo}_`;
-    let winnerTimeSec = null;
-    for (const [hk, hv] of Object.entries(lsData)) {
-      if (!hk.startsWith(prefix)) continue;
-      if (!hv || hv.type !== 'horse' || hv.fromOfficial) continue;
-      if (String(hv.chakujun) !== '1') continue;
-      const t = raceTimeToSec(hv.time);
-      if (t) { winnerTimeSec = t; break; }
-    }
+    const winnerTimeSec = winTime[`${babaCode}_${raceDate}_${raceNo}`];
     if (!winnerTimeSec) continue;
-    const first3f = +(winnerTimeSec - ag4Sec).toFixed(1);
-    if (first3f <= 0 || first3f > 50) continue;         // 異常値ガード
+    let first3f = null;
+    if (dist === '1400') {
+      first3f = winnerTimeSec - ag4Sec;
+    } else if (dist === '1300') {
+      const ag3Sec = parseFloat(v.agari3f_race || '');
+      if (isNaN(ag3Sec) || ag3Sec <= 0) continue;
+      const midF = ag4Sec - ag3Sec;                     // 中間1F（4F目→3F目）
+      if (midF < 10 || midF > 20) continue;             // 計測不整合ガード
+      first3f = winnerTimeSec - (ag4Sec + ag3Sec) / 2;
+    } else {
+      const t4 = A4_1600[v.track_cond || ''];
+      if (t4 == null) continue;                         // 馬場状態不明は補完しない
+      first3f = winnerTimeSec - ag4Sec - t4;
+    }
+    first3f = +first3f.toFixed(1);
+    if (first3f < 33 || first3f > 46) continue;         // 異常値ガード
     lsWrite(k, { ...v, first3f: String(first3f) });
-    count++;
+    count[dist]++;
   }
-  if (count > 0) console.log(`[backfill1400m] 前半3F を ${count} レース分補完しました`);
-  return count;
+  const total = count[1300] + count[1400] + count[1600];
+  if (total > 0) console.log(`[backfillF3] 前半3F補完: 1300m=${count[1300]} / 1400m=${count[1400]} / 1600m=${count[1600]}`);
+  return total;
 }
 
 function _updateRqsStrip(raceNo, f3, ag3, pace) {
@@ -3422,6 +3605,18 @@ function _updateRqsStrip(raceNo, f3, ag3, pace) {
   }
   const paceClass = pace === 'ハイ' ? 'rqs-pace-high' : pace === 'スロー' ? 'rqs-pace-slow' : pace === 'ミドル' ? 'rqs-pace-mid' : '';
   _set(`rqs-pace-${raceNo}`, pace || null, paceClass);
+  // 基準比（クラス×馬場×距離平均との差）＋自動ペースラベル（既存ペース欄とは独立表示）
+  const _devEl = document.getElementById(`rqs-dev-${raceNo}`);
+  const _ri = allRacesData[raceNo]?.raceInfo;
+  if (_devEl && _ri) {
+    const r = (typeof getPaceDevLabel === 'function') ? getPaceDevLabel(_ri.distance, _ri.raceClass, _ri.trackCond, f3) : null;
+    if (r) {
+      _devEl.textContent = `${r.dev > 0 ? '+' : ''}${r.dev.toFixed(1)} ${r.label}`;
+      _devEl.className = 'rqs-val ' + (r.label === 'ハイ' ? 'rqs-pace-high' : r.label === 'スロー' ? 'rqs-pace-slow' : 'rqs-pace-mid');
+    } else {
+      _devEl.textContent = '—'; _devEl.className = 'rqs-val rqs-empty';
+    }
+  }
 }
 
 /**
@@ -4922,6 +5117,9 @@ function idbPut(key, val) {
       window._dayRaceDataCache = {};
       window._winnerTimeCache = {};
       window._comboStatsCache = null;
+      window._comboStatsAllCache = null;
+      window._horseBiasCache = {};
+      window._f3BenchCache = null;
     }, 150);
   }
   openIDB().then(db => {
@@ -5069,6 +5267,9 @@ async function _idbBulkPut(obj) {
   window._dayRaceDataCache = {};
   window._winnerTimeCache = {};
   window._comboStatsCache = null;
+  window._comboStatsAllCache = null;
+  window._horseBiasCache = {};
+  window._f3BenchCache = null;
 }
 
 // ============================================================
@@ -5284,6 +5485,8 @@ async function initDB() {
     if(typeof initAnalysisDateSelect==='function') initAnalysisDateSelect();
     // 1400m戦の前半3Fを上がり4Fから一括補完（全データ揃った後に実行）
     const _bfCount = backfillFirst3fFrom1400m();
+    // 自動ペースラベル（基準比ベース・paceTypeAuto）を付与。手入力のpaceTypeには触れない
+    try { backfillPaceLabels(); } catch(e) { console.warn('[paceLabels]', e); }
     // 補完で1400mデータが増えたので、馬場傾向の前残り傾向パネルを最新で再描画
     if (_bfCount > 0 && typeof renderTrackTrend === 'function') {
       try { renderTrackTrend(); } catch(e) {}
@@ -5550,9 +5753,6 @@ function saveDaySettings(baba, date, { memo } = {}) {
   renderTrackTrend();
 }
 
-function saveDayMemo(baba, date, val) {
-  saveDaySettings(baba, date, { memo: val });
-}
 
 // ── 向正面 × 直線 組み合わせ好走率による SI 補正（日別） ──
 // 同じ開催日・同じ競馬場の全馬を使い、その日のポジション有利不利を計算する
@@ -5620,6 +5820,208 @@ function getDayTrackCond(babaCode, raceDate) {
   return result;
 }
 
+/**
+ * 💎PSF妙味履歴タブ：厳密検証と同一のscanDataパイプラインから
+ * 「PSFと現行AIの◎が割れたレース」を抽出して成績を一覧表示する。
+ * scanData未生成時は非表示divを使ってバックテストを裏で実行（初回のみ約15秒）。
+ */
+function renderPsfHistory() {
+  const body = document.getElementById('psfhist-body');
+  if (!body) return;
+  if (!window._scanData) {
+    body.innerHTML = '<p style="color:#9ca3af;font-size:13px"><i class="fas fa-spinner fa-spin"></i> 全レースを解析中（初回のみ・約15秒）...</p>';
+    let hidden = document.getElementById('yoso-backtest-hist');
+    if (!hidden) {
+      hidden = document.createElement('div');
+      hidden.id = 'yoso-backtest-hist';
+      hidden.style.display = 'none';
+      document.body.appendChild(hidden);
+    }
+    try { runYosoBacktest('hist'); } catch(e) { body.innerHTML = `<p style="color:#dc2626;font-size:13px">解析に失敗しました: ${e}</p>`; return; }
+    const t0 = Date.now();
+    const iv = setInterval(() => {
+      if (window._scanData) { clearInterval(iv); _renderPsfHistoryTable(body); }
+      else if (Date.now() - t0 > 60000) { clearInterval(iv); body.innerHTML = '<p style="color:#dc2626;font-size:13px">タイムアウトしました。再度タブを開いてください。</p>'; }
+    }, 600);
+    return;
+  }
+  _renderPsfHistoryTable(body);
+}
+
+function _renderPsfHistoryTable(body) {
+  const S = window._scanData, ls = lsRead();
+  const curScore = c => c.base + c.condNew + c.distNew + c.rotN + c.clsN + c.cornN + c.trendN + c.weightN + c.agariN + c.comboN + c.marginN + c.winStrN + c.jockeyChgN + c.takiN + c.cornConsistN;
+  const psfScore = c => c.psfS != null ? c.psfS : -1e9;
+  const pickOf = (rc, f) => { let bi = 0, bs = -Infinity; for (let i = 0; i < rc.length; i++) { const v = f(rc[i]); if (v > bs) { bs = v; bi = i; } } return rc[bi]; };
+  const nameOf = (date, rno, uma) => (ls[`31_${date}_${rno}_${uma}`] || {}).horseName || `${uma}番`;
+  const rows = [];
+  const all = { bet: 0, ret: 0, h1: 0, h3: 0, n: 0 };       // 勝ち馬オッズ判明レースでの単勝収支
+  const band = { bet: 0, ret: 0, h1: 0 };                     // 本域（3-10倍・全馬オッズ判明レースのみ）
+  for (const rc of S) {
+    if (rc.length < 2 || rc._rno == null) continue;
+    const pP = pickOf(rc, psfScore), pC = pickOf(rc, curScore);
+    if (pP.psfS == null || pP === pC) continue;
+    const winner = rc.find(c => c.chaku === 1);
+    const winnerOddsKnown = !!(winner && winner.odds != null);
+    all.n++;
+    if (pP.chaku <= 3) all.h3++;
+    if (winnerOddsKnown) {
+      all.bet++;
+      if (pP.chaku === 1) { all.ret += pP.odds * 100; all.h1++; }
+    }
+    const fullCover = rc.every(c => c.odds != null);
+    if (fullCover && pP.odds >= 3 && pP.odds < 10) {
+      band.bet++;
+      if (pP.chaku === 1) { band.ret += pP.odds * 100; band.h1++; }
+    }
+    rows.push({
+      date: rc._date, rno: rc._rno,
+      psfName: nameOf(rc._date, rc._rno, pP.umaBan), psfOdds: pP.odds, psfNinki: pP.ninki, psfChaku: pP.chaku,
+      aiName: nameOf(rc._date, rc._rno, pC.umaBan), aiChaku: pC.chaku,
+      inBand: fullCover && pP.odds >= 3 && pP.odds < 10,
+    });
+  }
+  rows.sort((a, b) => a.date < b.date ? 1 : a.date > b.date ? -1 : b.rno - a.rno);
+  const chakuHtml = ch => `<span style="font-weight:800;color:${ch === 1 ? '#dc2626' : ch <= 3 ? '#d97706' : '#9ca3af'}">${ch}着</span>`;
+  const summaryChip = (label, val, strong) => `<div class="psf-chip${strong ? ' psf-chip--hl' : ''}"><div class="psf-chip-label">${label}</div><div class="psf-chip-val">${val}</div></div>`;
+  const shown = rows.slice(0, 50);
+  body.innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      ${summaryChip('💎対象レース', all.n + 'R', false)}
+      ${summaryChip('単勝的中率', all.bet ? (100 * all.h1 / all.bet).toFixed(1) + '%' : '—', false)}
+      ${summaryChip('複勝率', all.n ? (100 * all.h3 / all.n).toFixed(1) + '%' : '—', false)}
+      ${summaryChip('単勝ROI（全体）', all.bet ? (all.ret / all.bet).toFixed(1) + '%' : '—', true)}
+      ${summaryChip('単勝ROI（本域3-10倍）', band.bet ? `${(band.ret / band.bet).toFixed(1)}%（${band.h1}/${band.bet}）` : '—', true)}
+    </div>
+    <div style="overflow-x:auto"><table class="f3avg-table">
+      <thead><tr><th style="text-align:left">日付</th><th>R</th><th style="text-align:left">💎PSF妙味馬</th><th>オッズ</th><th>人気</th><th>結果</th><th style="text-align:left">AI◎（現行）</th><th>結果</th></tr></thead>
+      <tbody>${shown.map(r => `<tr${r.inBand ? ' style="background:rgba(103,232,249,.10)"' : ''}>
+        <td class="f3-cls" style="white-space:nowrap">${r.date}</td>
+        <td>${r.rno}R</td>
+        <td class="f3-cls" style="font-weight:700">${r.psfName}${r.inBand ? ' <span title="本域（3〜10倍）">💎</span>' : ''}</td>
+        <td>${r.psfOdds != null ? r.psfOdds.toFixed(1) : '—'}</td>
+        <td>${r.psfNinki != null ? r.psfNinki : '—'}</td>
+        <td>${chakuHtml(r.psfChaku)}</td>
+        <td class="f3-cls">${r.aiName}</td>
+        <td>${chakuHtml(r.aiChaku)}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+    <div class="f3avg-note">
+      直近${shown.length}件を表示（全${rows.length}件）。行の水色背景＝本域（オッズ3〜10倍）。
+      ROIは公式確定払戻ベースの単勝100円均一買い想定。「全体」は勝ち馬オッズ判明レース（外れ馬券のオッズは収支に不要）、
+      「本域」は全馬オッズ判明レースのみで集計。実際の前売りオッズとはズレる点に注意。
+    </div>`;
+}
+
+/** 前半3F基準表（クラス×馬場×距離の平均・n>=3セルのみ）を構築（キャッシュ付き） */
+function getF3BenchTable() {
+  if (window._f3BenchCache) return window._f3BenchCache;
+  const CONDS = ['良', '稍重', '重', '不良'];
+  const tmp = {};
+  for (const v of Object.values(lsRead())) {
+    if (v.type !== 'race' || v.baba_code !== '31' || !v.first3f) continue;
+    const d = String(v.distance || '').replace(/[^\d]/g, '');
+    if (!['1300', '1400', '1600'].includes(d)) continue;
+    const cond = v.track_cond || '';
+    if (!CONDS.includes(cond)) continue;
+    const f = parseFloat(v.first3f);
+    if (!isFinite(f) || f < 33 || f > 46) continue;
+    const cls = getEffectiveClass(v.race_class || '');
+    if (!cls) continue;
+    const key = `${d}|${cls}|${cond}`;
+    (tmp[key] = tmp[key] || []).push(f);
+  }
+  const t = {};
+  for (const [k, a] of Object.entries(tmp)) if (a.length >= 3) t[k] = a.reduce((x, y) => x + y, 0) / a.length;
+  window._f3BenchCache = t;
+  return t;
+}
+
+/**
+ * レースの前半3F基準比（dev）と自動ペースラベルを返す。
+ * 閾値は1,212レースの結果統計から導出（2026-07-02）：
+ *   ハイ＝基準比−1.0秒以下（後方勝ち23%・逃げ複勝57%に低下）
+ *   スロー＝基準比+0.3秒以上（後方勝ち10%前後・逃げ複勝67-70%）
+ */
+function getPaceDevLabel(distance, raceClass, trackCond, first3f) {
+  const d = String(distance || '').replace(/[^\d]/g, '');
+  const f = parseFloat(first3f);
+  if (!isFinite(f) || f < 33 || f > 46) return null;
+  const cls = getEffectiveClass(raceClass || '');
+  const b = getF3BenchTable()[`${d}|${cls}|${trackCond || ''}`];
+  if (b == null) return null;
+  const dev = +(f - b).toFixed(2);
+  return { dev, label: dev <= -1.0 ? 'ハイ' : dev >= 0.3 ? 'スロー' : 'ミドル' };
+}
+
+/**
+ * 自動ペースラベルをレースレコードへ付与（paceTypeAuto / paceDevAuto）。
+ * 手入力・既存の paceType には絶対に触れない（完全に別フィールド）。
+ * 起動時に毎回再計算するので、基準表がデータ増加で動けばラベルも追従する。
+ */
+function backfillPaceLabels() {
+  let n = 0;
+  for (const [k, v] of Object.entries(lsRead())) {
+    if (!k.startsWith('race_') || v.baba_code !== '31' || !v.first3f) continue;
+    const r = getPaceDevLabel(v.distance, v.race_class || v.raceClass, v.track_cond || v.trackCond, v.first3f);
+    if (!r) continue;
+    if (v.paceTypeAuto === r.label && v.paceDevAuto === r.dev) continue; // 変化なし
+    lsWrite(k, { ...v, paceTypeAuto: r.label, paceDevAuto: r.dev });
+    n++;
+  }
+  if (n > 0) console.log(`[paceLabels] 自動ペースラベル（基準比）を ${n} レースに付与/更新`);
+  return n;
+}
+
+/**
+ * 前半3F基準表（クラス×馬場状態×距離）を保存データから自動計算して描画。
+ * ページを開くたびに再計算するので、データが増えれば数値も自動で最新化される。
+ */
+function renderF3Averages() {
+  const body = document.getElementById('f3avg-body');
+  if (!body) return;
+  const CONDS = ['良', '稍重', '重', '不良'];
+  const CLS_ORDER = ['重賞', 'OP', 'A', 'B', 'C1', 'C2', 'C3', '3歳', '2歳'];
+  const agg = { '1300': {}, '1400': {}, '1600': {} };
+  let totalN = 0;
+  for (const v of Object.values(lsRead())) {
+    if (v.type !== 'race' || v.baba_code !== '31' || !v.first3f) continue;
+    const d = String(v.distance || '').replace(/[^\d]/g, '');
+    if (!agg[d]) continue;
+    const cond = v.track_cond || '';
+    if (!CONDS.includes(cond)) continue;
+    const f = parseFloat(v.first3f);
+    if (!isFinite(f) || f < 33 || f > 46) continue;
+    const cls = getEffectiveClass(v.race_class || '');
+    if (!cls) continue;
+    if (!agg[d][cls]) agg[d][cls] = {};
+    if (!agg[d][cls][cond]) agg[d][cls][cond] = [];
+    agg[d][cls][cond].push(f);
+    totalN++;
+  }
+  const distSec = ['1300', '1400', '1600'].map(d => {
+    const clsRows = CLS_ORDER.filter(c => agg[d][c]);
+    if (!clsRows.length) return '';
+    const rows = clsRows.map(cls => {
+      const cells = CONDS.map(cond => {
+        const a = agg[d][cls][cond];
+        if (!a || !a.length) return '<td class="f3-thin">—</td>';
+        const mean = (a.reduce((x, y) => x + y, 0) / a.length).toFixed(2);
+        return `<td class="${a.length < 5 ? 'f3-thin' : ''}">${mean}<span class="f3avg-n"> (${a.length})</span></td>`;
+      }).join('');
+      return `<tr><td class="f3-cls">${cls}</td>${cells}</tr>`;
+    }).join('');
+    return `<div class="f3avg-h">${d}m${d === '1600' ? ' <span class="f3avg-n">（4F目仮置き推定・±0.3秒）</span>' : ''}</div>
+      <div style="overflow-x:auto"><table class="f3avg-table">
+        <thead><tr><th style="text-align:left">クラス</th>${CONDS.map(c => `<th>${c}</th>`).join('')}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>`;
+  }).join('');
+  body.innerHTML = distSec + `<div class="f3avg-note">
+    保存データから自動計算（現在 ${totalN}R）。データが増えるたびに開くだけで最新の平均に更新されます。薄い表示＝5レース未満（参考値）。<br>
+    前半3Fの由来：実測値＋自動補完（1400m＝決着タイム−上がり4F／1300m＝決着タイム−(上がり4F＋上がり3F)÷2／1600m＝決着タイム−上がり4F−4F目仮置き 良14.5〜不良13.5秒）。1600mは前半800mの内訳が計測されないため、稍重の逆転など±0.3秒程度の不確実性が残ります。</div>`;
+}
+
 function renderTrackTrend() {
   const wrap = document.getElementById('track-trend-table');
   if (!wrap) return;
@@ -5639,6 +6041,8 @@ function renderTrackTrend() {
   const condBiasArr = groups.map((g, i) => getDayCondBias(g.baba, g.date, condArr[i]));
   // 距離別馬場差を事前計算
   const distBiasArr = groups.map(g => getDayBiasByDist(g.baba, g.date));
+  // 馬アンカー方式（同一馬の自己比較）を事前計算
+  const horseBiasArr = groups.map(g => getHorseAnchoredBias(g.baba, g.date));
 
   const rows = groups.map((g, idx) => {
     const bias = biasArr[idx];
@@ -5666,6 +6070,19 @@ function renderTrackTrend() {
       biasCell = `<span style="font-weight:700;color:${col};font-size:13px">${sign}${abs}秒</span>${distHtml}`;
     }
 
+    // 馬基準差（馬アンカー方式：同一馬の自己比較なのでメンバーの強弱に依存しない）
+    const hb = horseBiasArr[idx];
+    let horseBiasCell = `<span style="color:#cbd5e1;font-size:11px">—</span>`;
+    if (hb && hb.bias !== null) {
+      const hSign = hb.bias < 0 ? '−' : '+';
+      const hAbs  = Math.abs(hb.bias).toFixed(2);
+      const hCol  = hb.bias < -0.05 ? '#1d4ed8' : hb.bias > 0.05 ? '#dc2626' : '#059669';
+      // 基準時計方式との乖離が大きい日＝メンバーに時計が引っ張られた疑い
+      const gap = (bias !== null && bias !== undefined) ? Math.abs(hb.bias - bias) : 0;
+      const warn = gap >= 0.8 ? `<div style="font-size:9px;color:#d97706;margin-top:2px">⚠基準時計と${gap.toFixed(1)}秒差</div>` : '';
+      horseBiasCell = `<div class="hb-cell" onclick="toggleHorseBiasDetail('${g.baba}','${g.date}',this)" title="クリックで人気帯別の内訳（メンバー汚染チェック）"><span style="font-weight:700;color:${hCol};font-size:13px">${hSign}${hAbs}秒</span><div style="font-size:9px;color:#94a3b8;margin-top:1px">n=${hb.n}頭 ▾</div>${warn}</div>`;
+    }
+
     // 条件内比較（条件別基準との差）
     const condDiff = condBiasArr[idx];
     let condCell2 = `<span style="color:#cbd5e1;font-size:11px">—</span>`;
@@ -5685,6 +6102,7 @@ function renderTrackTrend() {
       <td style="padding:8px 10px;white-space:nowrap;color:#374151">${getBabaName(g.baba)}</td>
       <td style="padding:8px 10px;text-align:center">${condCell}</td>
       <td style="padding:8px 10px;text-align:center">${biasCell}</td>
+      <td style="padding:8px 10px;text-align:center">${horseBiasCell}</td>
       <td style="padding:8px 10px;text-align:center">${condCell2}</td>
       <td style="padding:8px 4px;color:#6b7280;font-size:11px;text-align:center">${g.races.length}R</td>
       <td style="padding:8px 10px">
@@ -5703,6 +6121,7 @@ function renderTrackTrend() {
         <th style="padding:8px 10px;border-bottom:2px solid #e2e8f0;white-space:nowrap">競馬場</th>
         <th style="padding:8px 10px;border-bottom:2px solid #e2e8f0;text-align:center;white-space:nowrap">馬場状態</th>
         <th style="padding:8px 10px;border-bottom:2px solid #e2e8f0;text-align:center;white-space:nowrap">馬場差<br><span style="font-size:9px;font-weight:400;color:#9ca3af">（良比較）</span></th>
+        <th style="padding:8px 10px;border-bottom:2px solid #e2e8f0;text-align:center;white-space:nowrap">馬基準差<br><span style="font-size:9px;font-weight:400;color:#9ca3af">同一馬の自己比較</span></th>
         <th style="padding:8px 10px;border-bottom:2px solid #e2e8f0;text-align:center;white-space:nowrap">条件内比較<br><span style="font-size:9px;font-weight:400;color:#9ca3af">条件基準との差</span></th>
         <th style="padding:8px 10px;border-bottom:2px solid #e2e8f0;text-align:center;white-space:nowrap">R数</th>
         <th style="padding:8px 10px;border-bottom:2px solid #e2e8f0">馬場傾向メモ</th>
@@ -5927,6 +6346,51 @@ function loadSavedDay(date, baba) {
   document.getElementById('baba-code').value=baba;
   fetchAllRaces();
 }
+// ── 出馬表タブ：保存済み開催日リスト（タップで即読込・保存データタブを経由しない） ──
+function renderDebanDateList() {
+  const el = document.getElementById('deban-date-list');
+  if (!el) return;
+  buildSavedGroups();
+  const DOW = ['日','月','火','水','木','金','土'];
+  const groups = (_savedGroups || []).filter(g => g.baba === '31');
+  if (!groups.length) {
+    el.innerHTML = '<p style="color:#9ca3af;font-size:13px;line-height:1.8">保存済みの高知データがありません。<br>「検索」タブで開催日を取得すると、ここに一覧が出ます。</p>';
+    return;
+  }
+  const byYm = {};
+  groups.forEach(g => { (byYm[g.ym] = byYm[g.ym] || []).push(g); });
+  const yms = Object.keys(byYm).sort((a, b) => b.localeCompare(a));
+  el.innerHTML = yms.map(ym => {
+    const monthLabel = ym.replace('/', '年') + '月';
+    const items = byYm[ym].map(g => {
+      const d = new Date(g.date.replace(/\//g, '-') + 'T00:00:00');
+      const dow = isNaN(d) ? '' : DOW[d.getDay()];
+      const md = g.date.slice(5);
+      const hasResult = g.races.some(r => { const v = r.data; return v && (v.first3f || v.agari4f); });
+      return `<button type="button" class="deban-date-item" onclick="restoreFromSaved('${g.date}','31')">
+        <span class="ddi-date">${md}<small>(${dow})</small></span>
+        <span class="ddi-count">${g.races.length}R</span>
+        ${hasResult ? '<span class="ddi-tag">結果</span>' : ''}
+        <i class="fas fa-chevron-right ddi-arrow"></i>
+      </button>`;
+    }).join('');
+    return `<div class="ddi-month">${monthLabel}</div><div class="ddi-grid">${items}</div>`;
+  }).join('');
+}
+function showDebanDateList() {
+  allRacesData = {};
+  if (typeof clearRaceTabs === 'function') clearRaceTabs();
+  const area = document.getElementById('race-content-area'); if (area) area.innerHTML = '';
+  document.getElementById('deban-date-list-card')?.classList.remove('hidden');
+  document.getElementById('race-layout-wrap')?.classList.add('hidden');
+  renderDebanDateList();
+  window.scrollTo(0, 0);
+}
+function showDebanRaceView() {
+  document.getElementById('deban-date-list-card')?.classList.add('hidden');
+  document.getElementById('race-layout-wrap')?.classList.remove('hidden');
+}
+
 function restoreFromSaved(date, baba) {
   const lsData=lsRead();
   const raceEntries=Object.entries(lsData).filter(([,v])=>v.type==='race'&&v.race_date===date&&v.baba_code===baba).sort((a,b)=>(a[1].race_no||0)-(b[1].race_no||0));
@@ -6247,6 +6711,7 @@ async function saveOneRace(raceNo) {
  * 各レース間に少し間隔を開けてCORSプロキシへの負荷を分散
  */
 async function fetchAllComments() {
+  if (!isAdminMode()) { alert('コメント一括取得は管理者のみ可能です。'); return; }
   const raceNos = Object.keys(allRacesData).map(Number).sort((a, b) => a - b);
   if (!raceNos.length) { alert('先にレースデータを取得してください。'); return; }
 
@@ -8196,20 +8661,6 @@ const DRAW_STATS = {
     '重':{5:16.13,6:6.25,7:12.12,8:5.88}
   }
 };
-function lookupDrawStats(dist, cond, gate) {
-  const g = parseInt(gate);
-  if (!g || g < 1 || g > 8) return null;
-  const dists = [800,1300,1400,1600,1900];
-  const nearD = dists.reduce((a,b) => Math.abs(b-dist)<Math.abs(a-dist)?b:a);
-  const condMap = DRAW_STATS[nearD];
-  if (!condMap) return null;
-  const gateMap = condMap[cond] || condMap['良'] || Object.values(condMap)[0];
-  if (!gateMap || gateMap[g] == null) return null;
-  const vals = Object.values(gateMap).filter(v=>v>0);
-  if (vals.length < 4) return null;
-  const avg = vals.reduce((s,v)=>s+v,0)/vals.length;
-  return { wr: gateMap[g], avg };
-}
 
 /** 騎手別成績データ（高知競馬 2016-2026 実績） */
 const JOCKEY_STATS = {"吉村智洋":{"all":{"wr":10.3,"pr":41.4,"n":29},"dist":{"1400":{"wr":18.2,"pr":36.4,"n":11},"1300":{"wr":0,"pr":40,"n":15}},"cond":{"不良":{"wr":0,"pr":0,"n":5},"重":{"wr":11.8,"pr":41.2,"n":17},"良":{"wr":0,"pr":57.1,"n":7}},"recent":{"wr":14.3,"pr":42.9,"n":14}},"松井伸也":{"all":{"wr":5.6,"pr":22.7,"n":321},"dist":{"1300":{"wr":7.1,"pr":22,"n":127},"1400":{"wr":4.4,"pr":23.3,"n":159},"1600":{"wr":5.7,"pr":22.9,"n":35}},"cond":{"不良":{"wr":0,"pr":29.3,"n":41},"重":{"wr":8.9,"pr":24.1,"n":79},"良":{"wr":4.9,"pr":23.8,"n":122},"稍重":{"wr":5.1,"pr":16.5,"n":79}},"recent":{"wr":5.8,"pr":21.5,"n":260}},"郷間勇太":{"all":{"wr":8.7,"pr":27.1,"n":5519},"dist":{"1300":{"wr":8.5,"pr":26.7,"n":2370},"1400":{"wr":9,"pr":27.2,"n":2461},"1600":{"wr":8.6,"pr":27.9,"n":688}},"cond":{"不良":{"wr":8.1,"pr":26.2,"n":1765},"重":{"wr":8.7,"pr":25.9,"n":1932},"良":{"wr":8.4,"pr":29.9,"n":864},"稍重":{"wr":10.1,"pr":28.6,"n":958}},"recent":{"wr":7.6,"pr":27.1,"n":1329}},"木村直輝":{"all":{"wr":4.2,"pr":16.8,"n":4371},"dist":{"1300":{"wr":4.6,"pr":17.6,"n":1971},"1400":{"wr":3.8,"pr":15.6,"n":1975},"1600":{"wr":4,"pr":18.4,"n":425}},"cond":{"不良":{"wr":3.8,"pr":16.9,"n":1483},"重":{"wr":4.9,"pr":16.9,"n":1339},"良":{"wr":3.3,"pr":17,"n":723},"稍重":{"wr":4.5,"pr":16.2,"n":826}},"recent":{"wr":3.6,"pr":15.7,"n":1179}},"林謙佑":{"all":{"wr":8.8,"pr":30.2,"n":5995},"dist":{"1300":{"wr":8.4,"pr":27.8,"n":2615},"1400":{"wr":9.4,"pr":32.3,"n":2640},"1600":{"wr":8.1,"pr":30.9,"n":740}},"cond":{"不良":{"wr":9.4,"pr":30.6,"n":1935},"重":{"wr":7.9,"pr":29.1,"n":2014},"良":{"wr":9.6,"pr":30.6,"n":1020},"稍重":{"wr":8.5,"pr":31.1,"n":1026}},"recent":{"wr":8.1,"pr":29.4,"n":1162}},"赤岡修次":{"all":{"wr":30.7,"pr":61.9,"n":5272},"dist":{"1300":{"wr":31.9,"pr":65,"n":2147},"1400":{"wr":29.7,"pr":60.5,"n":2356},"1600":{"wr":30.4,"pr":57.6,"n":769}},"cond":{"不良":{"wr":31.2,"pr":63.8,"n":1759},"重":{"wr":31.6,"pr":62.9,"n":1846},"良":{"wr":28.7,"pr":58.1,"n":728},"稍重":{"wr":29.5,"pr":59.1,"n":939}},"recent":{"wr":29.4,"pr":61.3,"n":954}},"仲原大生":{"all":{"wr":5.7,"pr":27.6,"n":123},"dist":{"1300":{"wr":7.1,"pr":28.6,"n":56},"1400":{"wr":4.1,"pr":26.5,"n":49},"1600":{"wr":0,"pr":27.8,"n":18}},"cond":{"不良":{"wr":0,"pr":26.7,"n":60},"重":{"wr":9.5,"pr":47.6,"n":21},"良":{"wr":37.5,"pr":37.5,"n":8},"稍重":{"wr":0,"pr":14.7,"n":34}},"recent":{"wr":5.8,"pr":28.1,"n":121}},"永森大智":{"all":{"wr":22.2,"pr":52.4,"n":6617},"dist":{"1300":{"wr":22.8,"pr":55.3,"n":2772},"1400":{"wr":21.4,"pr":49.9,"n":2908},"1600":{"wr":22.7,"pr":51.8,"n":937}},"cond":{"不良":{"wr":21.2,"pr":51.5,"n":2091},"重":{"wr":23.3,"pr":54.7,"n":2316},"良":{"wr":21.7,"pr":50.9,"n":1074},"稍重":{"wr":22,"pr":50.9,"n":1136}},"recent":{"wr":20.1,"pr":48.8,"n":1485}},"倉兼育康":{"all":{"wr":12.2,"pr":37.7,"n":4403},"dist":{"1300":{"wr":12.3,"pr":39.3,"n":1971},"1400":{"wr":11.5,"pr":35.2,"n":1938},"1600":{"wr":14.2,"pr":41.1,"n":494}},"cond":{"不良":{"wr":13.1,"pr":37.2,"n":1499},"重":{"wr":12.4,"pr":38.8,"n":1700},"良":{"wr":11.4,"pr":36.8,"n":562},"稍重":{"wr":10.1,"pr":36.6,"n":642}}},"山崎雅由":{"all":{"wr":7.4,"pr":26.8,"n":4952},"dist":{"1300":{"wr":8.4,"pr":27.2,"n":2213},"1400":{"wr":5.9,"pr":25.1,"n":2144},"1600":{"wr":9.4,"pr":31.8,"n":595}},"cond":{"不良":{"wr":7.6,"pr":27,"n":1566},"重":{"wr":7.1,"pr":26.2,"n":1620},"良":{"wr":8.1,"pr":27,"n":847},"稍重":{"wr":7.1,"pr":27.5,"n":919}},"recent":{"wr":8.1,"pr":29.8,"n":1522}},"中島龍也":{"all":{"wr":4,"pr":24.9,"n":503},"dist":{"1300":{"wr":4.9,"pr":28,"n":164},"1400":{"wr":3.5,"pr":19.7,"n":254},"1600":{"wr":3.5,"pr":34.1,"n":85}},"cond":{"不良":{"wr":3.5,"pr":29.6,"n":115},"重":{"wr":5.8,"pr":26.5,"n":155},"良":{"wr":2.4,"pr":19.5,"n":123},"稍重":{"wr":3.6,"pr":23.6,"n":110}},"recent":{"wr":5,"pr":24,"n":300}},"岩本怜":{"all":{"wr":4,"pr":12,"n":75},"dist":{"1300":{"wr":0,"pr":17.9,"n":28},"1400":{"wr":0,"pr":8.6,"n":35},"1600":{"wr":0,"pr":0,"n":12}},"cond":{"重":{"wr":0,"pr":10.5,"n":19},"良":{"wr":0,"pr":11.1,"n":18},"稍重":{"wr":5.6,"pr":13.9,"n":36}},"recent":{"wr":4.1,"pr":12.3,"n":73}},"葛山晃平":{"all":{"wr":2.6,"pr":23.4,"n":231},"dist":{"1300":{"wr":0,"pr":25.9,"n":81},"1400":{"wr":4.4,"pr":21.9,"n":114},"1600":{"wr":0,"pr":22.2,"n":36}},"cond":{"不良":{"wr":0,"pr":15.2,"n":46},"重":{"wr":2.5,"pr":22.8,"n":79},"良":{"wr":0,"pr":17.2,"n":29},"稍重":{"wr":2.6,"pr":31.2,"n":77}},"recent":{"wr":0,"pr":4.1,"n":49}},"近藤翔月":{"all":{"wr":8.6,"pr":23.7,"n":735},"dist":{"1300":{"wr":8,"pr":22.3,"n":274},"1400":{"wr":8,"pr":21.2,"n":312},"1600":{"wr":10.7,"pr":31.5,"n":149}},"cond":{"不良":{"wr":7.2,"pr":23.9,"n":180},"重":{"wr":7.7,"pr":21.9,"n":169},"良":{"wr":8.3,"pr":25.9,"n":205},"稍重":{"wr":11,"pr":22.7,"n":181}},"recent":{"wr":8.6,"pr":23.7,"n":735}},"上田将司":{"all":{"wr":6.8,"pr":26.5,"n":5077},"dist":{"1300":{"wr":6.4,"pr":25.9,"n":2394},"1400":{"wr":7.4,"pr":27.2,"n":2111},"1600":{"wr":5.9,"pr":26.6,"n":572}},"cond":{"不良":{"wr":6.4,"pr":25.7,"n":1635},"重":{"wr":6.4,"pr":26.3,"n":1918},"良":{"wr":7.8,"pr":29.3,"n":735},"稍重":{"wr":7.6,"pr":26,"n":789}},"recent":{"wr":6.7,"pr":25.8,"n":507}},"松本大輝":{"all":{"wr":14.3,"pr":35.7,"n":28},"dist":{"1400":{"wr":14.3,"pr":42.9,"n":21},"1300":{"wr":0,"pr":0,"n":5}},"cond":{"重":{"wr":0,"pr":41.7,"n":12},"稍重":{"wr":20,"pr":30,"n":10}},"recent":{"wr":9.1,"pr":36.4,"n":22}},"大澤誠志":{"all":{"wr":2.1,"pr":10.4,"n":4082},"dist":{"1300":{"wr":1.9,"pr":10.5,"n":2055},"1400":{"wr":2.3,"pr":10.2,"n":1669},"1600":{"wr":2.5,"pr":10.9,"n":358}},"cond":{"不良":{"wr":2.4,"pr":10.4,"n":1294},"重":{"wr":2.1,"pr":10.7,"n":1398},"良":{"wr":1,"pr":8.7,"n":667},"稍重":{"wr":2.6,"pr":11.5,"n":723}},"recent":{"wr":1.5,"pr":9.1,"n":957}},"沢田龍哉":{"all":{"wr":0,"pr":26.3,"n":19},"dist":{"1400":{"wr":0,"pr":41.7,"n":12},"1300":{"wr":0,"pr":0,"n":6}},"cond":{"良":{"wr":0,"pr":33.3,"n":12},"稍重":{"wr":0,"pr":0,"n":7}},"recent":{"wr":0,"pr":26.3,"n":19}},"塚本征吾":{"all":{"wr":8.3,"pr":30.6,"n":36},"dist":{"1400":{"wr":0,"pr":27.8,"n":18},"1300":{"wr":13.3,"pr":40,"n":15}},"cond":{"不良":{"wr":0,"pr":30,"n":10},"重":{"wr":0,"pr":16.7,"n":12},"良":{"wr":0,"pr":36.4,"n":11}},"recent":{"wr":8.6,"pr":31.4,"n":35}},"宮川実":{"all":{"wr":23.3,"pr":52.6,"n":5136},"dist":{"1300":{"wr":25,"pr":54.5,"n":2062},"1400":{"wr":21.8,"pr":51.5,"n":2339},"1600":{"wr":23,"pr":50.7,"n":735}},"cond":{"不良":{"wr":23.8,"pr":52.9,"n":1695},"重":{"wr":22.3,"pr":52,"n":1810},"良":{"wr":23,"pr":50.9,"n":812},"稍重":{"wr":24.7,"pr":54.9,"n":819}},"recent":{"wr":28,"pr":57.3,"n":810}},"佐原秀泰":{"all":{"wr":9.6,"pr":31.6,"n":5598},"dist":{"1300":{"wr":9.5,"pr":32.2,"n":2421},"1400":{"wr":9.8,"pr":30.8,"n":2460},"1600":{"wr":9.3,"pr":32.2,"n":717}},"cond":{"不良":{"wr":9.6,"pr":32.4,"n":1792},"重":{"wr":9.1,"pr":30.2,"n":2069},"良":{"wr":10.8,"pr":34.3,"n":784},"稍重":{"wr":10,"pr":31.1,"n":953}},"recent":{"wr":11.8,"pr":33.8,"n":876}},"岡遼太郎":{"all":{"wr":8.9,"pr":29.4,"n":2888},"dist":{"1300":{"wr":9.6,"pr":29.8,"n":1100},"1400":{"wr":8.5,"pr":29.5,"n":1404},"1600":{"wr":7.8,"pr":28.1,"n":384}},"cond":{"不良":{"wr":7.9,"pr":28.7,"n":895},"重":{"wr":8.4,"pr":26.4,"n":812},"良":{"wr":9.9,"pr":29.7,"n":535},"稍重":{"wr":9.9,"pr":34.1,"n":646}},"recent":{"wr":10.4,"pr":33,"n":1371}},"村上弘樹":{"all":{"wr":13,"pr":37.7,"n":154},"dist":{"1300":{"wr":11.9,"pr":35.8,"n":67},"1400":{"wr":14.9,"pr":38.8,"n":67},"1600":{"wr":10,"pr":40,"n":20}},"cond":{"不良":{"wr":9.4,"pr":35.9,"n":64},"重":{"wr":16.4,"pr":38.2,"n":55},"稍重":{"wr":14.3,"pr":40,"n":35}}},"西森将司":{"all":{"wr":2.8,"pr":15.4,"n":4687},"dist":{"1300":{"wr":2.5,"pr":15.4,"n":2358},"1400":{"wr":3.1,"pr":14.7,"n":1927},"1600":{"wr":3,"pr":18.7,"n":402}},"cond":{"不良":{"wr":3,"pr":15,"n":1478},"重":{"wr":2.8,"pr":16.4,"n":1743},"良":{"wr":2.2,"pr":13.7,"n":678},"稍重":{"wr":2.8,"pr":15.5,"n":788}},"recent":{"wr":1.9,"pr":14.5,"n":782}},"石本純也":{"all":{"wr":3.5,"pr":14.2,"n":3859},"dist":{"1300":{"wr":3.7,"pr":14.3,"n":2101},"1400":{"wr":3.3,"pr":13.7,"n":1490},"1600":{"wr":2.6,"pr":16,"n":268}},"cond":{"不良":{"wr":2.8,"pr":12.8,"n":1245},"重":{"wr":3.9,"pr":15.7,"n":1348},"良":{"wr":4,"pr":14.6,"n":603},"稍重":{"wr":3.5,"pr":13.4,"n":663}},"recent":{"wr":2.1,"pr":8.4,"n":681}},"妹尾浩一":{"all":{"wr":8,"pr":25.9,"n":4524},"dist":{"1300":{"wr":8.2,"pr":26.4,"n":2074},"1400":{"wr":7.8,"pr":24.9,"n":1931},"1600":{"wr":8.3,"pr":27.6,"n":519}},"cond":{"不良":{"wr":8.9,"pr":26.9,"n":1436},"重":{"wr":7.3,"pr":24.9,"n":1623},"良":{"wr":8.2,"pr":26.1,"n":674},"稍重":{"wr":7.7,"pr":25.9,"n":791}},"recent":{"wr":9.4,"pr":28.3,"n":1152}},"塚本直之":{"all":{"wr":0,"pr":7.3,"n":41},"dist":{"1300":{"wr":0,"pr":0,"n":13},"1400":{"wr":0,"pr":10,"n":20},"1600":{"wr":0,"pr":0,"n":8}},"cond":{"不良":{"wr":0,"pr":0,"n":17},"重":{"wr":0,"pr":0,"n":13},"稍重":{"wr":0,"pr":0,"n":11}},"recent":{"wr":0,"pr":7.3,"n":41}},"飛田愛斗":{"all":{"wr":0,"pr":30,"n":10},"dist":{"1400":{"wr":0,"pr":40,"n":5}},"cond":{"不良":{"wr":0,"pr":30,"n":10}},"recent":{"wr":0,"pr":0,"n":8}},"及川烈":{"all":{"wr":0,"pr":0,"n":28},"dist":{"1300":{"wr":0,"pr":0,"n":13},"1400":{"wr":0,"pr":0,"n":10},"1600":{"wr":0,"pr":0,"n":5}},"cond":{"良":{"wr":0,"pr":0,"n":16},"不良":{"wr":0,"pr":0,"n":10}},"recent":{"wr":0,"pr":0,"n":28}},"加藤翔馬":{"all":{"wr":8.2,"pr":26.1,"n":402},"dist":{"1300":{"wr":8.8,"pr":26.4,"n":159},"1400":{"wr":9.4,"pr":29.3,"n":191},"1600":{"wr":0,"pr":13.5,"n":52}},"cond":{"不良":{"wr":12.8,"pr":24.4,"n":78},"重":{"wr":5.8,"pr":22.1,"n":104},"良":{"wr":9.3,"pr":31.1,"n":151},"稍重":{"wr":4.3,"pr":23.2,"n":69}},"recent":{"wr":8.2,"pr":26,"n":400}},"阿部基嗣":{"all":{"wr":2.6,"pr":13.3,"n":1566},"dist":{"1300":{"wr":2.3,"pr":14.3,"n":607},"1400":{"wr":3.2,"pr":13.3,"n":750},"1600":{"wr":1,"pr":10,"n":209}},"cond":{"不良":{"wr":1.9,"pr":11.9,"n":469},"重":{"wr":2.9,"pr":14.3,"n":349},"良":{"wr":3.8,"pr":12.5,"n":368},"稍重":{"wr":1.8,"pr":14.7,"n":380}},"recent":{"wr":2.6,"pr":13.9,"n":1285}},"浜尚美":{"all":{"wr":5,"pr":18.1,"n":1087},"dist":{"1300":{"wr":6,"pr":19.5,"n":435},"1400":{"wr":4.4,"pr":17.6,"n":551},"1600":{"wr":4,"pr":14.9,"n":101}},"cond":{"不良":{"wr":3.7,"pr":16.6,"n":301},"重":{"wr":6.2,"pr":16.9,"n":307},"良":{"wr":7.1,"pr":21.3,"n":253},"稍重":{"wr":2.7,"pr":18.1,"n":226}},"recent":{"wr":6.9,"pr":22.4,"n":491}},"中島良美":{"all":{"wr":0,"pr":3.6,"n":56},"dist":{"1300":{"wr":0,"pr":6.9,"n":29},"1400":{"wr":0,"pr":0,"n":22},"1600":{"wr":0,"pr":0,"n":5}},"cond":{"不良":{"wr":0,"pr":0,"n":19},"重":{"wr":0,"pr":0,"n":11},"良":{"wr":0,"pr":0,"n":12},"稍重":{"wr":0,"pr":0,"n":14}},"recent":{"wr":0,"pr":3.8,"n":53}},"塚本雄大":{"all":{"wr":6.8,"pr":23.4,"n":4299},"dist":{"1300":{"wr":7.2,"pr":22.4,"n":2210},"1400":{"wr":6.8,"pr":24.6,"n":1747},"1600":{"wr":5,"pr":24.6,"n":342}},"cond":{"不良":{"wr":7.8,"pr":24.9,"n":1416},"重":{"wr":6.4,"pr":22.1,"n":1689},"良":{"wr":5,"pr":22.8,"n":501},"稍重":{"wr":7.4,"pr":24.2,"n":693}},"recent":{"wr":8.6,"pr":31.8,"n":151}},"田口貫太":{"all":{"wr":0,"pr":30,"n":10},"dist":{"1400":{"wr":0,"pr":33.3,"n":9}},"cond":{"重":{"wr":0,"pr":0,"n":5}},"recent":{"wr":0,"pr":28.6,"n":7}},"岡村卓弥":{"all":{"wr":9.2,"pr":32.2,"n":7144},"dist":{"1300":{"wr":9.3,"pr":32.2,"n":3151},"1400":{"wr":9.2,"pr":31,"n":3084},"1600":{"wr":8.6,"pr":36,"n":909}},"cond":{"不良":{"wr":7.9,"pr":29.5,"n":2315},"重":{"wr":9.6,"pr":33.1,"n":2448},"良":{"wr":9.5,"pr":33.8,"n":1159},"稍重":{"wr":10.6,"pr":33.6,"n":1222}},"recent":{"wr":9.9,"pr":32.2,"n":1523}},"小杉亮":{"all":{"wr":4.5,"pr":19.1,"n":157},"dist":{"1300":{"wr":4.8,"pr":24.2,"n":62},"1400":{"wr":5.1,"pr":14.1,"n":78},"1600":{"wr":0,"pr":23.5,"n":17}},"cond":{"不良":{"wr":3.8,"pr":23.1,"n":52},"重":{"wr":14.8,"pr":22.2,"n":27},"良":{"wr":0,"pr":15.2,"n":33},"稍重":{"wr":0,"pr":15.6,"n":45}},"recent":{"wr":4.5,"pr":19.1,"n":157}},"嬉勝則":{"all":{"wr":6,"pr":20.6,"n":3281},"dist":{"1300":{"wr":6.2,"pr":21.1,"n":1576},"1400":{"wr":6.1,"pr":20.4,"n":1384},"1600":{"wr":4.7,"pr":19,"n":321}},"cond":{"不良":{"wr":5.9,"pr":19.8,"n":1115},"重":{"wr":6.2,"pr":21,"n":1228},"良":{"wr":6,"pr":21.6,"n":450},"稍重":{"wr":5.5,"pr":20.5,"n":488}},"recent":{"wr":4.8,"pr":25.5,"n":208}},"山田義貴":{"all":{"wr":7.8,"pr":16.9,"n":77},"dist":{"1300":{"wr":0,"pr":16.7,"n":24},"1400":{"wr":9.3,"pr":18.6,"n":43},"1600":{"wr":0,"pr":0,"n":10}},"cond":{"不良":{"wr":13.6,"pr":22.7,"n":22},"重":{"wr":6.2,"pr":15.6,"n":32},"良":{"wr":0,"pr":0,"n":5},"稍重":{"wr":0,"pr":11.1,"n":18}},"recent":{"wr":7.8,"pr":16.9,"n":77}},"下原理":{"all":{"wr":12.7,"pr":45.5,"n":110},"dist":{"1300":{"wr":18.4,"pr":55.3,"n":38},"1400":{"wr":10.5,"pr":43.9,"n":57},"1600":{"wr":0,"pr":26.7,"n":15}},"cond":{"不良":{"wr":7.3,"pr":36.6,"n":41},"重":{"wr":16.1,"pr":51.6,"n":31},"良":{"wr":17.6,"pr":52.9,"n":17},"稍重":{"wr":14.3,"pr":47.6,"n":21}},"recent":{"wr":0,"pr":54.5,"n":11}},"城野慈尚":{"all":{"wr":6.8,"pr":20.8,"n":1298},"dist":{"1300":{"wr":7.6,"pr":22,"n":487},"1400":{"wr":6.8,"pr":21.6,"n":617},"1600":{"wr":4.6,"pr":15.5,"n":194}},"cond":{"不良":{"wr":7.8,"pr":20.8,"n":322},"重":{"wr":6.7,"pr":21.6,"n":282},"良":{"wr":7.4,"pr":22.1,"n":366},"稍重":{"wr":5.2,"pr":18.6,"n":328}},"recent":{"wr":6.8,"pr":20.8,"n":1298}},"畑中信司":{"all":{"wr":9.1,"pr":31.6,"n":2812},"dist":{"1300":{"wr":8.4,"pr":32.1,"n":1034},"1400":{"wr":8.8,"pr":30.9,"n":1338},"1600":{"wr":11.4,"pr":32.3,"n":440}},"cond":{"不良":{"wr":10.8,"pr":32.4,"n":911},"重":{"wr":7.9,"pr":30.6,"n":814},"良":{"wr":8.8,"pr":33.6,"n":456},"稍重":{"wr":8.4,"pr":30.3,"n":631}},"recent":{"wr":9.1,"pr":33.2,"n":1170}},"井上瑛太":{"all":{"wr":10.9,"pr":33.2,"n":2838},"dist":{"1300":{"wr":10.3,"pr":31.7,"n":1035},"1400":{"wr":10.7,"pr":32.8,"n":1395},"1600":{"wr":12.7,"pr":38.5,"n":408}},"cond":{"不良":{"wr":10.7,"pr":31.4,"n":821},"重":{"wr":11,"pr":32.1,"n":783},"良":{"wr":11.6,"pr":37.1,"n":550},"稍重":{"wr":10.2,"pr":33.6,"n":684}},"recent":{"wr":14.8,"pr":42,"n":1421}},"多田羅誠":{"all":{"wr":12.3,"pr":37.8,"n":4230},"dist":{"1300":{"wr":13.1,"pr":39.1,"n":1763},"1400":{"wr":11.5,"pr":36.3,"n":1890},"1600":{"wr":12.3,"pr":38.5,"n":577}},"cond":{"不良":{"wr":12.2,"pr":38,"n":1327},"重":{"wr":11.8,"pr":37.6,"n":1234},"良":{"wr":12.9,"pr":39,"n":792},"稍重":{"wr":12.4,"pr":36.6,"n":877}},"recent":{"wr":13.4,"pr":41.4,"n":1540}},"長尾翼玖":{"all":{"wr":6.2,"pr":21.2,"n":113},"dist":{"1300":{"wr":11.4,"pr":27.3,"n":44},"1400":{"wr":3.3,"pr":18.3,"n":60},"1600":{"wr":0,"pr":0,"n":9}},"cond":{"不良":{"wr":0,"pr":28.6,"n":21},"重":{"wr":12.9,"pr":22.6,"n":31},"良":{"wr":0,"pr":8.3,"n":24},"稍重":{"wr":5.4,"pr":24.3,"n":37}}},"吉原寛人":{"all":{"wr":28.5,"pr":62.1,"n":884},"dist":{"1300":{"wr":29.2,"pr":64.8,"n":233},"1400":{"wr":28.7,"pr":59.8,"n":463},"1600":{"wr":27.1,"pr":64.4,"n":188}},"cond":{"不良":{"wr":27.4,"pr":63.7,"n":179},"重":{"wr":27.7,"pr":59.1,"n":264},"良":{"wr":25.6,"pr":57.6,"n":262},"稍重":{"wr":35.2,"pr":71.5,"n":179}},"recent":{"wr":26.1,"pr":61.1,"n":532}},"岩橋勇二":{"all":{"wr":6.8,"pr":25.4,"n":59},"dist":{"1300":{"wr":9.5,"pr":19,"n":21},"1400":{"wr":7.7,"pr":38.5,"n":26},"1600":{"wr":0,"pr":0,"n":12}},"cond":{"良":{"wr":4.4,"pr":24.4,"n":45},"稍重":{"wr":18.2,"pr":27.3,"n":11}},"recent":{"wr":6.8,"pr":25.4,"n":59}},"高野誠毅":{"all":{"wr":0.9,"pr":9.8,"n":224},"dist":{"1300":{"wr":0,"pr":11.2,"n":80},"1400":{"wr":0,"pr":9,"n":122},"1600":{"wr":0,"pr":9.1,"n":22}},"cond":{"不良":{"wr":2,"pr":9.2,"n":98},"重":{"wr":0,"pr":10,"n":40},"良":{"wr":0,"pr":12.8,"n":39},"稍重":{"wr":0,"pr":8.5,"n":47}},"recent":{"wr":0,"pr":8.2,"n":97}},"所蛍":{"all":{"wr":2.2,"pr":18,"n":139},"dist":{"1300":{"wr":3.2,"pr":15.9,"n":63},"1400":{"wr":0,"pr":16.4,"n":61},"1600":{"wr":0,"pr":33.3,"n":15}},"cond":{"不良":{"wr":0,"pr":17.2,"n":58},"重":{"wr":0,"pr":19.1,"n":47},"稍重":{"wr":5.9,"pr":17.6,"n":34}}}};
@@ -8335,13 +8786,6 @@ function getDistNum(distStr) {
 /**
  * 馬場状態文字列 → テーブルキー
  */
-function trackCondToKey(cond) {
-  if (cond === '良')   return 'good';
-  if (cond === '稍重') return 'yaya';
-  if (cond === '重')   return 'heavy';
-  if (cond === '不良') return 'bad';
-  return null;
-}
 
 /** タイム指数バッジHTML（55+紫/50-54赤/45-49青/45未満黒） */
 function speedIndexBadgeHtml(idx) {
@@ -8527,6 +8971,89 @@ function getDayBiasForDate(babaCode, raceDate) {
   const result = diffs.length ? calcMedian(diffs) : null;
   window._dayBiasCache[cacheKey] = result;
   return result;
+}
+
+/**
+ * 馬アンカー方式の当日馬場差（同一馬の自己比較）
+ * その日の各出走馬のタイムを「同じ馬の直近の同距離走（参照日の馬場差で水準補正済み）」
+ * と比較し、全馬の差の中央値を取る。基準時計方式（getDayBiasForDate）と違い、
+ * その日に組まれたメンバーの強弱に引っ張られない。両者が大きくズレる日は
+ * 「強い組に時計が引っ張られた日」のシグナル。
+ * 戻り値: { bias, n } ｜ 参照できた馬が5頭未満なら bias:null
+ */
+if (!window._horseBiasCache) window._horseBiasCache = {};
+/** 馬別の自己ベンチ比差分を収集（getHorseAnchoredBiasと人気帯別内訳の共通材料） */
+function _horseBiasDiffs(babaCode, raceDate) {
+  const { raceInfoMap, horsesByRace } = _buildDayRaceData(babaCode, raceDate);
+  const REF_DAYS = 180; // 参照期間（この日数より古い自己ベンチは使わない）
+  const rows = [];
+  for (const [rno, raceInfo] of raceInfoMap) {
+    if (is2yo(raceInfo.race_class || raceInfo.raceClass || '')) continue;
+    const dist = getDistNum(raceInfo.distance);
+    if (!dist) continue;
+    for (const v of (horsesByRace.get(rno) || [])) {
+      const t = raceTimeToSec(v.time);
+      if (t == null || isNaN(parseInt(v.chakujun))) continue;
+      const name = v.horseName || v.horse_name;
+      if (!name) continue;
+      // 同じ馬の当日より前・同場・同距離の走破時計（直近3走）を自己ベンチにする
+      const refs = [];
+      for (const h of getHorseHistory(name)) {
+        if (h.babaCode !== babaCode) continue;
+        if (!(h.raceDate < raceDate)) continue;
+        if (dateDiffDays(raceDate, h.raceDate) > REF_DAYS) continue;
+        if (getDistNum(h.distance) !== dist) continue;
+        const rt = raceTimeToSec(h.time);
+        if (rt == null) continue;
+        const rb = getDayBiasForDate(babaCode, h.raceDate);
+        if (rb == null) continue;
+        refs.push(rt - rb); // 参照日の馬場差を引いて水準を揃える
+        if (refs.length >= 3) break;
+      }
+      if (!refs.length) continue;
+      rows.push({ ninki: parseInt(v.ninki) || null, odds: parseFloat(v.odds) || null, diff: t - calcMedian(refs) });
+    }
+  }
+  return rows;
+}
+
+function getHorseAnchoredBias(babaCode, raceDate) {
+  const cacheKey = `${babaCode}_${raceDate}`;
+  if (window._horseBiasCache[cacheKey] !== undefined) return window._horseBiasCache[cacheKey];
+  const diffs = _horseBiasDiffs(babaCode, raceDate).map(r => r.diff);
+  // 外れ値除去（中央値から3秒超は大敗・展開崩れとして除外）
+  let arr = diffs;
+  if (arr.length >= 8) {
+    const med = calcMedian([...arr]);
+    const trimmed = arr.filter(d => Math.abs(d - med) <= 3.0);
+    if (trimmed.length >= 5) arr = trimmed;
+  }
+  const result = arr.length >= 5
+    ? { bias: +calcMedian(arr).toFixed(2), n: arr.length }
+    : { bias: null, n: arr.length };
+  window._horseBiasCache[cacheKey] = result;
+  return result;
+}
+
+/** 馬基準差セルのクリックで人気帯別内訳（メンバー汚染チェック）を開閉 */
+function toggleHorseBiasDetail(babaCode, raceDate, cellEl) {
+  const existing = cellEl.querySelector('.hb-detail');
+  if (existing) { existing.remove(); return; }
+  const rows = _horseBiasDiffs(babaCode, raceDate);
+  const med = a => a.length ? +calcMedian(a.map(r => r.diff)).toFixed(2) : null;
+  const fmt = v => v == null ? '—' : (v < 0 ? '−' : '+') + Math.abs(v).toFixed(2) + '秒';
+  const buckets = [
+    ['1〜3人気（強）',  rows.filter(r => r.ninki >= 1 && r.ninki <= 3)],
+    ['4〜6人気（中）',  rows.filter(r => r.ninki >= 4 && r.ninki <= 6)],
+    ['7人気〜（弱）',   rows.filter(r => r.ninki >= 7)],
+    ['単勝20倍〜（最弱）', rows.filter(r => r.odds >= 20)],
+  ];
+  const box = document.createElement('div');
+  box.className = 'hb-detail';
+  box.innerHTML = buckets.map(([label, a]) =>
+    `<div class="hb-detail-row"><span>${label}</span><b>${fmt(med(a))}</b><i>n=${a.length}</i></div>`
+  ).join('') + `<div class="hb-detail-note">全階層が同程度に速い＝馬場が本物。弱い馬だけ平時並みなら、強いメンバーに時計が引っ張られた疑い。</div>`;
+  cellEl.appendChild(box);
 }
 
 /** 指定日の距離別馬場差を計算 → {1300: -X, 1400: -Y, ...} */
@@ -9501,79 +10028,6 @@ function closePosDetailModal(){
   document.querySelectorAll('td.matrix-cell-selected').forEach(t=>t.classList.remove('matrix-cell-selected'));
 }
 
-function render3FChart(winners, losers, all) {
-  const wrap = document.getElementById('ana-3f-table-wrap'); if (!wrap) return;
-  function toBin(v) { if (v == null) return null; return Math.round(Math.floor(parseFloat(v) * 2) / 2 * 10) / 10; }
-
-  const binSet = new Set();
-  [...winners, ...losers].forEach(h => { const b = toBin(h.first3f); if (b !== null) binSet.add(b); });
-  if (!binSet.size) {
-    wrap.innerHTML = '<p style="text-align:center;color:#9ca3af;font-size:12px;padding:16px">前半3Fデータがありません</p>';
-    return;
-  }
-
-  const bins = [...binSet].sort((a, b) => a - b);
-  const topN = parseInt(document.getElementById('ana-top-n')?.value) || 3;
-
-  // 各帯の集計
-  const rows = bins.map(b => {
-    const win   = winners.filter(h => toBin(h.first3f) === b).length;
-    const total = win + losers.filter(h => toBin(h.first3f) === b && h.first3f != null).length;
-    const rate  = total > 0 ? win / total : 0;
-    return { b, win, total, rate };
-  });
-
-  // 最大total（帯グラフ幅の基準）
-  const maxTotal = Math.max(...rows.map(r => r.total), 1);
-
-  // 好走率が最高の帯をハイライト
-  const maxRate = Math.max(...rows.map(r => r.rate));
-
-  const tableRows = rows.map(r => {
-    const pct      = Math.round(r.rate * 100);
-    const barW     = Math.round(r.rate * 100);           // 好走率バー幅（%）
-    const totalBarW = Math.round(r.total / maxTotal * 100); // 総数バー幅
-    const isTop    = r.rate === maxRate && r.total > 0;
-    const rateColor = r.rate >= 0.5 ? '#15803d' : r.rate >= 0.35 ? '#1d4ed8' : r.rate >= 0.2 ? '#374151' : '#9ca3af';
-    return `<tr style="${isTop ? 'background:#fffbeb' : ''}">
-      <td style="font-family:monospace;font-weight:700;font-size:12px;text-align:center;padding:5px 8px;white-space:nowrap">
-        ${isTop ? '★ ' : ''}<span style="color:${isTop?'#b45309':'#374151'}">${r.b.toFixed(1)}秒</span>
-      </td>
-      <td style="text-align:center;padding:5px 6px;font-weight:700;font-size:13px;color:#1a56a0">${r.win}</td>
-      <td style="text-align:center;padding:5px 6px;font-size:12px;color:#6b7280">${r.total}</td>
-      <td style="padding:5px 8px;min-width:120px">
-        <div style="display:flex;align-items:center;gap:6px">
-          <div style="flex:1;background:#f1f5f9;border-radius:4px;height:10px;min-width:70px;overflow:hidden">
-            <div style="width:${barW}%;height:100%;background:${rateColor};border-radius:4px;transition:width .3s"></div>
-          </div>
-          <span style="font-size:12px;font-weight:700;color:${rateColor};min-width:34px;text-align:right">${pct}%</span>
-        </div>
-      </td>
-      <td style="padding:5px 6px;min-width:80px">
-        <div style="background:#f1f5f9;border-radius:3px;height:8px;overflow:hidden">
-          <div style="width:${totalBarW}%;height:100%;background:#cbd5e1;border-radius:3px"></div>
-        </div>
-      </td>
-    </tr>`;
-  }).join('');
-
-  wrap.innerHTML = `
-    <div style="overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse;font-size:12px">
-        <thead>
-          <tr style="border-bottom:2px solid #e2e8f0">
-            <th style="padding:4px 8px;text-align:center;color:#6b7280;font-weight:600;font-size:11px">前半3F帯</th>
-            <th style="padding:4px 6px;text-align:center;color:#1a56a0;font-weight:600;font-size:11px">好走数</th>
-            <th style="padding:4px 6px;text-align:center;color:#6b7280;font-weight:600;font-size:11px">合計</th>
-            <th style="padding:4px 8px;text-align:left;color:#6b7280;font-weight:600;font-size:11px">好走率</th>
-            <th style="padding:4px 6px;text-align:left;color:#9ca3af;font-weight:600;font-size:11px">頭数規模</th>
-          </tr>
-        </thead>
-        <tbody>${tableRows}</tbody>
-      </table>
-      <p style="font-size:10px;color:#9ca3af;margin-top:6px;padding:0 4px">★ 好走率最高帯。好走＝1〜${topN}着。</p>
-    </div>`;
-}
 
 // ── 好走馬一覧テーブル ──
 function renderResultTable(winners,topN){const tbody=document.getElementById('ana-result-tbody');if(!tbody)return;const sorted=[...winners].sort((a,b)=>a.raceNo-b.raceNo||a.chakujun-b.chakujun);tbody.innerHTML=sorted.map(h=>{const cCls=h.chakujun===1?'chakujun-1':h.chakujun===2?'chakujun-2':h.chakujun===3?'chakujun-3':'';const wCls=`waku-${Math.min(Math.max(parseInt(h.wakuBan)||1,1),8)}`;const pCls=paceKey(h.paceType);const mCls=mukaeColor(h.mukaeShoumen),sCls=straightColor(h.shoumenStraight);return`<tr class="horse-row"><td><span class="umano-badge">${h.raceNo}R</span></td><td><span class="chakujun-badge ${cCls}">${h.chakujun}</span></td><td><span class="waku-badge ${wCls}">${h.wakuBan}</span></td><td><span class="umano-badge">${h.umaBan}</span></td><td style="text-align:left;font-weight:700">${h.horseName}</td><td>${h.jockey||'—'}</td><td style="font-family:monospace;font-weight:700">${h.first3f!=null?h.first3f.toFixed(1)+'秒':'—'}</td><td><span class="pace-label pace-label-${pCls}">${h.paceType||'—'}</span></td><td class="${mCls}">${h.mukaeShoumen||'—'}</td><td class="${sCls}">${h.shoumenStraight||'—'}</td><td style="font-family:monospace">${h.time||'—'}</td><td style="font-family:monospace">${h.agari3f||'—'}</td></tr>`;}).join('');if(!sorted.length)tbody.innerHTML='<tr><td colspan="12" class="no-data">好走馬のデータがありません</td></tr>';}
@@ -10204,50 +10658,6 @@ function renderCornerChart(winners, losers, allValid) {
 }
 
 // ── 人気別好走バー（クリックで馬一覧表示対応） ──
-function renderNinkiBars(winners,losers,allValid){
-  const el=document.getElementById('ana-ninki-bars');if(!el)return;
-  el.innerHTML='';
-  // 最大人気を取得（データ次第で変動）
-  const maxNinki=Math.max(
-    ...allValid.map(h=>parseInt(h.ninki)||0).filter(n=>n>0),
-    0
-  );
-  if(!maxNinki){el.innerHTML='<p class="ana-empty">人気データなし</p>';return;}
-  // 人気別の色（1人気=金、2=銀、3=銅、4以降=青系グラデ）
-  const ninkiColor=n=>{
-    if(n===1)return'#d97706';
-    if(n===2)return'#6b7280';
-    if(n===3)return'#b45309';
-    // 4〜は薄青→灰
-    const t=Math.min((n-4)/6,1);
-    const r=Math.round(59+t*(140-59));
-    const g=Math.round(130+t*(150-130));
-    const b=Math.round(246+t*(160-246));
-    return`rgb(${r},${g},${b})`;
-  };
-  let any=false;
-  for(let n=1;n<=maxNinki;n++){
-    const ns=String(n);
-    const wArr=winners.filter(h=>String(h.ninki)===ns);
-    const lArr=losers.filter(h=>String(h.ninki)===ns);
-    const wc=wArr.length,lc=lArr.length,total=wc+lc;
-    if(!total)continue;
-    any=true;
-    const rate=Math.round(wc/total*100);
-    const color=ninkiColor(n);
-    const row=document.createElement('div');
-    row.className='ana-bar-row';
-    row.style.cssText='cursor:pointer;border-radius:6px;padding:2px 4px;transition:background .15s';
-    row.title=`${n}人気の馬一覧を表示`;
-    row.style.display='block';
-    row.innerHTML=`<div style="display:flex;align-items:center;gap:6px;padding:0 4px"><div class="ana-bar-label" style="width:40px;font-size:11px">${n}人気</div><div class="ana-bar-track"><div class="ana-bar-fill" style="width:${rate}%;background:${color}"></div></div><div class="ana-bar-stats"><span class="ana-bar-rate">${rate}%</span><span class="ana-bar-count">${wc}/${total}</span></div></div>`;
-    row.addEventListener('click',()=>{ openPosDetailModal(`${n}人気`,'ninki',wArr,lArr); });
-    row.addEventListener('mouseenter',()=>row.style.background='#fef9c3');
-    row.addEventListener('mouseleave',()=>row.style.background='');
-    el.appendChild(row);
-  }
-  if(!any)el.innerHTML='<p class="ana-empty">人気データなし</p>';
-}
 
 function renderWakuBarsNew(winners,losers,allValid){
   const el=document.getElementById('ana-waku-bars');if(!el)return;
@@ -10286,7 +10696,6 @@ function renderWakuBarsNew(winners,losers,allValid){
   if(!any)el.innerHTML='<p class="ana-empty">枠番データなし</p>';
 }
 // 互換性のため旧名も保持
-function renderWakuBars(winners,losers){renderWakuBarsNew(winners,losers,window._anaValidHorses||[]);}
 function posBarColor(label,type){if(type==='mukae')return{'最内':'bar-uchi0','内':'bar-uchi1','外2':'bar-soto2','外3':'bar-soto3','大外':'bar-soto4'}[label]||'bar-default';if(type==='straight')return{'内':'bar-s-uchi','中':'bar-s-naka','外':'bar-s-soto'}[label]||'bar-default';if(type==='pace')return{'ハイ':'bar-pace-high','ミドル':'bar-pace-mid','スロー':'bar-pace-slow'}[label]||'bar-default';return'bar-default';}
 function mukaeColor(v){return{'最内':'ana-td-uchi0','内':'ana-td-uchi1','外2':'ana-td-soto2','外3':'ana-td-soto3','大外':'ana-td-soto4'}[v]||'';}
 function straightColor(v){return{'内':'ana-td-s-uchi','中':'ana-td-s-naka','外':'ana-td-s-soto'}[v]||'';}
@@ -10879,8 +11288,27 @@ function _adminPwToToken(pw) {
 const KV_ADMIN_ALWAYS = true;
 
 function isAdminMode() {
+  // 【開発用】手動トグル（localStorage kv_dev_admin）が最優先。'1'=管理者/'0'=閲覧者。
+  const dev = localStorage.getItem('kv_dev_admin');
+  if (dev !== null) return dev === '1';
   if (KV_ADMIN_ALWAYS) return true;
   return sessionStorage.getItem('kv_admin_session') === '1';
+}
+
+/** 【開発用】管理者⇔閲覧者を手動トグル（完成後はこの関数とボタン・isAdminModeのdev分岐を削除） */
+function toggleDevAdmin() {
+  const next = isAdminMode() ? '0' : '1';
+  localStorage.setItem('kv_dev_admin', next);
+  applyModeUI();
+  _updateDevAdminBtn();
+  if (typeof _currentPage === 'string') switchPage(_currentPage, true);
+}
+function _updateDevAdminBtn() {
+  const btn = document.getElementById('dev-admin-btn');
+  const label = document.getElementById('dev-admin-label');
+  const admin = isAdminMode();
+  if (label) label.textContent = admin ? '管理者' : '閲覧者';
+  if (btn) btn.classList.toggle('dev-admin-public', !admin);
 }
 
 function applyModeUI() {
@@ -11380,6 +11808,110 @@ const Yoso = {
   },
 };
 
+// ══ PSF指数（Claude設計・仕様書v1.0凍結）══
+// 位置取り予測(1C)を主役に、位置条件付き地力を掛け合わせる構造モデル。
+// 定数は2026-07-02の実測から凍結（fitではなく測定）：
+//   PSF_WIN[p] = 1C位置p番手の実測勝率（N=1,200超/セル・pos4-5のみ単調化平滑）
+//   PSF_POSEXP[p] = 1C位置p番手の勝ち馬比時計コスト中央値（秒）
+// 検証（公式払戻・1,071R・352的中）：単勝ROI 109.2%／現行と◎不一致の635RではROI 112.9%。
+// 精度は現行に劣るため印は現行のまま、💎妙味バッジ（表示のみ）に使う。
+const PSF_WIN    = [null, .311, .187, .135, .087, .087, .066, .045, .033, .017];
+const PSF_POSEXP = [null, 0.4, 1.0, 1.1, 1.3, 1.4, 1.5, 1.6, 1.8, 1.9];
+const PSF_BETA = 0.8, PSF_G_COMBO = 2.0, PSF_G_KIN = -0.05, PSF_G_WC = 0.5; // 事前決め打ち
+function _psfWinAt(x) { // 実数位置xでの勝率（線形補間・1〜9でクランプ）
+  const xc = Math.max(1, Math.min(9, x));
+  const lo = Math.floor(xc), hi = Math.ceil(xc);
+  const v = lo === hi ? PSF_WIN[lo] : PSF_WIN[lo] + (PSF_WIN[hi] - PSF_WIN[lo]) * (xc - lo);
+  return Math.max(v, 0.005);
+}
+
+/** 騎手×厩舎コンボ統計（全馬場・PSF用。予想AI用のgetComboStatsは高知限定＝別物） */
+function getComboStatsAll() {
+  if (window._comboStatsAllCache) return window._comboStatsAllCache;
+  const stats = {};
+  for (const v of Object.values(lsRead())) {
+    if (!v.jockey || !v.trainer) continue;
+    const ch = parseInt(v.chakujun);
+    if (isNaN(ch)) continue;
+    const ck = `${v.jockey.trim()}_${v.trainer.trim()}`;
+    if (!stats[ck]) stats[ck] = { place: 0, total: 0 };
+    stats[ck].total++;
+    if (ch <= 3) stats[ck].place++;
+  }
+  window._comboStatsAllCache = stats;
+  return stats;
+}
+
+/**
+ * ライブ用PSFスコア計算（バックテストの検証済みレシピと同一の材料・定数）。
+ * 戻り値: { top: 最上位の馬名, scores: {馬名: psfS} }｜計算不能は null
+ */
+function computePsfScores(raceNo) {
+  const data = allRacesData[raceNo];
+  if (!data || !data.horses.length) return null;
+  const raceDate = data.raceInfo.raceDate || '';
+  const thisNo = parseInt(raceNo);
+  const comboAll = getComboStatsAll();
+  const ls = lsRead();
+  const anchBias = (babaCode, d) => {
+    const hb = getHorseAnchoredBias(babaCode, d);
+    return (hb && hb.bias != null) ? hb.bias : (getDayBiasForDate(babaCode, d) ?? null);
+  };
+  const rows = data.horses.map(horse => {
+    const name = horse.horseName || '';
+    const preHist = getHorseHistoryBefore(name, raceDate, thisNo);
+    const k5 = preHist.filter(h => h.babaCode === '31').slice(0, 5);
+    const c1s = k5.map(h => parseInt(String(h.corner || '').split('-')[0])).filter(x => !isNaN(x) && x > 0).sort((a, b) => a - b);
+    const es = c1s.length >= 2 ? c1s[Math.floor(c1s.length / 2)] : null;
+    const perfs = [];
+    for (const h of k5) {
+      const c1 = parseInt(String(h.corner || '').split('-')[0]);
+      const t = raceTimeToSec(h.time);
+      if (isNaN(c1) || c1 <= 0 || t == null) continue;
+      const rrec = ls[`race_31_${h.raceDate}_${h.raceNo}`] || {};
+      const d2 = getDistNum(rrec.distance || h.distance);
+      const cl = getEffectiveClass(rrec.race_class || h.raceClass || '');
+      const std = (d2 && cl) ? STANDARD_TIMES[d2]?.[cl] : null;
+      if (std == null) continue;
+      const db = anchBias('31', h.raceDate);
+      if (db == null) continue;
+      perfs.push(-(t - db - std - PSF_POSEXP[Math.min(c1, 9)]));
+    }
+    let g = null;
+    if (perfs.length >= 2) { perfs.sort((a, b) => a - b); g = perfs[Math.floor(perfs.length / 2)]; }
+    const cs = comboAll[`${(horse.jockey || '').trim()}_${(horse.trainer || '').trim()}`];
+    const combo = cs ? (cs.place + 0.33 * 10) / (cs.total + 10) - 0.33 : 0;
+    const kinV = parseFloat(horse.kinryo);
+    return { name, es, g, combo, kin: isNaN(kinV) ? null : kinV, wcM: Yoso.weightMod(Yoso.weightChange(horse.weight, preHist[0]?.weight)) };
+  });
+  const fld = rows.length;
+  const wEs = rows.filter(r => r.es != null).sort((a, b) => a.es - b.es);
+  let i = 0;
+  while (i < wEs.length) {
+    let j = i;
+    while (j + 1 < wEs.length && wEs[j + 1].es === wEs[i].es) j++;
+    const avgRank = (i + j) / 2 + 1;
+    for (let m = i; m <= j; m++) wEs[m]._rank = avgRank;
+    i = j + 1;
+  }
+  const nullRank = Math.ceil(fld * 0.6);
+  const D = wEs.filter(r => r.es <= 3).length / fld;
+  const shift = D >= 0.45 ? 0.5 : D < 0.25 ? -0.5 : 0;
+  const kins = rows.map(r => r.kin).filter(v => v != null);
+  const kinAvg = kins.length ? kins.reduce((a, b) => a + b, 0) / kins.length : null;
+  const scores = {};
+  let top = null, topS = -Infinity;
+  for (const r of rows) {
+    if (r.g == null) continue;
+    const rank = r._rank != null ? r._rank : nullRank;
+    const kd = (r.kin != null && kinAvg != null) ? r.kin - kinAvg : 0;
+    const s = Math.log(_psfWinAt(rank + shift)) + PSF_BETA * r.g + PSF_G_COMBO * r.combo + PSF_G_KIN * kd + PSF_G_WC * r.wcM;
+    scores[r.name] = s;
+    if (s > topS) { topS = s; top = r.name; }
+  }
+  return top ? { top, scores } : null;
+}
+
 /**
  * 予想AIスコア計算（共通コア）
  * renderPredictionPanel（予想AIパネル）と出馬表のAI印列の両方が使う。
@@ -11432,9 +11964,22 @@ function computeYosoScored(raceNo, selCondOverride) {
       return si != null ? si + getPositionAdvantage(h.babaCode, h.raceDate, h.mukaeShoumen, h.shoumenStraight) : null;
     };
     const { list: recentSI, kochiCount: kochiSICount } = Yoso.buildSIList(kochiHist, otherHist, _siForLive);
+    // 馬基準差SI（2026-07-02採用）：ベーススコアの水準補正だけを馬アンカー方式に置換。
+    // CVで印全体のランキング品質が改善（ペア整合率4/5fold・勝ち馬捕捉+0.4pt・○▲複勝+0.3pt）。
+    // トレンド・勝ち馬強さ・siCount等は検証時の構成どおり従来SI（recentSI）を使い続ける。
+    const _siForLiveAnch = h => {
+      const f3Val = parseFloat(h.first3f);
+      const hb = getHorseAnchoredBias(h.babaCode, h.raceDate);
+      const bias = (hb && hb.bias != null) ? hb.bias
+        : (getDayBiasForDate(h.babaCode, h.raceDate) ?? (h.fromOfficial ? estimateBiasFromCond(h.distance, h.raceClass, h.trackCond) : null));
+      const avgF3 = getRaceAvgF3(h.babaCode, h.raceDate, h.raceNo);
+      const pAdj  = calcPaceAdj(f3Val, avgF3);
+      const si = calcSpeedIndex(h.time, h.distance, h.raceClass, h.trackCond, bias, h.kinryo, pAdj);
+      return si != null ? si + getPositionAdvantage(h.babaCode, h.raceDate, h.mukaeShoumen, h.shoumenStraight) : null;
+    };
     let isEstimatedScore = false;
     let isTransfer = kochiSICount === 0 && recentSI.length > 0;
-    let baseScore = Yoso.baseFromSIList(recentSI);
+    let baseScore = Yoso.baseFromSIList(Yoso.buildSIList(kochiHist, otherHist, _siForLiveAnch).list) ?? Yoso.baseFromSIList(recentSI);
     // 転入馬推定スコア（SI算出不可＝JRA・NAR他場転入等。履歴→official_*キャッシュの順で推定）
     if (baseScore === null) {
       const _est = Yoso.estimateTransferScore(histEx, raceCls, hName, _officialByHorse);
@@ -11838,6 +12383,16 @@ function renderPredictionPanel(raceNo) {
       <button type="button" id="yoso-fetch-all-btn-${raceNo}" onclick="fetchAllByNameForRace(${raceNo})" style="padding:4px 12px;background:#1a56a0;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;"><i class="fas fa-download"></i> データ自動取得</button>
       <span id="yoso-fetch-status-${raceNo}" style="font-size:11px;color:#6b7280;white-space:nowrap;"></span>
     </div>
+    ${(() => {
+      // 💎PSF妙味バッジ（現行◎と不一致のときのみ・表示専用で印には一切影響しない）
+      const _pt = (typeof computePsfScores === 'function') ? (computePsfScores(raceNo)?.top ?? null) : null;
+      const _topName = (scored[0] && scored[0].totalScore != null) ? scored[0].horse.horseName : null;
+      if (!_pt || _pt === _topName) return '';
+      const _ph = horses.find(h => h.horseName === _pt);
+      const _po = _ph ? parseFloat(_ph.odds) : NaN;
+      const _inBand = !isNaN(_po) && _po >= 3 && _po < 10;
+      return `<div class="psf-value-bar">💎 <b>PSF妙味：${_pt}</b>（位置構造モデルの単独推し・検証635RでROI112.9%）${!isNaN(_po) ? `｜単勝${_po.toFixed(1)}倍${_inBand ? '＝<b>本域</b>' : '（本域は3〜10倍）'}` : '｜オッズ未取得（本域は3〜10倍）'}</div>`;
+    })()}
     ${confidenceBadge}
     ${paceBiasBadge}
     <div style="overflow-x:auto;">${tableHtml}</div>
@@ -11937,6 +12492,15 @@ function runYosoBacktest(raceNo) {
       // ペース×馬場バイアス行列（脚質補正の伸縮係数用）
       const _btPaceMatrix = buildPaceBiasMatrix('31');
 
+      // 馬基準差SI実験用アクセサ：SIの水準補正を馬アンカー方式に置き換える
+      // （データ不足でnullの日は基準時計方式へフォールバック）
+      const _anchBiasBT = (babaCode, raceDate) => {
+        const hb = getHorseAnchoredBias(babaCode, raceDate);
+        return (hb && hb.bias != null) ? hb.bias : (getDayBiasForDate(babaCode, raceDate) ?? null);
+      };
+
+      // PSF定数・カーブはトップレベル（PSF_WIN等）を使用（ライブの💎妙味バッジと共通）
+
       const oldS = { t:0, h1:0, h3:0 };
       const newS = { t:0, h1:0, h3:0 };
       const newBS = { t:0, h1:0, h3:0 }; // 新＋ペース補正
@@ -11988,6 +12552,11 @@ function runYosoBacktest(raceNo) {
             if (base == null) continue; // 真のデビュー馬（推定材料もなし）
             _isEstimatedBT = true;
           }
+
+          // 馬基準差SI実験：水準補正だけを馬アンカー方式に置き換えたベーススコア。
+          // 補正項は全て共通のまま＝置換の効果だけを分離して測る（推定スコア馬は同値）。
+          const _siForBTA = h => calcSpeedIndex(h.time, h.distance, h.raceClass, h.trackCond, _anchBiasBT(h.babaCode, h.raceDate), h.kinryo, null);
+          const baseA = _isEstimatedBT ? base : (Yoso.baseFromSIList(Yoso.buildSIList(kochiPre, otherPre, _siForBTA).list) ?? base);
 
           // 旧: condMod（複勝率ベース・3走以上）
           const selCond = entry.trackCond || raceVal.track_cond || raceVal.trackCond || '良';
@@ -12071,6 +12640,58 @@ function runYosoBacktest(raceNo) {
           // cornConsistN（コーナー一貫性補正）
           const cornConsistN = Yoso.cornConsistMod(Yoso.cornConsistAvg(preHist));
 
+          // paceCtxN（展開文脈補正・実験v2）：過去3走のペース基準比×位置取りで
+          // 「逆境で先行して好走＝地力」「ハイ限定の差し好走＝展開ギフト」
+          // 「ハイで潰れた先行＝免罪（次走複勝35.4% vs スロー潰れ27.7%・EDA由来）」を識別
+          let paceCtxN = 0;
+          {
+            let _tough = false, _gifted = false, _excused = false;
+            for (const h of preHist.slice(0, 3)) {
+              if (h.babaCode !== '31') continue;
+              const rrec = lsData[`race_31_${h.raceDate}_${h.raceNo}`];
+              if (!rrec || !rrec.first3f) continue;
+              const pd = getPaceDevLabel(rrec.distance, rrec.race_class, rrec.track_cond, rrec.first3f);
+              if (!pd) continue;
+              const c1 = parseInt(String(h.corner || '').split('-')[0]);
+              const ch = parseInt(h.chakujun);
+              if (isNaN(c1) || c1 <= 0 || isNaN(ch)) continue;
+              if (pd.dev <= -0.6 && c1 <= 3 && ch <= 3) _tough = true;
+              if (pd.dev <= -1.0 && c1 >= 6 && ch <= 3) _gifted = true;
+              if (pd.dev <= -1.0 && c1 <= 3 && ch >= 4) _excused = true;
+            }
+            if (_tough)   paceCtxN += 0.5;
+            if (_gifted)  paceCtxN -= 0.4;
+            if (_excused) paceCtxN += 0.4;
+          }
+
+          // PSF材料：先行力ES（過去5走1C中央値）・位置条件付き地力G（時計から馬場/クラス/位置コストを除いた残差の中央値）
+          let psfEs = null, psfG = null;
+          {
+            const _k5 = preHist.filter(h => h.babaCode === '31').slice(0, 5);
+            const _c1s = _k5.map(h => parseInt(String(h.corner || '').split('-')[0])).filter(x => !isNaN(x) && x > 0).sort((a, b) => a - b);
+            if (_c1s.length >= 2) psfEs = _c1s[Math.floor(_c1s.length / 2)];
+            const _perfs = [];
+            for (const h of _k5) {
+              const _pc1 = parseInt(String(h.corner || '').split('-')[0]);
+              const _pt = raceTimeToSec(h.time);
+              if (isNaN(_pc1) || _pc1 <= 0 || _pt == null) continue;
+              const _prr = lsData[`race_31_${h.raceDate}_${h.raceNo}`] || {};
+              const _pd2 = getDistNum(_prr.distance || h.distance);
+              const _pcl = getEffectiveClass(_prr.race_class || h.raceClass || '');
+              const _std = (_pd2 && _pcl) ? STANDARD_TIMES[_pd2]?.[_pcl] : null;
+              if (_std == null) continue;
+              const _pdb = _anchBiasBT('31', h.raceDate);
+              if (_pdb == null) continue;
+              _perfs.push(-(_pt - _pdb - _std - PSF_POSEXP[Math.min(_pc1, 9)]));
+            }
+            if (_perfs.length >= 2) { _perfs.sort((a, b) => a - b); psfG = _perfs[Math.floor(_perfs.length / 2)]; }
+          }
+          const _psfCs = _btComboStats[`${(entry.jockey || '').trim()}_${(entry.trainer || '').trim()}`];
+          const psfCombo = _psfCs ? (_psfCs.place + 0.33 * 10) / (_psfCs.total + 10) - 0.33 : 0;
+          const _psfKinV = parseFloat(entry.kinryo);
+          const psfKin = isNaN(_psfKinV) ? null : _psfKinV;
+          const psfWcM = Yoso.weightMod(Yoso.weightChange(entry.weight, preHist[0]?.weight));
+
           // 移籍初戦／デビュー馬判定：_isEstimatedBT＝SI算出不可で推定スコアを使った
           // （転入初戦の典型）。preHist.length===0は真のデビュー馬だが推定も出来ないため
           // 既にcontinueで除外済み＝ここには到達しない。
@@ -12081,7 +12702,7 @@ function runYosoBacktest(raceNo) {
           const _sc = !!entry._scratched;
           const _odds = parseFloat(entry.odds);
           const _ninki = parseInt(entry.ninki);
-          if (!_sc) scanRaceData.push({ chaku, base, condNew, distNew, rotN, clsN, cornN, trendN, weightN, agariN, comboN, marginN, winStrN, jockeyChgN, takiN, cornConsistN, odds: (!isNaN(_odds) && _odds>0) ? _odds : null, ninki: isNaN(_ninki) ? null : _ninki });
+          if (!_sc) scanRaceData.push({ chaku, umaBan: parseInt(String(entry._key || '').split('_')[3]) || null, base, baseA, condNew, distNew, rotN, clsN, cornN, trendN, weightN, agariN, comboN, marginN, winStrN, jockeyChgN, takiN, cornConsistN, paceCtxN, psfEs, psfG, psfCombo, psfKin, psfWcM, odds: (!isNaN(_odds) && _odds>0) ? _odds : null, ninki: isNaN(_ninki) ? null : _ninki });
           scoredOld.push({ hName, chaku, score: base + condOld + distOld, _scratched: _sc });
           scoredNew.push({ hName, chaku, score: base + condNew + distNew + rotN + clsN + cornN + trendN + weightN + agariN + comboN + marginN + winStrN + jockeyChgN + takiN + cornConsistN, base, _scratched: _sc, _cornN: cornN, _a4c: _a4c, _isTransferBT, _isDebutBT });
         }
@@ -12093,7 +12714,31 @@ function runYosoBacktest(raceNo) {
           scoredNew.forEach(s => { if (s.base != null) s.score += Yoso.relSIMod(s.base, _btFAvg); });
         }
 
-        if (scanRaceData.length >= 2) { scanRaceData._date = raceDate; scanData.push(scanRaceData); }
+        // PSFスコア（レース内後処理）：ES順位＝競り合い後の期待位置 → 実測勝率カーブ × 地力
+        if (scanRaceData.length >= 2) {
+          const _fld = scanRaceData.length;
+          const _wEs = scanRaceData.filter(r => r.psfEs != null).sort((a, b) => a.psfEs - b.psfEs);
+          let _pi = 0;
+          while (_pi < _wEs.length) { // 同ES帯は平均ランク（先行争いの奪い合いを表現）
+            let _pj = _pi;
+            while (_pj + 1 < _wEs.length && _wEs[_pj + 1].psfEs === _wEs[_pi].psfEs) _pj++;
+            const _avgRank = (_pi + _pj) / 2 + 1;
+            for (let m = _pi; m <= _pj; m++) _wEs[m]._psfRank = _avgRank;
+            _pi = _pj + 1;
+          }
+          const _nullRank = Math.ceil(_fld * 0.6); // ES不明馬は中団後ろ想定（凍結）
+          const _D = _wEs.filter(r => r.psfEs <= 3).length / _fld;
+          const _shift = _D >= 0.45 ? 0.5 : _D < 0.25 ? -0.5 : 0; // 先行密度→カーブシフト（凍結）
+          const _kins = scanRaceData.map(r => r.psfKin).filter(v => v != null);
+          const _kinAvg = _kins.length ? _kins.reduce((a, b) => a + b, 0) / _kins.length : null;
+          for (const r of scanRaceData) {
+            if (r.psfG == null) { r.psfS = null; continue; }
+            const _rank = r._psfRank != null ? r._psfRank : _nullRank;
+            const _kd = (r.psfKin != null && _kinAvg != null) ? r.psfKin - _kinAvg : 0;
+            r.psfS = Math.log(_psfWinAt(_rank + _shift)) + PSF_BETA * r.psfG + PSF_G_COMBO * r.psfCombo + PSF_G_KIN * _kd + PSF_G_WC * r.psfWcM;
+          }
+        }
+        if (scanRaceData.length >= 2) { scanRaceData._date = raceDate; scanRaceData._rno = rNo; scanData.push(scanRaceData); }
         if (scoredOld.length < 2) continue;
         scoredOld.sort((a,b)=>b.score-a.score);
         scoredNew.sort((a,b)=>b.score-a.score);
@@ -12245,6 +12890,8 @@ function runYosoBacktest(raceNo) {
           return { scale, wr: _st>0 ? (_sh1/_st*100).toFixed(1) : '—' };
         });
       }
+
+      window._scanData = scanData; // デバッグ・分析用（PSF精査等でコンソールから利用）
 
       // ── 時系列クロスバリデーション（過学習検出） ──
       // scanData を日付順で訓練70%/検証30%に分割。各補正の最適スケールを訓練で決め、
@@ -12429,6 +13076,106 @@ function runYosoBacktest(raceNo) {
           return out;
         };
 
+        // ── 馬基準差SI実験（固定変種・パラメータ適合なし）──
+        // ベーススコアだけを馬アンカー方式SIに置き換え、他の補正は現行と完全共通。
+        const _scoreAnch = c => _scoreJM(c, 1, 1) + ((c.baseA != null ? c.baseA : c.base) - c.base);
+        const _pickAnch = rc => { let bi = 0, bs = -Infinity; for (let i = 0; i < rc.length; i++) { const s = _scoreAnch(rc[i]); if (s > bs) { bs = s; bi = i; } } return bi; };
+        const _rateAnch = (set, place) => {
+          let h = 0, t = 0;
+          for (const rc of set) {
+            if (rc.length < 2) continue;
+            const bi = _pickAnch(rc);
+            t++; if (place ? rc[bi].chaku <= 3 : rc[bi].chaku === 1) h++;
+          }
+          return t ? 100 * h / t : 0;
+        };
+        const _rrAnchF = set => {
+          let bet = 0, ret = 0;
+          for (const rc of set) {
+            if (rc.length < 2) continue;
+            const bi = _pickAnch(rc);
+            if (rc[bi].odds == null) continue;
+            bet++; if (rc[bi].chaku === 1) ret += rc[bi].odds * 100;
+          }
+          return bet > 0 ? ret / bet : null;
+        };
+
+        // ── 展開文脈補正実験（固定変種・パラメータ適合なし）──
+        // 現行スコアに paceCtxN（逆境先行好走+0.5／ハイ限定差し好走−0.4）を足しただけの変種
+        const _scorePctx = c => _scoreJM(c, 1, 1) + (c.paceCtxN || 0);
+        const _pickPctx = rc => { let bi = 0, bs = -Infinity; for (let i = 0; i < rc.length; i++) { const s = _scorePctx(rc[i]); if (s > bs) { bs = s; bi = i; } } return bi; };
+        const _ratePctx = (set, place) => {
+          let h = 0, t = 0;
+          for (const rc of set) {
+            if (rc.length < 2) continue;
+            const bi = _pickPctx(rc);
+            t++; if (place ? rc[bi].chaku <= 3 : rc[bi].chaku === 1) h++;
+          }
+          return t ? 100 * h / t : 0;
+        };
+        const _rrPctxF = set => {
+          let bet = 0, ret = 0;
+          for (const rc of set) {
+            if (rc.length < 2) continue;
+            const bi = _pickPctx(rc);
+            if (rc[bi].odds == null) continue;
+            bet++; if (rc[bi].chaku === 1) ret += rc[bi].odds * 100;
+          }
+          return bet > 0 ? ret / bet : null;
+        };
+
+        // ── PSF対決（Claude設計指数 vs 現行・固定変種）──
+        const _scorePsf = c => c.psfS != null ? c.psfS : -1e9;
+        const _pickPsf = rc => { let bi = 0, bs = -Infinity; for (let i = 0; i < rc.length; i++) { const s = _scorePsf(rc[i]); if (s > bs) { bs = s; bi = i; } } return bi; };
+        const _ratePsf = (set, place) => {
+          let h = 0, t = 0;
+          for (const rc of set) {
+            if (rc.length < 2) continue;
+            const bi = _pickPsf(rc);
+            t++; if (place ? rc[bi].chaku <= 3 : rc[bi].chaku === 1) h++;
+          }
+          return t ? 100 * h / t : 0;
+        };
+        const _rrPsfF = set => {
+          let bet = 0, ret = 0;
+          for (const rc of set) {
+            if (rc.length < 2) continue;
+            const bi = _pickPsf(rc);
+            if (rc[bi].odds == null) continue;
+            bet++; if (rc[bi].chaku === 1) ret += rc[bi].odds * 100;
+          }
+          return bet > 0 ? ret / bet : null;
+        };
+
+        // ── ランキング品質指標（印全体の評価：◎だけでなく○▲△が正当か）──
+        const _rankMetrics = (set, scorer) => {
+          let races = 0, winCap3 = 0, hitCnt = 0, sanren = 0, pairsC = 0, pairsT = 0;
+          const fuku = [0, 0, 0], fn = [0, 0, 0]; // ○▲△（2,3,4番手）の複勝
+          for (const rc of set) {
+            if (rc.length < 4) continue;
+            const s = rc.map(c => ({ chaku: c.chaku, score: scorer(c) })).sort((a, b) => b.score - a.score);
+            races++;
+            const top3 = s.slice(0, 3);
+            if (top3.some(x => x.chaku === 1)) winCap3++;
+            const capt = top3.filter(x => x.chaku <= 3).length;
+            hitCnt += capt;
+            if (capt === 3) sanren++;
+            for (let m = 0; m < 3; m++) { const p = s[m + 1]; if (p) { fn[m]++; if (p.chaku <= 3) fuku[m]++; } }
+            for (let i = 0; i < s.length; i++) for (let j = i + 1; j < s.length; j++) {
+              if (s[i].chaku === s[j].chaku) continue;
+              pairsT++;
+              if (s[i].chaku < s[j].chaku) pairsC++;
+            }
+          }
+          const pc = (a, b) => b > 0 ? +(100 * a / b).toFixed(1) : null;
+          return {
+            winCap3: pc(winCap3, races), sanren: pc(sanren, races),
+            avgHit: races ? +(hitCnt / races).toFixed(2) : null,
+            fuku2: pc(fuku[0], fn[0]), fuku3: pc(fuku[1], fn[1]), fuku4: pc(fuku[2], fn[2]),
+            concord: pc(pairsC, pairsT),
+          };
+        };
+
         const _jcCand=[0.5,0.75,1.0,1.5,2.0], _mgCand=[0.5,0.75,1.0,1.5];
         const K=5, N=_cvSorted.length, blk=Math.floor(N/K), folds=[];
         for (let k=0;k<K;k++){
@@ -12455,6 +13202,19 @@ function runYosoBacktest(raceNo) {
             mlTrainWin:+_mlRate(train,_ml,false).toFixed(1), curTrainWin:+_rate(train,1,1,false).toFixed(1),
             mlEff,
             valueSlices: _valueSlices(test),
+            anchWin: +_rateAnch(test, false).toFixed(1),
+            anchFuku: +_rateAnch(test, true).toFixed(1),
+            rrAnchV: (() => { const v = _rrAnchF(test); return v != null ? +v.toFixed(1) : null; })(),
+            pctxWin: +_ratePctx(test, false).toFixed(1),
+            pctxFuku: +_ratePctx(test, true).toFixed(1),
+            rrPctxV: (() => { const v = _rrPctxF(test); return v != null ? +v.toFixed(1) : null; })(),
+            rmCur: _rankMetrics(test, c => _scoreJM(c, 1, 1)),
+            rmPctx: _rankMetrics(test, _scorePctx),
+            rmAnch: _rankMetrics(test, _scoreAnch),
+            rmPsf: _rankMetrics(test, _scorePsf),
+            psfWin: +_ratePsf(test, false).toFixed(1),
+            psfFuku: +_ratePsf(test, true).toFixed(1),
+            rrPsfV: (() => { const v = _rrPsfF(test); return v != null ? +v.toFixed(1) : null; })(),
           });
         }
         const _avg=key=>+(folds.reduce((s,x)=>s+x[key],0)/folds.length).toFixed(1);
@@ -12501,6 +13261,57 @@ function runYosoBacktest(raceNo) {
           };
         }
 
+        // 馬基準差SI実験の集計と判定（事前固定基準：複勝4/5以上 かつ 1着平均で現行以上）
+        const _anchFukuWins = folds.filter(f => f.anchFuku > f.curFuku).length;
+        const _anchWinWins  = folds.filter(f => f.anchWin  > f.curWin).length;
+        const _anchRRFolds  = folds.filter(f => f.rrAnchV != null && f.rrCur != null);
+        const _rrAvgAnch = _anchRRFolds.length ? +(_anchRRFolds.reduce((s, f) => s + f.rrAnchV, 0) / _anchRRFolds.length).toFixed(1) : null;
+        const anch = {
+          winAvg: _avg('anchWin'), fukuAvg: _avg('anchFuku'),
+          fukuWins: _anchFukuWins, winWins: _anchWinWins, rrAvg: _rrAvgAnch,
+          adopt: _anchFukuWins >= 4 && _avg('anchWin') >= _avg('curWin'),
+        };
+
+        // 展開文脈補正実験の集計と判定（事前固定基準：複勝4/5以上 かつ 1着平均で現行以上）
+        const _pctxFukuWins = folds.filter(f => f.pctxFuku > f.curFuku).length;
+        const _pctxWinWins  = folds.filter(f => f.pctxWin  > f.curWin).length;
+        const _pctxRRFolds  = folds.filter(f => f.rrPctxV != null && f.rrCur != null);
+        const _rrAvgPctx = _pctxRRFolds.length ? +(_pctxRRFolds.reduce((s, f) => s + f.rrPctxV, 0) / _pctxRRFolds.length).toFixed(1) : null;
+        const paceCtx = {
+          winAvg: _avg('pctxWin'), fukuAvg: _avg('pctxFuku'),
+          fukuWins: _pctxFukuWins, winWins: _pctxWinWins, rrAvg: _rrAvgPctx,
+          adopt: _pctxFukuWins >= 4 && _avg('pctxWin') >= _avg('curWin'),
+        };
+
+        // ランキング品質の集計（印全体の評価：変種が◎不変でも○▲△を改善していないか）
+        const RM_KEYS = ['winCap3', 'sanren', 'avgHit', 'fuku2', 'fuku3', 'fuku4', 'concord'];
+        const _rmAvg = (src, key) => { const vals = folds.map(f => f[src][key]).filter(v => v != null); return vals.length ? +(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(key === 'avgHit' ? 2 : 1) : null; };
+        const _rmWins = (src, key) => folds.filter(f => f[src][key] != null && f.rmCur[key] != null && f[src][key] > f.rmCur[key]).length;
+        const rank = { cur: {}, pctx: {}, anch: {}, psf: {}, pctxWins: {}, anchWins: {}, psfWins: {} };
+        for (const _rk of RM_KEYS) {
+          rank.cur[_rk]  = _rmAvg('rmCur', _rk);
+          rank.pctx[_rk] = _rmAvg('rmPctx', _rk);
+          rank.anch[_rk] = _rmAvg('rmAnch', _rk);
+          rank.psf[_rk]  = _rmAvg('rmPsf', _rk);
+          rank.pctxWins[_rk] = _rmWins('rmPctx', _rk);
+          rank.anchWins[_rk] = _rmWins('rmAnch', _rk);
+          rank.psfWins[_rk]  = _rmWins('rmPsf', _rk);
+        }
+
+        // PSF対決の判定（仕様書v1.0の事前登録ルール）
+        const _psfFukuWins = folds.filter(f => f.psfFuku > f.curFuku).length;
+        const _psfWinWins  = folds.filter(f => f.psfWin  > f.curWin).length;
+        const _psfRRFolds  = folds.filter(f => f.rrPsfV != null && f.rrCur != null);
+        const _rrAvgPsf = _psfRRFolds.length ? +(_psfRRFolds.reduce((s, f) => s + f.rrPsfV, 0) / _psfRRFolds.length).toFixed(1) : null;
+        const psf = {
+          winAvg: _avg('psfWin'), fukuAvg: _avg('psfFuku'),
+          fukuWins: _psfFukuWins, winWins: _psfWinWins, rrAvg: _rrAvgPsf,
+          // 主判定（事前登録）：ペア整合率4/5以上 かつ ○▲複勝が平均で悪化しない
+          primaryWin: rank.psfWins.concord >= 4 && rank.psf.fuku2 >= rank.cur.fuku2 && rank.psf.fuku3 >= rank.cur.fuku3,
+          // 副判定：◎基準
+          secondaryWin: _psfFukuWins >= 4 && _avg('psfWin') >= _avg('curWin'),
+        };
+
         // 学習重み実験の集計と採用判定（基準は事前固定：複勝4/5以上 かつ 1着平均で現行以上）
         const _mlWinAvg = _avg('mlWin'), _mlFukuAvg = _avg('mlFuku');
         const _mlFukuWins = folds.filter(f => f.mlFuku > f.curFuku).length;
@@ -12524,7 +13335,7 @@ function runYosoBacktest(raceNo) {
           curWinsFolds: folds.filter(f=>f.curWin>f.origWin).length,
           curFukuFolds: folds.filter(f=>f.curFuku>f.origFuku).length,
           rrAvgCur: _rrAvgCur, rrAvgFav: _rrAvgFav, rrWinsFolds: _rrWinsFolds, rrFoldsN: _rrFolds.length,
-          tierRR, ml, value,
+          tierRR, ml, value, anch, paceCtx, rank, psf,
         };
         const _sv = window._strictCV;
         const _mark = (a,b)=> a>b?`<span style="color:#15803d;font-weight:700">${a}</span>` : a<b?`<span style="color:#dc2626">${a}</span>` : `${a}`;
@@ -12638,6 +13449,116 @@ function runYosoBacktest(raceNo) {
             </tr>`; }).join('')}</tbody>
           </table></div>
           <div style="font-size:10px;color:#374151;margin-top:5px;line-height:1.6">緑背景＝回収率100%超え。Nが小さい層（特に4番人気以下・10倍以上）は数レースの的中で数字が跳ねるので、fold頑健性（右列）とセットで判断すること。</div>
+          <div style="font-size:10px;font-weight:700;color:#0f766e;margin-top:10px;margin-bottom:4px">🧭 馬基準差SI実験：SIの水準補正を馬アンカー方式に置換（fold別・初見データ）</div>
+          <div style="font-size:10px;color:#6b7280;margin-bottom:5px;line-height:1.6">ベーススコアの馬場差補正だけを馬基準差（同一馬の自己比較）に置き換え、他の補正は現行と完全共通。パラメータ適合なしの固定変種。<b>◎基準は未達だったが、印全体のランキング品質（下の📐）で頑健な改善を示し、2026-07-02にライブモデルのベースSIへ採用済み</b>。この表の「現行」は採用前の旧構成。</div>
+          <div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:10px;width:100%">
+            <thead><tr style="background:#1a1a2e;color:#fff">
+              <th style="padding:4px 6px">fold</th><th style="padding:4px 6px">現1着</th><th style="padding:4px 6px">馬基準1着</th><th style="padding:4px 6px">現複勝</th><th style="padding:4px 6px">馬基準複勝</th><th style="padding:4px 6px">現ROI</th><th style="padding:4px 6px">馬基準ROI</th>
+            </tr></thead>
+            <tbody>${folds.map(f=>`<tr style="border-bottom:1px solid #e2e8f0">
+              <td style="padding:4px 6px;text-align:center;color:#6b7280">${f.k}</td>
+              <td style="padding:4px 6px;text-align:center">${f.curWin}%</td>
+              <td style="padding:4px 6px;text-align:center">${_mark(f.anchWin,f.curWin)}%</td>
+              <td style="padding:4px 6px;text-align:center">${f.curFuku}%</td>
+              <td style="padding:4px 6px;text-align:center">${_mark(f.anchFuku,f.curFuku)}%</td>
+              <td style="padding:4px 6px;text-align:center">${f.rrCur!=null?f.rrCur+'%':'—'}</td>
+              <td style="padding:4px 6px;text-align:center">${f.rrAnchV!=null?_mark(f.rrAnchV,f.rrCur)+'%':'—'}</td>
+            </tr>`).join('')}
+            <tr style="border-top:2px solid #e2e8f0;background:#f8fafc;font-weight:700">
+              <td style="padding:5px 6px;text-align:center">平均</td>
+              <td style="padding:5px 6px;text-align:center">${_sv.curWin}%</td>
+              <td style="padding:5px 6px;text-align:center">${_mark(anch.winAvg,_sv.curWin)}%</td>
+              <td style="padding:5px 6px;text-align:center">${_sv.curFuku}%</td>
+              <td style="padding:5px 6px;text-align:center">${_mark(anch.fukuAvg,_sv.curFuku)}%</td>
+              <td style="padding:5px 6px;text-align:center">${_rrAvgCur!=null?_rrAvgCur+'%':'—'}</td>
+              <td style="padding:5px 6px;text-align:center">${anch.rrAvg!=null?_mark(anch.rrAvg,_rrAvgCur)+'%':'—'}</td>
+            </tr></tbody>
+          </table></div>
+          <div style="margin-top:6px;padding:8px 10px;border-radius:8px;font-size:11px;line-height:1.7;${anch.adopt?'background:#f0fdf4;border:1px solid #86efac;color:#166534':'background:#f8fafc;border:1px solid #cbd5e1;color:#475569'}">
+            ${anch.adopt
+              ? `🧭 <b>判定：馬基準差SIが採用基準を満たしました</b>（複勝 ${anch.fukuWins}/5・1着 ${anch.winWins}/5で現行超え）。ライブモデルのSI補正への反映を検討できます。`
+              : `🧭 <b>判定：採用見送り</b> — 複勝で現行に勝ったfoldは ${anch.fukuWins}/5（基準4/5）、1着は ${anch.winWins}/5。両方式の馬場差は大半の日でほぼ一致するため、◎の入れ替わり自体が少ない可能性もあります。データが増えたら自動で再判定されます。`}
+          </div>
+          <div style="font-size:10px;font-weight:700;color:#9333ea;margin-top:10px;margin-bottom:4px">🌀 展開文脈補正実験：過去走のペース基準比×位置取り（fold別・初見データ）</div>
+          <div style="font-size:10px;color:#6b7280;margin-bottom:5px;line-height:1.6">直近3走に「基準比−0.6以下のハイ寄りを先行(1C3内)して3着内」→+0.5（逆境の地力）／「基準比−1.0以下のハイ限定で差し(1C6下)好走」→−0.4（展開ギフト割引）／「基準比−1.0以下のハイで先行して着外」→+0.4（ペース犠牲の免罪：次走複勝35.4% vs スロー潰れ27.7%のEDAより）。<b>採用基準（事前固定）：複勝で4/5以上勝ち かつ 1着平均が現行以上</b>。</div>
+          <div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:10px;width:100%">
+            <thead><tr style="background:#1a1a2e;color:#fff">
+              <th style="padding:4px 6px">fold</th><th style="padding:4px 6px">現1着</th><th style="padding:4px 6px">展開1着</th><th style="padding:4px 6px">現複勝</th><th style="padding:4px 6px">展開複勝</th><th style="padding:4px 6px">現ROI</th><th style="padding:4px 6px">展開ROI</th>
+            </tr></thead>
+            <tbody>${folds.map(f=>`<tr style="border-bottom:1px solid #e2e8f0">
+              <td style="padding:4px 6px;text-align:center;color:#6b7280">${f.k}</td>
+              <td style="padding:4px 6px;text-align:center">${f.curWin}%</td>
+              <td style="padding:4px 6px;text-align:center">${_mark(f.pctxWin,f.curWin)}%</td>
+              <td style="padding:4px 6px;text-align:center">${f.curFuku}%</td>
+              <td style="padding:4px 6px;text-align:center">${_mark(f.pctxFuku,f.curFuku)}%</td>
+              <td style="padding:4px 6px;text-align:center">${f.rrCur!=null?f.rrCur+'%':'—'}</td>
+              <td style="padding:4px 6px;text-align:center">${f.rrPctxV!=null?_mark(f.rrPctxV,f.rrCur)+'%':'—'}</td>
+            </tr>`).join('')}
+            <tr style="border-top:2px solid #e2e8f0;background:#f8fafc;font-weight:700">
+              <td style="padding:5px 6px;text-align:center">平均</td>
+              <td style="padding:5px 6px;text-align:center">${_sv.curWin}%</td>
+              <td style="padding:5px 6px;text-align:center">${_mark(paceCtx.winAvg,_sv.curWin)}%</td>
+              <td style="padding:5px 6px;text-align:center">${_sv.curFuku}%</td>
+              <td style="padding:5px 6px;text-align:center">${_mark(paceCtx.fukuAvg,_sv.curFuku)}%</td>
+              <td style="padding:5px 6px;text-align:center">${_rrAvgCur!=null?_rrAvgCur+'%':'—'}</td>
+              <td style="padding:5px 6px;text-align:center">${paceCtx.rrAvg!=null?_mark(paceCtx.rrAvg,_rrAvgCur)+'%':'—'}</td>
+            </tr></tbody>
+          </table></div>
+          <div style="margin-top:6px;padding:8px 10px;border-radius:8px;font-size:11px;line-height:1.7;${paceCtx.adopt?'background:#f0fdf4;border:1px solid #86efac;color:#166534':'background:#f8fafc;border:1px solid #cbd5e1;color:#475569'}">
+            ${paceCtx.adopt
+              ? `🌀 <b>判定：展開文脈補正が採用基準を満たしました</b>（複勝 ${paceCtx.fukuWins}/5・1着 ${paceCtx.winWins}/5で現行超え）。ライブモデルへの反映を検討できます。`
+              : `🌀 <b>判定：採用見送り</b> — 複勝で現行に勝ったfoldは ${paceCtx.fukuWins}/5（基準4/5）、1着は ${paceCtx.winWins}/5。データが増えたら自動で再判定されます。`}
+          </div>
+          <div style="font-size:10px;font-weight:700;color:#4338ca;margin-top:10px;margin-bottom:4px">📐 印全体の評価：ランキング品質（◎だけでなく○▲△が正当か・fold平均）</div>
+          <div style="font-size:10px;color:#6b7280;margin-bottom:5px;line-height:1.6">◎的中だけでは変種の価値を見落とす（○▲△の改善が測れない）ため、印全体の質を比較。<b>ペア整合率</b>＝任意の2頭でスコア上位が実際に先着した割合（全馬が正当に評価される度合いの最直接指標）。緑＝現行より改善、括弧＝5fold中の勝ち数。</div>
+          <div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:10px;width:100%">
+            <thead><tr style="background:#1a1a2e;color:#fff">
+              <th style="padding:4px 6px;text-align:left">指標</th><th style="padding:4px 6px">現行</th><th style="padding:4px 6px">展開補正v2</th><th style="padding:4px 6px">馬基準SI</th><th style="padding:4px 6px">⚔PSF</th>
+            </tr></thead>
+            <tbody>${[
+              ['winCap3', '勝ち馬が◎○▲内', '%'], ['sanren', '3連複（上位3頭=1-3着）', '%'], ['avgHit', '上位3頭の平均的中頭数', '頭'],
+              ['fuku2', '○の複勝率', '%'], ['fuku3', '▲の複勝率', '%'], ['fuku4', '△の複勝率', '%'], ['concord', '全馬ペア整合率', '%'],
+            ].map(([key, label, unit]) => `<tr style="border-bottom:1px solid #e2e8f0">
+              <td style="padding:4px 6px">${label}</td>
+              <td style="padding:4px 6px;text-align:center">${rank.cur[key] != null ? rank.cur[key] + unit : '—'}</td>
+              <td style="padding:4px 6px;text-align:center">${rank.pctx[key] != null ? _mark(rank.pctx[key], rank.cur[key]) + unit + ` <span style="color:#9ca3af">(${rank.pctxWins[key]}/5)</span>` : '—'}</td>
+              <td style="padding:4px 6px;text-align:center">${rank.anch[key] != null ? _mark(rank.anch[key], rank.cur[key]) + unit + ` <span style="color:#9ca3af">(${rank.anchWins[key]}/5)</span>` : '—'}</td>
+              <td style="padding:4px 6px;text-align:center">${rank.psf[key] != null ? _mark(rank.psf[key], rank.cur[key]) + unit + ` <span style="color:#9ca3af">(${rank.psfWins[key]}/5)</span>` : '—'}</td>
+            </tr>`).join('')}</tbody>
+          </table></div>
+          <div style="font-size:10px;color:#374151;margin-top:5px;line-height:1.6">◎が同じでも○▲△が改善する変種は「印の割り当て」への採用価値がある。ペア整合率と○▲複勝率が4/5以上のfoldで現行を上回っていれば頑健な改善。</div>
+          <div style="font-size:10px;font-weight:700;color:#b91c1c;margin-top:10px;margin-bottom:4px">⚔ PSF対決：Claude設計指数 vs 現行指数（仕様書v1.0・事前登録ルール）</div>
+          <div style="font-size:10px;color:#6b7280;margin-bottom:5px;line-height:1.6">PSF＝位置取り予測（1C・競合調整）を主役に、位置条件付き地力・実測勝率カーブ・コンボ/斤量/馬体重で構成（17項目→5部品）。定数は実測から凍結・fitなし。<b>主判定＝ペア整合率4/5以上かつ○▲複勝が悪化しない／副判定＝◎基準</b>。</div>
+          <div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:10px;width:100%">
+            <thead><tr style="background:#1a1a2e;color:#fff">
+              <th style="padding:4px 6px">fold</th><th style="padding:4px 6px">現1着</th><th style="padding:4px 6px">PSF1着</th><th style="padding:4px 6px">現複勝</th><th style="padding:4px 6px">PSF複勝</th><th style="padding:4px 6px">現ROI</th><th style="padding:4px 6px">PSF ROI</th>
+            </tr></thead>
+            <tbody>${folds.map(f=>`<tr style="border-bottom:1px solid #e2e8f0">
+              <td style="padding:4px 6px;text-align:center;color:#6b7280">${f.k}</td>
+              <td style="padding:4px 6px;text-align:center">${f.curWin}%</td>
+              <td style="padding:4px 6px;text-align:center">${_mark(f.psfWin,f.curWin)}%</td>
+              <td style="padding:4px 6px;text-align:center">${f.curFuku}%</td>
+              <td style="padding:4px 6px;text-align:center">${_mark(f.psfFuku,f.curFuku)}%</td>
+              <td style="padding:4px 6px;text-align:center">${f.rrCur!=null?f.rrCur+'%':'—'}</td>
+              <td style="padding:4px 6px;text-align:center">${f.rrPsfV!=null?_mark(f.rrPsfV,f.rrCur)+'%':'—'}</td>
+            </tr>`).join('')}
+            <tr style="border-top:2px solid #e2e8f0;background:#f8fafc;font-weight:700">
+              <td style="padding:5px 6px;text-align:center">平均</td>
+              <td style="padding:5px 6px;text-align:center">${_sv.curWin}%</td>
+              <td style="padding:5px 6px;text-align:center">${_mark(psf.winAvg,_sv.curWin)}%</td>
+              <td style="padding:5px 6px;text-align:center">${_sv.curFuku}%</td>
+              <td style="padding:5px 6px;text-align:center">${_mark(psf.fukuAvg,_sv.curFuku)}%</td>
+              <td style="padding:5px 6px;text-align:center">${_rrAvgCur!=null?_rrAvgCur+'%':'—'}</td>
+              <td style="padding:5px 6px;text-align:center">${psf.rrAvg!=null?_mark(psf.rrAvg,_rrAvgCur)+'%':'—'}</td>
+            </tr></tbody>
+          </table></div>
+          <div style="margin-top:6px;padding:8px 10px;border-radius:8px;font-size:11px;line-height:1.7;${(psf.primaryWin||psf.secondaryWin)?'background:#f0fdf4;border:1px solid #86efac;color:#166534':'background:#f8fafc;border:1px solid #cbd5e1;color:#475569'}">
+            ${psf.primaryWin
+              ? `⚔ <b>判定：PSFの勝利（主判定クリア）</b> — ペア整合率 ${rank.psfWins.concord}/5・○複勝 ${rank.psf.fuku2}%（現行${rank.cur.fuku2}%）・▲複勝 ${rank.psf.fuku3}%（現行${rank.cur.fuku3}%）。副判定（◎）：複勝${psf.fukuWins}/5・1着${psf.winWins}/5。`
+              : psf.secondaryWin
+                ? `⚔ <b>判定：PSFの勝利（副判定＝◎基準クリア）</b> — 複勝${psf.fukuWins}/5・1着平均${psf.winAvg}%≥現行。主判定（📐）は未達：ペア整合率${rank.psfWins.concord}/5。`
+                : `⚔ <b>判定：現行の防衛</b> — 主判定：ペア整合率 ${rank.psfWins.concord}/5（基準4/5）・○複勝 ${rank.psf.fuku2!=null?rank.psf.fuku2+'%':'—'} vs 現行${rank.cur.fuku2!=null?rank.cur.fuku2+'%':'—'}。副判定（◎）：複勝${psf.fukuWins}/5・1着${psf.winWins}/5。上の📐表のPSF列に敗因の内訳。`}
+          </div>
         </details>`;
       }
 
