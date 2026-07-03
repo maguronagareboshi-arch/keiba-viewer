@@ -75,6 +75,9 @@ td.l { text-align: left; }
 </header>
 <main>
   <div class="controls">
+    <label>開催日 <select id="dateSel"></select></label>
+  </div>
+  <div class="controls">
     <div class="racebtns" id="raceBtns"></div>
   </div>
   <div class="controls">
@@ -130,10 +133,13 @@ async function sbGet(pathq) {
 const sources = {
   supabase: {
     label: 'Supabase',
-    async listRaces() {
-      const recent = await sbGet('chihou_races?select=race_date&order=race_date.desc&limit=1');
-      if (!recent.length) throw new Error('empty');
-      const races = await sbGet(`chihou_races?race_date=eq.${recent[0].race_date}&select=race_id,race_no,klass,race_name,distance_m&order=race_no.asc`);
+    async listDates() {
+      const rows = await sbGet('chihou_races?select=race_date&order=race_date.desc&limit=5000');
+      if (!rows.length) throw new Error('empty');
+      return [...new Set(rows.map((r) => r.race_date))];
+    },
+    async listRaces(date) {
+      const races = await sbGet(`chihou_races?race_date=eq.${date}&select=race_id,race_no,klass,race_name,distance_m&order=race_no.asc`);
       return races.map((r) => ({ race_id: r.race_id, race_no: r.race_no, klass: r.klass, name: r.race_name, distance_m: r.distance_m }));
     },
     async loadEntries(raceId) {
@@ -164,13 +170,10 @@ const sources = {
     },
   },
   local: {
-    label: 'ローカル', _horses: null,
-    async listRaces() {
-      const idx = await jget('data/index.json');
-      const dates = Object.keys(idx.dates);
-      const date = dates.find((d) => (idx.dates[d] || []).some((r) => r.entries_only)) || dates[0];
-      return idx.dates[date];
-    },
+    label: 'ローカル', _horses: null, _idx: null,
+    async _index() { if (!this._idx) this._idx = await jget('data/index.json'); return this._idx; },
+    async listDates() { return Object.keys((await this._index()).dates); },
+    async listRaces(date) { return (await this._index()).dates[date] || []; },
     async loadEntries(raceId) {
       const syu = await jget(`data/json/syutuba/${raceId}.json`);
       return { race: syu.race || {}, entries: syu.entries.filter((e) => e.umaban != null) };
@@ -658,34 +661,44 @@ async function init() {
   loadCss();
   drawTrack();
   try {
-    let races = null;
+    let dates = null;
     for (const name of ['supabase', 'local']) {
-      try { races = await sources[name].listRaces(); state.source = sources[name]; state.sourceName = name; break; }
+      try { dates = await sources[name].listDates(); state.source = sources[name]; state.sourceName = name; break; }
       catch (e) { /* 次の源へ */ }
     }
-    if (!races) throw new Error('データ源が見つかりません');
-    const badge = document.getElementById('raceLabel');
+    if (!dates || !dates.length) throw new Error('データ源が見つかりません');
     statsDb = await state.source.loadStats().catch(() => null);
-    await initMain(races);
+    await initMain(dates);
   } catch (e) {
     $('raceLabel').textContent = '⚠ データ読み込み失敗';
     $('params').innerHTML = `<div class="note">⚠ 読み込みエラー: ${esc(e.message)}</div>`;
   }
 }
 
-async function initMain(races) {
+async function initMain(dates) {
+  state.races = [];
   const renderRaceBtns = () => {
-    $('raceBtns').innerHTML = races.map((r) =>
+    $('raceBtns').innerHTML = state.races.map((r) =>
       `<button data-id="${r.race_id}" class="${r.race_id === state.raceId ? 'active' : ''}"
         title="${esc(r.klass || '')} ${esc(r.name || '')}">${r.race_no}R<small>${r.distance_m || '?'}m</small></button>`).join('');
   };
+  const loadDate = async (date) => {
+    state.races = await state.source.listRaces(date);
+    if (state.races.length) {
+      const meta = state.races[0];
+      await loadRace(meta.race_id, meta);
+    }
+    renderRaceBtns();
+  };
+  state.renderRaceBtns = renderRaceBtns;
+  $('dateSel').innerHTML = dates.map((d) => `<option value="${d}">${d}</option>`).join('');
+  $('dateSel').addEventListener('change', (e) => loadDate(e.target.value));
   $('raceBtns').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-id]');
     if (!b) return;
-    const meta = races.find((r) => r.race_id === b.dataset.id);
+    const meta = state.races.find((r) => r.race_id === b.dataset.id);
     loadRace(meta.race_id, meta).then(renderRaceBtns);
   });
-  state.renderRaceBtns = renderRaceBtns;
   $('startBtn').addEventListener('click', () => {
     if (state.running) return;
     if (state.horses.every((h) => h.finTime != null) || state.t > 0) {
@@ -724,9 +737,7 @@ async function initMain(races) {
     $('speedBtn').textContent = `速度 x${state.speed}`;
   });
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { loadCss(); drawTrack(); drawHorses(); });
-  const meta = races[0];
-  await loadRace(meta.race_id, meta);
-  renderRaceBtns();
+  await loadDate(dates[0]);
 }
 init();
 </script>
