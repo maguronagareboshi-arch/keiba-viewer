@@ -1015,41 +1015,66 @@ async function renderCyokyo() {
     }
   }
   const all = cyokyoState.data;
-  const dateKeys = Object.keys(all.dates);
+  // Supabaseのjsonbはキー順を保持しないため、明示的に新しい順へ
+  const dateKeys = Object.keys(all.dates).sort().reverse();
   const youbiOf = (d) => (all.dates[d][0] || {}).youbi || '';
-  const filtered = dateKeys.slice(0, 40);   // 直近40調教日を日付ボタンで
+  const filtered = dateKeys.slice(0, 40);   // 直近40調教日を日付ボタンで（2026年度が先頭）
   if (!cyokyoState.date || !filtered.includes(cyokyoState.date)) cyokyoState.date = filtered[0];
 
   const hb = all.base;
   const hensachi = (t3) => (hb && hb.std ? 50 + 10 * (hb.mean - t3) / hb.std : null);
   const works = all.dates[cyokyoState.date] || [];
+  const finCell = (w) => {
+    if (w.fin == null) return '<td></td>';
+    const cls = w.fin >= 1 && w.fin <= 3 ? `fin${w.fin}` : '';
+    return `<td class="${cls}">${w.fin}着</td>`;
+  };
+  // 坂路（3F順）と 本馬場（3F順）を分けて表示
   const hanro = works.filter((w) => w.hanro && w.t3 != null);
-  const others = works.length - hanro.length;
-  const rows = hanro.map((w, i) => `<tr>
+  const honba = works.filter((w) => w.honba && w.t3 != null).sort((a, b) => a.t3 - b.t3);
+  const other = works.length - hanro.length - honba.length;
+  const hanroRows = hanro.map((w, i) => `<tr>
     <td>${i + 1}</td>
-    <td class="l"><a href="#" class="horse-link" data-horse="${esc(w.name)}">${esc(w.name)}</a>${w.pb ? ' <span class="badge arrow-up">自己ベスト</span>' : ''}</td>
-    <td>${esc(w.course)}</td>
-    <td>${esc(w.baba || '')}</td>
+    <td class="l"><a class="horse-link" data-horse="${esc(w.name)}">${esc(w.name)}</a>${w.pb ? ' <span class="badge arrow-up">自己ベスト</span>' : ''}</td>
+    <td>${esc(w.course)}</td><td>${esc(w.baba || '')}</td>
     <td class="num">${w.t4 != null ? w.t4.toFixed(1) : ''}</td>
     <td class="num ${i < 3 ? 'f1' : ''}">${w.t3.toFixed(1)}</td>
     <td class="num">${hensachi(w.t3) != null ? hensachi(w.t3).toFixed(1) : ''}</td>
     <td class="num">${w.t2 != null ? w.t2.toFixed(1) : ''}</td>
     <td class="num">${w.t1 != null ? w.t1.toFixed(1) : ''}</td>
-    <td>${esc(w.ashiiro || '')}</td>
-    <td class="l">${esc(w.tanpyo || '')}</td>
+    ${finCell(w)}<td>${esc(w.ashiiro || '')}</td><td class="l">${esc(w.tanpyo || '')}</td>
+  </tr>`).join('');
+  const honbaRows = honba.map((w, i) => `<tr>
+    <td>${i + 1}</td>
+    <td class="l"><a class="horse-link" data-horse="${esc(w.name)}">${esc(w.name)}</a></td>
+    <td>${esc(w.course)}</td><td>${esc(w.baba || '')}</td>
+    <td class="num">${w.t4 != null ? w.t4.toFixed(1) : ''}</td>
+    <td class="num ${i < 3 ? 'f1' : ''}">${w.t3.toFixed(1)}</td>
+    <td class="num">${w.t2 != null ? w.t2.toFixed(1) : ''}</td>
+    <td class="num">${w.t1 != null ? w.t1.toFixed(1) : ''}</td>
+    ${finCell(w)}<td>${esc(w.ashiiro || '')}</td><td class="l">${esc(w.tanpyo || '')}</td>
   </tr>`).join('');
 
   root.innerHTML = `
   <div class="controls">調教日
-    <div class="racetabs">${filtered.map((d) => `<button data-cdate="${d}" class="${cyokyoState.date === d ? 'active' : ''}" style="width:auto;padding:6px 8px">${d.slice(5)}(${youbiOf(d)})</button>`).join('')}</div>
+    <div class="racetabs">${filtered.map((d) => `<button data-cdate="${d}" class="${cyokyoState.date === d ? 'active' : ''}" style="width:auto;padding:6px 8px">${d.slice(0, 4)}/${d.slice(5).replace('-', '.')}(${youbiOf(d)})</button>`).join('')}</div>
   </div>
   <div class="card tablewrap">
+    <b>坂路（${cyokyoState.date}）</b>
     <table>
-      <tr><th>#</th><th>馬名</th><th>コース</th><th>馬場</th><th>4F</th><th>3F</th><th>偏差値</th><th>2F</th><th>1F</th><th>脚色</th><th>短評</th></tr>
-      ${rows || '<tr><td colspan="11">この日の坂路追切はありません</td></tr>'}
+      <tr><th>#</th><th>馬名</th><th>コース</th><th>馬場</th><th>4F</th><th>3F</th><th>偏差値</th><th>2F</th><th>1F</th><th>着順</th><th>脚色</th><th>短評</th></tr>
+      ${hanroRows || '<tr><td colspan="12">この日の坂路追切はありません</td></tr>'}
     </table>
-    <div class="legend">${esc(cyokyoState.date)} の坂路追切 ${hanro.length}本（坂路以外 他${others}本は除外）。<span class="sw f"></span> 3F上位3本。偏差値は全期間の坂路3F分布（${hb ? `${hb.mean}±${hb.std}秒・n=${hb.n.toLocaleString()}本` : '-'}）基準・50が平均。</div>
-  </div>`;
+    <div class="legend"><span class="sw f"></span> 3F上位3本。偏差値は全期間の坂路3F分布（${hb ? `${hb.mean}±${hb.std}秒・n=${hb.n.toLocaleString()}本` : '-'}）基準・50が平均。着順は各馬の次走結果。</div>
+  </div>
+  ${honba.length ? `<div class="card tablewrap">
+    <b>本馬場（${cyokyoState.date}）</b>
+    <table>
+      <tr><th>#</th><th>馬名</th><th>コース</th><th>馬場</th><th>5F</th><th>3F</th><th>2F</th><th>1F</th><th>着順</th><th>脚色</th><th>短評</th></tr>
+      ${honbaRows}
+    </table>
+    <div class="legend">本馬場（門別本）の時計。<span class="sw f"></span> 3F上位3本。${other ? `他コース${other}本は非表示。` : ''}</div>
+  </div>` : (other ? `<div class="note">この日は本馬場の追切はありません（他コース${other}本）。</div>` : '')}`;
 }
 
 // ============================================================
