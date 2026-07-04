@@ -6924,6 +6924,9 @@ async function _refetchEmptyRaces(date, baba, rns) {
         }
         allRacesData[rn] = parsed;
         addRaceTab(rn);
+        // switchRaceTabは描画済みセクションをキャッシュ再利用するため、0頭で描画された
+        // 古いセクションを破棄しないと再描画されない（＝データは埋まるのに画面は0頭のまま）。
+        document.getElementById(`race-section-${rn}`)?.remove();
         if (currentRaceNo === rn) switchRaceTab(rn);   // 表示中のレースなら即再描画
         fixed++;
       }
