@@ -1119,21 +1119,22 @@ async function renderCyokyo() {
   // 本馬場: 5F/4F/3F/1F（t4=5F, t3=4F=半哩, t2=3F, t1=1F）真の3F(t2)順
   const honba = works.filter((w) => w.honba && w.t2 != null).sort((a, b) => a.t2 - b.t2);
   const other = works.length - hanro.length - honba.length;
+  const finalCell = (w) => `<td>${w.final ? '<span class="badge arrow-up">最終追い</span>' : ''}</td>`;
   const hanroRows = hanro.map((w, i) => `<tr>
     <td>${i + 1}</td>
     <td class="l"><a class="horse-link" data-horse="${esc(w.name)}">${esc(w.name)}</a>${w.pb ? ' <span class="badge arrow-up">自己ベスト</span>' : ''}</td>
-    <td>${esc(w.sex || '')}</td><td>${esc(w.course)}</td><td>${esc(w.baba || '')}</td>
+    <td>${esc(w.sex || '')}</td><td class="l small">${esc(w.trainer || '')}</td><td>${esc(w.course)}</td><td>${esc(w.baba || '')}</td>
     <td class="num">${w.t4 != null ? w.t4.toFixed(1) : ''}</td>
     <td class="num ${i < 3 ? 'f1' : ''}">${w.t3.toFixed(1)}</td>
     <td class="num">${w.t2 != null ? w.t2.toFixed(1) : ''}</td>
     <td class="num">${w.t1 != null ? w.t1.toFixed(1) : ''}</td>
     <td class="num">${hensachi(w.t3) != null ? hensachi(w.t3).toFixed(1) : ''}</td>
-    ${finCell(w)}<td>${esc(w.ashiiro || '')}</td><td class="l">${esc(w.tanpyo || '')}</td>
+    ${finCell(w)}${finalCell(w)}<td class="l">${esc(w.tanpyo || '')}</td>
   </tr>`).join('');
   const honbaRows = honba.map((w, i) => `<tr>
     <td>${i + 1}</td>
     <td class="l"><a class="horse-link" data-horse="${esc(w.name)}">${esc(w.name)}</a></td>
-    <td>${esc(w.sex || '')}</td><td>${esc(w.course)}</td><td>${esc(w.baba || '')}</td>
+    <td>${esc(w.sex || '')}</td><td class="l small">${esc(w.trainer || '')}</td><td>${esc(w.course)}</td><td>${esc(w.baba || '')}</td>
     <td class="num">${w.t4 != null ? w.t4.toFixed(1) : ''}</td>
     <td class="num">${w.t3 != null ? w.t3.toFixed(1) : ''}</td>
     <td class="num ${i < 3 ? 'f1' : ''}">${w.t2.toFixed(1)}</td>
@@ -1153,15 +1154,15 @@ async function renderCyokyo() {
   <div class="card tablewrap">
     <b>坂路（${cyokyoState.date}）</b>
     <table>
-      <tr><th>#</th><th>馬名</th><th>馬齢</th><th>コース</th><th>馬場</th><th>4F</th><th>3F</th><th>2F</th><th>1F</th><th>偏差値</th><th>着順</th><th>脚色</th><th>短評</th></tr>
-      ${hanroRows || '<tr><td colspan="13">この日の坂路追切はありません</td></tr>'}
+      <tr><th>#</th><th>馬名</th><th>馬齢</th><th>厩舎</th><th>コース</th><th>馬場</th><th>4F</th><th>3F</th><th>2F</th><th>1F</th><th>偏差値</th><th>着順</th><th>最終追い</th><th>短評</th></tr>
+      ${hanroRows || '<tr><td colspan="14">この日の坂路追切はありません</td></tr>'}
     </table>
-    <div class="legend"><span class="sw f"></span> 3F上位3本。偏差値は全期間の坂路3F分布（${hb ? `${hb.mean}±${hb.std}秒・n=${hb.n.toLocaleString()}本` : '-'}）基準・50が平均。着順は各馬の次走結果。</div>
+    <div class="legend"><span class="sw f"></span> 3F上位3本。偏差値は全期間の坂路3F分布（${hb ? `${hb.mean}±${hb.std}秒・n=${hb.n.toLocaleString()}本` : '-'}）基準・50が平均。着順は各馬の次走結果。<span class="badge arrow-up">最終追い</span>＝その次走前で最後の追切（本馬場を含め最後の1本）。</div>
   </div>
   ${honba.length ? `<div class="card tablewrap">
     <b>本馬場（${cyokyoState.date}）</b>
     <table>
-      <tr><th>#</th><th>馬名</th><th>馬齢</th><th>コース</th><th>馬場</th><th>5F</th><th>4F</th><th>3F</th><th>1F</th><th>着順</th><th>脚色</th><th>短評</th></tr>
+      <tr><th>#</th><th>馬名</th><th>馬齢</th><th>厩舎</th><th>コース</th><th>馬場</th><th>5F</th><th>4F</th><th>3F</th><th>1F</th><th>着順</th><th>脚色</th><th>短評</th></tr>
       ${honbaRows}
     </table>
     <div class="legend">本馬場（門別本）の時計。<span class="sw f"></span> 3F上位3本。${other ? `他コース${other}本は非表示。` : ''}</div>
