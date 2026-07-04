@@ -2431,19 +2431,21 @@ function parseDebaTable(html, raceDate, raceNo, babaCode) {
   const grid = expandTableGrid(bestTable);
 
   // ヘッダー列マッピング（先頭行から検出）
+  // 実際のkeiba.go.jp DebaTable構造：[0]枠番 [1]馬番 [2-4]競走馬(馬名/colspan) [5]騎手・調教師(騎手のみ掲載)
+  //   [6]オッズ・馬体重(前売りオッズ+人気/馬体重は直前) [7]着別成績(戦績) [8-12]近5走。
+  //   ※所属・性齢・斤量・調教師は出馬表には個別掲載がないため、専用列がある時だけ採用し無ければ空欄にする。
   const hTexts = (grid[0]||[]).map(cell => (cell?.textContent||'').replace(/\s+/g,''));
-  const col = { waku:0, umaBan:1, umaName:2, belong:3, sexAge:4, kinryo:5, jockey:6, trainer:7, weight:8 };
+  const col = { waku:0, umaBan:1, umaName:2, sexAge:-1, kinryo:-1, jockey:5, trainer:-1, oddsW:6 };
   if (hTexts.length >= 5) {
     hTexts.forEach((t,i) => {
-      if (/^枠$/.test(t)) col.waku=i;
-      else if (/^馬番$/.test(t)) col.umaBan=i;
-      else if (/^馬名$/.test(t)) col.umaName=i;
-      else if (/所属/.test(t)) col.belong=i;
+      if (/^枠/.test(t)) col.waku=i;
+      else if (/馬番/.test(t)) col.umaBan=i;
+      else if (/競走馬|^馬名/.test(t)) col.umaName=i;
       else if (/性齢/.test(t)) col.sexAge=i;
       else if (/斤量|負担/.test(t)) col.kinryo=i;
-      else if (/騎手/.test(t)) col.jockey=i;
-      else if (/調教師/.test(t)) col.trainer=i;
-      else if (/馬体重|体重/.test(t)) col.weight=i;
+      else if (/騎手/.test(t)) col.jockey=i;                 // 「騎手・調教師」列（騎手を採用）
+      else if (/調教師/.test(t)) col.trainer=i;              // 調教師単独列がある時だけ
+      else if (/オッズ|馬体重|体重/.test(t)) col.oddsW=i;     // 「オッズ馬体重変更情報」列
     });
   }
 
@@ -2464,19 +2466,30 @@ function parseDebaTable(html, raceDate, raceNo, babaCode) {
     if(!horseName||horseName.length<2||/^\d+$/.test(horseName)) continue;
     const debaHref = getCH(col.umaName);
     const debaLineage = (debaHref.match(/k_lineageLoginCode=(\d+)/)||['',''])[1];
-    const belong  = getCT(col.belong);
-    const sexAge  = getCT(col.sexAge);
-    const kinryo  = (getCT(col.kinryo).match(/(\d+\.?\d*)/)||['',''])[1];
-    let jockey    = (getCL(col.jockey)||getCT(col.jockey)).replace(/[（(][^）)]*[）)]/g,'').replace(/^[△▲☆★◇◆○◎▽▼]+/,'').replace(/\s/g,'').trim();
-    let trainer   = (getCL(col.trainer)||getCT(col.trainer)).replace(/[（(][^）)]*[）)]/g,'').replace(/\s/g,'').trim();
-    const weightRaw = getCT(col.weight).replace(/\s/g,'');
-    const weightM   = weightRaw.match(/(\d{3,4}[(\（][+\-]?\d+[)\）]?)/);
-    const weight    = weightM?weightM[1]:weightRaw;
+    // 性齢：専用列があり性齢トークン(牡3等)を含む時だけ。無ければ空欄（馬名を誤って入れない）
+    let sexAge = col.sexAge>=0 ? getCT(col.sexAge) : '';
+    if (sexAge && !/[牡牝騸セせ]\s*\d{1,2}/.test(sexAge)) sexAge = '';
+    // 斤量：専用列に数値がある時だけ（出馬表には通常なし）
+    const kinryo = col.kinryo>=0 ? ((getCT(col.kinryo).match(/(\d{2}(?:\.\d)?)/)||['',''])[1]) : '';
+    // 騎手：「騎手・調教師」セルの騎手名（所属カッコ・印を除去）
+    let jockey = (getCL(col.jockey)||getCT(col.jockey)).replace(/[（(][^）)]*[）)]/g,'').replace(/^[△▲☆★◇◆○◎▽▼]+/,'').replace(/\s/g,'').trim();
+    // 調教師：出馬表には個別掲載がなく着別成績(戦績)が誤読されるため、専用列がある時だけ・戦績形式は拒否
+    let trainer = col.trainer>=0 ? (getCL(col.trainer)||getCT(col.trainer)).replace(/[（(][^）)]*[）)]/g,'').replace(/\s/g,'').trim() : '';
+    if (/[全左右場距]\d|\d-\d+-\d/.test(trainer)) trainer = '';
+    // オッズ・人気・馬体重：オッズ馬体重列から抽出。馬体重は妥当な体重形式の時だけ採用し、取得できなければ空欄
+    let odds='', ninki='', weight='';
+    if (col.oddsW>=0) {
+      const ow = getCT(col.oddsW).replace(/\s/g,'');
+      const om = ow.match(/(\d{1,4}\.\d)/); if (om) odds = om[1];
+      const nm = ow.match(/[(（](\d+)人気[)）]/); if (nm) ninki = nm[1];
+      const wm = ow.match(/(\d{3,4}[(（][+\-]?\d+[)）])/) || ow.match(/(?:^|人気[)）])(\d{3,4})(?![\d.])/);
+      if (wm) weight = wm[1];
+    }
     const savedKey  = `${babaCode}_${raceDate}_${raceNo}_${umaBan}`;
     const savedPace = getSavedHorsePace(savedKey);
     horses.push({
-      chakujun:'', wakuBan, umaBan, horseName, belong, sexAge, kinryo,
-      jockey, trainer, weight, ninki:'', odds:'', time:'', diff:'', agari3f:'', corner:'',
+      chakujun:'', wakuBan, umaBan, horseName, belong:'', sexAge, kinryo,
+      jockey, trainer, weight, ninki, odds, time:'', diff:'', agari3f:'', corner:'',
       lineageLoginCode: debaLineage,
       first3f:         savedPace?.first3f         || '',
       paceType:        savedPace?.paceType        || '',
