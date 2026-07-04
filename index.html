@@ -1247,8 +1247,10 @@ const KV_APP_CSS = [
       <input type="month" id="bulk-month" class="form-input" style="max-width:170px">
       <label style="display:flex;align-items:center;gap:5px;font-size:13px;color:#374151;cursor:pointer"><input type="checkbox" id="bulk-comments" checked style="width:15px;height:15px;accent-color:#1a56a0"> コメントも取得</label>
       <button type="button" id="bulk-start-btn" class="btn btn-primary" onclick="bulkFetchMonth()"><i class="fas fa-cloud-download-alt"></i> この月を一括取得＆保存</button>
+      <button type="button" id="rakuten-odds-btn" class="btn btn-secondary" onclick="backfillOddsFromRakuten()"><i class="fas fa-yen-sign"></i> 保存済のオッズ欠損を楽天で補完</button>
       <button type="button" id="bulk-cancel-btn" class="btn btn-secondary hidden" onclick="bulkCancel()"><i class="fas fa-stop"></i> 中止</button>
     </div>
+    <p style="font-size:11px;color:#9ca3af;margin:-4px 0 8px;line-height:1.6">※「楽天で補完」は再取得せず、既に保存したレースの<b>空欄オッズだけ</b>を楽天競馬から埋めます。keiba.go.jpが消した古いレースの全馬オッズもこれで復元できます。</p>
     <div id="bulk-progress" style="font-size:13px;color:#374151;min-height:20px;line-height:1.7"></div>
   </section>
 
@@ -5511,8 +5513,8 @@ async function initDB() {
     if(typeof initAnalysisDateSelect==='function') initAnalysisDateSelect();
     // 1400m戦の前半3Fを上がり4Fから一括補完（全データ揃った後に実行）
     const _bfCount = backfillFirst3fFrom1400m();
-    // 自動ペースラベル（基準比ベース・paceTypeAuto）を付与。手入力のpaceTypeには触れない
-    try { backfillPaceLabels(); } catch(e) { console.warn('[paceLabels]', e); }
+    // 自動ペースラベル（基準比ベース・paceTypeAuto）＋前後半差ペース(paceType)を補完。手入力のpaceTypeは保持
+    try { backfillPaceLabels(); backfillPaceType(); } catch(e) { console.warn('[paceLabels]', e); }
     // 補完で1400mデータが増えたので、馬場傾向の前残り傾向パネルを最新で再描画
     if (_bfCount > 0 && typeof renderTrackTrend === 'function') {
       try { renderTrackTrend(); } catch(e) {}
@@ -5636,6 +5638,8 @@ const _bulkSleep = ms => new Promise(r => setTimeout(r, ms));
 /** 1レース分（parsed）を直接Supabase＋IDBへ保存（グローバルに依存しないヘッドレス版）。戻り値=保存頭数 */
 async function _saveRaceDirect(date, baba, rn, parsed) {
   const info = parsed.raceInfo || {};
+  // ペース(前後半差)が未設定でも first3f＋上がり3F があれば計算して保存に含める
+  if (!info.paceType) { const p = paceFromDiff(info.first3f, info.agari3f_race); if (p) info.paceType = p; }
   const raceId = `race_${baba}_${date}_${rn}`;
   const raceRow = { race_date:date, race_no:rn, baba_code:baba, race_name:info.raceName||'', distance:info.distance||'', race_class:info.raceClass||'', track_cond:info.trackCond||'', first3f:info.first3f||'', agari4f:info.agari4f||'', agari3f_race:info.agari3f_race||'', pace_type:info.paceType||'', memo:info.memo||'', lap_times:'' };
   await apiUpsert('keiba_races', raceId, raceRow);
@@ -5691,6 +5695,107 @@ async function _fetchRefundOddsDay(date) {
   return out;
 }
 
+/**
+ * 楽天競馬のオッズ(単勝/複勝)ページから全馬の単勝オッズを取得する。
+ * keiba.go.jpは約5か月でオッズを消すが、楽天は数年前まで全馬分を保持しているため、
+ * 古いレースの「勝ち馬以外」も含めた全馬オッズ復元に使う（払戻ベースの生存者バイアス回避）。
+ * RACEID = 日付(YYYYMMDD 8桁) + 馬場31 + "000000" + レース番号(2桁ゼロ埋め) = 18桁。
+ * 表の各行で「複勝オッズ範囲(例 2.9-7.8)」列を目印に、その直前セルを単勝、cells[1]を馬番とする。
+ * この構造は本体テーブル・単勝オッズ順テーブルの両方で一致する。
+ * 戻り値: { umaBan(数値): 単勝オッズ(数値), ... }（失敗時は空オブジェクト）
+ */
+async function _fetchRakutenOddsRace(date, rn) {
+  const out = {};
+  const ymd = String(date).replace(/[^0-9]/g, '');   // "2025/05/10" -> "20250510"
+  if (ymd.length !== 8) return out;
+  const raceId = `${ymd}31000000${String(rn).padStart(2, '0')}`;
+  let html;
+  try { html = await fetchHtmlWithProxy(`https://keiba.rakuten.co.jp/odds/tanfuku/RACEID/${raceId}`, 15000); }
+  catch(e) { return out; }
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const RANGE = /^\d+(?:\.\d)?[-–]\d+(?:\.\d)?$/;   // 複勝オッズ範囲 "2.9-7.8"（下限=上限も可）
+  const ODD   = /^\d{1,4}\.\d$/;                    // 単勝オッズ "34.8"
+  for (const tr of doc.querySelectorAll('tr')) {
+    const cells = [...tr.querySelectorAll('th,td')].map(x => (x.textContent || '').replace(/\s+/g, ''));
+    if (cells.length < 4) continue;
+    const j = cells.findIndex(c => RANGE.test(c));   // 複勝レンジ列を探す
+    if (j < 2) continue;                             // その前に馬番と単勝が要る
+    const tan = cells[j - 1];                        // レンジ直前＝単勝オッズ
+    if (!ODD.test(tan)) continue;
+    let uma = parseInt(cells[1], 10);               // 本体表・順位表とも cells[1] が馬番
+    if (!(uma >= 1 && uma <= 18) || String(uma) !== cells[1]) {
+      // 念のためのフォールバック：単勝列より前の最後の純整数(1-18)を馬番とみなす
+      uma = NaN;
+      for (let k = j - 2; k >= 0; k--) { const v = parseInt(cells[k], 10); if (String(v) === cells[k] && v >= 1 && v <= 18) { uma = v; break; } }
+    }
+    if (!(uma >= 1 && uma <= 18)) continue;
+    const o = parseFloat(tan);
+    if (o >= 1 && out[uma] == null) out[uma] = o;
+  }
+  return out;
+}
+
+/**
+ * 既に保存済みの高知レースのうち「オッズ欠損のある馬」を楽天オッズで一括補完する（管理者専用）。
+ * keiba.go.jpのオッズ保持期限切れで空欄になった過去レースを、再取得せずオッズだけ埋め直す。
+ */
+async function backfillOddsFromRakuten() {
+  if (!isAdminMode()) { alert('オッズ補完は管理者のみ可能です。'); return; }
+  const btn = document.getElementById('rakuten-odds-btn');
+  const cancelBtn = document.getElementById('bulk-cancel-btn');
+  _bulkCancel = false;
+  if (btn) btn.disabled = true;
+  if (cancelBtn) cancelBtn.classList.remove('hidden');
+  _proxyHealth.forEach(h => { h.blockedUntil = 0; });
+  try {
+    const lsData = lsRead();
+    // 高知(31)の保存済みレース一覧
+    const races = Object.entries(lsData)
+      .filter(([k, v]) => (v.type === 'race' || k.startsWith('race_')) && v.baba_code === '31' && v.race_date && v.race_no != null)
+      .map(([k, v]) => ({ date: v.race_date, rn: v.race_no }));
+    // オッズ欠損を1頭でも含むレースだけを対象に（欠損頭数も把握）
+    const targets = [];
+    for (const r of races) {
+      const prefix = `31_${r.date}_${r.rn}_`;
+      const horses = Object.entries(lsData).filter(([k, v]) => v.type === 'horse' && k.startsWith(prefix));
+      if (!horses.length) continue;
+      const missing = horses.filter(([k, v]) => !(parseFloat(v.odds) > 0));
+      if (missing.length) targets.push({ ...r, horses });
+    }
+    if (!targets.length) { _bulkLog('✅ オッズ欠損のある高知レースはありません。'); return; }
+    // 新しい順（date+rn）に並べて、直近から埋める
+    targets.sort((a, b) => (b.date + String(b.rn).padStart(2, '0')).localeCompare(a.date + String(a.rn).padStart(2, '0')));
+    let filled = 0, doneRaces = 0, hitRaces = 0, err = 0;
+    for (let i = 0; i < targets.length && !_bulkCancel; i++) {
+      const t = targets[i];
+      _bulkLog(`<i class="fas fa-download"></i> 楽天オッズ補完 ${t.date} ${t.rn}R …<br><span style="font-size:11px;color:#6b7280">進捗 ${i + 1}/${targets.length}R／補完 ${filled}頭（${hitRaces}R更新）・エラー${err}</span>`);
+      let rk = {}; try { rk = await _fetchRakutenOddsRace(t.date, t.rn); } catch(e) { err++; }
+      let raceFilled = 0;
+      if (Object.keys(rk).length) {
+        for (const [k, v] of t.horses) {
+          const uma = parseInt(k.split('_').pop(), 10);
+          if (!(parseFloat(v.odds) > 0) && rk[uma] > 0) {
+            const newOdds = String(rk[uma]);
+            try { await apiUpsert('keiba_horses', k, { odds: newOdds }); } catch(e) {}
+            v.odds = newOdds;
+            lsWrite(k, v);
+            filled++; raceFilled++;
+          }
+        }
+      }
+      if (raceFilled) hitRaces++;
+      doneRaces++;
+      await _bulkSleep(400);
+    }
+    _savedGroupsDirty = true;
+    loadSavedData();
+    _bulkLog(`${_bulkCancel ? '⏹ 中止しました。' : '✅ 完了！'} 欠損 ${targets.length}レースを確認し <b>${filled}頭のオッズ</b>を楽天から補完しました（${hitRaces}レース更新${err ? `／エラー${err}` : ''}）。`);
+  } finally {
+    if (btn) btn.disabled = false;
+    if (cancelBtn) cancelBtn.classList.add('hidden');
+  }
+}
+
 function _bulkLog(html) { const el = document.getElementById('bulk-progress'); if (el) el.innerHTML = html; }
 
 async function bulkFetchMonth() {
@@ -5736,7 +5841,13 @@ async function bulkFetchMonth() {
         try {
           const parsed = await fetchOneRace(date, rn, '31');
           if (!parsed || !parsed.horses || !parsed.horses.length) { err++; continue; }
-          // 成績ページのオッズが空なら払戻の勝ち馬オッズで補完
+          // オッズが空の馬を楽天の全馬オッズで補完（keiba.go.jpが消した古いレースも全馬復元可）
+          if (parsed.horses.some(h => !(parseFloat(h.odds) > 0))) {
+            let rk = {}; try { rk = await _fetchRakutenOddsRace(date, rn); } catch(e) {}
+            if (Object.keys(rk).length) parsed.horses.forEach(h => { const u = parseInt(h.umaBan); if (!(parseFloat(h.odds) > 0) && rk[u] > 0) h.odds = String(rk[u]); });
+            await _bulkSleep(300);
+          }
+          // なお残る空欄は払戻の勝ち馬オッズで最終補完
           const rf = refund[rn];
           if (rf) parsed.horses.forEach(h => { const u = parseInt(h.umaBan); if (!(parseFloat(h.odds) > 0) && rf.win[u] > 0) h.odds = String(rf.win[u]); });
           if (withComments) {
@@ -5752,8 +5863,8 @@ async function bulkFetchMonth() {
         await _bulkSleep(400);
       }
     }
-    // first3f自動補完（今回保存分に効く）
-    try { backfillFirst3fFrom1400m(); backfillPaceLabels(); } catch(e) {}
+    // first3f・ペース自動補完（今回保存分に効く）
+    try { backfillFirst3fFrom1400m(); backfillPaceLabels(); backfillPaceType(); } catch(e) {}
     loadSavedData();
     if (typeof initAnalysisDateSelect === 'function') initAnalysisDateSelect();
     _bulkLog(`${_bulkCancel ? '⏹ 中止しました。' : '✅ 完了！'} ${y}年${m}月：<b>${savedR}レース・${savedH}頭</b>を保存${withComments?`（コメント${cmt}件）`:''}${err?`／エラー${err}`:''}`);
@@ -6135,6 +6246,33 @@ function backfillPaceLabels() {
     n++;
   }
   if (n > 0) console.log(`[paceLabels] 自動ペースラベル（基準比）を ${n} レースに付与/更新`);
+  return n;
+}
+
+/** 前後半差(前半3F−上がり3F)からペース(ハイ/ミドル/スロー)を判定 */
+function paceFromDiff(first3f, agari3f) {
+  const f3 = parseFloat(first3f), ag = parseFloat(agari3f);
+  if (isNaN(f3) || isNaN(ag)) return '';
+  const diff = f3 - ag;
+  return diff <= -2.0 ? 'ハイ' : diff <= -0.5 ? 'ミドル' : 'スロー';
+}
+
+/**
+ * ペース(paceType)の自動補完：前半3F＋上がり3FがあるのにpaceTypeが空のレースを
+ * 前後半差から計算して埋める（手入力済みpaceTypeは保持）。表示時のライブ計算に頼らず
+ * 保存データにも持たせることで、一覧表示・分析でペースが一貫して見えるようにする。
+ */
+function backfillPaceType() {
+  let n = 0;
+  for (const [k, v] of Object.entries(lsRead())) {
+    if (!k.startsWith('race_') || (v.baba_code || v.babaCode) !== '31') continue;
+    if (v.pace_type || v.paceType) continue; // 既に値あり（手入力含む）→ 保持
+    const pace = paceFromDiff(v.first3f, v.agari3f_race);
+    if (!pace) continue;
+    lsWrite(k, { ...v, pace_type: pace, paceType: pace });
+    n++;
+  }
+  if (n > 0) console.log(`[paceType] 前後半差ペースを ${n} レースに付与`);
   return n;
 }
 
@@ -12903,7 +13041,8 @@ function runYosoBacktest(raceNo) {
             r.psfS = Math.log(_psfWinAt(_rank + _shift)) + PSF_BETA * r.psfG + PSF_G_COMBO * r.psfCombo + PSF_G_KIN * _kd + PSF_G_WC * r.psfWcM;
           }
         }
-        if (scanRaceData.length >= 2) { scanRaceData._date = raceDate; scanRaceData._rno = rNo; scanData.push(scanRaceData); }
+        // 全馬オッズが揃っているレースのみROI検証対象（勝ち馬のみ補完＝生存者バイアスを排除）
+        if (scanRaceData.length >= 2) { scanRaceData._date = raceDate; scanRaceData._rno = rNo; scanRaceData._fullOdds = scanRaceData.every(c => c.odds != null); scanData.push(scanRaceData); }
         if (scoredOld.length < 2) continue;
         scoredOld.sort((a,b)=>b.score-a.score);
         scoredNew.sort((a,b)=>b.score-a.score);
@@ -13123,7 +13262,7 @@ function runYosoBacktest(raceNo) {
         const _rrRate = (set, jc, mg) => {
           let bet=0, ret=0;
           for (const rc of set) {
-            if (rc.length < 2) continue;
+            if (rc.length < 2 || !rc._fullOdds) continue;
             const s = rc.map(c=>({chaku:c.chaku, odds:c.odds, score:_scoreJM(c,jc,mg)})).sort((a,b)=>b.score-a.score);
             if (s[0].odds == null) continue;
             bet++; if (s[0].chaku===1) ret += s[0].odds*100;
@@ -13133,6 +13272,7 @@ function runYosoBacktest(raceNo) {
         const _rrRateFav = set => {
           let bet=0, ret=0;
           for (const rc of set) {
+            if (!rc._fullOdds) continue;
             const fav = rc.find(c => c.ninki === 1);
             if (!fav || fav.odds == null) continue;
             bet++; if (fav.chaku===1) ret += fav.odds*100;
@@ -13151,7 +13291,7 @@ function runYosoBacktest(raceNo) {
             const tier = out[_confTier(s[0].score - s[1].score)];
             tier.n++;
             if (s[0].chaku <= 3) tier.h3++;
-            if (s[0].odds != null) {
+            if (rc._fullOdds && s[0].odds != null) {
               tier.bet++;
               if (s[0].chaku === 1) { tier.ret += s[0].odds * 100; tier.h1++; }
             }
@@ -13210,7 +13350,7 @@ function runYosoBacktest(raceNo) {
           for (const rc of set) {
             if (rc.length < 2) continue;
             const bi = _mlPick(rc, m);
-            if (rc[bi].odds == null) continue;
+            if (!rc._fullOdds || rc[bi].odds == null) continue;
             bet++; if (rc[bi].chaku === 1) ret += rc[bi].odds * 100;
           }
           return bet > 0 ? ret / bet : null;
@@ -13228,11 +13368,13 @@ function runYosoBacktest(raceNo) {
             let bi=0, bs=-Infinity;
             for (let i=0;i<rc.length;i++){ const s=_scoreJM(rc[i],1,1); if(s>bs){bs=s;bi=i;} }
             const p = rc[bi];
-            const rec = o => { o.n++; if(p.chaku<=3)o.h3++; if(p.odds!=null){o.bet++; if(p.chaku===1){o.ret+=p.odds*100;o.h1++;}} };
+            // ROI(bet/ret)は全馬オッズ判明レースのみ（勝ち馬のみ補完＝生存者バイアス排除）。複勝率(h3)は全レース可
+            const _roiOK = rc._fullOdds && p.odds!=null;
+            const rec = o => { o.n++; if(p.chaku<=3)o.h3++; if(_roiOK){o.bet++; if(p.chaku===1){o.ret+=p.odds*100;o.h1++;}} };
             if (p.ninki===1) rec(out.n1);
             else if (p.ninki!=null && p.ninki<=3) rec(out.n23);
             else if (p.ninki!=null) rec(out.n4p);
-            if (p.odds!=null) {
+            if (_roiOK) {
               if (p.odds<3) rec(out.oLow);
               else if (p.odds<10) rec(out.oMid);
               else rec(out.oHigh);
@@ -13259,7 +13401,7 @@ function runYosoBacktest(raceNo) {
           for (const rc of set) {
             if (rc.length < 2) continue;
             const bi = _pickAnch(rc);
-            if (rc[bi].odds == null) continue;
+            if (!rc._fullOdds || rc[bi].odds == null) continue;
             bet++; if (rc[bi].chaku === 1) ret += rc[bi].odds * 100;
           }
           return bet > 0 ? ret / bet : null;
@@ -13283,7 +13425,7 @@ function runYosoBacktest(raceNo) {
           for (const rc of set) {
             if (rc.length < 2) continue;
             const bi = _pickPctx(rc);
-            if (rc[bi].odds == null) continue;
+            if (!rc._fullOdds || rc[bi].odds == null) continue;
             bet++; if (rc[bi].chaku === 1) ret += rc[bi].odds * 100;
           }
           return bet > 0 ? ret / bet : null;
@@ -13306,7 +13448,7 @@ function runYosoBacktest(raceNo) {
           for (const rc of set) {
             if (rc.length < 2) continue;
             const bi = _pickPsf(rc);
-            if (rc[bi].odds == null) continue;
+            if (!rc._fullOdds || rc[bi].odds == null) continue;
             bet++; if (rc[bi].chaku === 1) ret += rc[bi].odds * 100;
           }
           return bet > 0 ? ret / bet : null;
