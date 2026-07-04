@@ -1121,6 +1121,21 @@ async function renderCyokyo() {
   const honba = works.filter((w) => w.honba && w.t2 != null).sort((a, b) => a.t2 - b.t2);
   const other = works.length - hanro.length - honba.length;
   const finalCell = (w) => `<td>${w.final ? '<span class="badge arrow-up">最終追い</span>' : ''}</td>`;
+  // 坂路の200m毎ラップ（累計t4/t3/t2/t1から算出）＋終いの加速/失速判定
+  const lapCell = (w) => {
+    const L = [];
+    if (w.t4 != null && w.t3 != null) L.push(w.t4 - w.t3);
+    if (w.t3 != null && w.t2 != null) L.push(w.t3 - w.t2);
+    if (w.t2 != null && w.t1 != null) L.push(w.t2 - w.t1);
+    if (w.t1 != null) L.push(w.t1);
+    if (L.length < 2) return '<td></td>';
+    const last = L[L.length - 1], bestEarlier = Math.min(...L.slice(0, -1));
+    const up = last <= bestEarlier + 0.1, down = last >= bestEarlier + 0.5;  // 尻上がり / 終い掛かる
+    const tag = up ? ' <span class="badge conf-S">加速</span>' : down ? ' <span class="badge conf-C">失速</span>' : '';
+    const cls = up ? 'arrow-up' : down ? 'bias-front' : '';
+    const s = L.map((v, k) => k === L.length - 1 ? `<b class="${cls}">${v.toFixed(1)}</b>` : v.toFixed(1)).join('-');
+    return `<td class="small l">${s}${tag}</td>`;
+  };
   const hanroRows = hanro.map((w, i) => `<tr>
     <td>${i + 1}</td>
     <td class="l"><a class="horse-link" data-horse="${esc(w.name)}">${esc(w.name)}</a>${w.pb ? ' <span class="badge arrow-up">自己ベスト</span>' : ''}</td>
@@ -1129,6 +1144,7 @@ async function renderCyokyo() {
     <td class="num ${i < 3 ? 'f1' : ''}">${w.t3.toFixed(1)}</td>
     <td class="num">${w.t2 != null ? w.t2.toFixed(1) : ''}</td>
     <td class="num">${w.t1 != null ? w.t1.toFixed(1) : ''}</td>
+    ${lapCell(w)}
     <td class="num">${hensachi(w.t3) != null ? hensachi(w.t3).toFixed(1) : ''}</td>
     ${finCell(w)}${finalCell(w)}<td class="l">${esc(w.tanpyo || '')}</td>
   </tr>`).join('');
@@ -1155,10 +1171,10 @@ async function renderCyokyo() {
   <div class="card tablewrap">
     <b>坂路（${cyokyoState.date}）</b>
     <table>
-      <tr><th>#</th><th>馬名</th><th>馬齢</th><th>厩舎</th><th>コース</th><th>馬場</th><th>4F</th><th>3F</th><th>2F</th><th>1F</th><th>偏差値</th><th>着順</th><th>最終追い</th><th>短評</th></tr>
-      ${hanroRows || '<tr><td colspan="14">この日の坂路追切はありません</td></tr>'}
+      <tr><th>#</th><th>馬名</th><th>馬齢</th><th>厩舎</th><th>コース</th><th>馬場</th><th>4F</th><th>3F</th><th>2F</th><th>1F</th><th>ラップ(200m毎)</th><th>偏差値</th><th>着順</th><th>最終追い</th><th>短評</th></tr>
+      ${hanroRows || '<tr><td colspan="15">この日の坂路追切はありません</td></tr>'}
     </table>
-    <div class="legend"><span class="sw f"></span> 3F上位3本。偏差値は全期間の坂路3F分布（${hb ? `${hb.mean}±${hb.std}秒・n=${hb.n.toLocaleString()}本` : '-'}）基準・50が平均。着順は各馬の次走結果。<span class="badge arrow-up">最終追い</span>＝その次走前で最後の追切（本馬場を含め最後の1本）。</div>
+    <div class="legend"><span class="sw f"></span> 3F上位3本。偏差値は全期間の坂路3F分布（${hb ? `${hb.mean}±${hb.std}秒・n=${hb.n.toLocaleString()}本` : '-'}）基準・50が平均。着順は各馬の次走結果。<span class="badge arrow-up">最終追い</span>＝その次走前で最後の追切（本馬場を含め最後の1本）。ラップ＝200m毎の実測（累計から算出・左が入り→右が終い）。<span class="badge conf-S">加速</span>＝終いが最速級＝尻上がり／<span class="badge conf-C">失速</span>＝終いが明確に掛かる（入りが速くてもバテ気配）。</div>
   </div>
   ${honba.length ? `<div class="card tablewrap">
     <b>本馬場（${cyokyoState.date}）</b>
