@@ -2437,10 +2437,11 @@ function parseDebaTable(html, raceDate, raceNo, babaCode) {
   const hTexts = (grid[0]||[]).map(cell => (cell?.textContent||'').replace(/\s+/g,''));
   const col = { waku:0, umaBan:1, umaName:2, sexAge:-1, kinryo:-1, jockey:5, trainer:-1, oddsW:6 };
   if (hTexts.length >= 5) {
+    let _nameSet = false;   // 「競走馬」はcolspan=3でヘッダーが重複するため最初の列だけ採用（性齢はこの列に来る）
     hTexts.forEach((t,i) => {
       if (/^枠/.test(t)) col.waku=i;
       else if (/馬番/.test(t)) col.umaBan=i;
-      else if (/競走馬|^馬名/.test(t)) col.umaName=i;
+      else if (/競走馬|^馬名/.test(t)) { if (!_nameSet) { col.umaName=i; _nameSet=true; } }
       else if (/性齢/.test(t)) col.sexAge=i;
       else if (/斤量|負担/.test(t)) col.kinryo=i;
       else if (/騎手/.test(t)) col.jockey=i;                 // 「騎手・調教師」列（騎手を採用）
@@ -2449,42 +2450,54 @@ function parseDebaTable(html, raceDate, raceNo, babaCode) {
     });
   }
 
+  // 各馬は縦5行ブロック（rowspanで枠/馬番/オッズ列が結合）。行の役割：
+  //   [0]馬名/騎手 [1]性齢/負担重量(斤量)+騎乗成績/馬体重 [2]父名/調教師 [3]母名/馬主 [4]母父/生産牧場
+  //   斤量・調教師・性齢はブロックの2・3行目にあるので、先頭行だけでなくブロック全体を読む。
   const horses = [];
-  const seenUmaBan = new Set(); // rowspan再利用による重複を防ぐ
-  for (const row of grid) {
-    if (row.length < 5) continue;
-    const getCT = idx => (idx<0||idx>=row.length)?'':(row[idx]?.textContent||'').replace(/[\r\n\t]+/g,' ').replace(/\s{2,}/g,' ').trim();
-    const getCL = idx => { if(idx<0||idx>=row.length)return''; const a=row[idx]?.querySelector?.('a'); return a?a.textContent.replace(/\s+/g,'').trim():''; };
-    const getCH = idx => { if(idx<0||idx>=row.length)return''; const a=row[idx]?.querySelector?.('a'); return a?a.getAttribute('href')||'':''; };
-    if (!/^\s*[1-8]\s*$/.test(getCT(col.waku))) continue;
-    if (!/^\s*\d+\s*$/.test(getCT(col.umaBan))) continue;
-    const wakuBan = getCT(col.waku).replace(/\s/g,'');
-    const umaBan  = parseInt(getCT(col.umaBan)); if(isNaN(umaBan)) continue;
-    if (seenUmaBan.has(umaBan)) continue; // 重複スキップ
+  const seenUmaBan = new Set();
+  const _txt = (r, idx) => (!r || idx<0 || idx>=r.length) ? '' : (r[idx]?.textContent||'').replace(/[\r\n\t]+/g,' ').replace(/\s{2,}/g,' ').trim();
+  const _nameLink = r => r ? r[col.umaName]?.querySelector?.('a[href*="HorseMarkInfo"], a[href*="lineageLoginCode"], a.horseName') : null;
+  for (let ri = 0; ri < grid.length; ri++) {
+    const row = grid[ri];
+    if (!row || row.length < 5) continue;
+    if (!/^[1-8]$/.test(_txt(row, col.waku).replace(/\s/g,''))) continue;
+    if (!/^\d+$/.test(_txt(row, col.umaBan).replace(/\s/g,''))) continue;
+    const nameA = _nameLink(row);
+    if (!nameA) continue;                                  // 馬の先頭行のみ処理（性齢/父母行はスキップ）
+    const umaBan = parseInt(_txt(row, col.umaBan)); if (isNaN(umaBan) || seenUmaBan.has(umaBan)) continue;
     seenUmaBan.add(umaBan);
-    const horseName = getCL(col.umaName)||getCT(col.umaName).split(' ')[0];
-    if(!horseName||horseName.length<2||/^\d+$/.test(horseName)) continue;
-    const debaHref = getCH(col.umaName);
-    const debaLineage = (debaHref.match(/k_lineageLoginCode=(\d+)/)||['',''])[1];
-    // 性齢：専用列があり性齢トークン(牡3等)を含む時だけ。無ければ空欄（馬名を誤って入れない）
-    let sexAge = col.sexAge>=0 ? getCT(col.sexAge) : '';
-    if (sexAge && !/[牡牝騸セせ]\s*\d{1,2}/.test(sexAge)) sexAge = '';
-    // 斤量：専用列に数値がある時だけ（出馬表には通常なし）
-    const kinryo = col.kinryo>=0 ? ((getCT(col.kinryo).match(/(\d{2}(?:\.\d)?)/)||['',''])[1]) : '';
-    // 騎手：「騎手・調教師」セルの騎手名（所属カッコ・印を除去）
-    let jockey = (getCL(col.jockey)||getCT(col.jockey)).replace(/[（(][^）)]*[）)]/g,'').replace(/^[△▲☆★◇◆○◎▽▼]+/,'').replace(/\s/g,'').trim();
-    // 調教師：出馬表には個別掲載がなく着別成績(戦績)が誤読されるため、専用列がある時だけ・戦績形式は拒否
-    let trainer = col.trainer>=0 ? (getCL(col.trainer)||getCT(col.trainer)).replace(/[（(][^）)]*[）)]/g,'').replace(/\s/g,'').trim() : '';
-    if (/[全左右場距]\d|\d-\d+-\d/.test(trainer)) trainer = '';
-    // オッズ・人気・馬体重：オッズ馬体重列から抽出。馬体重は妥当な体重形式の時だけ採用し、取得できなければ空欄
-    let odds='', ninki='', weight='';
-    if (col.oddsW>=0) {
-      const ow = getCT(col.oddsW).replace(/\s/g,'');
+    const wakuBan = _txt(row, col.waku).replace(/\s/g,'');
+    // ブロック収集（次の馬の先頭行の手前まで）
+    const block = [row];
+    for (let rj = ri+1; rj < grid.length && !_nameLink(grid[rj]); rj++) block.push(grid[rj]);
+    const b = k => block[k] || null;
+
+    const horseName = (nameA.textContent||'').replace(/\s+/g,'').trim();
+    if (!horseName || horseName.length < 2 || /^\d+$/.test(horseName)) continue;
+    const debaLineage = ((nameA.getAttribute('href')||'').match(/k_lineageLoginCode=(\d+)/)||['',''])[1];
+
+    // 騎手：先頭行の騎手・調教師列（1行目＝騎手名。所属カッコ・印を除去）
+    const jkA = row[col.jockey]?.querySelector?.('a');
+    let jockey = ((jkA?.textContent) || _txt(row, col.jockey)).replace(/[（(][^）)]*[）)]/g,'').replace(/^[△▲☆★◇◆○◎▽▼]+/,'').replace(/\s/g,'').trim();
+
+    // 性齢：ブロック2行目のcol.umaName（例「牡7」「セン7」）。騸馬は「セン」の2文字表記
+    let sexAge = ''; { const m = _txt(b(1), col.umaName).match(/(牡|牝|騸|セン|セ)\s*(\d{1,2})/); if (m) sexAge = m[1] + m[2]; }
+
+    // 斤量(負担重量)：ブロック2行目の騎手・調教師列の先頭数値（例「57.0 0-1-0-1」→57.0）
+    let kinryo = ''; { const m = _txt(b(1), col.jockey).match(/(\d{2}(?:\.\d)?)/); if (m && +m[1] >= 40 && +m[1] <= 75) kinryo = m[1]; }
+
+    // 調教師：ブロック3行目の騎手・調教師列（例「國澤輝（高知）」）。所属除去・数値/戦績形式は拒否
+    let trainer = ''; { const trA = b(2)?.[col.jockey]?.querySelector?.('a');
+      trainer = ((trA?.textContent) || _txt(b(2), col.jockey)).replace(/[（(][^）)]*[）)]/g,'').replace(/\s/g,'').trim();
+      if (/[全左右場距]\d|\d-\d|^\d/.test(trainer)) trainer = ''; }
+
+    // オッズ・人気：先頭行のオッズ列（例「17.3 (6人気)」）
+    let odds='', ninki=''; { const ow = _txt(row, col.oddsW).replace(/\s/g,'');
       const om = ow.match(/(\d{1,4}\.\d)/); if (om) odds = om[1];
-      const nm = ow.match(/[(（](\d+)人気[)）]/); if (nm) ninki = nm[1];
-      const wm = ow.match(/(\d{3,4}[(（][+\-]?\d+[)）])/) || ow.match(/(?:^|人気[)）])(\d{3,4})(?![\d.])/);
-      if (wm) weight = wm[1];
-    }
+      const nm = ow.match(/[(（](\d+)人気[)）]/); if (nm) ninki = nm[1]; }
+    // 馬体重：ブロック内オッズ列に妥当な体重(300〜700・任意の増減)が出た時だけ。無ければ空欄（オッズ混入防止）
+    let weight=''; for (const br of block) { const m = _txt(br, col.oddsW).replace(/\s/g,'').match(/(\d{3,4})([(（][+\-]?\d+[)）])?/); if (m && +m[1] >= 300 && +m[1] <= 700) { weight = m[1] + (m[2]||''); break; } }
+
     const savedKey  = `${babaCode}_${raceDate}_${raceNo}_${umaBan}`;
     const savedPace = getSavedHorsePace(savedKey);
     horses.push({
