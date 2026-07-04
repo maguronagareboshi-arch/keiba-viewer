@@ -12785,8 +12785,14 @@ function renderPredictionPanel(raceNo) {
       const dMod  = fmt(s.distMod);
       const tMod  = fmt(s.trendMod);
       const kMod  = fmt(s.comboMod);
-      const rMod  = fmt(s.rotMod);
-      const clMod = fmt(s.classMod);
+      const cnMod = fmt(s.cornMod);   // 脚質補正の実数値（従来はラベルのみで非表示だった）
+      // その他＝総合に効くが列に出ていない補正の合計（ローテ・昇降級・馬体重・上がり・着差・
+      // 勝ち馬強さ・乗替・叩き・コーナー一貫性・相対SI）。画面の丸め値でぴったり合うよう、
+      // 各列の表示値（小数1桁）を引いた残りとして算出＝ SI＋各表示列＋その他＝総合 が目で合う。
+      const _r1 = v => parseFloat(v.toFixed(1));   // 表示と同じ丸め（.05境界のズレ防止）
+      const otherMod = (s.totalScore != null && s.baseScore != null)
+        ? +(_r1(s.totalScore) - _r1(s.baseScore) - _r1(s.condMod) - _r1(s.distMod) - _r1(s.trendMod) - _r1(s.comboMod) - _r1(s.cornMod)).toFixed(1) : null;
+      const oMod = otherMod != null ? fmt(otherMod) : '—';
       const noData = s.siCount === 0;
       const jStatsKnown = !!lookupJockeyStats(s.jockey);
       const transferBadge = s.isEstimatedScore
@@ -12812,7 +12818,8 @@ function renderPredictionPanel(raceNo) {
         <td style="padding:7px 6px;text-align:center;font-size:11px;color:${s.distMod!==0?col(dMod):'#9ca3af'}">${s.distMod!==0?dMod:'—'}</td>
         <td style="padding:7px 6px;text-align:center;font-size:11px;color:${s.siCount>=3?col(tMod):'#9ca3af'}">${s.siCount>=3?tMod:'—'}</td>
         <td style="padding:7px 6px;text-align:center;font-size:11px;color:${s.comboMod!==0?col(kMod):'#9ca3af'}">${s.comboMod!==0?kMod+comboNote:'—'}</td>
-        <td style="padding:7px 6px;text-align:center;font-size:11px">${(()=>{if(s.avg4C==null)return'<span style="color:#9ca3af">—</span>';const a=s.avg4C;const label=a<=2?'<span style="color:#dc2626;font-weight:700">逃げ</span>':a<=3.5?'<span style="color:#d97706;font-weight:700">先行</span>':a<=6?'<span style="color:#374151">中団</span>':'<span style="color:#6b7280">差追</span>';return label+'<br><span style="font-size:9px;color:#9ca3af">avg'+a+'番手</span>';})()}</td>
+        <td style="padding:7px 6px;text-align:center;font-size:11px;color:${s.cornMod!==0?col(cnMod):'#9ca3af'}">${s.cornMod!==0?cnMod:'—'}${(()=>{if(s.avg4C==null)return'';const a=s.avg4C;const label=a<=2?'逃げ':a<=3.5?'先行':a<=6?'中団':'差追';return '<br><span style="font-size:9px;color:#9ca3af">'+label+' '+a+'番</span>';})()}</td>
+        <td style="padding:7px 6px;text-align:center;font-size:11px;color:${otherMod!=null&&otherMod!==0?col(oMod):'#9ca3af'}">${otherMod!=null?(otherMod!==0?oMod:'0.0'):'—'}</td>
         <td style="padding:7px 8px;text-align:center;font-size:15px;font-family:monospace;font-weight:900;color:${s.totalScore!=null?'#7c3aed':'#9ca3af'};background:${s.totalScore!=null&&idx<2?'rgba(124,58,237,.05)':'transparent'}">${ts}</td>
       </tr>`;
     }).join('');
@@ -12828,7 +12835,8 @@ function renderPredictionPanel(raceNo) {
         <th style="padding:6px 6px;text-align:center">距離<br><span style="font-weight:400;font-size:9px">適性</span></th>
         <th style="padding:6px 6px;text-align:center">近況<br><span style="font-weight:400;font-size:9px">トレンド</span></th>
         <th style="padding:6px 6px;text-align:center">厩舎<br><span style="font-weight:400;font-size:9px">コンボ</span></th>
-        <th style="padding:6px 6px;text-align:center">脚質<br><span style="font-weight:400;font-size:9px">参考</span></th>
+        <th style="padding:6px 6px;text-align:center">脚質<br><span style="font-weight:400;font-size:9px">補正</span></th>
+        <th style="padding:6px 6px;text-align:center" title="ローテ・昇降級・馬体重・上がり・着差・勝ち馬強さ・乗替・叩き・コーナー一貫性・相対SI の合計">その他<br><span style="font-weight:400;font-size:9px">補正計</span></th>
         <th style="padding:6px 8px;text-align:center;background:#2d1b69">総合<br><span style="font-weight:400;font-size:9px">スコア</span></th>
       </tr></thead>
       <tbody>${rows}</tbody>
@@ -12962,7 +12970,12 @@ function renderPredictionPanel(raceNo) {
     ${paceBiasBadge}
     <div style="overflow-x:auto;">${tableHtml}</div>
     <div id="yoso-backtest-${raceNo}"></div>
-    <p style="font-size:10px;color:#9ca3af;margin-top:8px">
+    <p style="font-size:10px;color:#374151;margin-top:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:6px 10px;line-height:1.7">
+      <b>総合スコア ＝ SI ＋ 馬場 ＋ 距離 ＋ トレンド ＋ コンボ ＋ 脚質 ＋ その他</b>（この7つを足すと総合になります）。<br>
+      <b>その他</b>＝表に列がない補正の合計：ローテ・昇降級・馬体重・上がり3F・着差・勝ち馬強さ・乗替・叩き・コーナー一貫性・相対SI。<br>
+      <span style="color:#b45309">※「騎手」列は<b>参考値でスコアには加算していません</b></span>（騎手影響は「コンボ＝騎手×厩舎」と「その他内の乗替」で反映）。脚質補正は高知の前有利で差し・追い込みが大きく引かれます。
+    </p>
+    <p style="font-size:10px;color:#9ca3af;margin-top:6px">
       ◎本命 ○対抗 ▲単穴 △連下 ×注意 ／ SIベース＝高知直近10走加重平均（現在レース除外）／ 馬場適性＝SI差分ベース（1走～）／ 距離適性＝SI差分ベース±100m（1走～）＋延長/短縮補正／ 脚質補正＝4コーナー平均通過順→補正値（逃げ+1.5〜差追-1.2、3走以上で有効）：高知実績4C1番手勝率60-75% ／ 騎手ボーナス＝当日騎乗勝率ベース（*=データなし騎手）
     </p>`;
 }
