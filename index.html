@@ -265,6 +265,14 @@ body.dark-mode .rf-x{background:#0d1826!important;color:#4a5e76!important}
 body.dark-mode .rf-none{color:#4a5e76!important}
 body.dark-mode .psf-value-bar{background:#062a33!important;border-color:#0e5a6b!important;color:#7dd3fc!important}
 body.dark-mode .value-bet-bar{background:#3f3506!important;border-color:#a16207!important;color:#fde047!important}
+body.dark-mode .cv-verdict-card{background:#0c2438!important;border-color:#1d4ed8!important;color:#bfdbfe!important}
+body.dark-mode .cv-verdict-card .cv-verdict-title{color:#7dd3fc!important}
+body.dark-mode .cv-verdict-card .cv-verdict-note{color:#94a3b8!important}
+body.dark-mode .cv-sec>summary{background:#1e293b!important;border-color:#334155!important;color:#e2e8f0!important}
+body.dark-mode .cv-sec>summary:hover{background:#334155!important}
+body.dark-mode .cv-sec[open]>summary{background:#0c3a52!important}
+body.dark-mode .cv-sec>summary .cv-sum-verdict{color:#94a3b8!important}
+body.dark-mode .cv-sec-body{border-color:#334155!important}
 body.dark-mode .kv-sp-row>td{border-color:#1e3048!important}
 body.dark-mode .spr-name{color:#e2e8f0!important}
 body.dark-mode .spr-odds{color:#f87171!important}
@@ -991,6 +999,16 @@ const KV_APP_CSS = [
       '.psf-value-bar{margin-bottom:10px;background:#ecfeff;border:1px solid #67e8f9;border-radius:8px;padding:7px 12px;font-size:12px;color:#155e75}',
       '.value-bet-bar{margin-bottom:10px;background:#fefce8;border:1.5px solid #eab308;border-radius:8px;padding:7px 12px;font-size:12px;color:#854d0e;font-weight:600}',
       '.value-bet-bar .vbb-sub{font-size:11px;opacity:.85;font-weight:500}',
+      /* 厳密検証：判定サマリーカード（常時表示）＋実験ごとの折りたたみ見出し */
+      '.cv-verdict-card{margin-top:8px;background:#eef6ff;border:1.5px solid #93c5fd;border-radius:8px;padding:8px 12px;font-size:11px;color:#1e3a5f;line-height:1.9}',
+      '.cv-verdict-card .cv-verdict-title{font-weight:800;color:#0369a1;margin-bottom:2px;font-size:12px}',
+      '.cv-verdict-card .cv-verdict-note{font-size:10px;color:#64748b}',
+      '.cv-sec{margin-top:6px}',
+      '.cv-sec>summary{cursor:pointer;font-size:11px;font-weight:700;padding:6px 10px;background:#f1f5f9;border-radius:6px;border:1px solid #e2e8f0;color:#334155}',
+      '.cv-sec>summary:hover{background:#e2e8f0}',
+      '.cv-sec>summary .cv-sum-verdict{font-weight:600;color:#64748b;font-size:10px}',
+      '.cv-sec[open]>summary{border-radius:6px 6px 0 0;background:#e0f2fe}',
+      '.cv-sec-body{padding:8px 10px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 6px 6px}',
       // PSF履歴タブのサマリーチップ
       '.psf-chip{flex:1;min-width:110px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;text-align:center}',
       '.psf-chip--hl{background:#ecfeff;border-color:#67e8f9}',
@@ -13859,9 +13877,27 @@ function runYosoBacktest(raceNo) {
         } catch(e) { console.warn('[mlWeights]', e); }
         const _sv = window._strictCV;
         const _mark = (a,b)=> a>b?`<span style="color:#15803d;font-weight:700">${a}</span>` : a<b?`<span style="color:#dc2626">${a}</span>` : `${a}`;
-        _strictCvHtml = `<details style="font-size:10px;margin-top:6px">
-          <summary style="cursor:pointer;color:#0369a1;font-weight:700;margin-bottom:6px">🔬 厳密検証：5分割 時系列CV（現行の係数が元係数に勝つか・全て初見データ）</summary>
-          <div style="font-size:10px;color:#6b7280;margin-bottom:5px;line-height:1.6">データを日付で5分割し、各回1つを初見の検証用に。元係数＝旧固定値／現行＝採用中の値（現在は中立×1.0）／再導出＝その回の訓練だけで再チューニング。<b>現行が元係数より高ければ緑</b>。</div>
+        // ── 判定サマリー（折りたたみを開かなくても結論が見えるように） ──
+        const _pcv = v => v != null ? v + '%' : '—';
+        const _mlR2Fails = [];
+        if (rank.mlWins.concord < 4) _mlR2Fails.push(`ペア整合率${rank.mlWins.concord}/5`);
+        if (!(rank.ml.fuku2 >= rank.cur.fuku2)) _mlR2Fails.push(`○複勝${_pcv(rank.ml.fuku2)}＜現行${_pcv(rank.cur.fuku2)}`);
+        if (!(rank.ml.fuku3 >= rank.cur.fuku3)) _mlR2Fails.push(`▲複勝${_pcv(rank.ml.fuku3)}＜現行${_pcv(rank.cur.fuku3)}`);
+        const _mlShort = ml.fullAdopt ? '✅ 二段基準クリア → 重みを保存（ライブ適用）'
+          : ml.adopt ? `⏸ 採用保留：一段目(◎)✅・二段目(印全体)✗（${_mlR2Fails.join('・')}）`
+          : ml.rank2Pass ? `⏸ 採用保留：二段目(印全体)✅・一段目(◎)✗（複勝${ml.fukuWins}/5）`
+          : `❌ 見送り（複勝${ml.fukuWins}/5・1着${ml.winWins}/5）`;
+        const _mlLiveNow = (typeof getMlLiveWeights === 'function' && getMlLiveWeights()) ? '🧠 学習重み適用中' : '手動等倍（従来式）';
+        const _cvVerdictCard = `<div class="cv-verdict-card">
+          <div class="cv-verdict-title">🔬 厳密検証の結論（5分割時系列CV・ウォーム評価${_cvEval.length}R・全て初見データ）</div>
+          <div>🤖 学習重み：<b>${_mlShort}</b>　<span style="color:#64748b">／現在のライブ採点：${_mlLiveNow}</span></div>
+          <div>💰 ◎単勝ROI <b>${_pcv(_rrAvgCur)}</b>（1番人気${_pcv(_rrAvgFav)}・勝ちfold ${_rrWinsFolds}/${_rrFolds.length}）　🎯 帯別：断然${_pcv(tierRR.strong.roi)}／標準${_pcv(tierRR.mid.roi)}／接戦${_pcv(tierRR.tight.roi)}</div>
+          <div class="cv-verdict-note">根拠は下の「🔬 厳密検証」内の各見出しを開く（見出しに結論を併記しています）</div>
+        </div>`;
+        _strictCvHtml = _cvVerdictCard + `<details style="font-size:10px;margin-top:6px">
+          <summary style="cursor:pointer;color:#0369a1;font-weight:700;margin-bottom:6px">🔬 厳密検証：5分割 時系列CV（実験ごとの詳細・全て初見データ）</summary>
+          <details class="cv-sec"><summary>📊 現行係数 vs 元係数 <span class="cv-sum-verdict">— 現行が勝ったfold：1着${_sv.curWinsFolds}/5・複勝${_sv.curFukuFolds}/5</span></summary><div class="cv-sec-body">
+          <div style="font-size:10px;color:#6b7280;margin-bottom:5px;line-height:1.6">データを日付で5分割し、各回1つを初見の検証用に。元係数＝旧固定値／現行＝採用中の値（現在は中立×1.0）。<b>現行が元係数より高ければ緑</b>。</div>
           <div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:10px;width:100%">
             <thead><tr style="background:#1a1a2e;color:#fff">
               <th style="padding:4px 6px">fold</th><th style="padding:4px 6px">元1着</th><th style="padding:4px 6px">現1着</th><th style="padding:4px 6px">元複勝</th><th style="padding:4px 6px">現複勝</th>
@@ -13882,7 +13918,8 @@ function runYosoBacktest(raceNo) {
             </tr></tbody>
           </table></div>
           <div style="font-size:10px;color:#374151;margin-top:5px;line-height:1.6">初見データで現行が元係数に勝ったfold：<b>1着 ${_sv.curWinsFolds}/5・複勝 ${_sv.curFukuFolds}/5</b>。${_sv.curFukuFolds>=4?'<b style="color:#15803d">→ 複勝で頑健に汎化＝再最適化は本物</b>':'<span style="color:#dc2626">→ 汎化が弱い。要再考</span>'}</div>
-          <div style="font-size:10px;font-weight:700;color:#7c3aed;margin-top:10px;margin-bottom:4px">💰 ◎単勝回収率 vs 1番人気ベースライン（fold別・初見データ）</div>
+          </div></details>
+          <details class="cv-sec"><summary>💰 ◎単勝回収率 vs 1番人気 <span class="cv-sum-verdict">— ◎${_pcv(_rrAvgCur)}／人気${_pcv(_rrAvgFav)}（勝ちfold ${_rrWinsFolds}/${_rrFolds.length}）</span></summary><div class="cv-sec-body">
           <div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:10px;width:100%">
             <thead><tr style="background:#1a1a2e;color:#fff">
               <th style="padding:4px 6px">fold</th><th style="padding:4px 6px">1番人気回収率</th><th style="padding:4px 6px">新◎回収率</th>
@@ -13899,7 +13936,8 @@ function runYosoBacktest(raceNo) {
             </tr></tbody>
           </table></div>
           <div style="font-size:10px;color:#374151;margin-top:5px;line-height:1.6">初見データで新◎回収率が1番人気ベースラインに勝ったfold：<b>${_rrWinsFolds}/${_rrFolds.length}</b>。${_rrFolds.length>0 && _rrWinsFolds>=Math.ceil(_rrFolds.length*0.8)?'<b style="color:#15803d">→ 頑健に市場を上回る</b>':'<span style="color:#d97706">→ foldごとのブレが大きく、まだ確信は持てない（オッズ判明レースが少なくサンプル不足の可能性）</span>'}</div>
-          <div style="font-size:10px;font-weight:700;color:#0e7490;margin-top:10px;margin-bottom:4px">🎯 信頼度バッジ別・◎回収率（断然帯だけに絞ったら回収率は上がるか）</div>
+          </div></details>
+          <details class="cv-sec"><summary>🎯 信頼度帯別・◎回収率 <span class="cv-sum-verdict">— 断然${_pcv(tierRR.strong.roi)}／標準${_pcv(tierRR.mid.roi)}／接戦${_pcv(tierRR.tight.roi)}</span></summary><div class="cv-sec-body">
           <div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:10px;width:100%">
             <thead><tr style="background:#1a1a2e;color:#fff">
               <th style="padding:4px 6px;text-align:left">層</th><th style="padding:4px 6px">N（全fold合算）</th><th style="padding:4px 6px">複勝率</th><th style="padding:4px 6px">単勝回収率</th><th style="padding:4px 6px">1番人気超えfold</th>
@@ -13913,7 +13951,8 @@ function runYosoBacktest(raceNo) {
             </tr>`; }).join('')}</tbody>
           </table></div>
           <div style="font-size:10px;color:#374151;margin-top:5px;line-height:1.6">断然帯（◎○のスコア差6以上）のN・foldごとのオッズ判明数が十分か確認のうえで判断してください。層を細かく切るほどfold内サンプルは減り、ノイズも増えます。</div>
-          <div style="font-size:10px;font-weight:700;color:#be185d;margin-top:10px;margin-bottom:4px">🤖 学習重み実験：条件付きロジット vs 現行手動重み（fold別・初見データ）</div>
+          </div></details>
+          <details class="cv-sec"><summary>🤖 学習重み実験（条件付きロジット） <span class="cv-sum-verdict">— ${_mlShort}</span></summary><div class="cv-sec-body">
           <div style="font-size:10px;color:#6b7280;margin-bottom:5px;line-height:1.6">15特徴量（ベースSI＋14補正）の重みを各foldの訓練データだけで機械学習し、初見のテストで現行モデルと比較。<b>採用基準（事前固定）：複勝で4/5以上勝ち かつ 1着平均が現行以上</b>。</div>
           <div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:10px;width:100%">
             <thead><tr style="background:#1a1a2e;color:#fff">
@@ -13955,7 +13994,8 @@ function runYosoBacktest(raceNo) {
             </table></div>
             <div style="font-size:9px;color:#9ca3af;margin-top:3px">×1.00＝現行と同じ重み。ベースSIの係数で正規化した比。太字＝現行から±50%以上乖離。</div>
           </details>
-          <div style="font-size:10px;font-weight:700;color:#b45309;margin-top:10px;margin-bottom:4px">💎 妙味検証：◎とオッズ・人気の関係（モデルと市場の意見が割れたとき儲かるか）</div>
+          </div></details>
+          <details class="cv-sec"><summary>💎 妙味検証（◎の人気帯・オッズ帯別ROI） <span class="cv-sum-verdict">— 2〜3人気${_pcv(value.n23.roi)}／4人気以下${_pcv(value.n4p.roi)}／3〜10倍${_pcv(value.oMid.roi)}</span></summary><div class="cv-sec-body">
           <div style="font-size:10px;color:#6b7280;margin-bottom:5px;line-height:1.6">◎を「市場との一致度」で分けた成績。<b>非1番人気の◎の回収率が高ければ、モデル独自の眼に妙味がある</b>ことになる。注意：オッズは確定値（前売りではない）。</div>
           <div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:10px;width:100%">
             <thead><tr style="background:#1a1a2e;color:#fff">
@@ -13971,7 +14011,8 @@ function runYosoBacktest(raceNo) {
             </tr>`; }).join('')}</tbody>
           </table></div>
           <div style="font-size:10px;color:#374151;margin-top:5px;line-height:1.6">緑背景＝回収率100%超え。Nが小さい層（特に4番人気以下・10倍以上）は数レースの的中で数字が跳ねるので、fold頑健性（右列）とセットで判断すること。</div>
-          <div style="font-size:10px;font-weight:700;color:#0f766e;margin-top:10px;margin-bottom:4px">🧭 馬基準差SI実験：SIの水準補正を馬アンカー方式に置換（fold別・初見データ）</div>
+          </div></details>
+          <details class="cv-sec"><summary>🧭 馬基準差SI実験 <span class="cv-sum-verdict">— ${anch.adopt?'✅基準クリア':'見送り'}（ベースSIに採用済みの方式・参考）</span></summary><div class="cv-sec-body">
           <div style="font-size:10px;color:#6b7280;margin-bottom:5px;line-height:1.6">ベーススコアの馬場差補正だけを馬基準差（同一馬の自己比較）に置き換え、他の補正は現行と完全共通。パラメータ適合なしの固定変種。<b>◎基準は未達だったが、印全体のランキング品質（下の📐）で頑健な改善を示し、2026-07-02にライブモデルのベースSIへ採用済み</b>。この表の「現行」は採用前の旧構成。</div>
           <div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:10px;width:100%">
             <thead><tr style="background:#1a1a2e;color:#fff">
@@ -14001,7 +14042,8 @@ function runYosoBacktest(raceNo) {
               ? `🧭 <b>判定：馬基準差SIが採用基準を満たしました</b>（複勝 ${anch.fukuWins}/5・1着 ${anch.winWins}/5で現行超え）。ライブモデルのSI補正への反映を検討できます。`
               : `🧭 <b>判定：採用見送り</b> — 複勝で現行に勝ったfoldは ${anch.fukuWins}/5（基準4/5）、1着は ${anch.winWins}/5。両方式の馬場差は大半の日でほぼ一致するため、◎の入れ替わり自体が少ない可能性もあります。データが増えたら自動で再判定されます。`}
           </div>
-          <div style="font-size:10px;font-weight:700;color:#9333ea;margin-top:10px;margin-bottom:4px">🌀 展開文脈補正実験：過去走のペース基準比×位置取り（fold別・初見データ）</div>
+          </div></details>
+          <details class="cv-sec"><summary>🌀 展開文脈補正実験 <span class="cv-sum-verdict">— ${paceCtx.adopt?'✅基準クリア':`❌見送り（複勝${paceCtx.fukuWins}/5）`}</span></summary><div class="cv-sec-body">
           <div style="font-size:10px;color:#6b7280;margin-bottom:5px;line-height:1.6">直近3走に「基準比−0.6以下のハイ寄りを先行(1C3内)して3着内」→+0.5（逆境の地力）／「基準比−1.0以下のハイ限定で差し(1C6下)好走」→−0.4（展開ギフト割引）／「基準比−1.0以下のハイで先行して着外」→+0.4（ペース犠牲の免罪：次走複勝35.4% vs スロー潰れ27.7%のEDAより）。<b>採用基準（事前固定）：複勝で4/5以上勝ち かつ 1着平均が現行以上</b>。</div>
           <div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:10px;width:100%">
             <thead><tr style="background:#1a1a2e;color:#fff">
@@ -14031,7 +14073,8 @@ function runYosoBacktest(raceNo) {
               ? `🌀 <b>判定：展開文脈補正が採用基準を満たしました</b>（複勝 ${paceCtx.fukuWins}/5・1着 ${paceCtx.winWins}/5で現行超え）。ライブモデルへの反映を検討できます。`
               : `🌀 <b>判定：採用見送り</b> — 複勝で現行に勝ったfoldは ${paceCtx.fukuWins}/5（基準4/5）、1着は ${paceCtx.winWins}/5。データが増えたら自動で再判定されます。`}
           </div>
-          <div style="font-size:10px;font-weight:700;color:#4338ca;margin-top:10px;margin-bottom:4px">📐 印全体の評価：ランキング品質（◎だけでなく○▲△が正当か・fold平均）</div>
+          </div></details>
+          <details class="cv-sec"><summary>📐 印全体の評価（🧠学習重み列はここ） <span class="cv-sum-verdict">— ペア整合率：学習${_pcv(rank.ml.concord)} vs 現行${_pcv(rank.cur.concord)}（${rank.mlWins.concord}/5）</span></summary><div class="cv-sec-body">
           <div style="font-size:10px;color:#6b7280;margin-bottom:5px;line-height:1.6">◎的中だけでは変種の価値を見落とす（○▲△の改善が測れない）ため、印全体の質を比較。<b>ペア整合率</b>＝任意の2頭でスコア上位が実際に先着した割合（全馬が正当に評価される度合いの最直接指標）。緑＝現行より改善、括弧＝5fold中の勝ち数。</div>
           <div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:10px;width:100%">
             <thead><tr style="background:#1a1a2e;color:#fff">
@@ -14050,7 +14093,8 @@ function runYosoBacktest(raceNo) {
             </tr>`).join('')}</tbody>
           </table></div>
           <div style="font-size:10px;color:#374151;margin-top:5px;line-height:1.6">◎が同じでも○▲△が改善する変種は「印の割り当て」への採用価値がある。ペア整合率と○▲複勝率が4/5以上のfoldで現行を上回っていれば頑健な改善。</div>
-          <div style="font-size:10px;font-weight:700;color:#b91c1c;margin-top:10px;margin-bottom:4px">⚔ PSF対決：Claude設計指数 vs 現行指数（仕様書v1.0・事前登録ルール）</div>
+          </div></details>
+          <details class="cv-sec"><summary>⚔ PSF対決（Claude設計指数 vs 現行） <span class="cv-sum-verdict">— ${psf.primaryWin?'PSF勝利（主判定）':psf.secondaryWin?'PSF勝利（副判定）':'現行の防衛'}</span></summary><div class="cv-sec-body">
           <div style="font-size:10px;color:#6b7280;margin-bottom:5px;line-height:1.6">PSF＝位置取り予測（1C・競合調整）を主役に、位置条件付き地力・実測勝率カーブ・コンボ/斤量/馬体重で構成（17項目→5部品）。定数は実測から凍結・fitなし。<b>主判定＝ペア整合率4/5以上かつ○▲複勝が悪化しない／副判定＝◎基準</b>。</div>
           <div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:10px;width:100%">
             <thead><tr style="background:#1a1a2e;color:#fff">
@@ -14082,6 +14126,7 @@ function runYosoBacktest(raceNo) {
                 ? `⚔ <b>判定：PSFの勝利（副判定＝◎基準クリア）</b> — 複勝${psf.fukuWins}/5・1着平均${psf.winAvg}%≥現行。主判定（📐）は未達：ペア整合率${rank.psfWins.concord}/5。`
                 : `⚔ <b>判定：現行の防衛</b> — 主判定：ペア整合率 ${rank.psfWins.concord}/5（基準4/5）・○複勝 ${rank.psf.fuku2!=null?rank.psf.fuku2+'%':'—'} vs 現行${rank.cur.fuku2!=null?rank.cur.fuku2+'%':'—'}。副判定（◎）：複勝${psf.fukuWins}/5・1着${psf.winWins}/5。上の📐表のPSF列に敗因の内訳。`}
           </div>
+          </div></details>
         </details>`;
       }
 
