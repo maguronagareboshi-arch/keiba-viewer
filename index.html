@@ -277,6 +277,7 @@ body.dark-mode .rf-x{background:#0d1826!important;color:#4a5e76!important}
 body.dark-mode .rf-none{color:#4a5e76!important}
 body.dark-mode .psf-value-bar{background:#062a33!important;border-color:#0e5a6b!important;color:#7dd3fc!important}
 body.dark-mode .value-bet-bar{background:#3f3506!important;border-color:#a16207!important;color:#fde047!important}
+body.dark-mode .danger-fav-bar{background:#2d0000!important;border-color:#b91c1c!important;color:#fca5a5!important}
 body.dark-mode .cv-verdict-card{background:#0c2438!important;border-color:#1d4ed8!important;color:#bfdbfe!important}
 body.dark-mode .cv-verdict-card .cv-verdict-title{color:#7dd3fc!important}
 body.dark-mode .cv-verdict-card .cv-verdict-note{color:#94a3b8!important}
@@ -1011,6 +1012,8 @@ const KV_APP_CSS = [
       '.psf-value-bar{margin-bottom:10px;background:#ecfeff;border:1px solid #67e8f9;border-radius:8px;padding:7px 12px;font-size:12px;color:#155e75}',
       '.value-bet-bar{margin-bottom:10px;background:#fefce8;border:1.5px solid #eab308;border-radius:8px;padding:7px 12px;font-size:12px;color:#854d0e;font-weight:600}',
       '.value-bet-bar .vbb-sub{font-size:11px;opacity:.85;font-weight:500}',
+      '.danger-fav-bar{margin-bottom:10px;background:#fef2f2;border:1.5px solid #dc2626;border-radius:8px;padding:7px 12px;font-size:12px;color:#991b1b;font-weight:600}',
+      '.danger-fav-bar .dfb-sub{font-size:11px;opacity:.85;font-weight:500}',
       /* 厳密検証：判定サマリーカード（常時表示）＋実験ごとの折りたたみ見出し */
       '.cv-verdict-card{margin-top:8px;background:#eef6ff;border:1.5px solid #93c5fd;border-radius:8px;padding:8px 12px;font-size:11px;color:#1e3a5f;line-height:1.9}',
       '.cv-verdict-card .cv-verdict-title{font-weight:800;color:#0369a1;margin-bottom:2px;font-size:12px}',
@@ -3074,6 +3077,7 @@ function renderRaceContent(raceNo) {
         <div class="split-table-area">
           <div class="table-wrapper">
             <div style="display:flex;justify-content:flex-end;gap:8px;padding:6px 8px 4px;">
+              <button type="button" onclick="openCommentSheet(${raceNo})" class="btn btn-secondary btn-sm viewer-ok" title="出走馬全頭の最新コメント10件を一覧表示・PDF/画像で保存">💬 コメント一覧</button>
               <button type="button" id="odds-btn-${raceNo}" onclick="fetchLiveOddsBtn(${raceNo})" class="btn btn-secondary btn-sm viewer-ok" title="公式サイトから単勝オッズ・馬体重を取得（開催日はリアルタイム更新）">💹 オッズ取得</button>
               <button type="button" id="deban-mode-btn-${raceNo}" onclick="toggleDebanMode(${raceNo})" class="btn btn-secondary btn-sm viewer-ok" title="レース前の出馬表と、結果・記録入力用の表を切り替え">📝 記録表示へ</button>
             </div>
@@ -4521,6 +4525,11 @@ function renderAbilityTable(raceNo) {
       const speedIdx  = isKochi ? calcSpeedIndex(tv, r.distance, r.raceClass, rTrackCond, biasForCorr, kr, paceAdj) : null;
       const raceAvgAg = isKochi ? getRaceAvgAgari3f(r.babaCode, r.raceDate, r.raceNo) : null;
       const agariIdx  = isKochi ? calcAgariIndex(agv, raceAvgAg) : null;
+      // 各馬の前半区間タイム（走破−上がり3F）と基準比dev（負=ハイ/正=スロー）。高知のみ。
+      const frontSec = isKochi ? calcFrontSectional(tv, r.agari3f) : null;
+      const frontDev = frontSec != null ? getFrontDev(r.raceDate, r.distance, r.raceClass, rTrackCond, frontSec) : null;
+      const _fdevClr = frontDev == null ? '' : frontDev <= -0.4 ? (isDark?'#f87171':'#dc2626') : frontDev >= 0.4 ? (isDark?'#60a5fa':'#1d4ed8') : (isDark?'#8fa3be':'#94a3b8');
+      const _fdevTxt = frontDev == null ? '' : `${frontDev > 0 ? '+' : ''}${frontDev.toFixed(1)}`;
       // 他場の場合は場名タグを表示
       const venueName = !isKochi && r.babaCode ? getBabaName(r.babaCode) : '';
 
@@ -4600,8 +4609,13 @@ function renderAbilityTable(raceNo) {
           <span style="font-size:10px;font-weight:600;color:${isDark?'#8fa3be':'#475569'};white-space:nowrap;flex-shrink:0;">${fmtWeightDiff(wt)}</span>
         </div>
 
-        <!-- ⑤ 前3F / 後3F (2列) -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;padding:4px 8px 4px;">
+        <!-- ⑤ 前半（馬自身の走破−上がり3F、基準比dev付き）/ 前3F / 後3F -->
+        <div style="display:grid;grid-template-columns:${frontSec != null ? '1fr 1fr 1fr' : '1fr 1fr'};gap:3px;padding:4px 8px 4px;">
+          ${frontSec != null ? `<div style="background:${isDark?'#0d1520':'#f1f5f9'};border-radius:4px;padding:3px 2px;text-align:center;" title="この馬自身の前半区間タイム（走破−上がり3F）。下段は基準比：−=速い(ハイ)/＋=遅い(スロー)">
+            <div style="font-size:7px;color:${isDark?'#8fa3be':'#64748b'};font-weight:700;">前半</div>
+            <div style="font-size:13px;font-family:monospace;font-weight:800;color:${isDark?'#c8d8ec':'#334155'};">${frontSec.toFixed(1)}</div>
+            ${_fdevTxt ? `<div style="font-size:8px;font-family:monospace;font-weight:800;color:${_fdevClr};line-height:1;">${_fdevTxt}</div>` : ''}
+          </div>` : ''}
           <div style="background:${isDark?'#001228':'#eff6ff'};border-radius:4px;padding:3px 2px;text-align:center;">
             <div style="font-size:7px;color:${isDark?'#60a5fa':'#3b82f6'};font-weight:700;">前3F</div>
             <div style="font-size:13px;font-family:monospace;font-weight:800;color:${isDark?'#93c5fd':'#1d4ed8'};">${!isNaN(f3v) ? f3v.toFixed(1) : '—'}</div>
@@ -4875,6 +4889,253 @@ async function exportAbilityImage(raceNo) {
     console.error('[exportAbilityImage]', e);
     alert('画像生成に失敗しました: ' + e.message);
     if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
+  }
+}
+
+// ============================================================
+// 出走馬コメント一覧シート（全頭×最新10件 → PDF/画像）
+// 注: シート内はエクスポート成果物のため意図的に固定ライト配色の
+// インラインstyle（ダークモードでも白背景でキャプチャする）。
+// ============================================================
+
+/** コメント一覧モーダルを開く */
+function openCommentSheet(raceNo) {
+  const data = allRacesData[raceNo];
+  if (!data || !data.horses.length) { alert('レースデータがありません'); return; }
+  const { raceInfo, horses } = data;
+
+  const WBG2 = w => ({'1':'#fff','2':'#111','3':'#c00','4':'#1a5ab8','5':'#e8c800','6':'#18a020','7':'#f05a00','8':'#c080c8'})[String(Math.min(Math.max(parseInt(w)||1,1),8))]||'#888';
+  const WFG2 = w => [1,5,8].includes(parseInt(w)||1)?'#222':'#fff';
+
+  const sorted = [...horses].sort((a,b)=>(parseInt(a.umaBan)||99)-(parseInt(b.umaBan)||99));
+  const cards = sorted.map(h => {
+    const waku = Math.min(Math.max(parseInt(h.wakuBan) || Math.ceil((parseInt(h.umaBan)||1)/2), 1), 8);
+    const hist = getHorseHistory(h.horseName).filter(x => x.postComment && String(x.postComment).trim()).slice(0, 10);
+    const lines = hist.length ? hist.map(x => {
+      const ch = parseInt(x.chakujun);
+      const chBadge = !isNaN(ch)
+        ? `<span style="display:inline-block;min-width:17px;text-align:center;border-radius:3px;font-weight:800;font-size:10px;padding:0 2px;background:${ch===1?'#f59e0b':ch===2?'#94a3b8':ch===3?'#cd7c32':'#e2e8f0'};color:${ch<=3?'#fff':'#475569'};">${ch}</span>`
+        : '<span style="display:inline-block;min-width:17px;text-align:center;font-size:10px;color:#9ca3af;">—</span>';
+      return `<div style="display:flex;align-items:flex-start;gap:6px;padding:2.5px 0;border-bottom:1px dashed #eef2f7;">
+        <span style="font-size:9.5px;color:#64748b;white-space:nowrap;font-family:monospace;flex-shrink:0;padding-top:1px;">${x.raceDate||''}</span>
+        <span style="font-size:9px;color:#94a3b8;white-space:nowrap;flex-shrink:0;padding-top:1px;">${x.raceClass||''}${x.distance?` ${x.distance}`:''}</span>
+        ${chBadge}
+        <span style="font-size:11px;color:#1e293b;line-height:1.45;">${String(x.postComment).trim()}</span>
+      </div>`;
+    }).join('') : '<div style="font-size:11px;color:#9ca3af;padding:4px 0;">保存済みコメントなし</div>';
+    return `<div class="cmt-sheet-card" style="border:1px solid #dde3ef;border-radius:8px;margin-bottom:8px;overflow:hidden;background:#fff;">
+      <div style="display:flex;align-items:center;gap:7px;background:#f1f5f9;border-bottom:1px solid #dde3ef;padding:4px 10px;">
+        <span style="background:${WBG2(waku)};color:${WFG2(waku)};border:${waku===1?'1px solid #aaa':'none'};min-width:19px;height:19px;border-radius:3px;font-size:11px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;">${waku}</span>
+        <span style="font-size:12px;font-weight:800;color:#475569;">${h.umaBan}番</span>
+        <span style="font-size:13.5px;font-weight:900;color:#0f172a;">${h.horseName}</span>
+        ${h.jockey?`<span style="font-size:10.5px;color:#64748b;">${h.jockey}</span>`:''}
+        <span style="margin-left:auto;font-size:9px;color:#94a3b8;">コメント${hist.length}件</span>
+      </div>
+      <div style="padding:4px 10px 6px;">${lines}</div>
+    </div>`;
+  }).join('');
+
+  const title = `${raceInfo.raceDate||''} ${raceNo}R ${raceInfo.raceName||''}（${raceInfo.distance||''}・${raceInfo.raceClass||''}）`;
+  let overlay = document.getElementById('comment-sheet-overlay');
+  if (overlay) closeCommentSheet();
+  overlay = document.createElement('div');
+  overlay.id = 'comment-sheet-overlay';
+  // ダークモードは [style*="background:#fff"] 属性セレクタで!important上書きするため、
+  // シート表示中のみdark-modeクラスを外す（エクスポート成果物は常にライト配色で撮る）。
+  overlay._wasDark = document.body.classList.contains('dark-mode');
+  if (overlay._wasDark) document.body.classList.remove('dark-mode');
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(15,23,42,.55);overflow-y:auto;padding:20px 10px;';
+  overlay.innerHTML = `
+    <div style="max-width:860px;margin:0 auto;">
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:8px;position:sticky;top:0;z-index:1;">
+        <button type="button" id="cmt-pdf-btn" onclick="exportCommentPDF(${raceNo})" style="padding:7px 16px;background:linear-gradient(135deg,#dc2626,#b91c1c);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.3);"><i class="fas fa-file-pdf"></i> PDFで保存</button>
+        <button type="button" id="cmt-img-btn" onclick="exportCommentImage(${raceNo})" style="padding:7px 16px;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.3);"><i class="fas fa-image"></i> 画像で保存</button>
+        <button type="button" id="cmt-x-btn" onclick="exportCommentImageX(${raceNo})" title="Xの圧縮で文字が潰れないよう大きな文字で撮影し、必ず4枚以内に分割して保存（1ポストにそのまま添付可）" style="padding:7px 16px;background:linear-gradient(135deg,#0f172a,#334155);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.3);">𝕏 X用に分割保存（4枚以内）</button>
+        <button type="button" onclick="closeCommentSheet()" style="padding:7px 16px;background:#475569;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.3);"><i class="fas fa-times"></i> 閉じる</button>
+      </div>
+      <div id="comment-sheet-${raceNo}" style="background:#fff;border-radius:10px;padding:14px 16px;box-shadow:0 4px 24px rgba(0,0,0,.35);">
+        <div style="display:flex;align-items:baseline;gap:8px;border-bottom:2px solid #1a56a0;padding-bottom:6px;margin-bottom:10px;">
+          <span style="font-size:15px;font-weight:900;color:#0f172a;">💬 出走馬コメント一覧</span>
+          <span style="font-size:11.5px;font-weight:700;color:#475569;">${title}</span>
+          <span style="margin-left:auto;font-size:9px;color:#94a3b8;">各馬最新10件・高知競馬ビューア</span>
+        </div>
+        ${cards}
+      </div>
+    </div>`;
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeCommentSheet(); });
+  document.body.appendChild(overlay);
+}
+
+/** コメント一覧モーダルを閉じる（開く時に外したdark-modeクラスを復元） */
+function closeCommentSheet() {
+  const ov = document.getElementById('comment-sheet-overlay');
+  if (!ov) return;
+  if (ov._wasDark) document.body.classList.add('dark-mode');
+  ov.remove();
+}
+
+/** コメントシートをキャプチャ（共通） */
+async function _captureCommentCanvas(raceNo, scale) {
+  const target = document.getElementById(`comment-sheet-${raceNo}`);
+  if (!target) throw new Error('コメント一覧が見つかりません');
+  const canvas = await html2canvas(target, { scale: scale || 2, useCORS: true, backgroundColor: '#ffffff', logging: false, scrollY: -window.scrollY });
+  return { canvas, target };
+}
+
+/** 馬カード境界で改ページ/分割位置を計算（canvas px の [y0,y1] 配列を返す）
+ *  「カードiを含めると1ページが溢れる」ならカードiの頭で切る先読み方式。
+ *  1カードがページ超えの場合のみハードスライス。 */
+function _commentPageSlices(canvas, target, pageHpx) {
+  const tTop = target.getBoundingClientRect().top;
+  const pxRatio = canvas.width / target.offsetWidth;
+  const breaks = [...target.querySelectorAll('.cmt-sheet-card')].map(el => (el.getBoundingClientRect().top - tTop) * pxRatio);
+  const cuts = [0];
+  let cur = 0;
+  for (let i = 0; i < breaks.length; i++) {
+    const cardEnd = (i + 1 < breaks.length) ? breaks[i + 1] : canvas.height;
+    if (cardEnd - cur > pageHpx && breaks[i] > cur) { cuts.push(breaks[i]); cur = breaks[i]; }
+  }
+  const slices = [];
+  for (let i = 0; i < cuts.length; i++) {
+    let y = cuts[i];
+    const end = (i + 1 < cuts.length) ? cuts[i + 1] : canvas.height;
+    while (end - y > pageHpx) { slices.push([y, y + pageHpx]); y += pageHpx; }
+    if (end - y > 4) slices.push([y, end]);
+  }
+  return slices;
+}
+
+/** 馬カードの上端オフセット配列（canvas px）＝分割候補の境界。先頭は0（ヘッダ含む）、末尾はcanvas.height。 */
+function _commentCardBounds(canvas, target) {
+  const tTop = target.getBoundingClientRect().top;
+  const pxRatio = canvas.width / target.offsetWidth;
+  const tops = [...target.querySelectorAll('.cmt-sheet-card')].map(el => (el.getBoundingClientRect().top - tTop) * pxRatio);
+  if (!tops.length) return [0, canvas.height];
+  tops[0] = 0;                       // 1枚目にヘッダを含める
+  return tops.concat(canvas.height); // カードn個 → 境界n+1個
+}
+
+/** カード境界だけで k枚以下に「各ページ高さが最も揃う」ように分割（最大ページ高を二分探索で最小化）。 */
+function _balancedSlices(bounds, k) {
+  const m = bounds.length - 1;                 // カード数
+  if (m <= 0) return [[0, bounds[bounds.length - 1]]];
+  const h = i => bounds[i + 1] - bounds[i];
+  const feasible = H => {                       // 最大ページ高Hで何ページ必要か（≤kならOK）
+    let pages = 1, cur = 0;
+    for (let i = 0; i < m; i++) {
+      const ci = h(i);
+      if (cur > 0 && cur + ci > H) { pages++; cur = ci; } else cur += ci;
+      if (pages > k) return false;
+    }
+    return true;
+  };
+  let lo = 0; for (let i = 0; i < m; i++) lo = Math.max(lo, h(i)); // 1カードは分割不可＝下限
+  let hi = bounds[m] - bounds[0];
+  for (let it = 0; it < 45; it++) { const mid = (lo + hi) / 2; if (feasible(mid)) hi = mid; else lo = mid; }
+  const H = hi;
+  const slices = []; let s = 0, cur = 0;
+  for (let i = 0; i < m; i++) {
+    const ci = h(i);
+    if (cur > 0 && cur + ci > H) { slices.push([bounds[s], bounds[i]]); s = i; cur = ci; } else cur += ci;
+  }
+  slices.push([bounds[s], bounds[m]]);
+  return slices;
+}
+
+/** コメント一覧をPDF保存（A4縦・馬カード境界で改ページ） */
+async function exportCommentPDF(raceNo) {
+  const btn = document.getElementById('cmt-pdf-btn');
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 生成中...'; }
+  try {
+    const { canvas, target } = await _captureCommentCanvas(raceNo);
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const margin = 8;
+    const usableW = pdf.internal.pageSize.getWidth() - margin * 2;
+    const usableH = pdf.internal.pageSize.getHeight() - margin * 2;
+    const mmRatio = usableW / canvas.width;                  // canvas px → mm
+    const pageHpx = usableH / mmRatio;                       // 1ページに入るcanvas高
+    const slices = _commentPageSlices(canvas, target, pageHpx);
+    slices.forEach(([y0, y1], i) => {
+      const h = y1 - y0;
+      const c2 = document.createElement('canvas');
+      c2.width = canvas.width; c2.height = h;
+      c2.getContext('2d').drawImage(canvas, 0, y0, canvas.width, h, 0, 0, canvas.width, h);
+      if (i > 0) pdf.addPage();
+      pdf.addImage(c2.toDataURL('image/jpeg', 0.92), 'JPEG', margin, margin, usableW, h * mmRatio);
+    });
+    const rd = (allRacesData[raceNo]?.raceInfo?.raceDate || '').replace(/\//g, '');
+    pdf.save(`comments_${raceNo}R_${rd}.pdf`);
+    if (btn) { btn.innerHTML = '<i class="fas fa-check"></i> 保存完了'; setTimeout(() => { btn.disabled = false; btn.innerHTML = orig; }, 2500); }
+  } catch (e) {
+    console.error('[exportCommentPDF]', e);
+    alert('PDF生成に失敗しました: ' + e.message);
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+
+/** コメント一覧をX(Twitter)用に分割PNG保存。
+ *  Xは長い画像を強制縮小＋JPEG再圧縮するため縦長1枚だと文字が潰れる。
+ *  対策：シートを狭幅(640px)に組み替えて文字を相対的に大きくし、scale3で撮って
+ *  馬カード境界で4:5比率（X表示に最適）の画像に分割する。Xには4枚まで添付可。 */
+async function exportCommentImageX(raceNo) {
+  const btn = document.getElementById('cmt-x-btn');
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 生成中...'; }
+  const target = document.getElementById(`comment-sheet-${raceNo}`);
+  const origW = target ? target.style.width : '';
+  try {
+    if (!target) throw new Error('コメント一覧が見つかりません');
+    target.style.width = '640px';
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); // reflow待ち
+    const { canvas } = await _captureCommentCanvas(raceNo, 3);
+    // まず4:5（幅:高）でXのタイムライン表示に最適な枚数を試し、Xの添付上限4枚を
+    // 超える時だけ「4枚均等分割」に切り替える（1枚が縦長になるが文字解像度は不変＝潰れない）。
+    let slices = _commentPageSlices(canvas, target, canvas.width * 1.25);
+    if (slices.length > 4) slices = _balancedSlices(_commentCardBounds(canvas, target), 4);
+    const rd = (allRacesData[raceNo]?.raceInfo?.raceDate || '').replace(/\//g, '');
+    let i = 0;
+    for (const [y0, y1] of slices) {
+      const h = y1 - y0;
+      const c2 = document.createElement('canvas');
+      c2.width = canvas.width; c2.height = h;
+      const ctx = c2.getContext('2d');
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, c2.width, c2.height);
+      ctx.drawImage(canvas, 0, y0, canvas.width, h, 0, 0, canvas.width, h);
+      const link = document.createElement('a');
+      link.download = `comments_${raceNo}R_${rd}_x${++i}.png`;
+      link.href = c2.toDataURL('image/png');
+      link.click();
+      await new Promise(r => setTimeout(r, 350)); // 連続DLブロック回避
+    }
+    if (btn) { btn.innerHTML = `<i class="fas fa-check"></i> ${slices.length}枚保存`; setTimeout(() => { btn.disabled = false; btn.innerHTML = orig; }, 3000); }
+  } catch (e) {
+    console.error('[exportCommentImageX]', e);
+    alert('X用画像の生成に失敗しました: ' + e.message);
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  } finally {
+    if (target) { target.style.width = origW; }
+  }
+}
+
+/** コメント一覧をPNG画像保存（縦長1枚） */
+async function exportCommentImage(raceNo) {
+  const btn = document.getElementById('cmt-img-btn');
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 生成中...'; }
+  try {
+    const { canvas } = await _captureCommentCanvas(raceNo);
+    const link = document.createElement('a');
+    const rd = (allRacesData[raceNo]?.raceInfo?.raceDate || '').replace(/\//g, '');
+    link.download = `comments_${raceNo}R_${rd}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+    if (btn) { btn.innerHTML = '<i class="fas fa-check"></i> 保存完了'; setTimeout(() => { btn.disabled = false; btn.innerHTML = orig; }, 2500); }
+  } catch (e) {
+    console.error('[exportCommentImage]', e);
+    alert('画像生成に失敗しました: ' + e.message);
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
   }
 }
 
@@ -7755,6 +8016,13 @@ function openHorseModal(horseName, raceNo) {
     const _rAvgAgari  = getRaceAvgAgari3f(h.babaCode, h.raceDate, h.raceNo);
     const _agariIdx   = calcAgariIndex(agVal, _rAvgAgari);
     const _agariHtml  = _agariIdx != null ? agariIndexBadgeHtml(_agariIdx) : '<span style="color:#d1d5db;font-size:10px">—</span>';
+    // 各馬の前半区間タイム（走破−上がり3F）＋基準比dev（負=ハイ/正=スロー）。高知のみ。
+    const _frontSec = h.babaCode === '31' ? calcFrontSectional(h.time, h.agari3f) : null;
+    const _frontDev = _frontSec != null ? getFrontDev(h.raceDate, h.distance, h.raceClass, h.trackCond, _frontSec) : null;
+    const _fdClr = _frontDev == null ? '' : _frontDev <= -0.4 ? '#dc2626' : _frontDev >= 0.4 ? '#1d4ed8' : '#94a3b8';
+    const _frontCell = _frontSec != null
+      ? `${_frontSec.toFixed(1)}${_frontDev != null ? `<div style="font-size:8px;font-weight:800;color:${_fdClr};line-height:1.1">${_frontDev > 0 ? '+' : ''}${_frontDev.toFixed(1)}</div>` : ''}`
+      : '—';
     let rotCell='—';
     if(idx < history.length-1){
       const cur2=new Date(h.raceDate.replace(/\//g,'-'));
@@ -7780,6 +8048,7 @@ function openHorseModal(horseName, raceNo) {
       <td class="col-rank"><span class="chakujun-badge ${cCls(h.chakujun)}" style="font-size:11px;min-width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center">${chaku<900?chaku:'—'}</span></td>
       <td class="col-first3f" style="font-family:monospace;font-weight:700;font-size:10px">${!isNaN(f3Val)?f3Val.toFixed(1):'—'}</td>
       <td class="col-last3f" style="font-family:monospace;font-size:10px">${!isNaN(agVal)?agVal.toFixed(1):'—'}</td>
+      <td class="col-front" style="font-family:monospace;font-size:10px;font-weight:700" title="この馬自身の前半区間タイム（走破−上がり3F）。下段は基準比：−=速い(ハイ)/＋=遅い(スロー)">${_frontCell}</td>
       <td class="col-time" style="font-family:monospace;font-size:10px">${h.time||'—'}</td>
       <td class="col-idx" style="text-align:center;">${_siHtml}</td>
       <td class="col-agari-idx" style="text-align:center;">${_agariHtml}</td>
@@ -7804,7 +8073,9 @@ function openHorseModal(horseName, raceNo) {
         <thead><tr>
           <th class="col-date">日付</th><th class="col-rname">レース名</th><th class="col-cls">クラス</th>
           <th class="col-dist">距離</th><th class="col-track">馬場</th><th class="col-rank">着順</th>
-          <th class="col-first3f">前半3F</th><th class="col-last3f">上がり3F</th><th class="col-time">タイム</th>
+          <th class="col-first3f">前半3F</th><th class="col-last3f">上がり3F</th>
+          <th class="col-front" style="line-height:1.3" title="走破タイム−上がり3F＝残り600m地点までの通過タイム">前半<br><span style="font-size:8px;font-weight:400;opacity:.75;">基準比</span></th>
+          <th class="col-time">タイム</th>
           <th class="col-idx" style="text-align:center;min-width:40px;">指数</th>
           <th class="col-agari-idx" style="text-align:center;min-width:36px;">末指</th>
           <th class="col-weight">馬体重</th><th class="col-pace" style="line-height:1.3;">馬P<br><span style="font-size:8px;font-weight:400;opacity:.75;">R:レース</span></th>
@@ -9413,6 +9684,75 @@ function getRaceAvgF3(babaCode, raceDate, raceNo) {
     : null;
   window._raceAvgF3Cache[cacheKey] = result;
   return result;
+}
+
+/**
+ * 各馬の前半区間タイム（走破タイム − 上がり3F）＝残り600m地点までの通過タイム。
+ * 1300m→700m地点 / 1400m→800m地点 / 1600m→1000m地点。手入力不要で全馬に出せる
+ * （被覆率98.9%・レース内で4角位置と相関0.796を確認済み）。
+ */
+function calcFrontSectional(timeStr, agari3f) {
+  const t = raceTimeToSec(timeStr);
+  const a = parseFloat(agari3f);
+  if (!t || !isFinite(a) || a < 30 || a > 60) return null;
+  const f = t - a;
+  return (f >= 30 && f <= 90) ? +f.toFixed(1) : null;
+}
+
+/**
+ * 前半区間タイムの基準（距離×実効クラス×馬場の平均、n>=30）と当日補正（当日の平均偏差、n>=30）。
+ * dev = 馬の前半 − (基準 + 当日補正)。負=基準より速い（ハイ）／正=遅い（スロー）。高知(31)のみ。
+ * 検証済み（2026-07-04）：逃げ馬はdevが遅いほど粘る（複勝83.0→93.7%）・垂れた逃げ馬は平均−1.23秒。
+ */
+function _buildFrontBaseline() {
+  if (window._frontBaseCache) return window._frontBaseCache;
+  const lsData = lsRead();
+  const raceInfo = {};
+  for (const k of Object.keys(lsData)) {
+    if (!k.startsWith('race_31_')) continue;
+    const r = lsData[k];
+    if (r) raceInfo[`${r.race_date}_${r.race_no}`] = r;
+  }
+  const agg = {}; const rows = [];
+  for (const k of Object.keys(lsData)) {
+    const p = k.split('_');
+    if (p.length !== 4 || p[0] !== '31') continue;
+    const v = lsData[k];
+    if (!v || v.type !== 'horse') continue;
+    const ri = raceInfo[`${p[1]}_${parseInt(p[2])}`];
+    if (!ri) continue;
+    const front = calcFrontSectional(v.time, v.agari3f);
+    if (front == null) continue;
+    const distNum = getDistNum(ri.distance), effCls = getEffectiveClass(ri.race_class);
+    if (!distNum || !effCls) continue;
+    const bk = `${distNum}_${effCls}_${ri.track_cond || '良'}`;
+    if (!agg[bk]) agg[bk] = { n: 0, s: 0 };
+    agg[bk].n++; agg[bk].s += front;
+    rows.push({ d: p[1], bk, front });
+  }
+  const mean = {};
+  for (const bk of Object.keys(agg)) if (agg[bk].n >= 30) mean[bk] = agg[bk].s / agg[bk].n;
+  const day = {};
+  for (const r of rows) {
+    if (mean[r.bk] == null) continue;
+    if (!day[r.d]) day[r.d] = { n: 0, s: 0 };
+    day[r.d].n++; day[r.d].s += r.front - mean[r.bk];
+  }
+  const dayAdj = {};
+  for (const d of Object.keys(day)) if (day[d].n >= 30) dayAdj[d] = day[d].s / day[d].n;
+  window._frontBaseCache = { mean, dayAdj };
+  return window._frontBaseCache;
+}
+
+/** 前半区間タイムの基準比偏差（秒）。負=速い（ハイ）／正=遅い（スロー）。算出不可はnull。 */
+function getFrontDev(raceDate, dist, raceClass, trackCond, frontSec) {
+  if (frontSec == null) return null;
+  const distNum = getDistNum(dist), effCls = getEffectiveClass(raceClass);
+  if (!distNum || !effCls) return null;
+  const { mean, dayAdj } = _buildFrontBaseline();
+  const m = mean[`${distNum}_${effCls}_${trackCond || '良'}`];
+  if (m == null) return null;
+  return +(frontSec - m - (dayAdj[raceDate] || 0)).toFixed(1);
 }
 
 /**
@@ -12945,6 +13285,48 @@ function renderPredictionPanel(raceNo) {
     }
   }
 
+  // ── ⚠️危険な1番人気バッジ（過剰人気検出・表示専用）──
+  //    検証（2026-07-04・1番人気2,386頭）：①手動指数4番手以下②壁馬（同クラス2走以上全て
+  //    4着以下＋下級で好走歴）③前走楽逃げ好走（1角2番手以内・3着内・前半dev+0.8秒以上）の
+  //    いずれか該当で複勝54.3% vs 該当なし78.7%（−24pt・5fold全て劣後・単勝ROI71% vs 83%）。
+  let dangerFavBadge = '';
+  {
+    const _dfH = horses.find(h => parseInt(h.ninki) === 1);
+    const _dfS = _dfH ? scored.find(s => s.horse === _dfH) : null;
+    if (_dfS && scored.length >= 5 && raceInfo.raceDate) {
+      const _dfReasons = [];
+      // ①モデル乖離：手動等倍指数で4番手以下
+      const _manOf2 = s => s.baseScore + s.condMod + s.distMod + s.trendMod + s.comboMod + s.rotMod + s.classMod + s.cornMod + s.weightMod + s.agariMod + s.marginMod + s.winStrMod + s.jockeyChgMod + s.takiMod + s.cornConsistMod + (s.relSIMod || 0);
+      const _dfRank = scored.filter(s => s.totalScore != null && s.baseScore != null)
+        .map(s => ({ s, sc: _manOf2(s) })).sort((a, b) => b.sc - a.sc)
+        .findIndex(x => x.s === _dfS) + 1;
+      if (_dfRank >= 4) _dfReasons.push(`AI評価${_dfRank}番手`);
+      // ②壁馬 ③前走楽逃げ（高知走歴から判定）
+      const _dfHist = getHorseHistoryBefore(_dfH.horseName, raceInfo.raceDate, raceNo).filter(h => h.babaCode === '31');
+      const _clsOrd = c => ({ A: 1, B: 2, C1: 3, C2: 4, C3: 5 })[getEffectiveClass(c)] || null;
+      const _dfCur = _clsOrd(raceInfo.raceClass);
+      if (_dfCur != null && _dfHist.length) {
+        const _l6 = _dfHist.slice(0, 6);
+        const _inC = _l6.filter(h => _clsOrd(h.raceClass) === _dfCur);
+        const _wk  = _l6.filter(h => { const q = _clsOrd(h.raceClass); return q != null && q > _dfCur; });
+        const _chN = h => { const c = parseInt(h.chakujun); return isNaN(c) ? 99 : c; };
+        if (_inC.length >= 2 && _inC.every(h => _chN(h) > 3) && _wk.some(h => _chN(h) <= 3)) _dfReasons.push('昇級の壁（同クラス連続馬券外）');
+      }
+      const _lr = _dfHist[0];
+      if (_lr && parseInt(_lr.chakujun) <= 3) {
+        const _c1 = parseInt(String(_lr.corner || '').split('-')[0]);
+        if (!isNaN(_c1) && _c1 <= 2) {
+          const _fs = calcFrontSectional(_lr.time, _lr.agari3f);
+          const _fd = _fs != null ? getFrontDev(_lr.raceDate, _lr.distance, _lr.raceClass, _lr.trackCond, _fs) : null;
+          if (_fd != null && _fd >= 0.8) _dfReasons.push(`前走は楽逃げ（前半+${_fd.toFixed(1)}秒の恵まれ）`);
+        }
+      }
+      if (_dfReasons.length) {
+        dangerFavBadge = `<div class="danger-fav-bar">⚠️ <b>危険な1番人気：${_dfH.horseName}</b>（${_dfReasons.join('・')}）＝検証でこのタイプの1番人気は複勝54%（通常79%）<span class="dfb-sub">｜2,386Rの実測・5期間全てで劣後</span></div>`;
+      }
+    }
+  }
+
   // 🧠 学習重み適用中の表示（表示のみ・重みが未保存なら何も出さない＝従来式）
   const _mlWNote = getMlLiveWeights();
   const mlNote = _mlWNote
@@ -12980,6 +13362,7 @@ function renderPredictionPanel(raceNo) {
     ${mlNote}
     ${confidenceBadge}
     ${valueBetBadge}
+    ${dangerFavBadge}
     ${paceBiasBadge}
     <div style="overflow-x:auto;">${tableHtml}</div>
     <div id="yoso-backtest-${raceNo}"></div>
@@ -13148,6 +13531,7 @@ function runYosoBacktest(raceNo) {
           // 補正項は全て共通のまま＝置換の効果だけを分離して測る（推定スコア馬は同値）。
           const _siForBTA = h => calcSpeedIndex(h.time, h.distance, h.raceClass, h.trackCond, _anchBiasBT(h.babaCode, h.raceDate), h.kinryo, null);
           const baseA = _isEstimatedBT ? base : (Yoso.baseFromSIList(Yoso.buildSIList(kochiPre, otherPre, _siForBTA).list) ?? base);
+
 
           // 旧: condMod（複勝率ベース・3走以上）
           const selCond = entry.trackCond || raceVal.track_cond || raceVal.trackCond || '良';
