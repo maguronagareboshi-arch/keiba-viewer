@@ -2470,25 +2470,26 @@ function parseDebaTable(html, raceDate, raceNo, babaCode) {
   const horses = [];
   const seenUmaBan = new Set();
   const _txt = (r, idx) => (!r || idx<0 || idx>=r.length) ? '' : (r[idx]?.textContent||'').replace(/[\r\n\t]+/g,' ').replace(/\s{2,}/g,' ').trim();
-  const _nameLink = r => r ? r[col.umaName]?.querySelector?.('a[href*="HorseMarkInfo"], a[href*="lineageLoginCode"], a.horseName') : null;
+  const _linkTxt = (r, idx) => { const a = r?.[idx]?.querySelector?.('a'); return a ? a.textContent.replace(/\s+/g,'').trim() : ''; };
   for (let ri = 0; ri < grid.length; ri++) {
     const row = grid[ri];
     if (!row || row.length < 5) continue;
-    if (!/^[1-8]$/.test(_txt(row, col.waku).replace(/\s/g,''))) continue;
-    if (!/^\d+$/.test(_txt(row, col.umaBan).replace(/\s/g,''))) continue;
-    const nameA = _nameLink(row);
-    if (!nameA) continue;                                  // 馬の先頭行のみ処理（性齢/父母行はスキップ）
-    const umaBan = parseInt(_txt(row, col.umaBan)); if (isNaN(umaBan) || seenUmaBan.has(umaBan)) continue;
-    seenUmaBan.add(umaBan);
-    const wakuBan = _txt(row, col.waku).replace(/\s/g,'');
-    // ブロック収集（次の馬の先頭行の手前まで）
+    const wk = _txt(row, col.waku).replace(/\s/g,''), ub = _txt(row, col.umaBan).replace(/\s/g,'');
+    if (!/^[1-8]$/.test(wk) || !/^\d+$/.test(ub)) continue;
+    const umaBan = parseInt(ub);
+    // 馬番は縦ブロックでrowspan結合され全行に繰り返される→同じ馬番の初出＝馬の先頭行、以降は下段(性齢/父母)。
+    // ※以前は名前リンクのclass/hrefで先頭行判定していたが、一部CORSプロキシがhref/classを書き換えると
+    //   全行で名前リンクが消え「0頭」になっていた。馬番ベースなら書き換えに強い。
+    if (isNaN(umaBan) || seenUmaBan.has(umaBan)) continue;
+    seenUmaBan.add(umaBan);   // 初出で即登録＝以降の同馬番(下段)行は必ずスキップ（父母名を馬名と誤認しない）
+    const wakuBan = wk;
+    const horseName = _linkTxt(row, col.umaName) || _txt(row, col.umaName).split(' ')[0];
+    if (!horseName || horseName.length < 2 || /^\d+$/.test(horseName) || /^(牡|牝|騸|セン|セ)\d/.test(horseName)) continue;
+    // ブロック収集：以降、馬番が同じ連続行（次の馬番になったら終了）
     const block = [row];
-    for (let rj = ri+1; rj < grid.length && !_nameLink(grid[rj]); rj++) block.push(grid[rj]);
+    for (let rj = ri+1; rj < grid.length; rj++) { const nr = grid[rj]; if (!nr || _txt(nr, col.umaBan).replace(/\s/g,'') !== ub) break; block.push(nr); }
     const b = k => block[k] || null;
-
-    const horseName = (nameA.textContent||'').replace(/\s+/g,'').trim();
-    if (!horseName || horseName.length < 2 || /^\d+$/.test(horseName)) continue;
-    const debaLineage = ((nameA.getAttribute('href')||'').match(/k_lineageLoginCode=(\d+)/)||['',''])[1];
+    const debaLineage = ((row[col.umaName]?.querySelector?.('a')?.getAttribute?.('href')||'').match(/k_lineageLoginCode=(\d+)/)||['',''])[1];
 
     // 騎手：先頭行の騎手・調教師列（1行目＝騎手名。所属カッコ・印を除去）
     const jkA = row[col.jockey]?.querySelector?.('a');
