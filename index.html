@@ -18,9 +18,21 @@ body.dark-mode{background:radial-gradient(1100px 700px at 15% -8%,#10203a 0%,#0a
 body.dark-mode .search-card,body.dark-mode .race-header-card,body.dark-mode .saved-card,
 body.dark-mode .loading-area,body.dark-mode .progress-section,body.dark-mode .race-tabs-section,
 body.dark-mode .error-area,body.dark-mode .ana-chart-card,body.dark-mode .ana-chart-card--wide,
-body.dark-mode .deban-section,body.dark-mode .saved-month-group{
+body.dark-mode .deban-section,body.dark-mode .saved-month-group,body.dark-mode .analysis-card{
   background:#111827!important;border-color:#1e3048!important;color:#e2e8f0!important;
   box-shadow:0 2px 16px rgba(0,0,0,.6)!important}
+/* 好走傾向分析パネル（白い枠がダークで明るいままだった長年の残課題を修正） */
+body.dark-mode .analysis-card{border-top:4px solid #7c3aed!important}  /* 紫アクセントは維持 */
+body.dark-mode .analysis-header .section-title{color:#a78bfa!important}
+body.dark-mode .analysis-controls label{color:#8fa3be!important}
+body.dark-mode .ana-summary-card{background:#0d1826!important;border-color:#1e3048!important;color:#e2e8f0!important}
+body.dark-mode .ana-summary-card .ana-sum-label,body.dark-mode .ana-summary-card small,body.dark-mode .ana-sum-sub{color:#8fa3be!important}
+body.dark-mode .ana-sum-value{color:#e8eef7!important}
+body.dark-mode .ana-sum-highlight{background:#1a1533!important;border-color:#7c3aed!important}
+body.dark-mode .ana-class-tabs-wrap{border-bottom-color:#1e3048!important}
+body.dark-mode .ana-class-tab{background:#0d1826!important;color:#8fa3be!important;border-color:#1e3048!important}
+body.dark-mode .ana-class-tab:hover{background:#16233a!important;color:#a8c4e8!important;border-color:#2a3f5f!important}
+body.dark-mode .ana-class-tab.active{background:#1d5fb8!important;color:#fff!important;border-color:transparent!important}
 body.dark-mode .saved-month-header{background:#0d1826!important;color:#38bdf8!important}
 
 /* セクションタイトル・アクセント */
