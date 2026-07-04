@@ -6114,6 +6114,37 @@ function saveDaySettings(baba, date, { memo } = {}) {
   renderTrackTrend();
 }
 
+// ── 🧠 学習重み（条件付きロジット）のライブ配布 ─────────────────
+// 精度検証の5分割CVで二段基準（◎複勝4/5＋1着平均≧現行、ペア整合率4/5＋○▲複勝悪化なし）を
+// 両方クリアしたときだけ、全データで学習した「実効倍率」（base係数=1に正規化した各補正の掛け率）を保存。
+// レース内順位は Σ(w/sd)×x と同値なので、この形なら現行と同じスコア目盛りを保てる
+// （信頼度バッジの閾値2.5/6や💰妙味帯の定義がそのまま使える）。
+// 読み込み優先順：①ローカル再学習（管理者の精度検証で自動保存）→ ②daySettingsセンチネル行
+// （keiba_day_settingsテーブル作成後に自動同期される将来経路）→ ③出荷時定数（デプロイで閲覧者に配布）。
+// 出荷時定数は現在null＝学習重みは無効（従来の等倍和で動作）。
+// 2026-07-04時点の判定：一段目（◎基準）は合格したが、二段目（📐印全体）の▲複勝が
+// −1.0ptで事前登録基準に届かず採用保留。データ追加が落ち着いた時点で精度検証を再実行し、
+// 二段基準を両方クリアすれば自動で保存・有効化される（saveMlLiveWeights経由）。
+// クリア時はこの定数に保存ペイロードを転記してデプロイすると閲覧者にも配布される。
+const KV_ML_WEIGHTS_DEFAULT = null;
+function getMlLiveWeights() {
+  try {
+    const ls = lsRead();
+    for (const rec of [ls['ml_weights_31'], ls['daySettings_31_ml-weights']]) {
+      if (!rec || !rec.memo) continue;
+      const p = JSON.parse(rec.memo);
+      if (p && p.fullAdopt && p.eff) return p;
+    }
+  } catch(e) {}
+  return KV_ML_WEIGHTS_DEFAULT;
+}
+function saveMlLiveWeights(payload) {
+  const memo = JSON.stringify(payload);
+  lsWrite('ml_weights_31', { type: 'mlWeights', memo });
+  // keiba_day_settingsテーブルは現状Supabaseに未作成（upsertは無害に失敗）。作成すれば閲覧者へ自動配布になる。
+  apiUpsert('keiba_day_settings', '31_ml-weights', { baba_code: '31', race_date: 'ml-weights', memo }).catch(() => {});
+}
+
 
 // ── 向正面 × 直線 組み合わせ好走率による SI 補正（日別） ──
 // 同じ開催日・同じ競馬場の全馬を使い、その日のポジション有利不利を計算する
@@ -12478,8 +12509,12 @@ function computeYosoScored(raceNo, selCondOverride) {
     //    厳密5分割CVでは複勝が5分割中1回しか改善せず（枠順と同じ「弱い信号が◎選択でノイズに
     //    負ける」パターン）。ライブモデルには組み込まない（2026-06-30）。
 
+    // 🧠 学習重みが保存済み（二段基準クリア）なら各補正項を実効倍率で合成。なければ従来の等倍和。
+    //    実効倍率はbase係数=1に正規化済みなのでスコアの目盛りは現行と同じ（バッジ閾値がそのまま使える）。
+    const _mlW = getMlLiveWeights();
+    const _eff = k => (_mlW && _mlW.eff[k] != null) ? _mlW.eff[k] : 1;
     const totalScore = baseScore != null
-      ? +(baseScore + condMod + distMod + trendMod + comboMod + rotMod + classMod + cornMod + weightMod + agariMod + marginMod + winStrMod + jockeyChgMod + takiMod + cornConsistMod).toFixed(2)
+      ? +(baseScore + condMod*_eff('condNew') + distMod*_eff('distNew') + trendMod*_eff('trendN') + comboMod*_eff('comboN') + rotMod*_eff('rotN') + classMod*_eff('clsN') + cornMod*_eff('cornN') + weightMod*_eff('weightN') + agariMod*_eff('agariN') + marginMod*_eff('marginN') + winStrMod*_eff('winStrN') + jockeyChgMod*_eff('jockeyChgN') + takiMod*_eff('takiN') + cornConsistMod*_eff('cornConsistN')).toFixed(2)
       : null;
 
     return { horse, jockey, trainer, baseScore, jockeyMod, condMod, distMod, trendMod, comboMod, rotMod, classMod, cornMod, weightMod, agariMod, marginMod, winStrMod, jockeyChgMod, takiMod, cornConsistMod, avg4C, totalScore, siCount: recentSI.length, kochiSICount, isTransfer, isEstimatedScore, jockeyWR };
@@ -12492,9 +12527,12 @@ function computeYosoScored(raceNo, selCondOverride) {
   const _pbPace   = predictRacePaceFromA4C(scored.map(s => s.avg4C), scored.length);
   const _pbFactor = getPaceBiasFactor(_pbMatrix, raceCond, _pbPace);
   if (_pbFactor !== 1) {
+    // 学習重み適用時はcornModのスコア寄与が実効倍率分なので、伸縮もその倍率で行う（整合性）
+    const _pbW = getMlLiveWeights();
+    const _pbEffCorn = (_pbW && _pbW.eff.cornN != null) ? _pbW.eff.cornN : 1;
     scored.forEach(s => {
       if (s.totalScore != null && s.cornMod) {
-        s.totalScore = +(s.totalScore + s.cornMod * (_pbFactor - 1)).toFixed(2);
+        s.totalScore = +(s.totalScore + s.cornMod * _pbEffCorn * (_pbFactor - 1)).toFixed(2);
         s.cornMod    = +(s.cornMod * _pbFactor).toFixed(4);
       }
     });
@@ -12742,40 +12780,58 @@ function renderPredictionPanel(raceNo) {
     const _c0 = scored[0], _c1 = scored[1];
     if (_c0?.totalScore != null && _c1?.totalScore != null) {
       const _gap = +(_c0.totalScore - _c1.totalScore).toFixed(1);
+      // 学習重み適用時はML尺度に分位マッチングした閾値と実測複勝率を使う（未適用時は従来の2.5/6）
+      const _cw = getMlLiveWeights();
+      const _thLo = _cw?.tiers?.c1 ?? 2.5, _thHi = _cw?.tiers?.c2 ?? 6;
+      const _stT = _cw?.tiers?.fukuTight ?? 54, _stS = _cw?.tiers?.fukuStrong ?? 82, _stN = _cw?.tiers?.n ?? 1196;
       let label, color, bg, icon;
-      if (_gap >= 6)        { label = '断然（信頼度高）'; color = '#15803d'; bg = '#f0fdf4'; icon = '🟢'; }
-      else if (_gap < 2.5)  { label = '接戦（僅差・注意）'; color = '#d97706'; bg = '#fffbeb'; icon = '🟡'; }
-      else                  { label = '標準的な差';       color = '#6b7280'; bg = '#f8fafc'; icon = '⚪'; }
+      if (_gap >= _thHi)      { label = '断然（信頼度高）'; color = '#15803d'; bg = '#f0fdf4'; icon = '🟢'; }
+      else if (_gap < _thLo)  { label = '接戦（僅差・注意）'; color = '#d97706'; bg = '#fffbeb'; icon = '🟡'; }
+      else                    { label = '標準的な差';       color = '#6b7280'; bg = '#f8fafc'; icon = '⚪'; }
       confidenceBadge = `
         <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:${bg};border:1px solid ${color}33;border-radius:8px;padding:7px 12px;font-size:12px">
           <span style="font-weight:800;color:${color}">${icon} ${label}</span>
           <span style="color:#475569">◎と○のスコア差 <strong>${_gap>=0?'+':''}${_gap}</strong></span>
-          <span style="margin-left:auto;color:#94a3b8;font-size:10px">高知実績1196R：断然帯◎複勝82% / 接戦帯54%</span>
+          <span style="margin-left:auto;color:#94a3b8;font-size:10px">高知実績${_stN}R：断然帯◎複勝${_stS}% / 接戦帯${_stT}%</span>
         </div>`;
     }
   }
 
-  // ── 💰単勝妙味バッジ（実配当検証：標準帯(差2.5〜6)×◎単勝3〜10倍で単勝ROI 106.6%・5分割中3fold黒字）──
-  //    ◎の並びが「そこそこ自信×買われ過ぎていない中オッズ」に入ったときだけ表示（表示専用・印には影響しない）
+  // ── 💰単勝妙味バッジ（手動等倍指数ベースの妙味検出器・表示専用）──
+  //    妙味は「指数と市場の不一致」から生まれ、学習重みは市場寄りに収束するため、
+  //    妙味判定は印とは独立に従来の手動等倍指数で行う（💎PSFバッジと同じ「別指数のバッジ」方式）。
+  //    検証（全馬オッズ揃い・コールドスタート期除く2025/03以降169R）：手動指数の軸が
+  //    「標準帯(差2.5〜6)×単勝3〜10倍」のとき単勝ROI約101%（全◎平均88%比で+13pt）。
   let valueBetBadge = '';
   {
-    const _v0 = scored[0], _v1 = scored[1];
-    if (_v0?.totalScore != null && _v1?.totalScore != null) {
-      const _vgap = _v0.totalScore - _v1.totalScore;
-      const _vod = parseFloat(_v0.horse?.odds);
+    const _mvArr = scored.filter(s => s.totalScore != null && s.baseScore != null);
+    if (_mvArr.length >= 2) {
+      // 手動等倍スコアの再構成（学習重み適用前の従来totalScoreと同じ合成：15項目＋相対SI・cornModはペース伸縮後）
+      const _manOf = s => s.baseScore + s.condMod + s.distMod + s.trendMod + s.comboMod + s.rotMod + s.classMod + s.cornMod + s.weightMod + s.agariMod + s.marginMod + s.winStrMod + s.jockeyChgMod + s.takiMod + s.cornConsistMod + (s.relSIMod || 0);
+      const _mv = _mvArr.map(s => ({ s, sc: _manOf(s) })).sort((a, b) => b.sc - a.sc);
+      const _vgap = _mv[0].sc - _mv[1].sc;
+      const _vh = _mv[0].s.horse;
+      const _vod = parseFloat(_vh?.odds);
       if (_vgap >= 2.5 && _vgap < 6 && !isNaN(_vod) && _vod >= 3 && _vod < 10) {
-        const _vnin = parseInt(_v0.horse?.ninki);
+        const _isTop = scored[0] && scored[0].horse === _vh;
+        const _vnin = parseInt(_vh?.ninki);
         let _sub = '';
         if (!isNaN(_vnin) && _vnin >= 2) {
           const _favNames = horses
-            .filter(h => { const n = parseInt(h.ninki); return !isNaN(n) && h.horseName !== _v0.horse.horseName; })
+            .filter(h => { const n = parseInt(h.ninki); return !isNaN(n) && h.horseName !== _vh.horseName; })
             .sort((a, b) => parseInt(a.ninki) - parseInt(b.ninki)).slice(0, 2).map(h => h.horseName);
-          if (_favNames.length) _sub = `<span class="vbb-sub">｜＋馬単 ◎→（${_favNames.join('・')}）も可（高分散・ROI約105%）</span>`;
+          if (_favNames.length) _sub = `<span class="vbb-sub">｜＋馬単 ${_vh.horseName}→（${_favNames.join('・')}）も過去検証104%（高分散）</span>`;
         }
-        valueBetBadge = `<div class="value-bet-bar">💰 <b>単勝妙味ゾーン</b>：◎が「標準の自信 × 単勝${_vod.toFixed(1)}倍」＝過去検証で単勝ROI106%の妙味帯${_sub}</div>`;
+        valueBetBadge = `<div class="value-bet-bar">💰 <b>単勝妙味${_isTop ? 'ゾーン' : '：' + _vh.horseName}</b>（手動指数の軸${_isTop ? '＝◎' : '・◎とは別馬'}・単勝${_vod.toFixed(1)}倍）＝検証で単勝ROI約101%の帯（全◎平均88%比+13pt）${_sub}</div>`;
       }
     }
   }
+
+  // 🧠 学習重み適用中の表示（表示のみ・重みが未保存なら何も出さない＝従来式）
+  const _mlWNote = getMlLiveWeights();
+  const mlNote = _mlWNote
+    ? `<div style="margin-bottom:8px;font-size:10px;color:#9ca3af">🧠 学習重み適用中（${_mlWNote.races}R学習・${(_mlWNote.trainedAt || '').slice(0, 10)}）— 精度検証の二段基準クリア済み。補正項を学習済み実効倍率で合成しています。</div>`
+    : '';
 
   container.innerHTML = `
     <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -12803,6 +12859,7 @@ function renderPredictionPanel(raceNo) {
       const _inBand = !isNaN(_po) && _po >= 3 && _po < 10;
       return `<div class="psf-value-bar">💎 <b>PSF妙味：${_pt}</b>（位置構造モデルの単独推し・検証635RでROI112.9%）${!isNaN(_po) ? `｜単勝${_po.toFixed(1)}倍${_inBand ? '＝<b>本域</b>' : '（本域は3〜10倍）'}` : '｜オッズ未取得（本域は3〜10倍）'}</div>`;
     })()}
+    ${mlNote}
     ${confidenceBadge}
     ${valueBetBadge}
     ${paceBiasBadge}
@@ -13592,11 +13649,18 @@ function runYosoBacktest(raceNo) {
         };
 
         const _jcCand=[0.5,0.75,1.0,1.5,2.0], _mgCand=[0.5,0.75,1.0,1.5];
-        const K=5, N=_cvSorted.length, blk=Math.floor(N/K), folds=[];
+        // 評価（テストfold）はウォームスタート領域のみ：データ先頭のレースは参照履歴が薄く、
+        // 全変種が実力と無関係に劣化して比較ノイズになる（実測：妙味セルROIがコールド期48.7%／
+        // ウォーム期100.9%）。ライブ運用は常にウォーム条件なので、テストはウォーム領域から切る。
+        // 訓練には全データを使う（過去情報としては有効）。全変種に対称に適用。
+        const _CV_WARMUP = 400;
+        const _cvEval = _cvSorted.length > _CV_WARMUP + 500 ? _cvSorted.slice(_CV_WARMUP) : _cvSorted;
+        const K=5, N=_cvEval.length, blk=Math.floor(N/K), folds=[];
         for (let k=0;k<K;k++){
           const lo=k*blk, hi=(k===K-1?N:(k+1)*blk);
-          const test=_cvSorted.slice(lo,hi);
-          const train=_cvSorted.slice(0,lo).concat(_cvSorted.slice(hi));
+          const test=_cvEval.slice(lo,hi);
+          const _testSet=new Set(test);
+          const train=_cvSorted.filter(rc => !_testSet.has(rc));
           let bJc=1,bMg=1,bWr=-1;
           for(const jc of _jcCand)for(const mg of _mgCand){const wr=_rate(train,jc,mg,false); if(wr>bWr){bWr=wr;bJc=jc;bMg=mg;}}
           const _rrCur = _rrRate(test,1,1), _rrFav = _rrRateFav(test);
@@ -13627,6 +13691,7 @@ function runYosoBacktest(raceNo) {
             rmPctx: _rankMetrics(test, _scorePctx),
             rmAnch: _rankMetrics(test, _scoreAnch),
             rmPsf: _rankMetrics(test, _scorePsf),
+            rmMl: _rankMetrics(test, c => _mlScore(c, _ml)),  // 学習重みの印全体品質（二段目検証）
             psfWin: +_ratePsf(test, false).toFixed(1),
             psfFuku: +_ratePsf(test, true).toFixed(1),
             rrPsfV: (() => { const v = _rrPsfF(test); return v != null ? +v.toFixed(1) : null; })(),
@@ -13702,15 +13767,17 @@ function runYosoBacktest(raceNo) {
         const RM_KEYS = ['winCap3', 'sanren', 'avgHit', 'fuku2', 'fuku3', 'fuku4', 'concord'];
         const _rmAvg = (src, key) => { const vals = folds.map(f => f[src][key]).filter(v => v != null); return vals.length ? +(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(key === 'avgHit' ? 2 : 1) : null; };
         const _rmWins = (src, key) => folds.filter(f => f[src][key] != null && f.rmCur[key] != null && f[src][key] > f.rmCur[key]).length;
-        const rank = { cur: {}, pctx: {}, anch: {}, psf: {}, pctxWins: {}, anchWins: {}, psfWins: {} };
+        const rank = { cur: {}, pctx: {}, anch: {}, psf: {}, ml: {}, pctxWins: {}, anchWins: {}, psfWins: {}, mlWins: {} };
         for (const _rk of RM_KEYS) {
           rank.cur[_rk]  = _rmAvg('rmCur', _rk);
           rank.pctx[_rk] = _rmAvg('rmPctx', _rk);
           rank.anch[_rk] = _rmAvg('rmAnch', _rk);
           rank.psf[_rk]  = _rmAvg('rmPsf', _rk);
+          rank.ml[_rk]   = _rmAvg('rmMl', _rk);
           rank.pctxWins[_rk] = _rmWins('rmPctx', _rk);
           rank.anchWins[_rk] = _rmWins('rmAnch', _rk);
           rank.psfWins[_rk]  = _rmWins('rmPsf', _rk);
+          rank.mlWins[_rk]   = _rmWins('rmMl', _rk);
         }
 
         // PSF対決の判定（仕様書v1.0の事前登録ルール）
@@ -13738,9 +13805,12 @@ function runYosoBacktest(raceNo) {
           return { key: k, eff: vals.length ? +(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(2) : null };
         });
         const _mlAdopt = _mlFukuWins >= 4 && _mlWinAvg >= _avg('curWin');
+        // 二段目判定（アンカーSI採用時と同じ規律）：ペア整合率4/5以上 かつ ○▲複勝が平均で悪化しない
+        const _mlRank2 = rank.mlWins.concord >= 4 && rank.ml.fuku2 >= rank.cur.fuku2 && rank.ml.fuku3 >= rank.cur.fuku3;
         const ml = {
           winAvg: _mlWinAvg, fukuAvg: _mlFukuAvg, fukuWins: _mlFukuWins, winWins: _mlWinWins,
           rrAvg: _rrAvgMl, effAvg: _mlEffAvg, adopt: _mlAdopt,
+          rank2Pass: _mlRank2, fullAdopt: _mlAdopt && _mlRank2,  // 両段クリアで正式採用資格
           trainWinAvg: _avg('mlTrainWin'), curTrainWinAvg: _avg('curTrainWin'),
         };
         window._strictCV = {
@@ -13752,6 +13822,41 @@ function runYosoBacktest(raceNo) {
           rrAvgCur: _rrAvgCur, rrAvgFav: _rrAvgFav, rrWinsFolds: _rrWinsFolds, rrFoldsN: _rrFolds.length,
           tierRR, ml, value, anch, paceCtx, rank, psf,
         };
+
+        // ── 🧠 ライブ用フル学習＆保存（二段基準を両方クリアした場合のみ・管理者の検証実行で自動更新）──
+        // 全データで1回学習し、base係数=1に正規化した実効倍率としてSupabase(daySettingsセンチネル行)へ配布。
+        // 基準未達の実行では上書きしない（既存の重みが残る）。
+        try {
+          if (ml.fullAdopt && typeof isAdminMode === 'function' && isAdminMode()) {
+            const _mFull = _mlTrain(_cvSorted);
+            const _wbF = _mFull.w[0] / _mFull.sd[0];
+            if (_wbF > 0) {
+              const _effF = {};
+              _mlFeats.forEach((k, f) => { if (f > 0) _effF[k] = +((_mFull.w[f] / _mFull.sd[f]) / _wbF).toFixed(3); });
+              // 信頼度バッジ用のML尺度閾値：手動スケールの帯比率（差<2.5／≥6）を分位マッチングで移植し、
+              // ML採点でのギャップ分布から同じ比率になる境界を求める（＋帯別◎複勝の実測も保存）
+              const _mlScoreEff = c => { let s = c.base; _mlFeats.forEach((k, f) => { if (f > 0) s += (c[k] || 0) * _effF[k]; }); return s; };
+              const _manGaps = [], _mlGapRows = [];
+              for (const rc of _cvEval) {   // 閾値もウォーム領域から導出（ライブ条件の分布に合わせる）
+                if (rc.length < 2) continue;
+                const man = rc.map(c => _scoreJM(c, 1, 1)).sort((a, b) => b - a);
+                _manGaps.push(man[0] - man[1]);
+                const m = rc.map(c => ({ chaku: c.chaku, sc: _mlScoreEff(c) })).sort((a, b) => b.sc - a.sc);
+                _mlGapRows.push({ gap: m[0].sc - m[1].sc, h3: m[0].chaku <= 3 });
+              }
+              const _pTight = _manGaps.filter(g => g < 2.5).length / _manGaps.length;
+              const _pStrong = _manGaps.filter(g => g >= 6).length / _manGaps.length;
+              const _gSorted = _mlGapRows.map(r => r.gap).sort((a, b) => a - b);
+              const _c1t = +_gSorted[Math.floor(_pTight * _gSorted.length)].toFixed(2);
+              const _c2t = +_gSorted[Math.floor((1 - _pStrong) * _gSorted.length)].toFixed(2);
+              const _fkT = pred => { const s = _mlGapRows.filter(pred); return s.length ? +(100 * s.filter(r => r.h3).length / s.length).toFixed(1) : null; };
+              const tiers = { c1: _c1t, c2: _c2t, fukuTight: _fkT(r => r.gap < _c1t), fukuMid: _fkT(r => r.gap >= _c1t && r.gap < _c2t), fukuStrong: _fkT(r => r.gap >= _c2t), n: _mlGapRows.length };
+              saveMlLiveWeights({ eff: _effF, tiers, fullAdopt: true, races: _cvSorted.length, trainedAt: new Date().toISOString(),
+                cv: { mlWin: ml.winAvg, mlFuku: ml.fukuAvg, curWin: _avg('curWin'), curFuku: _avg('curFuku'), concordWins: rank.mlWins.concord } });
+              console.log('[mlWeights] 二段基準クリア → 学習重みを保存', _effF, tiers);
+            }
+          }
+        } catch(e) { console.warn('[mlWeights]', e); }
         const _sv = window._strictCV;
         const _mark = (a,b)=> a>b?`<span style="color:#15803d;font-weight:700">${a}</span>` : a<b?`<span style="color:#dc2626">${a}</span>` : `${a}`;
         _strictCvHtml = `<details style="font-size:10px;margin-top:6px">
@@ -13835,7 +13940,9 @@ function runYosoBacktest(raceNo) {
           </table></div>
           <div style="margin-top:6px;padding:8px 10px;border-radius:8px;font-size:11px;line-height:1.7;${ml.adopt?'background:#f0fdf4;border:1px solid #86efac;color:#166534':'background:#f8fafc;border:1px solid #cbd5e1;color:#475569'}">
             ${ml.adopt
-              ? `🤖 <b>判定：学習重みが採用基準を満たしました</b>（複勝 ${ml.fukuWins}/5・1着 ${ml.winWins}/5で現行超え）。ライブモデルへの反映を検討できます。`
+              ? (ml.fullAdopt
+                ? `🤖 <b>判定：学習重みが二段基準を両方クリア＝正式採用資格</b> — 一段目（◎）：複勝 ${ml.fukuWins}/5・1着 ${ml.winWins}/5。二段目（📐印全体）：ペア整合率 ${rank.mlWins.concord}/5・○複勝 ${rank.ml.fuku2}%（現行${rank.cur.fuku2}%）・▲複勝 ${rank.ml.fuku3}%（現行${rank.cur.fuku3}%）。ライブモデルへの反映を検討できます。`
+                : `🤖 <b>判定：一段目（◎基準）は合格・二段目（📐印全体）は未達で採用保留</b> — ◎：複勝 ${ml.fukuWins}/5・1着 ${ml.winWins}/5。📐：ペア整合率 ${rank.mlWins.concord}/5（基準4/5）・○複勝 ${rank.ml.fuku2!=null?rank.ml.fuku2+'%':'—'} vs 現行${rank.cur.fuku2!=null?rank.cur.fuku2+'%':'—'}・▲複勝 ${rank.ml.fuku3!=null?rank.ml.fuku3+'%':'—'} vs 現行${rank.cur.fuku3!=null?rank.cur.fuku3+'%':'—'}。上の📐表の🧠列に内訳。`)
               : `🤖 <b>判定：採用見送り</b> — 複勝で現行に勝ったfoldは ${ml.fukuWins}/5（基準4/5）、1着は ${ml.winWins}/5。学習訓練内1着 ${ml.trainWinAvg}%（現行 ${ml.curTrainWinAvg}%）。訓練内で勝っていて初見で勝てない場合は過学習、訓練内でも並ぶ場合は「手動重みが既に最適水準」の証拠。`}
           </div>
           <details style="margin-top:5px"><summary style="cursor:pointer;color:#6b7280;font-size:10px">学習された有効スケール（fold平均・現行×1.00との比較）</summary>
@@ -13928,7 +14035,7 @@ function runYosoBacktest(raceNo) {
           <div style="font-size:10px;color:#6b7280;margin-bottom:5px;line-height:1.6">◎的中だけでは変種の価値を見落とす（○▲△の改善が測れない）ため、印全体の質を比較。<b>ペア整合率</b>＝任意の2頭でスコア上位が実際に先着した割合（全馬が正当に評価される度合いの最直接指標）。緑＝現行より改善、括弧＝5fold中の勝ち数。</div>
           <div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:10px;width:100%">
             <thead><tr style="background:#1a1a2e;color:#fff">
-              <th style="padding:4px 6px;text-align:left">指標</th><th style="padding:4px 6px">現行</th><th style="padding:4px 6px">展開補正v2</th><th style="padding:4px 6px">馬基準SI</th><th style="padding:4px 6px">⚔PSF</th>
+              <th style="padding:4px 6px;text-align:left">指標</th><th style="padding:4px 6px">現行</th><th style="padding:4px 6px">展開補正v2</th><th style="padding:4px 6px">馬基準SI</th><th style="padding:4px 6px">⚔PSF</th><th style="padding:4px 6px">🧠学習重み</th>
             </tr></thead>
             <tbody>${[
               ['winCap3', '勝ち馬が◎○▲内', '%'], ['sanren', '3連複（上位3頭=1-3着）', '%'], ['avgHit', '上位3頭の平均的中頭数', '頭'],
@@ -13939,6 +14046,7 @@ function runYosoBacktest(raceNo) {
               <td style="padding:4px 6px;text-align:center">${rank.pctx[key] != null ? _mark(rank.pctx[key], rank.cur[key]) + unit + ` <span style="color:#9ca3af">(${rank.pctxWins[key]}/5)</span>` : '—'}</td>
               <td style="padding:4px 6px;text-align:center">${rank.anch[key] != null ? _mark(rank.anch[key], rank.cur[key]) + unit + ` <span style="color:#9ca3af">(${rank.anchWins[key]}/5)</span>` : '—'}</td>
               <td style="padding:4px 6px;text-align:center">${rank.psf[key] != null ? _mark(rank.psf[key], rank.cur[key]) + unit + ` <span style="color:#9ca3af">(${rank.psfWins[key]}/5)</span>` : '—'}</td>
+              <td style="padding:4px 6px;text-align:center">${rank.ml[key] != null ? _mark(rank.ml[key], rank.cur[key]) + unit + ` <span style="color:#9ca3af">(${rank.mlWins[key]}/5)</span>` : '—'}</td>
             </tr>`).join('')}</tbody>
           </table></div>
           <div style="font-size:10px;color:#374151;margin-top:5px;line-height:1.6">◎が同じでも○▲△が改善する変種は「印の割り当て」への採用価値がある。ペア整合率と○▲複勝率が4/5以上のfoldで現行を上回っていれば頑健な改善。</div>
