@@ -264,6 +264,7 @@ body.dark-mode .rf-o{background:#1e2a3a!important;color:#8fa3be!important}
 body.dark-mode .rf-x{background:#0d1826!important;color:#4a5e76!important}
 body.dark-mode .rf-none{color:#4a5e76!important}
 body.dark-mode .psf-value-bar{background:#062a33!important;border-color:#0e5a6b!important;color:#7dd3fc!important}
+body.dark-mode .value-bet-bar{background:#3f3506!important;border-color:#a16207!important;color:#fde047!important}
 body.dark-mode .kv-sp-row>td{border-color:#1e3048!important}
 body.dark-mode .spr-name{color:#e2e8f0!important}
 body.dark-mode .spr-odds{color:#f87171!important}
@@ -851,8 +852,6 @@ const KV_APP_CSS = [
       'body.public-mode .search-btns .btn:not(.viewer-ok){pointer-events:none!important;opacity:.4!important}',
       'body.public-mode .url-input-row .btn:not(.viewer-ok){pointer-events:none!important;opacity:.4!important}',
       /* 非管理者バナー */
-      '.public-mode-bar{display:none;position:sticky;top:60px;z-index:99;background:linear-gradient(90deg,#fef3c7,#fef9ee);border-bottom:2px solid #fbbf24;padding:7px 16px;font-size:12px;color:#92400e;font-weight:600;align-items:center;gap:8px}',
-      'body.public-mode .public-mode-bar{display:flex}',
       /* 案4: 閲覧モードではペース入力エリアを完全非表示 */
       'body.public-mode .admin-input-wrap{display:none!important}',
       /* 管理者モード: ペース入力エリア折りたたみ */
@@ -990,6 +989,8 @@ const KV_APP_CSS = [
       // 💎PSF妙味バッジ（位置構造モデルの単独推し表示・印には影響しない）
       '.psf-badge{margin-left:3px;font-size:12px;vertical-align:middle;cursor:help}',
       '.psf-value-bar{margin-bottom:10px;background:#ecfeff;border:1px solid #67e8f9;border-radius:8px;padding:7px 12px;font-size:12px;color:#155e75}',
+      '.value-bet-bar{margin-bottom:10px;background:#fefce8;border:1.5px solid #eab308;border-radius:8px;padding:7px 12px;font-size:12px;color:#854d0e;font-weight:600}',
+      '.value-bet-bar .vbb-sub{font-size:11px;opacity:.85;font-weight:500}',
       // PSF履歴タブのサマリーチップ
       '.psf-chip{flex:1;min-width:110px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;text-align:center}',
       '.psf-chip--hl{background:#ecfeff;border-color:#67e8f9}',
@@ -1181,13 +1182,6 @@ const KV_APP_CSS = [
   </div>
 </div>
 
-<!-- パブリックモードバナー（非管理者時に表示） -->
-<div class="public-mode-bar">
-  <i class="fas fa-eye"></i>
-  閲覧モード — 数値・ポジションの入力は管理者のみ可能です
-  <button onclick="openAdminLogin()" style="margin-left:auto;background:#f59e0b;color:#fff;border:none;border-radius:6px;padding:3px 12px;font-size:11px;font-weight:700;cursor:pointer"><i class="fas fa-lock"></i> 管理者ログイン</button>
-</div>
-
 <main class="app-main">
 
 <!-- ページ: 検索 -->
@@ -1229,13 +1223,6 @@ const KV_APP_CSS = [
           <button class="btn btn-sm admin-only" onclick="fetchAllComments()" style="background:#0e7490;color:#fff;border:none;border-radius:6px;padding:9px 14px;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:5px;font-weight:600;" title="取得済み全レースのコメントをまとめて取得（管理者のみ）"><i class="fas fa-comments"></i> 全レースコメント一括取得</button>
         </div>
       </div>
-      <div class="direct-url-area">
-        <label>または keiba.go.jp の URL を直接貼り付け <span style="background:#e0f0ff;color:#1a56a0;font-size:11px;padding:1px 7px;border-radius:10px;font-weight:700">RaceMarkTable（競走成績）も DebaTable（出馬表）も自動判別</span></label>
-        <div class="url-input-row">
-          <input type="text" id="direct-url" class="form-input url-input" placeholder="RaceMarkTable または DebaTable の URL を貼り付け...">
-          <button class="btn btn-secondary viewer-ok" onclick="parseAndFetchUrl()"><i class="fas fa-link"></i> URLから取得</button>
-        </div>
-      </div>
     </div>
   </section>
 
@@ -1248,6 +1235,7 @@ const KV_APP_CSS = [
       <label style="display:flex;align-items:center;gap:5px;font-size:13px;color:#374151;cursor:pointer"><input type="checkbox" id="bulk-comments" checked style="width:15px;height:15px;accent-color:#1a56a0"> コメントも取得</label>
       <button type="button" id="bulk-start-btn" class="btn btn-primary" onclick="bulkFetchMonth()"><i class="fas fa-cloud-download-alt"></i> この月を一括取得＆保存</button>
       <button type="button" id="rakuten-odds-btn" class="btn btn-secondary" onclick="backfillOddsFromRakuten()"><i class="fas fa-yen-sign"></i> 保存済のオッズ欠損を楽天で補完</button>
+      <button type="button" id="payout-backfill-btn" class="btn btn-secondary" onclick="backfillPayouts()"><i class="fas fa-coins"></i> 連系配当を取得（馬連/馬単/ワイド/3連複/3連単）</button>
       <button type="button" id="bulk-cancel-btn" class="btn btn-secondary hidden" onclick="bulkCancel()"><i class="fas fa-stop"></i> 中止</button>
     </div>
     <p style="font-size:11px;color:#9ca3af;margin:-4px 0 8px;line-height:1.6">※「楽天で補完」は再取得せず、既に保存したレースの<b>空欄オッズだけ</b>を楽天競馬から埋めます。keiba.go.jpが消した古いレースの全馬オッズもこれで復元できます。</p>
@@ -5790,6 +5778,103 @@ async function backfillOddsFromRakuten() {
     _savedGroupsDirty = true;
     loadSavedData();
     _bulkLog(`${_bulkCancel ? '⏹ 中止しました。' : '✅ 完了！'} 欠損 ${targets.length}レースを確認し <b>${filled}頭のオッズ</b>を楽天から補完しました（${hitRaces}レース更新${err ? `／エラー${err}` : ''}）。`);
+  } finally {
+    if (btn) btn.disabled = false;
+    if (cancelBtn) cancelBtn.classList.add('hidden');
+  }
+}
+
+/**
+ * 払戻ページ(RefundMoneyList)から日別・全馬券種の配当と当たり組合せを取得する。
+ * keiba.go.jpの払戻はオッズと違い古いレースでも保持されるため、連系ROI検証の配当源に使える。
+ * ページ構造は1レース=3テーブル：着順 / 単勝〜馬連複 / 馬連単〜三連単（UTF-8・券種ラベルそのまま）。
+ * 戻り値: { raceNo: { tan, fuku:[], umaren, umatan, wide:[], san3, san3tan } }
+ *   各値は { combo:[馬番…], pay:配当円 }（単勝/複勝は uma:馬番）。
+ */
+async function _fetchRefundPayoutsDay(date) {
+  const out = {};
+  let html;
+  try { html = await fetchHtmlWithProxy(`https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/RefundMoneyList?k_raceDate=${encodeURIComponent(date)}&k_babaCode=31`, 15000); }
+  catch(e) { return out; }
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const heads = [...doc.querySelectorAll('h1,h2,h3,h4')].map(e => e.textContent.replace(/\s+/g, '')).filter(t => /^\d{1,2}R/.test(t)).map(t => parseInt(t));
+  const tables = [...doc.querySelectorAll('table')];
+  const parseCombo = s => (s || '').split(/[\-－~〜]/).map(x => parseInt(x)).filter(n => !isNaN(n));
+  const parsePay = s => { const n = parseFloat((s || '').replace(/[円,]/g, '')); return n > 0 ? n : null; };
+  let raceIdx = -1;
+  for (const t of tables) {
+    const first = (t.querySelector('th,td')?.textContent || '').replace(/\s+/g, '');
+    if (first === '着順') { raceIdx++; continue; }
+    if (first !== '単勝' && first !== '馬連単') continue; // 払戻テーブルは単勝始まり(左)か馬連単始まり(右)
+    const rno = heads[raceIdx];
+    if (rno == null) continue;
+    const rec = out[rno] || { wide: [] };
+    let mode = '';
+    for (const tr of [...t.querySelectorAll('tr')]) {
+      const c = [...tr.querySelectorAll('th,td')].map(x => (x.textContent || '').replace(/\s+/g, ''));
+      if (!c.length) continue;
+      if (c[0]) mode = c[0];
+      const pay = parsePay(c[2]);
+      if (pay == null) continue;
+      const combo = c[1] || '';
+      if (mode === '単勝') rec.tan = { uma: parseInt(combo), pay };
+      else if (mode === '複勝') (rec.fuku = rec.fuku || []).push({ uma: parseInt(combo), pay });
+      else if (mode === '馬連複') rec.umaren = { combo: parseCombo(combo), pay };
+      else if (mode === '馬連単') rec.umatan = { combo: parseCombo(combo), pay };
+      else if (mode === 'ワイド') rec.wide.push({ combo: parseCombo(combo), pay });
+      else if (mode === '三連複') rec.san3 = { combo: parseCombo(combo), pay };
+      else if (mode === '三連単') rec.san3tan = { combo: parseCombo(combo), pay };
+      // 枠連複/枠単は枠番なので採用しない
+    }
+    out[rno] = rec;
+  }
+  return out;
+}
+
+/**
+ * 保存済みの高知レース日について、全馬券種の配当をまとめて取得しローカルに保存する（管理者専用）。
+ * 連系ROI検証(②)用のデータ収集。payoutレコードはローカルのみ（配当は検証用途でSupabase同期不要）。
+ * キー: payout_31_{date}_{rno}
+ */
+async function backfillPayouts() {
+  if (!isAdminMode()) { alert('配当バックフィルは管理者のみ可能です。'); return; }
+  const btn = document.getElementById('payout-backfill-btn');
+  const cancelBtn = document.getElementById('bulk-cancel-btn');
+  _bulkCancel = false;
+  if (btn) btn.disabled = true;
+  if (cancelBtn) cancelBtn.classList.remove('hidden');
+  _proxyHealth.forEach(h => { h.blockedUntil = 0; });
+  try {
+    const lsData = lsRead();
+    // 高知の保存済みレース日を収集（配当未取得の日を優先）
+    const dateHas = {};   // date -> 既にpayout保存済みのレース数
+    const dateRaces = {}; // date -> 保存済みレース数
+    for (const [k, v] of Object.entries(lsData)) {
+      if ((v.type === 'race' || k.startsWith('race_')) && v.baba_code === '31' && v.race_date) {
+        dateRaces[v.race_date] = (dateRaces[v.race_date] || 0) + 1;
+      } else if (v.type === 'payout' && v.baba_code === '31' && v.race_date) {
+        dateHas[v.race_date] = (dateHas[v.race_date] || 0) + 1;
+      }
+    }
+    // まだ全レース分の配当が揃っていない日だけ対象に
+    const dates = Object.keys(dateRaces).filter(d => (dateHas[d] || 0) < dateRaces[d]).sort((a, b) => b.localeCompare(a));
+    if (!dates.length) { _bulkLog('✅ 未取得の配当はありません（全日取得済み）。'); return; }
+    let doneDays = 0, savedR = 0, err = 0;
+    for (let i = 0; i < dates.length && !_bulkCancel; i++) {
+      const date = dates[i];
+      _bulkLog(`<i class="fas fa-coins"></i> 配当取得 ${date} …<br><span style="font-size:11px;color:#6b7280">進捗 ${i + 1}/${dates.length}日／保存 ${savedR}R・エラー${err}</span>`);
+      let day = {};
+      try { day = await _fetchRefundPayoutsDay(date); } catch(e) { err++; }
+      const rnos = Object.keys(day);
+      if (!rnos.length) err++;
+      for (const rno of rnos) {
+        lsWrite(`payout_31_${date}_${rno}`, { type: 'payout', race_date: date, race_no: parseInt(rno), baba_code: '31', ...day[rno], savedAt: new Date().toISOString() });
+        savedR++;
+      }
+      doneDays++;
+      await _bulkSleep(350);
+    }
+    _bulkLog(`${_bulkCancel ? '⏹ 中止しました。' : '✅ 完了！'} ${doneDays}日・<b>${savedR}レースの配当</b>を保存しました${err ? `／取得できなかった日 ${err}` : ''}。`);
   } finally {
     if (btn) btn.disabled = false;
     if (cancelBtn) cancelBtn.classList.add('hidden');
@@ -12670,6 +12755,28 @@ function renderPredictionPanel(raceNo) {
     }
   }
 
+  // ── 💰単勝妙味バッジ（実配当検証：標準帯(差2.5〜6)×◎単勝3〜10倍で単勝ROI 106.6%・5分割中3fold黒字）──
+  //    ◎の並びが「そこそこ自信×買われ過ぎていない中オッズ」に入ったときだけ表示（表示専用・印には影響しない）
+  let valueBetBadge = '';
+  {
+    const _v0 = scored[0], _v1 = scored[1];
+    if (_v0?.totalScore != null && _v1?.totalScore != null) {
+      const _vgap = _v0.totalScore - _v1.totalScore;
+      const _vod = parseFloat(_v0.horse?.odds);
+      if (_vgap >= 2.5 && _vgap < 6 && !isNaN(_vod) && _vod >= 3 && _vod < 10) {
+        const _vnin = parseInt(_v0.horse?.ninki);
+        let _sub = '';
+        if (!isNaN(_vnin) && _vnin >= 2) {
+          const _favNames = horses
+            .filter(h => { const n = parseInt(h.ninki); return !isNaN(n) && h.horseName !== _v0.horse.horseName; })
+            .sort((a, b) => parseInt(a.ninki) - parseInt(b.ninki)).slice(0, 2).map(h => h.horseName);
+          if (_favNames.length) _sub = `<span class="vbb-sub">｜＋馬単 ◎→（${_favNames.join('・')}）も可（高分散・ROI約105%）</span>`;
+        }
+        valueBetBadge = `<div class="value-bet-bar">💰 <b>単勝妙味ゾーン</b>：◎が「標準の自信 × 単勝${_vod.toFixed(1)}倍」＝過去検証で単勝ROI106%の妙味帯${_sub}</div>`;
+      }
+    }
+  }
+
   container.innerHTML = `
     <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <span style="font-size:13px;font-weight:700;color:#374151"><i class="fas fa-star" style="color:#d97706;margin-right:4px"></i>予想AI</span>
@@ -12697,6 +12804,7 @@ function renderPredictionPanel(raceNo) {
       return `<div class="psf-value-bar">💎 <b>PSF妙味：${_pt}</b>（位置構造モデルの単独推し・検証635RでROI112.9%）${!isNaN(_po) ? `｜単勝${_po.toFixed(1)}倍${_inBand ? '＝<b>本域</b>' : '（本域は3〜10倍）'}` : '｜オッズ未取得（本域は3〜10倍）'}</div>`;
     })()}
     ${confidenceBadge}
+    ${valueBetBadge}
     ${paceBiasBadge}
     <div style="overflow-x:auto;">${tableHtml}</div>
     <div id="yoso-backtest-${raceNo}"></div>
