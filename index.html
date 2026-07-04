@@ -1802,7 +1802,9 @@ async function fetchHtmlWithProxy(url, timeout = 12000) {
     if (RATE_LIMIT_RE.test(html)) { _blockProxy(makeProxy, 90000); throw new Error('content_blocked'); }
     return html;
   }));
-  const WAITS = [3000, 8000, 15000];
+  // 全プロキシ失敗時のリトライ待機。以前は3+8+15＝最大26秒で「時々止まる」原因だった。
+  // 短縮＋段数削減で最大待機を約9秒に。先頭は自前Cloudflare Worker(無制限)なので通常は初回で成功する。
+  const WAITS = [1200, 3000, 5000];
   for (let i = 0; i <= WAITS.length; i++) {
     try { return await tryAll(timeout); } catch(e) {
       if (i === WAITS.length) throw e;
@@ -5674,17 +5676,19 @@ async function _saveRaceDirect(date, baba, rn, parsed) {
   if (!info.paceType) { const p = paceFromDiff(info.first3f, info.agari3f_race); if (p) info.paceType = p; }
   const raceId = `race_${baba}_${date}_${rn}`;
   const raceRow = { race_date:date, race_no:rn, baba_code:baba, race_name:info.raceName||'', distance:info.distance||'', race_class:info.raceClass||'', track_cond:info.trackCond||'', first3f:info.first3f||'', agari4f:info.agari4f||'', agari3f_race:info.agari3f_race||'', pace_type:info.paceType||'', memo:info.memo||'', lap_times:'' };
-  await apiUpsert('keiba_races', raceId, raceRow);
+  // Supabase書き込みは全馬分をまとめて並列実行（逐次awaitだと1レース12往復＝一括取得最大のボトルネック）
+  const _jobs = [ apiUpsert('keiba_races', raceId, raceRow) ];
   lsWrite(raceId, { type:'race', ...raceRow, paceType:info.paceType||'', lapTimes:null, _apiSaved:true, savedAt:new Date().toISOString() });
   let hc = 0;
   for (const h of (parsed.horses||[])) {
     if (h.umaBan == null) continue;
     const horseId = `${baba}_${date}_${rn}_${h.umaBan}`;
     const horseRow = { race_date:date, race_no:rn, baba_code:baba, uma_ban:h.umaBan, waku_ban:h.wakuBan||'', horse_name:h.horseName||'', belong:h.belong||'', sex_age:h.sexAge||'', kinryo:h.kinryo||'', jockey:h.jockey||'', trainer:h.trainer||'', weight:h.weight||'', chakujun:h.chakujun||'', ninki:h.ninki||'', odds:h.odds||'', time:h.time||'', diff:h.diff||'', agari3f:h.agari3f||'', corner:h.corner||'', first3f:h.first3f||'', pace_type:h.paceType||'', mukae_shoumen:h.mukaeShoumen||'', shoumen_straight:h.shoumenStraight||'', post_comment:h.postComment||'', lineage_login_code:h.lineageLoginCode||'' };
-    await apiUpsert('keiba_horses', horseId, horseRow);
+    _jobs.push(apiUpsert('keiba_horses', horseId, horseRow));
     lsWrite(horseId, { type:'horse', chakujun:horseRow.chakujun, wakuBan:horseRow.waku_ban, horseName:horseRow.horse_name, belong:horseRow.belong, sexAge:horseRow.sex_age, kinryo:horseRow.kinryo, jockey:horseRow.jockey, trainer:horseRow.trainer, weight:horseRow.weight, ninki:horseRow.ninki, odds:horseRow.odds, time:horseRow.time, diff:horseRow.diff, agari3f:horseRow.agari3f, corner:horseRow.corner, first3f:horseRow.first3f, paceType:horseRow.pace_type, mukaeShoumen:horseRow.mukae_shoumen, shoumenStraight:horseRow.shoumen_straight, postComment:h.postComment||'', lineageLoginCode:h.lineageLoginCode||'', savedAt:new Date().toISOString() });
     hc++;
   }
+  await Promise.all(_jobs);
   return hc;
 }
 
@@ -5817,7 +5821,7 @@ async function backfillOddsFromRakuten() {
       }
       if (raceFilled) hitRaces++;
       doneRaces++;
-      await _bulkSleep(400);
+      await _bulkSleep(250);
     }
     _savedGroupsDirty = true;
     loadSavedData();
@@ -5916,7 +5920,7 @@ async function backfillPayouts() {
         savedR++;
       }
       doneDays++;
-      await _bulkSleep(350);
+      await _bulkSleep(200);
     }
     _bulkLog(`${_bulkCancel ? '⏹ 中止しました。' : '✅ 完了！'} ${doneDays}日・<b>${savedR}レースの配当</b>を保存しました${err ? `／取得できなかった日 ${err}` : ''}。`);
   } finally {
@@ -5949,7 +5953,7 @@ async function bulkFetchMonth() {
       _bulkLog(`<i class="fas fa-spinner fa-spin"></i> 開催日を確認中… ${d}/${daysInMonth}日（開催 ${raceDays.length}日発見）`);
       let chk; try { chk = await checkRaceListExists(date, '31'); } catch(e) { chk = { exists:null }; }
       if (chk.exists) raceDays.push({ date, raceNos: chk.raceNos });
-      await _bulkSleep(280);
+      await _bulkSleep(150);
     }
     if (_bulkCancel) { _bulkLog(`中止しました（開催日確認まで）。`); return; }
     if (!raceDays.length) { _bulkLog(`${y}年${m}月に高知の開催は見つかりませんでした。`); return; }
@@ -5962,7 +5966,7 @@ async function bulkFetchMonth() {
       const { date, raceNos } = raceDays[i];
       // その日の払戻オッズを1回だけ取得（古いレースの単勝オッズ空欄を勝ち馬分だけ復元）
       let refund = {}; try { refund = await _fetchRefundOddsDay(date); } catch(e) {}
-      await _bulkSleep(300);
+      await _bulkSleep(150);
       for (const rn of raceNos) {
         if (_bulkCancel) break;
         processed++;
@@ -5970,26 +5974,21 @@ async function bulkFetchMonth() {
         try {
           const parsed = await fetchOneRace(date, rn, '31');
           if (!parsed || !parsed.horses || !parsed.horses.length) { err++; continue; }
-          // オッズが空の馬を楽天の全馬オッズで補完（keiba.go.jpが消した古いレースも全馬復元可）
-          if (parsed.horses.some(h => !(parseFloat(h.odds) > 0))) {
-            let rk = {}; try { rk = await _fetchRakutenOddsRace(date, rn); } catch(e) {}
-            if (Object.keys(rk).length) parsed.horses.forEach(h => { const u = parseInt(h.umaBan); if (!(parseFloat(h.odds) > 0) && rk[u] > 0) h.odds = String(rk[u]); });
-            await _bulkSleep(300);
-          }
-          // なお残る空欄は払戻の勝ち馬オッズで最終補完
+          // 楽天オッズ(全馬・別サイト)とレース後コメント(keiba.go.jp)は互いに独立なので並行取得
+          const _needOdds = parsed.horses.some(h => !(parseFloat(h.odds) > 0));
+          const [rk, cr] = await Promise.all([
+            _needOdds ? _fetchRakutenOddsRace(date, rn).catch(() => ({})) : Promise.resolve({}),
+            withComments ? fetchPostRaceComments(date, rn, parsed.horses.map(h => h.horseName)).catch(() => null) : Promise.resolve(null),
+          ]);
+          // オッズ補完：楽天(全馬)→なお空欄は払戻の勝ち馬オッズで最終補完
+          if (rk && Object.keys(rk).length) parsed.horses.forEach(h => { const u = parseInt(h.umaBan); if (!(parseFloat(h.odds) > 0) && rk[u] > 0) h.odds = String(rk[u]); });
           const rf = refund[rn];
           if (rf) parsed.horses.forEach(h => { const u = parseInt(h.umaBan); if (!(parseFloat(h.odds) > 0) && rf.win[u] > 0) h.odds = String(rf.win[u]); });
-          if (withComments) {
-            try {
-              const cr = await fetchPostRaceComments(date, rn, parsed.horses.map(h => h.horseName));
-              if (cr && cr.map) { let n=0; parsed.horses.forEach(h => { if (cr.map[h.horseName]) { h.postComment = cr.map[h.horseName]; n++; } }); cmt += n; }
-            } catch(e) {}
-            await _bulkSleep(350);
-          }
+          if (cr && cr.map) { let n=0; parsed.horses.forEach(h => { if (cr.map[h.horseName]) { h.postComment = cr.map[h.horseName]; n++; } }); cmt += n; }
           const hc = await _saveRaceDirect(date, '31', rn, parsed);
           savedR++; savedH += hc;
         } catch(e) { err++; console.warn('[bulk]', date, rn, e); }
-        await _bulkSleep(400);
+        await _bulkSleep(300);
       }
     }
     // first3f・ペース自動補完（今回保存分に効く）
