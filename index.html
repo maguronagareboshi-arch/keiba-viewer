@@ -5979,28 +5979,30 @@ async function bulkFetchMonth() {
     if (!raceDays.length) { _bulkLog(`${y}年${m}月に高知の開催は見つかりませんでした。`); return; }
 
     // ② 各開催日・各レースを再取得＆保存
-    let savedR = 0, savedH = 0, cmt = 0, err = 0;
+    // 日ごとに速い/遅いの主因＝楽天オッズ補完：keiba.go.jpのオッズが残る直近日はスキップ(速い)、
+    // オッズが消えた古い日は全レースで楽天フェッチ(遅い)。→ 日内レースを並列化(同時3本)して吸収。
+    let savedR = 0, savedH = 0, cmt = 0, err = 0, rkTotal = 0;
     const totalRaces = raceDays.reduce((s, d) => s + d.raceNos.length, 0);
     let processed = 0;
+    const _CONC = 3;
     for (let i = 0; i < raceDays.length && !_bulkCancel; i++) {
       const { date, raceNos } = raceDays[i];
       // その日の払戻オッズを1回だけ取得（古いレースの単勝オッズ空欄を勝ち馬分だけ復元）
       let refund = {}; try { refund = await _fetchRefundOddsDay(date); } catch(e) {}
-      await _bulkSleep(150);
-      for (const rn of raceNos) {
-        if (_bulkCancel) break;
+      const _procOne = async (rn, j) => {
+        if (_bulkCancel) return;
+        if (j > 0) await _bulkSleep(180 * j);   // バッチ内の同時発火を少しずらす（バースト抑制）
         processed++;
-        _bulkLog(`<i class="fas fa-download"></i> ${date} ${rn}R 取得中…<br><span style="font-size:11px;color:#6b7280">進捗 ${processed}/${totalRaces}R（${i+1}/${raceDays.length}日）／保存 ${savedR}R ${savedH}頭・コメント${cmt}件・エラー${err}</span>`);
+        _bulkLog(`<i class="fas fa-download"></i> ${date} 取得中…<br><span style="font-size:11px;color:#6b7280">進捗 ${processed}/${totalRaces}R（${i+1}/${raceDays.length}日）／保存 ${savedR}R ${savedH}頭・コメント${cmt}件・<b>楽天補完${rkTotal}R</b>・エラー${err}</span>`);
         try {
           const parsed = await fetchOneRace(date, rn, '31');
-          if (!parsed || !parsed.horses || !parsed.horses.length) { err++; continue; }
-          // 楽天オッズ(全馬・別サイト)とレース後コメント(keiba.go.jp)は互いに独立なので並行取得
+          if (!parsed || !parsed.horses || !parsed.horses.length) { err++; return; }
           const _needOdds = parsed.horses.some(h => !(parseFloat(h.odds) > 0));
+          if (_needOdds) rkTotal++;   // ← この日が遅い＝ここが増える（診断表示）
           const [rk, cr] = await Promise.all([
             _needOdds ? _fetchRakutenOddsRace(date, rn).catch(() => ({})) : Promise.resolve({}),
             withComments ? fetchPostRaceComments(date, rn, parsed.horses.map(h => h.horseName)).catch(() => null) : Promise.resolve(null),
           ]);
-          // オッズ補完：楽天(全馬)→なお空欄は払戻の勝ち馬オッズで最終補完
           if (rk && Object.keys(rk).length) parsed.horses.forEach(h => { const u = parseInt(h.umaBan); if (!(parseFloat(h.odds) > 0) && rk[u] > 0) h.odds = String(rk[u]); });
           const rf = refund[rn];
           if (rf) parsed.horses.forEach(h => { const u = parseInt(h.umaBan); if (!(parseFloat(h.odds) > 0) && rf.win[u] > 0) h.odds = String(rf.win[u]); });
@@ -6008,7 +6010,11 @@ async function bulkFetchMonth() {
           const hc = await _saveRaceDirect(date, '31', rn, parsed);
           savedR++; savedH += hc;
         } catch(e) { err++; console.warn('[bulk]', date, rn, e); }
-        await _bulkSleep(300);
+      };
+      // 日内レースを CONC 本ずつ並列処理
+      for (let bi = 0; bi < raceNos.length && !_bulkCancel; bi += _CONC) {
+        await Promise.all(raceNos.slice(bi, bi + _CONC).map((rn, j) => _procOne(rn, j)));
+        await _bulkSleep(120);
       }
     }
     // first3f・ペース自動補完（今回保存分に効く）
