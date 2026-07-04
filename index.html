@@ -12428,6 +12428,11 @@ function computePsfScores(raceNo) {
   return top ? { top, scores } : null;
 }
 
+// V3リスケール（2026-07-04採用）：補正項ごとの実効倍率。CV検証で印全体の質(ペア整合率5/5fold)が
+// 現行を上回り◎も平均改善したため、上がり3F/騎手×厩舎/馬体重/勝ち馬強さを増、乗替/叩きを減。
+// 未記載の項目（馬場適性・距離・トレンド・脚質・着差・ローテ・昇降級・C一貫性）は等倍のまま。
+const YOSO_FACTOR_SCALE = { agariN: 2.5, comboN: 3.0, weightN: 2.5, winStrN: 2.5, jockeyChgN: 0.5, takiN: 0.5 };
+
 /**
  * 予想AIスコア計算（共通コア）
  * renderPredictionPanel（予想AIパネル）と出馬表のAI印列の両方が使う。
@@ -12606,10 +12611,11 @@ function computeYosoScored(raceNo, selCondOverride) {
     //    厳密5分割CVでは複勝が5分割中1回しか改善せず（枠順と同じ「弱い信号が◎選択でノイズに
     //    負ける」パターン）。ライブモデルには組み込まない（2026-06-30）。
 
-    // 🧠 学習重みが保存済み（二段基準クリア）なら各補正項を実効倍率で合成。なければ従来の等倍和。
-    //    実効倍率はbase係数=1に正規化済みなのでスコアの目盛りは現行と同じ（バッジ閾値がそのまま使える）。
+    // 各補正項の実効倍率で合成。優先順：①学習重み(保存時)→②V3リスケール(2026-07-04採用・下記)→③等倍。
+    // V3採用の根拠：5分割時系列CVで印全体の質（ペア整合率5/5fold・○▲複勝↑）が現行を上回り、
+    // ◎も平均で改善（複勝70.4→71.3・1着38.0→38.5）。馬アンカーSI採用時と同じ"二段目クリア"基準。
     const _mlW = getMlLiveWeights();
-    const _eff = k => (_mlW && _mlW.eff[k] != null) ? _mlW.eff[k] : 1;
+    const _eff = k => (_mlW && _mlW.eff[k] != null) ? _mlW.eff[k] : (YOSO_FACTOR_SCALE[k] != null ? YOSO_FACTOR_SCALE[k] : 1);
     const totalScore = baseScore != null
       ? +(baseScore + condMod*_eff('condNew') + distMod*_eff('distNew') + trendMod*_eff('trendN') + comboMod*_eff('comboN') + rotMod*_eff('rotN') + classMod*_eff('clsN') + cornMod*_eff('cornN') + weightMod*_eff('weightN') + agariMod*_eff('agariN') + marginMod*_eff('marginN') + winStrMod*_eff('winStrN') + jockeyChgMod*_eff('jockeyChgN') + takiMod*_eff('takiN') + cornConsistMod*_eff('cornConsistN')).toFixed(2)
       : null;
@@ -12784,14 +12790,15 @@ function renderPredictionPanel(raceNo) {
       const cMod  = fmt(s.condMod);
       const dMod  = fmt(s.distMod);
       const tMod  = fmt(s.trendMod);
-      const kMod  = fmt(s.comboMod);
+      const _kComboEff = s.comboMod * (typeof YOSO_FACTOR_SCALE!=='undefined' && YOSO_FACTOR_SCALE.comboN!=null ? YOSO_FACTOR_SCALE.comboN : 1);  // コンボはV3で×3効くので実効値で表示
+      const kMod  = fmt(_kComboEff);
       const cnMod = fmt(s.cornMod);   // 脚質補正の実数値（従来はラベルのみで非表示だった）
       // その他＝総合に効くが列に出ていない補正の合計（ローテ・昇降級・馬体重・上がり・着差・
       // 勝ち馬強さ・乗替・叩き・コーナー一貫性・相対SI）。画面の丸め値でぴったり合うよう、
       // 各列の表示値（小数1桁）を引いた残りとして算出＝ SI＋各表示列＋その他＝総合 が目で合う。
       const _r1 = v => parseFloat(v.toFixed(1));   // 表示と同じ丸め（.05境界のズレ防止）
       const otherMod = (s.totalScore != null && s.baseScore != null)
-        ? +(_r1(s.totalScore) - _r1(s.baseScore) - _r1(s.condMod) - _r1(s.distMod) - _r1(s.trendMod) - _r1(s.comboMod) - _r1(s.cornMod)).toFixed(1) : null;
+        ? +(_r1(s.totalScore) - _r1(s.baseScore) - _r1(s.condMod) - _r1(s.distMod) - _r1(s.trendMod) - _r1(_kComboEff) - _r1(s.cornMod)).toFixed(1) : null;
       const oMod = otherMod != null ? fmt(otherMod) : '—';
       const noData = s.siCount === 0;
       const jStatsKnown = !!lookupJockeyStats(s.jockey);
