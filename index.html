@@ -297,6 +297,9 @@ body.dark-mode .pf-dev--slow{color:#60a5fa!important}
 body.dark-mode .pf-dev--mid{color:#8fa3be!important}
 body.dark-mode .pf-note{background:#0d1826!important;border-color:#1e3048!important;color:#9fb2c8!important}
 body.dark-mode .pf-note b{color:#c8d8ec!important}
+body.dark-mode .jc-hot{color:#4ade80!important}
+body.dark-mode .jc-cold{color:#f87171!important}
+body.dark-mode .jcs-bl{color:#93c5fd!important}
 body.dark-mode .leg-warn-bar{background:#1f1200!important;border-color:#c2410c!important;color:#fdba74!important}
 body.dark-mode .cv-verdict-card{background:#0c2438!important;border-color:#1d4ed8!important;color:#bfdbfe!important}
 body.dark-mode .cv-verdict-card .cv-verdict-title{color:#7dd3fc!important}
@@ -1060,6 +1063,7 @@ const KV_APP_CSS = [
       '.pf-dev--fast{color:#dc2626}','.pf-dev--slow{color:#2563eb}','.pf-dev--mid{color:#94a3b8}',
       '.pf-note{margin-top:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:10.5px;color:#475569;line-height:1.6}',
       '.pf-note b{color:#0f172a;font-weight:800}',
+      '.jc-hot{color:#16a34a}','.jc-cold{color:#dc2626}','.jcs-bl{color:#1e40af}',
       /* 厳密検証：判定サマリーカード（常時表示）＋実験ごとの折りたたみ見出し */
       '.cv-verdict-card{margin-top:8px;background:#eef6ff;border:1.5px solid #93c5fd;border-radius:8px;padding:8px 12px;font-size:11px;color:#1e3a5f;line-height:1.9}',
       '.cv-verdict-card .cv-verdict-title{font-weight:800;color:#0369a1;margin-bottom:2px;font-size:12px}',
@@ -1379,6 +1383,25 @@ const KV_APP_CSS = [
 
 <!-- ページ: 分析 -->
 <div id="page-bunseki" class="page-section page-hidden">
+
+  <!-- 乗り替わり分析 -->
+  <section class="search-card" id="jockey-change-card">
+    <h2 class="section-title"><i class="fas fa-exchange-alt"></i> 乗り替わり分析（誰から誰へ乗せ替えたら熱い／危険か）</h2>
+    <p style="font-size:12px;color:#6b7280;margin-bottom:8px;line-height:1.7">前走から騎手が替わった全レースを集計。<b>乗替先</b>＝その騎手に乗せ替えた時の複勝率／<b>通常</b>＝その騎手の全騎乗複勝率／<b>差</b>＝乗替−通常（＋なら乗替時に上乗せ＝勝負気配）。<b>A→Bペア</b>は特定の乗せ替え組み合わせ別。</p>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+      <label style="font-size:12px;color:#374151;font-weight:600">対象年</label>
+      <select id="jc-year" class="form-input" style="max-width:120px;font-size:12px" onchange="renderJockeyChangeAnalysis()">
+        <option value="">全期間</option>
+      </select>
+      <label style="font-size:12px;color:#374151;font-weight:600;margin-left:6px">厩舎</label>
+      <select id="jc-trainer" class="form-input" style="max-width:150px;font-size:12px" onchange="renderJockeyChangeAnalysis()">
+        <option value="">全厩舎（高知）</option>
+      </select>
+      <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#374151;cursor:pointer;margin-left:6px"><input type="checkbox" id="jc-final" style="width:15px;height:15px;accent-color:#7c3aed" onchange="renderJockeyChangeAnalysis()"> ファイナルのみ</label>
+      <span style="font-size:11px;color:#9ca3af">※厩舎は高知所属のみ・年を絞ると引退騎手も除外</span>
+    </div>
+    <div id="jockey-change-body"><p style="color:#9ca3af;font-size:13px">分析ページを開くと自動集計します…</p></div>
+  </section>
 
   <!-- 分析パネル -->
   <section class="analysis-section" id="analysis-section">
@@ -1911,7 +1934,7 @@ function switchPage(pageId, _fromPop) {
     try { history.pushState({ kvPage: pageId }, ''); } catch(e) {}
   }
   // 分析ページに切り替えたとき自動レンダリング
-  if (pageId === 'bunseki') { setTimeout(() => { try { renderAnalysis(); } catch(e){} }, 0); }
+  if (pageId === 'bunseki') { setTimeout(() => { try { renderAnalysis(); } catch(e){} try { renderJockeyChangeAnalysis(); } catch(e){} }, 0); }
   if (pageId === 'deban')   { setTimeout(() => { try { (Object.keys(allRacesData).length ? showDebanRaceView : showDebanDateList)(); } catch(e){} }, 0); }
   if (pageId === 'baba')    { setTimeout(() => { try { renderTrackTrend(); } catch(e){} }, 0); }
   if (pageId === 'saved')   { setTimeout(() => { try { renderSavedList(); } catch(e){} }, 0); }
@@ -6372,6 +6395,192 @@ async function _bulkFetchRun(monthsList, label) {
   }
 }
 function bulkCancel() { _bulkCancel = true; _bulkLog('⏳ 中止処理中…現在のレース完了後に停止します。'); }
+
+// ── 乗り替わり分析（前走から騎手が替わった全レースを集計） ──
+// 「誰に乗せ替えたら来る/危険か（乗替先ランキング）」＋「A→Bペア別」。表示専用・分析ページ。
+function renderJockeyChangeAnalysis() {
+  const body = document.getElementById('jockey-change-body');
+  if (!body) return;
+  const yf = document.getElementById('jc-year')?.value || '';       // '' = 全期間 / 'YYYY'
+  const tf = document.getElementById('jc-trainer')?.value || '';    // '' = 全厩舎 / 厩舎名
+  const finalOnly = !!document.getElementById('jc-final')?.checked;  // ファイナルレースのみ
+  const inYear = d => !yf || String(d).slice(0, 4) === yf;
+  const store = lsRead();
+  // ファイナルレース（race_nameに「ファイナル」を含む）の日R集合
+  const finalSet = new Set();
+  for (const k of Object.keys(store)) { if (!k.startsWith('race_31_')) continue; const r = store[k]; if (/ファイナル/.test(r.race_name || '')) finalSet.add(`${r.race_date}_${parseInt(r.race_no)}`); }
+  const isFinal = (d, rno) => finalSet.has(`${d}_${rno}`);
+  const runs = {}, jkAll = {}, years = new Set(), trAll = {}, trainers = {}, trJk = {};
+  for (const k of Object.keys(store)) {
+    const p = k.split('_'); if (p.length !== 4 || p[0] !== '31') continue;
+    const v = store[k]; if (!v || v.type !== 'horse') continue;
+    const ch = parseInt(v.chakujun); if (isNaN(ch)) continue;
+    const jk = (v.jockey || '').trim(); if (!jk) continue;
+    const tr = (v.trainer || '').trim();
+    const rno = parseInt(p[2]);
+    const yr = String(p[1]).slice(0, 4); if (/^\d{4}$/.test(yr)) years.add(yr);
+    if (tr) trAll[tr] = (trAll[tr] || 0) + 1;   // 厩舎の総騎乗（高知所属判定用・全期間）
+    (runs[v.horseName] = runs[v.horseName] || []).push({ d: p[1], rno, jk, ch, tr, fin: isFinal(p[1], rno) });
+    if (inYear(p[1]) && (!finalOnly || isFinal(p[1], rno))) {
+      (jkAll[jk] = jkAll[jk] || { n: 0, f: 0 }); jkAll[jk].n++; if (ch <= 3) jkAll[jk].f++;
+      if (tr) { trainers[tr] = (trainers[tr] || 0) + 1;
+        if (tr === tf) { (trJk[jk] = trJk[jk] || { n: 0, f: 0, w: 0 }); trJk[jk].n++; if (ch <= 3) trJk[jk].f++; if (ch === 1) trJk[jk].w++; } }
+    }
+  }
+  // 年・厩舎ドロップダウンを初回に自動生成
+  const ysel = document.getElementById('jc-year');
+  if (ysel && ysel.options.length <= 1 && years.size) {
+    const cur = ysel.value;
+    ysel.innerHTML = '<option value="">全期間</option>' + [...years].sort((a, b) => b - a).map(y => `<option value="${y}">${y}年</option>`).join('');
+    ysel.value = cur;
+  }
+  const tsel = document.getElementById('jc-trainer');
+  if (tsel && Object.keys(trAll).length) {
+    // 年/ファイナルが変わったら再生成：高知所属(総騎乗30件+)かつ「その条件で騎乗データがある」厩舎のみ
+    const popKey = yf + '|' + (finalOnly ? 'F' : '');
+    if (tsel._popKey !== popKey) {
+      tsel._popKey = popKey;
+      const cur = tsel.value;
+      const list = Object.keys(trAll).filter(t => trAll[t] >= 30 && (trainers[t] || 0) >= 1)
+        .sort((a, b) => (trainers[b] || 0) - (trainers[a] || 0));
+      tsel.innerHTML = '<option value="">全厩舎（高知）</option>' + list.map(t => `<option value="${t}">${t}</option>`).join('');
+      tsel.value = list.includes(cur) ? cur : '';
+      // 選択中の厩舎がこの年に無い→'' にリセットされたら、正しい表示で再描画
+      if (cur && tsel.value !== cur) { renderJockeyChangeAnalysis(); return; }
+    }
+  }
+  for (const n of Object.keys(runs)) runs[n].sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : a.rno - b.rno);
+  const byB = {}, pair = {}, sameB = {}, jkTr = {};   // sameB＝同騎手継続の基準／jkTr＝騎手×厩舎（ツールチップ用）
+  const chgTot = { n: 0, f: 0 }, contTot = { n: 0, f: 0 };
+  for (const n of Object.keys(runs)) {
+    const rs = runs[n];
+    for (let i = 1; i < rs.length; i++) {
+      const A = rs[i - 1].jk, B = rs[i].jk; if (!A || !B) continue;
+      if (!inYear(rs[i].d)) continue;
+      if (finalOnly && !rs[i].fin) continue;   // ファイナルレースのみ（当該走B）
+      const tr = rs[i].tr;
+      const hit = rs[i].ch <= 3;
+      // 騎手×厩舎の継続/乗替（乗替先騎手のツールチップ用・厩舎フィルタ前に全厩舎ぶん集計）
+      if (tr) {
+        (jkTr[B] = jkTr[B] || {}); (jkTr[B][tr] = jkTr[B][tr] || { cn: 0, cf: 0, gn: 0, gf: 0 });
+        if (A === B) { jkTr[B][tr].cn++; if (hit) jkTr[B][tr].cf++; } else { jkTr[B][tr].gn++; if (hit) jkTr[B][tr].gf++; }
+      }
+      if (tf && tr !== tf) continue;     // 表示集計は当該走の厩舎で限定
+      if (A === B) {   // 継続（乗り替わりなし）
+        (sameB[B] = sameB[B] || { n: 0, f: 0 }); sameB[B].n++; if (hit) sameB[B].f++;
+        contTot.n++; if (hit) contTot.f++;
+      } else {          // 乗り替わり
+        (byB[B] = byB[B] || { n: 0, f: 0, w: 0 }); byB[B].n++; if (hit) byB[B].f++; if (rs[i].ch === 1) byB[B].w++;
+        const pk = A + ' → ' + B; (pair[pk] = pair[pk] || { n: 0, f: 0 }); pair[pk].n++; if (hit) pair[pk].f++;
+        chgTot.n++; if (hit) chgTot.f++;
+      }
+    }
+  }
+  const pct = (a, b) => b ? +(100 * a / b).toFixed(1) : 0;
+  // 乗替先騎手のツールチップ：この騎手がどの厩舎で継続/乗替が良いか（各上位3厩舎・n≥3）
+  const jkTip = B => {
+    const tm = jkTr[B]; if (!tm) return '';
+    const top = (getN, getF) => Object.entries(tm).filter(([t, v]) => getN(v) >= 3)
+      .map(([t, v]) => ({ t, f: pct(getF(v), getN(v)), n: getN(v) })).sort((a, b) => b.f - a.f)
+      .slice(0, 3).map(x => `${x.t}${x.f}%(${x.n})`).join('  ');
+    const c = top(v => v.cn, v => v.cf), g = top(v => v.gn, v => v.gf);
+    return `【${B}】継続が良い厩舎: ${c || '—'}\n乗替が良い厩舎: ${g || '—'}`;
+  };
+  // 乗替 vs 継続 の全体比較バー（乗り替わりなしの基準）
+  const _chgF = pct(chgTot.f, chgTot.n), _contF = pct(contTot.f, contTot.n);
+  const _sumDiff = +(_chgF - _contF).toFixed(1);
+  const summaryBar = `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+    <div style="flex:1;min-width:150px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:6px 12px"><div class="jcs-bl" style="font-size:10px;font-weight:700">乗り替わり</div><div style="font-size:16px;font-weight:800;color:#1d4ed8">${_chgF}%<span style="font-size:10px;font-weight:400;color:#60a5fa;margin-left:4px">複勝・${chgTot.n.toLocaleString()}件</span></div></div>
+    <div style="flex:1;min-width:150px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:6px 12px"><div style="font-size:10px;color:#166534;font-weight:700">継続（同騎手・乗替なし）</div><div style="font-size:16px;font-weight:800;color:#16a34a">${_contF}%<span style="font-size:10px;font-weight:400;color:#4ade80;margin-left:4px">複勝・${contTot.n.toLocaleString()}件</span></div></div>
+    <div style="flex:1;min-width:120px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:6px 12px"><div style="font-size:10px;color:#475569;font-weight:700">差（乗替−継続）</div><div style="font-size:16px;font-weight:800" class="${_sumDiff > 0 ? 'jc-hot' : _sumDiff < 0 ? 'jc-cold' : ''}">${_sumDiff > 0 ? '+' : ''}${_sumDiff}pt</div></div>
+  </div>`;
+  const cls = v => v >= 45 ? 'jc-hot' : v < 20 ? 'jc-cold' : '';
+  const dcls = v => v > 0 ? 'jc-hot' : v < 0 ? 'jc-cold' : '';
+  const pairTbl = arr => arr.map(r => `<tr>
+    <td>${r.pk}</td><td class="${cls(r.fuku)}" style="text-align:right;font-weight:800">${r.fuku}%</td>
+    <td style="text-align:right;color:#94a3b8">${r.n}</td></tr>`).join('');
+  const _minPair = tf ? 2 : (yf ? 8 : 20);
+  const pairRows = Object.entries(pair).filter(([k, v]) => v.n >= _minPair)
+    .map(([pk, v]) => ({ pk, n: v.n, fuku: pct(v.f, v.n) })).sort((a, b) => b.fuku - a.fuku);
+  const _pairPanels = `
+    <div style="flex:1;min-width:280px;display:flex;flex-direction:column;gap:12px">
+      <div>
+        <div style="font-size:13px;font-weight:800;color:#16a34a;margin-bottom:4px">🔥 熱い乗替ペア（A→B・n≥${_minPair}・上位15）</div>
+        <div class="table-wrapper"><table class="deban-table" style="font-size:12px">
+          <thead><tr><th style="text-align:left">乗せ替え</th><th style="text-align:right">複勝</th><th style="text-align:right">件数</th></tr></thead>
+          <tbody>${pairTbl(pairRows.slice(0, 15)) || '<tr><td colspan="3" style="color:#9ca3af">該当なし</td></tr>'}</tbody></table></div>
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:800;color:#dc2626;margin-bottom:4px">⚠️ 危険な乗替ペア（A→B・n≥${_minPair}・下位15）</div>
+        <div class="table-wrapper"><table class="deban-table" style="font-size:12px">
+          <thead><tr><th style="text-align:left">乗せ替え</th><th style="text-align:right">複勝</th><th style="text-align:right">件数</th></tr></thead>
+          <tbody>${pairTbl(pairRows.slice(-15).reverse()) || '<tr><td colspan="3" style="color:#9ca3af">該当なし</td></tr>'}</tbody></table></div>
+      </div>
+    </div>`;
+
+  if (tf) {
+    // ── 厩舎ビュー：この厩舎の騎手別成績＋乗替パターン ──
+    const mainJk = Object.entries(trJk).sort((a, b) => b[1].n - a[1].n)[0]?.[0];
+    // 1件でもあれば表示（元の騎乗データ）。全体＋乗替時／継続時の内訳を出す。起用数順＝主戦が上。
+    const _sn = n => `<span style="font-size:9px;color:#94a3b8;margin-left:3px">${n}</span>`;
+    const jkRows = Object.entries(trJk).filter(([k, v]) => v.n >= 1)
+      .map(([J, v]) => {
+        const s = (jkTr[J] && jkTr[J][tf]) ? jkTr[J][tf] : { cn: 0, cf: 0, gn: 0, gf: 0 };
+        return { J, n: v.n, allF: pct(v.f, v.n), chg: s.gn ? pct(s.gf, s.gn) : null, chgN: s.gn, cont: s.cn ? pct(s.cf, s.cn) : null, contN: s.cn };
+      })
+      .sort((a, b) => b.n - a.n);
+    const jkTbl = jkRows.map(r => `<tr>
+      <td style="font-weight:700">${r.J}${r.J === mainJk ? ' <span style="font-size:9px;font-weight:800;background:#7c3aed;color:#fff;border-radius:3px;padding:0 4px">主戦</span>' : ''}</td>
+      <td class="${cls(r.allF)}" style="text-align:right;font-weight:800">${r.allF}%${_sn(r.n)}</td>
+      <td class="${cls(r.chg)}" style="text-align:right">${r.chg != null ? r.chg + '%' : '—'}${r.chgN ? _sn(r.chgN) : ''}</td>
+      <td class="${cls(r.cont)}" style="text-align:right">${r.cont != null ? r.cont + '%' : '—'}${r.contN ? _sn(r.contN) : ''}</td></tr>`).join('');
+    const trTot = Object.values(trJk).reduce((s, v) => s + v.n, 0);
+    body.innerHTML = `
+      <div style="font-size:11px;color:#9ca3af;margin-bottom:6px">厩舎「<b style="color:#7c3aed">${tf}</b>」${yf ? '・' + yf + '年' : ''}：全騎乗 ${trTot.toLocaleString()} 件・乗替 ${chgTot.n.toLocaleString()} 件・継続 ${contTot.n.toLocaleString()} 件</div>
+      ${summaryBar}
+      <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
+        <div style="flex:1;min-width:320px">
+          <div style="font-size:13px;font-weight:800;color:#374151;margin-bottom:4px">👤 この厩舎の騎手別成績（全体／乗替時／継続時・起用数順／<span style="color:#7c3aed">主戦</span>＝最多起用）</div>
+          <div class="table-wrapper" style="max-height:420px;overflow-y:auto">
+            <table class="deban-table" style="font-size:12px">
+              <thead><tr><th style="text-align:left">騎手</th><th style="text-align:right" title="全騎乗の複勝率（右の小数字＝騎乗数）">全体複勝</th><th style="text-align:right" title="この厩舎がこの騎手に乗せ替えた時">乗替時</th><th style="text-align:right" title="この騎手が前走から継続した時">継続時</th></tr></thead>
+              <tbody>${jkTbl || '<tr><td colspan="4" style="color:#9ca3af">データ不足</td></tr>'}</tbody>
+            </table>
+          </div>
+        </div>
+        ${_pairPanels}
+      </div>
+      <p style="font-size:10.5px;color:#9ca3af;margin-top:8px;line-height:1.6">※複勝＝この厩舎の馬にその騎手が乗った時の複勝率／通常＝その騎手の全騎乗複勝率／差＝この厩舎−通常（＋＝この厩舎と特に相性が良い）。差がプラスの騎手＝この厩舎の"買える"乗せ替え先。</p>`;
+  } else {
+    // ── 全厩舎ビュー：乗替先ランキング＋ペア ──
+    const _minDest = yf ? 15 : 30;
+    const destRows = Object.entries(byB).filter(([k, v]) => v.n >= _minDest)
+      .map(([B, v]) => { const cont = sameB[B] ? pct(sameB[B].f, sameB[B].n) : null; const chg = pct(v.f, v.n); return { B, n: v.n, chg, cont, contN: sameB[B] ? sameB[B].n : 0, diff: cont != null ? +(chg - cont).toFixed(1) : null }; })
+      .sort((a, b) => b.chg - a.chg);
+    const destTbl = destRows.map(r => `<tr>
+      <td style="font-weight:700;cursor:help;border-bottom:1px dotted #94a3b8" title="${jkTip(r.B).replace(/"/g, '&quot;')}">${r.B}</td>
+      <td class="${cls(r.chg)}" style="text-align:right;font-weight:800">${r.chg}%</td>
+      <td class="${cls(r.cont)}" style="text-align:right">${r.cont != null ? r.cont + '%' : '—'}</td>
+      <td class="${dcls(r.diff)}" style="text-align:right;font-weight:700">${r.diff != null ? (r.diff > 0 ? '+' : '') + r.diff : '—'}</td>
+      <td style="text-align:right;color:#94a3b8">${r.n}/${r.contN}</td></tr>`).join('');
+    body.innerHTML = `
+      <div style="font-size:11px;color:#9ca3af;margin-bottom:6px">対象：乗り替わり ${chgTot.n.toLocaleString()} 件／継続 ${contTot.n.toLocaleString()} 件（前走との比較）</div>
+      ${summaryBar}
+      <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
+        <div style="flex:1;min-width:320px">
+          <div style="font-size:13px;font-weight:800;color:#374151;margin-bottom:4px">🏇 乗替先ランキング（この騎手に乗せ替えた時・n≥${_minDest}・乗替複勝率順）</div>
+          <div class="table-wrapper" style="max-height:420px;overflow-y:auto">
+            <table class="deban-table" style="font-size:12px">
+              <thead><tr><th style="text-align:left">乗替先騎手</th><th style="text-align:right">乗替複勝</th><th style="text-align:right">継続複勝</th><th style="text-align:right">差</th><th style="text-align:right" title="乗替件数/継続件数">件数</th></tr></thead>
+              <tbody>${destTbl}</tbody>
+            </table>
+          </div>
+        </div>
+        ${_pairPanels}
+      </div>
+      <p style="font-size:10.5px;color:#9ca3af;margin-top:8px;line-height:1.6">※乗替複勝＝この騎手に乗せ替えた時／継続複勝＝この騎手が前走から継続した時（乗り替わりなし）／差＝乗替−継続（＋＝乗せ替えた方が良い＝勝負気配）。件数は「乗替/継続」。厩舎を選ぶとその厩舎の主戦・相性が見られます。</p>`;
+  }
+}
 
 function getSavedRacePace(key){const d=lsRead()[key];if(!d)return null;return{first3f:d.first3f||'',agari4f:d.agari4f||'',agari3f_race:d.agari3f_race||'',paceType:d.paceType||d.pace_type||'',memo:d.memo||''};}
 function getSavedHorsePace(key){const d=lsRead()[key];if(!d)return null;return{first3f:d.first3f||'',paceType:d.paceType||d.pace_type||'',mukaeShoumen:d.mukaeShoumen||d.mukae_shoumen||'',shoumenStraight:d.shoumenStraight||d.shoumen_straight||''};}
