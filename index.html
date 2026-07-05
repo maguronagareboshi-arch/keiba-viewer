@@ -278,6 +278,9 @@ body.dark-mode .rf-none{color:#4a5e76!important}
 body.dark-mode .psf-value-bar{background:#062a33!important;border-color:#0e5a6b!important;color:#7dd3fc!important}
 body.dark-mode .value-bet-bar{background:#3f3506!important;border-color:#a16207!important;color:#fde047!important}
 body.dark-mode .danger-fav-bar{background:#2d0000!important;border-color:#b91c1c!important;color:#fca5a5!important}
+body.dark-mode .leg-warn-bar{background:#2a1400!important;border-color:#c2410c!important;color:#fdba74!important}
+body.dark-mode .market-back-bar{background:#071a30!important;border-color:#1d4ed8!important;color:#93c5fd!important}
+body.dark-mode .leg-warn-bar{background:#1f1200!important;border-color:#c2410c!important;color:#fdba74!important}
 body.dark-mode .cv-verdict-card{background:#0c2438!important;border-color:#1d4ed8!important;color:#bfdbfe!important}
 body.dark-mode .cv-verdict-card .cv-verdict-title{color:#7dd3fc!important}
 body.dark-mode .cv-verdict-card .cv-verdict-note{color:#94a3b8!important}
@@ -1014,6 +1017,10 @@ const KV_APP_CSS = [
       '.value-bet-bar .vbb-sub{font-size:11px;opacity:.85;font-weight:500}',
       '.danger-fav-bar{margin-bottom:10px;background:#fef2f2;border:1.5px solid #dc2626;border-radius:8px;padding:7px 12px;font-size:12px;color:#991b1b;font-weight:600}',
       '.danger-fav-bar .dfb-sub{font-size:11px;opacity:.85;font-weight:500}',
+      '.leg-warn-bar{margin-bottom:10px;background:#fff7ed;border:1.5px solid #ea580c;border-radius:8px;padding:7px 12px;font-size:12px;color:#9a3412;font-weight:600}',
+      '.leg-warn-bar .lwb-sub{font-size:11px;opacity:.85;font-weight:500}',
+      '.market-back-bar{margin-bottom:10px;background:#eff6ff;border:1.5px solid #2563eb;border-radius:8px;padding:7px 12px;font-size:12px;color:#1e40af;font-weight:600}',
+      '.market-back-bar .mbb-sub{font-size:11px;opacity:.85;font-weight:500}',
       /* 厳密検証：判定サマリーカード（常時表示）＋実験ごとの折りたたみ見出し */
       '.cv-verdict-card{margin-top:8px;background:#eef6ff;border:1.5px solid #93c5fd;border-radius:8px;padding:8px 12px;font-size:11px;color:#1e3a5f;line-height:1.9}',
       '.cv-verdict-card .cv-verdict-title{font-weight:800;color:#0369a1;margin-bottom:2px;font-size:12px}',
@@ -4914,13 +4921,21 @@ function openCommentSheet(raceNo) {
     const lines = hist.length ? hist.map(x => {
       const ch = parseInt(x.chakujun);
       const chBadge = !isNaN(ch)
-        ? `<span style="display:inline-block;min-width:17px;text-align:center;border-radius:3px;font-weight:800;font-size:10px;padding:0 2px;background:${ch===1?'#f59e0b':ch===2?'#94a3b8':ch===3?'#cd7c32':'#e2e8f0'};color:${ch<=3?'#fff':'#475569'};">${ch}</span>`
-        : '<span style="display:inline-block;min-width:17px;text-align:center;font-size:10px;color:#9ca3af;">—</span>';
-      return `<div style="display:flex;align-items:flex-start;gap:6px;padding:2.5px 0;border-bottom:1px dashed #eef2f7;">
-        <span style="font-size:9.5px;color:#64748b;white-space:nowrap;font-family:monospace;flex-shrink:0;padding-top:1px;">${x.raceDate||''}</span>
-        <span style="font-size:9px;color:#94a3b8;white-space:nowrap;flex-shrink:0;padding-top:1px;">${x.raceClass||''}${x.distance?` ${x.distance}`:''}</span>
+        ? `<span style="display:inline-block;width:22px;text-align:center;border-radius:3px;font-weight:800;font-size:10px;line-height:16px;background:${ch===1?'#f59e0b':ch===2?'#94a3b8':ch===3?'#cd7c32':'#e2e8f0'};color:${ch<=3?'#fff':'#475569'};">${ch}</span>`
+        : '<span style="display:inline-block;width:22px;text-align:center;font-size:10px;color:#9ca3af;line-height:16px;">—</span>';
+      const rWk = Math.min(Math.max(parseInt(x.wakuBan) || Math.ceil((parseInt(x.umaBan)||1)/2), 1), 8);
+      const rUma = x.umaBan || '';
+      // 各列は固定幅（flex-shrink:0）＝着順バッジが縦に揃う。枠馬番・騎手はその過去走のもの。
+      return `<div style="display:flex;align-items:flex-start;gap:5px;padding:2.5px 0;border-bottom:1px dashed #eef2f7;">
+        <span style="width:58px;font-size:9.5px;color:#64748b;white-space:nowrap;font-family:monospace;flex-shrink:0;padding-top:1px;">${x.raceDate||''}</span>
+        <span style="width:40px;flex-shrink:0;display:inline-flex;align-items:center;gap:2px;padding-top:1px;">
+          <span style="background:${WBG2(rWk)};color:${WFG2(rWk)};border:${rWk===1?'1px solid #bbb':'none'};width:14px;height:14px;border-radius:2px;font-size:9px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">${rWk}</span>
+          <span style="font-size:9px;font-weight:700;color:#475569;">${rUma}</span>
+        </span>
+        <span style="width:52px;flex-shrink:0;font-size:9px;color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-top:1px;" title="${x.jockey||''}">${x.jockey||'—'}</span>
+        <span style="width:74px;flex-shrink:0;font-size:9px;color:#94a3b8;white-space:nowrap;padding-top:1px;">${x.raceClass||''}${x.distance?` ${x.distance}`:''}</span>
         ${chBadge}
-        <span style="font-size:11px;color:#1e293b;line-height:1.45;">${String(x.postComment).trim()}</span>
+        <span style="flex:1;font-size:11px;color:#1e293b;line-height:1.45;">${String(x.postComment).trim()}</span>
       </div>`;
     }).join('') : '<div style="font-size:11px;color:#9ca3af;padding:4px 0;">保存済みコメントなし</div>';
     return `<div class="cmt-sheet-card" style="border:1px solid #dde3ef;border-radius:8px;margin-bottom:8px;overflow:hidden;background:#fff;">
@@ -13327,6 +13342,40 @@ function renderPredictionPanel(raceNo) {
     }
   }
 
+  // ── 🏇◎脚質注意バッジ（◎が差し・追込馬のとき警告・表示専用）──
+  //    検証（scanData 2,742R）：モデル◎の複勝率は 逃げ先行77%・中団71% に対し
+  //    差し・追込は48.8%（1着17.6%）と激落ち。高知の前有利で差し◎はコース不向き。
+  //    指数側は差し罰則を強めてもCV改善せず（◎-closerは既に最善の選択で振替不可）＝人間警告で活かす。
+  let legWarnBadge = '';
+  {
+    const _honmei = scored.find(s => s.totalScore != null);
+    if (_honmei && _honmei.avg4C != null && _honmei.avg4C > 5) {
+      const _lt = _honmei.avg4C > 7 ? '追込' : '差し';
+      legWarnBadge = `<div class="leg-warn-bar">🏇 <b>◎脚質注意：${_honmei.horse.horseName}</b>（4角平均${_honmei.avg4C.toFixed(1)}番手＝${_lt}脚質）＝高知の前有利で差し◎は複勝48.8%（◎が逃げ先行なら77%）<span class="lwb-sub">｜相手の逃げ先行馬を厚めに・軸は割引推奨</span></div>`;
+    }
+  }
+
+  // ── 🔵市場は買っているバッジ（モデル低評価×市場上位・表示専用）──
+  //    残差分析（scanData 2,715R）：モデルが外した勝馬の27%はモデル4番手以下。共通点は
+  //    「低SIのベテランを市場が推している」で、指数化できる特徴は無い（市場の私的情報）。
+  //    実測：モデル6番手以下でも最終1-2番人気なら複勝45.4%・3-4番人気で33.2%。純能力指数は
+  //    汚さず、市場のクロスチェックとして表示（"人気薄→急に人気"の内部情報系を人間に知らせる）。
+  let marketBackBadge = '';
+  {
+    const _mb = scored
+      .map((s, idx) => ({ s, rank: idx + 1, nk: parseInt(s.horse?.ninki) }))
+      .filter(x => x.rank >= 6 && x.s.totalScore != null && !isNaN(x.nk) && x.nk >= 1 && x.nk <= 4)
+      .sort((a, b) => a.nk - b.nk)
+      .slice(0, 3);
+    if (_mb.length) {
+      const _items = _mb.map(x => {
+        const _fk = x.nk <= 2 ? '45%' : '33%';
+        return `<b>${x.s.horse.horseName}</b>（AI${x.rank}番手→${x.nk}番人気・この型は複勝${_fk}）`;
+      }).join('　');
+      marketBackBadge = `<div class="market-back-bar">🔵 <b>市場は買っている</b>：${_items}<span class="mbb-sub">｜AIが能力を測れていない可能性。直前で人気が急上昇した馬は特に妙味（内部情報系）</span></div>`;
+    }
+  }
+
   // 🧠 学習重み適用中の表示（表示のみ・重みが未保存なら何も出さない＝従来式）
   const _mlWNote = getMlLiveWeights();
   const mlNote = _mlWNote
@@ -13363,6 +13412,8 @@ function renderPredictionPanel(raceNo) {
     ${confidenceBadge}
     ${valueBetBadge}
     ${dangerFavBadge}
+    ${legWarnBadge}
+    ${marketBackBadge}
     ${paceBiasBadge}
     <div style="overflow-x:auto;">${tableHtml}</div>
     <div id="yoso-backtest-${raceNo}"></div>
