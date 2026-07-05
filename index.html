@@ -6361,7 +6361,8 @@ function buildSavedGroups() {
     .filter(([k,v]) => v.type === 'race' || k.startsWith('race_'));
   const groupMap = {};
   entries.forEach(([key,data]) => {
-    const pt = data.paceType || data.pace_type || '';
+    // 表示は前後半差paceType優先。first3f欠損で空なら基準比paceTypeAuto(前半区間フォールバック)で補完
+    const pt = data.paceType || data.pace_type || data.paceTypeAuto || '';
     const gk = `${data.race_date}_${data.baba_code}`;
     if (!groupMap[gk]) groupMap[gk] = {date:data.race_date, baba:data.baba_code, races:[]};
     groupMap[gk].races.push({key, data:{...data, paceType:pt}});
@@ -6743,11 +6744,61 @@ function getPaceDevLabel(distance, raceClass, trackCond, first3f) {
  * 手入力・既存の paceType には絶対に触れない（完全に別フィールド）。
  * 起動時に毎回再計算するので、基準表がデータ増加で動けばラベルも追従する。
  */
+// first3f(テン3F)は区間タイム由来で古いレース等は欠損することがある。その場合の
+// フォールバック＝先頭馬の前半区間タイム(走破−上がり3F の最小)を距離×クラス×馬場の基準と比較。
+// テン3Fラベルとの一致率82.6%（4177R検証・2026-07-05）。これで区間タイム未取得のレースでも
+// 各馬の走破/上がり3F(≒98.9%保有)から自動でペースが入る。基準はセッション内キャッシュ。
+function getRaceLeadFrontBench() {
+  if (window._leadFrontBench) return window._leadFrontBench;
+  const store = lsRead();
+  const raceInfo = {};
+  for (const k of Object.keys(store)) if (k.startsWith('race_31_')) { const r = store[k]; raceInfo[`${r.race_date}_${parseInt(r.race_no)}`] = r; }
+  const perRace = {};
+  for (const k of Object.keys(store)) {
+    const p = k.split('_'); if (p.length !== 4 || p[0] !== '31') continue;
+    const v = store[k]; if (!v || v.type !== 'horse') continue;
+    const fs = calcFrontSectional(v.time, v.agari3f); if (fs == null) continue;
+    const rk = `${p[1]}_${parseInt(p[2])}`; (perRace[rk] = perRace[rk] || []).push(fs);
+  }
+  const agg = {};
+  for (const rk of Object.keys(perRace)) {
+    const ri = raceInfo[rk]; if (!ri) continue; const arr = perRace[rk]; if (arr.length < 4) continue;
+    const d = getDistNum(ri.distance), c = getEffectiveClass(ri.race_class);
+    if (!d || !c) continue;
+    const key = `${d}|${c}|${ri.track_cond || ''}`;
+    (agg[key] = agg[key] || []).push(Math.min(...arr));
+  }
+  const bench = {};
+  for (const key of Object.keys(agg)) { const a = agg[key].sort((x, y) => x - y); if (a.length >= 8) bench[key] = a[Math.floor(a.length / 2)]; }
+  window._leadFrontBench = bench;
+  return bench;
+}
+
+/** first3f欠損レースのペース(ハイ/ミドル/スロー)を前半区間タイムから判定（srcで由来を区別）。 */
+function getFrontPaceLabel(raceDate, raceNo, distance, raceClass, trackCond) {
+  const d = getDistNum(distance), c = getEffectiveClass(raceClass);
+  if (!d || !c) return null;
+  const bench = getRaceLeadFrontBench()[`${d}|${c}|${trackCond || ''}`];
+  if (bench == null) return null;
+  const store = lsRead();
+  let lead = Infinity;
+  for (let u = 1; u <= 20; u++) { const v = store[`31_${raceDate}_${raceNo}_${u}`]; if (!v || v.type !== 'horse') continue; const fs = calcFrontSectional(v.time, v.agari3f); if (fs != null && fs < lead) lead = fs; }
+  if (lead === Infinity) return null;
+  const dev = +(lead - bench).toFixed(2);
+  return { dev, label: dev <= -0.8 ? 'ハイ' : dev >= 0.5 ? 'スロー' : 'ミドル', src: 'front' };
+}
+
 function backfillPaceLabels() {
   let n = 0;
   for (const [k, v] of Object.entries(lsRead())) {
-    if (!k.startsWith('race_') || v.baba_code !== '31' || !v.first3f) continue;
-    const r = getPaceDevLabel(v.distance, v.race_class || v.raceClass, v.track_cond || v.trackCond, v.first3f);
+    if (!k.startsWith('race_') || v.baba_code !== '31') continue;
+    // 第一優先＝テン3F由来（従来）。無い場合は前半区間タイムでフォールバック算出。
+    let r = v.first3f ? getPaceDevLabel(v.distance, v.race_class || v.raceClass, v.track_cond || v.trackCond, v.first3f) : null;
+    if (!r) {
+      const p = k.split('_');   // race_31_{date}_{rno}
+      const rno = parseInt(p[3]);
+      if (rno) r = getFrontPaceLabel(p[2], rno, v.distance, v.race_class || v.raceClass, v.track_cond || v.trackCond);
+    }
     if (!r) continue;
     if (v.paceTypeAuto === r.label && v.paceDevAuto === r.dev) continue; // 変化なし
     lsWrite(k, { ...v, paceTypeAuto: r.label, paceDevAuto: r.dev });
