@@ -6384,7 +6384,7 @@ async function _bulkFetchRun(monthsList, label) {
     }
     // first3f・ペース自動補完（今回保存分に効く）＋基準タイム系のキャッシュ無効化（データ増を反映）
     try { backfillFirst3fFrom1400m(); backfillPaceLabels(); backfillPaceType(); } catch(e) {}
-    window._f3BenchCache = null; window._leadFrontBench = null; window._frontBaseCache = null; window._comboStatsCache = null;
+    window._f3BenchCache = null; window._leadFrontBench = null; window._frontBaseCache = null; window._comboStatsCache = null; window._jcMapsCache = null;
     loadSavedData();
     if (typeof initAnalysisDateSelect === 'function') initAnalysisDateSelect();
     _bulkLog(`${_bulkCancel ? '⏹ 中止しました。' : '✅ 完了！'} ${label}：<b>${savedR}レース・${savedH}頭</b>を保存${withComments?`（コメント${cmt}件）`:''}${err?`／エラー${err}`:''}`);
@@ -6580,6 +6580,106 @@ function renderJockeyChangeAnalysis() {
       </div>
       <p style="font-size:10.5px;color:#9ca3af;margin-top:8px;line-height:1.6">※乗替複勝＝この騎手に乗せ替えた時／継続複勝＝この騎手が前走から継続した時（乗り替わりなし）／差＝乗替−継続（＋＝乗せ替えた方が良い＝勝負気配）。件数は「乗替/継続」。厩舎を選ぶとその厩舎の主戦・相性が見られます。</p>`;
   }
+}
+
+// ── 乗替/継続の集計マップ（出馬表の乗り替わり診断＆分析パネル共用・キャッシュ付き）──
+// 返す：byB=乗替先別{n,f}／sameB=同騎手継続別{n,f}／pair=A→B別／jkTr=騎手×厩舎の継続/乗替。
+function _buildJcMaps(yf, finalOnly) {
+  const ck = `${yf || ''}|${finalOnly ? 'F' : ''}`;
+  if (!window._jcMapsCache) window._jcMapsCache = {};
+  if (window._jcMapsCache[ck]) return window._jcMapsCache[ck];
+  const store = lsRead();
+  const finalSet = new Set();
+  for (const k of Object.keys(store)) { if (!k.startsWith('race_31_')) continue; const r = store[k]; if (/ファイナル/.test(r.race_name || '')) finalSet.add(`${r.race_date}_${parseInt(r.race_no)}`); }
+  const inYear = d => !yf || String(d).slice(0, 4) === yf;
+  const runs = {};
+  for (const k of Object.keys(store)) {
+    const p = k.split('_'); if (p.length !== 4 || p[0] !== '31') continue;
+    const v = store[k]; if (!v || v.type !== 'horse') continue;
+    const ch = parseInt(v.chakujun); if (isNaN(ch)) continue;
+    const jk = (v.jockey || '').trim(); if (!jk) continue;
+    (runs[v.horseName] = runs[v.horseName] || []).push({ d: p[1], rno: parseInt(p[2]), jk, ch, tr: (v.trainer || '').trim(), fin: finalSet.has(`${p[1]}_${parseInt(p[2])}`) });
+  }
+  for (const n of Object.keys(runs)) runs[n].sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : a.rno - b.rno);
+  const byB = {}, sameB = {}, pair = {}, jkTr = {};
+  for (const n of Object.keys(runs)) { const rs = runs[n];
+    for (let i = 1; i < rs.length; i++) {
+      const A = rs[i - 1].jk, B = rs[i].jk; if (!A || !B) continue;
+      if (!inYear(rs[i].d)) continue; if (finalOnly && !rs[i].fin) continue;
+      const tr = rs[i].tr, hit = rs[i].ch <= 3;
+      if (tr) { (jkTr[B] = jkTr[B] || {}); (jkTr[B][tr] = jkTr[B][tr] || { cn: 0, cf: 0, gn: 0, gf: 0 }); if (A === B) { jkTr[B][tr].cn++; if (hit) jkTr[B][tr].cf++; } else { jkTr[B][tr].gn++; if (hit) jkTr[B][tr].gf++; } }
+      if (A === B) { (sameB[B] = sameB[B] || { n: 0, f: 0 }); sameB[B].n++; if (hit) sameB[B].f++; }
+      else { (byB[B] = byB[B] || { n: 0, f: 0 }); byB[B].n++; if (hit) byB[B].f++; const pk = A + ' → ' + B; (pair[pk] = pair[pk] || { n: 0, f: 0 }); pair[pk].n++; if (hit) pair[pk].f++; }
+    }
+  }
+  const res = { byB, sameB, pair, jkTr };
+  window._jcMapsCache[ck] = res;
+  return res;
+}
+
+// ── 🔄 乗り替わり診断（出馬表/予想パネル用）：各馬の前走→今走騎手の乗替/継続実績を表示 ──
+// ファイナルレースならファイナル実績で判定（データ薄いjockeyは全レース実績にフォールバック）。
+function buildJockeyChangeDiag(raceNo) {
+  const data = allRacesData[raceNo];
+  if (!data || !data.horses.length) return '';
+  const { raceInfo, horses } = data;
+  const isFinal = /ファイナル/.test(raceInfo.raceName || raceInfo.race_name || '');
+  const allMaps = _buildJcMaps('', false);
+  const finMaps = isFinal ? _buildJcMaps('', true) : null;
+  const pct = (a, b) => b ? +(100 * a / b).toFixed(1) : null;
+  // ファイナル優先（n>=8）→薄ければ全レース。{f,n,src}を返す
+  const pick = (fMap, aMap, key) => { const fv = finMaps && fMap[key]; if (fv && fv.n >= 8) return { f: pct(fv.f, fv.n), n: fv.n, src: 'F' }; const av = aMap[key]; return av ? { f: pct(av.f, av.n), n: av.n, src: 'A' } : null; };
+  const _wk = h => Math.min(Math.max(parseInt(h.wakuBan) || Math.ceil((parseInt(h.umaBan) || 1) / 2), 1), 8);
+  const WBG = w => ({ 1: '#fff', 2: '#111', 3: '#c00', 4: '#1a5ab8', 5: '#e8c800', 6: '#18a020', 7: '#f05a00', 8: '#c080c8' })[w] || '#888';
+  const WFG = w => [1, 5, 8].includes(w) ? '#222' : '#fff';
+  const cls = v => v == null ? '' : v >= 45 ? 'jc-hot' : v < 18 ? 'jc-cold' : '';
+
+  let anyChange = false;
+  const rows = horses.map(h => {
+    const nowJk = (h.jockey || '').trim(); if (!nowJk) return null;
+    const tr = (h.trainer || '').trim();
+    const hist = getHorseHistoryBefore(h.horseName, raceInfo.raceDate, raceNo).filter(x => x.babaCode === '31');
+    const prevJk = hist.length ? (hist[0].jockey || '').trim() : '';
+    const waku = _wk(h);
+    const nameCell = `<span style="background:${WBG(waku)};color:${WFG(waku)};${waku===1?'border:1px solid #bbb;':''}min-width:18px;height:18px;border-radius:3px;font-size:10px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${h.umaBan}</span> <b>${h.horseName}</b>`;
+    if (!prevJk) return { kind: 'debut', nameCell };
+    if (prevJk === nowJk) {
+      const c = pick(finMaps ? finMaps.sameB : {}, allMaps.sameB, nowJk);
+      return { kind: 'cont', nameCell, jk: nowJk, stat: c, verdict: c && c.f >= 50 ? 'good' : c && c.f < 18 ? 'bad' : 'mid' };
+    }
+    anyChange = true;
+    const dst = pick(finMaps ? finMaps.byB : {}, allMaps.byB, nowJk);
+    const pr = pick(finMaps ? finMaps.pair : {}, allMaps.pair, prevJk + ' → ' + nowJk);
+    const cont = pick(finMaps ? finMaps.sameB : {}, allMaps.sameB, nowJk);
+    const trS = allMaps.jkTr[nowJk] && allMaps.jkTr[nowJk][tr];
+    const trF = trS && trS.gn >= 5 ? pct(trS.gf, trS.gn) : null;
+    const primary = (pr && pr.n >= 5) ? pr : dst;   // A→Bペアが5件+あればそれ、なければ乗替先全体
+    const pf = primary ? primary.f : null;
+    const verdict = pf == null ? 'mid' : pf >= 45 ? 'good' : pf < 18 ? 'bad' : 'mid';
+    return { kind: 'change', nameCell, prevJk, nowJk, dst, pr, cont, trF, primary, verdict };
+  }).filter(Boolean);
+
+  const vbadge = v => v === 'good' ? '<span style="color:#16a34a;font-weight:800">🔥買い</span>' : v === 'bad' ? '<span style="color:#dc2626;font-weight:800">⚠️危険</span>' : '<span style="color:#94a3b8">⚪標準</span>';
+  const statTxt = s => s ? `<span class="${cls(s.f)}" style="font-weight:800">${s.f}%</span><span style="font-size:9px;color:#94a3b8">(${s.n}${s.src === 'F' ? 'F' : ''})</span>` : '—';
+
+  const tbody = rows.map(r => {
+    if (r.kind === 'debut') return `<tr><td>${r.nameCell}</td><td style="color:#9ca3af">高知初騎乗/履歴なし</td><td>—</td><td style="text-align:center">—</td></tr>`;
+    if (r.kind === 'cont') return `<tr><td>${r.nameCell}</td><td><span style="font-size:10px;color:#64748b">継続</span> ${r.jk}</td><td>継続 ${statTxt(r.stat)}</td><td style="text-align:center">${vbadge(r.verdict)}</td></tr>`;
+    const detail = `乗替時 ${statTxt(r.dst)}${r.pr && r.pr.n >= 5 ? ` ｜ この乗替 ${statTxt(r.pr)}` : ''}${r.trF != null ? ` ｜ 厩舎 <span class="${cls(r.trF)}" style="font-weight:700">${r.trF}%</span>` : ''}${r.cont ? ` ｜ 継続なら ${r.cont.f}%` : ''}`;
+    return `<tr><td>${r.nameCell}</td><td><span style="font-size:10px;color:#dc2626;font-weight:700">乗替</span> ${r.prevJk}<span style="color:#94a3b8">→</span>${r.nowJk}</td><td style="font-size:11px">${detail}</td><td style="text-align:center">${vbadge(r.verdict)}</td></tr>`;
+  }).join('');
+
+  return `
+    <details class="pf-details">
+      <summary class="pf-summary">🔄 乗り替わり診断<span class="pf-sm-tag" style="background:${isFinal ? '#ede9fe' : '#f1f5f9'};color:${isFinal ? '#6d28d9' : '#475569'}">${isFinal ? 'ファイナル実績' : '全レース実績'}</span></summary>
+      <div class="pf-body">
+        <div class="pf-hint">前走→今走の騎手を照合。乗替時＝乗替先の複勝率／この乗替＝A→Bペア(5件+)／厩舎＝この厩舎がこの騎手に乗替時。判定は複勝45%+で🔥・18%未満で⚠️。${isFinal ? '<b style="color:#6d28d9">ファイナルの実績で判定（薄い騎手は全レース＝(n)にFなし）</b>' : ''}</div>
+        <div class="table-wrapper"><table class="deban-table" style="font-size:12px">
+          <thead><tr><th style="text-align:left">馬</th><th style="text-align:left">騎手（前走→今走）</th><th style="text-align:left">実績</th><th style="text-align:center">判定</th></tr></thead>
+          <tbody>${tbody}</tbody>
+        </table></div>
+      </div>
+    </details>`;
 }
 
 function getSavedRacePace(key){const d=lsRead()[key];if(!d)return null;return{first3f:d.first3f||'',agari4f:d.agari4f||'',agari3f_race:d.agari3f_race||'',paceType:d.paceType||d.pace_type||'',memo:d.memo||''};}
@@ -13836,6 +13936,7 @@ function renderPredictionPanel(raceNo) {
     ${marketBackBadge}
     ${paceBiasBadge}
     ${buildPaceFormationHtml(raceNo)}
+    ${buildJockeyChangeDiag(raceNo)}
     <div style="overflow-x:auto;">${tableHtml}</div>
     <div id="yoso-backtest-${raceNo}"></div>
     <p style="font-size:10px;color:#374151;margin-top:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:6px 10px;line-height:1.7">
