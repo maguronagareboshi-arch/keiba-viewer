@@ -280,6 +280,23 @@ body.dark-mode .value-bet-bar{background:#3f3506!important;border-color:#a16207!
 body.dark-mode .danger-fav-bar{background:#2d0000!important;border-color:#b91c1c!important;color:#fca5a5!important}
 body.dark-mode .leg-warn-bar{background:#2a1400!important;border-color:#c2410c!important;color:#fdba74!important}
 body.dark-mode .market-back-bar{background:#071a30!important;border-color:#1d4ed8!important;color:#93c5fd!important}
+body.dark-mode .pf-details{background:#0d1520!important;border-color:#1e3048!important}
+body.dark-mode .pf-summary{color:#c8d8ec!important}
+body.dark-mode .pf-body{background:#0a1119!important;border-top-color:#16273b!important}
+body.dark-mode .pf-pace--hi{background:#2d0000!important;border-color:#7f1d1d!important;color:#fca5a5!important}
+body.dark-mode .pf-pace--mid{background:#0d1826!important;border-color:#1e3048!important;color:#9fb2c8!important}
+body.dark-mode .pf-pace--slow{background:#04250f!important;border-color:#166534!important;color:#86efac!important}
+body.dark-mode .pf-band{border-bottom-color:#16273b!important}
+body.dark-mode .pf-band-label{color:#c8d8ec!important}
+body.dark-mode .pf-sub--warn{color:#f87171!important}
+body.dark-mode .pf-sub--good{color:#4ade80!important}
+body.dark-mode .pf-chip{background:#0f1b2b!important;border-color:#22354d!important}
+body.dark-mode .pf-chip-name{color:#e2ecf7!important}
+body.dark-mode .pf-dev--fast{color:#f87171!important}
+body.dark-mode .pf-dev--slow{color:#60a5fa!important}
+body.dark-mode .pf-dev--mid{color:#8fa3be!important}
+body.dark-mode .pf-note{background:#0d1826!important;border-color:#1e3048!important;color:#9fb2c8!important}
+body.dark-mode .pf-note b{color:#c8d8ec!important}
 body.dark-mode .leg-warn-bar{background:#1f1200!important;border-color:#c2410c!important;color:#fdba74!important}
 body.dark-mode .cv-verdict-card{background:#0c2438!important;border-color:#1d4ed8!important;color:#bfdbfe!important}
 body.dark-mode .cv-verdict-card .cv-verdict-title{color:#7dd3fc!important}
@@ -1021,6 +1038,28 @@ const KV_APP_CSS = [
       '.leg-warn-bar .lwb-sub{font-size:11px;opacity:.85;font-weight:500}',
       '.market-back-bar{margin-bottom:10px;background:#eff6ff;border:1.5px solid #2563eb;border-radius:8px;padding:7px 12px;font-size:12px;color:#1e40af;font-weight:600}',
       '.market-back-bar .mbb-sub{font-size:11px;opacity:.85;font-weight:500}',
+      '.pf-details{margin-bottom:10px;border:1px solid #dbe3ef;border-radius:8px;background:#f8fafc;overflow:hidden}',
+      '.pf-summary{cursor:pointer;padding:7px 12px;font-size:12px;font-weight:800;color:#334155;display:flex;align-items:center;gap:8px;list-style:none}',
+      '.pf-summary::-webkit-details-marker{display:none}',
+      '.pf-summary .pf-sm-tag{font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;margin-left:auto}',
+      '.pf-body{padding:6px 12px 10px;background:#fff;border-top:1px solid #eef2f7}',
+      '.pf-pace{border-radius:8px;padding:6px 10px;margin-bottom:8px;font-size:12px;line-height:1.5}',
+      '.pf-pace b{font-weight:800}',
+      '.pf-pace--hi{background:#fef2f2;border:1px solid #fecaca;color:#991b1b}',
+      '.pf-pace--mid{background:#f8fafc;border:1px solid #e2e8f0;color:#475569}',
+      '.pf-pace--slow{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534}',
+      '.pf-hint{font-size:10px;color:#94a3b8;margin-bottom:4px}',
+      '.pf-band{display:flex;align-items:flex-start;gap:9px;padding:6px 0;border-bottom:1px solid #f0f4fa}',
+      '.pf-band-label{flex-shrink:0;width:72px;padding-top:2px;font-size:12px;font-weight:800;color:#334155}',
+      '.pf-band-sub{font-size:9px;font-weight:700;margin-top:1px}',
+      '.pf-sub--warn{color:#dc2626}','.pf-sub--good{color:#16a34a}','.pf-sub--muted{color:#94a3b8}',
+      '.pf-chips{flex:1;display:flex;flex-wrap:wrap;gap:5px}',
+      '.pf-chip{display:flex;align-items:center;gap:5px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:3px 7px}',
+      '.pf-chip-name{font-size:12px;font-weight:700;color:#0f172a;white-space:nowrap}',
+      '.pf-dev{font-size:10px;font-family:monospace;font-weight:800}',
+      '.pf-dev--fast{color:#dc2626}','.pf-dev--slow{color:#2563eb}','.pf-dev--mid{color:#94a3b8}',
+      '.pf-note{margin-top:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:10.5px;color:#475569;line-height:1.6}',
+      '.pf-note b{color:#0f172a;font-weight:800}',
       /* 厳密検証：判定サマリーカード（常時表示）＋実験ごとの折りたたみ見出し */
       '.cv-verdict-card{margin-top:8px;background:#eef6ff;border:1.5px solid #93c5fd;border-radius:8px;padding:8px 12px;font-size:11px;color:#1e3a5f;line-height:1.9}',
       '.cv-verdict-card .cv-verdict-title{font-weight:800;color:#0369a1;margin-bottom:2px;font-size:12px}',
@@ -6469,12 +6508,17 @@ function saveDaySettings(baba, date, { memo } = {}) {
 // （信頼度バッジの閾値2.5/6や💰妙味帯の定義がそのまま使える）。
 // 読み込み優先順：①ローカル再学習（管理者の精度検証で自動保存）→ ②daySettingsセンチネル行
 // （keiba_day_settingsテーブル作成後に自動同期される将来経路）→ ③出荷時定数（デプロイで閲覧者に配布）。
-// 出荷時定数は現在null＝学習重みは無効（従来の等倍和で動作）。
-// 2026-07-04時点の判定：一段目（◎基準）は合格したが、二段目（📐印全体）の▲複勝が
-// −1.0ptで事前登録基準に届かず採用保留。データ追加が落ち着いた時点で精度検証を再実行し、
-// 二段基準を両方クリアすれば自動で保存・有効化される（saveMlLiveWeights経由）。
-// クリア時はこの定数に保存ペイロードを転記してデプロイすると閲覧者にも配布される。
-const KV_ML_WEIGHTS_DEFAULT = null;
+// 【2026-07-05 採用】データ3,002R到達で精度検証を最終判定。二段目（📐印全体）が頑健に合格
+// （○複勝55.4→57.4・勝ち馬捕捉66.5→68.6が5/5fold・ペア整合率4/5）、◎も平均改善（複勝71.0→71.8・
+// 1着38.5→39.2）。V3・馬アンカーSIと同じ「一段目3/5＋二段目クリア」基準で採用。全データ学習の
+// 実効倍率（base係数=1正規化）を転記。撤去は null に戻すだけ（従来の等倍和＝V3手動倍率に復帰）。
+const KV_ML_WEIGHTS_DEFAULT = {
+  fullAdopt: true, races: 3862, trainedAt: '2026-07-05',
+  eff: { condNew: 0.107, distNew: 0.339, rotN: 1.219, clsN: 2.174, cornN: 1.671, trendN: 0.979,
+    weightN: 2.129, agariN: 2.819, comboN: 5.269, marginN: 1.925, winStrN: 1.354,
+    jockeyChgN: 0.239, takiN: 0.147, cornConsistN: -0.877 },
+  tiers: { c1: 3.19, c2: 7.8, fukuTight: 60, fukuMid: 73, fukuStrong: 82.9, n: 3462 }
+};
 function getMlLiveWeights() {
   try {
     const ls = lsRead();
@@ -13042,6 +13086,80 @@ function computeYosoScored(raceNo, selCondOverride) {
   return { scored, comboStats: _comboStats, raceDist, raceCond, raceCls, selCond };
 }
 
+// ── 🏇 展開予想（予想隊列）──
+// 各馬の過去の前半区間タイム基準比(getFrontDev)の減衰平均から「今日の予想前半位置」を出し、
+// 速い順に隊列化。速い前半の馬(dev≤−0.3)の頭数からペースを予測（3頭+=ハイ→前崩れ注意）。
+// 表示専用（指数には非関与）。EDA(2742R)：ペース圧力大で先行複勝79→77%・差し+0.5pt＝弱いが実在。
+function buildPaceFormationHtml(raceNo) {
+  const data = allRacesData[raceNo];
+  if (!data || !data.horses.length) return '';
+  const { raceInfo, horses } = data;
+  const _wk = h => Math.min(Math.max(parseInt(h.wakuBan) || Math.ceil((parseInt(h.umaBan) || 1) / 2), 1), 8);
+  const WBG = w => ({ 1: '#fff', 2: '#111', 3: '#c00', 4: '#1a5ab8', 5: '#e8c800', 6: '#18a020', 7: '#f05a00', 8: '#c080c8' })[w] || '#888';
+  const WFG = w => [1, 5, 8].includes(w) ? '#222' : '#fff';
+
+  const rows = horses.map(h => {
+    const hist = getHorseHistoryBefore(h.horseName, raceInfo.raceDate, raceNo).filter(x => x.babaCode === '31');
+    const devs = [];
+    for (const r of hist) {
+      const fs = calcFrontSectional(r.time, r.agari3f);
+      if (fs == null) continue;
+      const d = getFrontDev(r.raceDate, r.distance, r.raceClass, r.trackCond, fs);
+      if (d != null) devs.push(d);
+      if (devs.length >= 6) break;
+    }
+    let pd = null;
+    if (devs.length >= 2) { let ws = 0, sm = 0; devs.forEach((v, i) => { const w = Math.pow(0.75, i); ws += w; sm += v * w; }); pd = +(sm / ws).toFixed(2); }
+    return { uma: h.umaBan, waku: _wk(h), name: h.horseName, pd, n: devs.length };
+  });
+  const known = rows.filter(r => r.pd != null);
+  if (known.length < 3) return '';   // 前半歴が薄いレースは出さない
+
+  const pressers = known.filter(r => r.pd <= -0.3).length;
+  const paceCls = pressers >= 3 ? 'hi' : pressers <= 1 ? 'slow' : 'mid';
+  const paceInfo = {
+    hi:   { tag: 'ハイ',   tagBg: '#fee2e2', tagFg: '#b91c1c', title: 'ハイペース予想', desc: `先行争い${pressers}頭 → 前崩れ注意・差し / 中団に展開の利` },
+    mid:  { tag: 'ミドル', tagBg: '#f1f5f9', tagFg: '#475569', title: 'ミドルペース予想', desc: `先行タイプ${pressers}頭 → 平均的な流れ・地力どおり` },
+    slow: { tag: 'スロー', tagBg: '#dcfce7', tagFg: '#166534', title: 'スローペース予想', desc: `速い前半${pressers}頭 → 楽な逃げ・前残り濃厚` },
+  }[paceCls];
+
+  const _chip = r => {
+    const dv = r.pd == null ? '—' : (r.pd > 0 ? '+' : '') + r.pd.toFixed(1);
+    const dc = r.pd == null ? 'pf-dev--mid' : r.pd <= -0.3 ? 'pf-dev--fast' : r.pd >= 0.4 ? 'pf-dev--slow' : 'pf-dev--mid';
+    const bd = r.waku === 1 ? 'border:1px solid #bbb;' : '';
+    return `<div class="pf-chip"><span style="background:${WBG(r.waku)};color:${WFG(r.waku)};${bd}min-width:19px;height:19px;border-radius:3px;font-size:11px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;">${r.uma}</span><span class="pf-chip-name">${r.name}</span><span class="pf-dev ${dc}">${dv}</span></div>`;
+  };
+  const _band = (label, subHtml, filt) => {
+    const arr = rows.filter(filt).sort((a, b) => (a.pd == null ? 99 : a.pd) - (b.pd == null ? 99 : b.pd));
+    if (!arr.length) return '';
+    return `<div class="pf-band"><div class="pf-band-label">${label}${subHtml}</div><div class="pf-chips">${arr.map(_chip).join('')}</div></div>`;
+  };
+
+  const bandsHtml =
+    _band('先頭集団', '<div class="pf-band-sub pf-sub--warn">競り合い→垂れ警戒</div>', r => r.pd != null && r.pd <= -0.7) +
+    _band('先行', '', r => r.pd != null && r.pd > -0.7 && r.pd <= -0.2) +
+    _band('中団', '<div class="pf-band-sub pf-sub--good">展開の利</div>', r => r.pd != null && r.pd > -0.2 && r.pd <= 0.4) +
+    _band('後方', paceCls === 'hi' ? '<div class="pf-band-sub pf-sub--good">展開の利</div>' : '', r => r.pd != null && r.pd > 0.4) +
+    _band('データ不足', '<div class="pf-band-sub pf-sub--muted">前半歴なし</div>', r => r.pd == null);
+
+  const note = paceCls === 'hi'
+    ? '先行勢が競り合いオーバーペース必至。軸は中団〜先行から折り合える馬、ヒモに差し脚を持つ馬を。'
+    : paceCls === 'slow'
+      ? '前が楽に運べる隊列。逃げ・先行馬の粘り込みを厚めに、差し・追込は割引推奨。'
+      : '極端な先行争いはなく地力どおりに流れそう。予想隊列で位置取りの優劣を確認。';
+
+  return `
+    <details class="pf-details">
+      <summary class="pf-summary">🏇 展開予想（予想隊列）<span class="pf-sm-tag" style="background:${paceInfo.tagBg};color:${paceInfo.tagFg};">${paceInfo.tag}ペース</span></summary>
+      <div class="pf-body">
+        <div class="pf-pace pf-pace--${paceCls}"><b>${paceInfo.title}</b>　${paceInfo.desc}</div>
+        <div class="pf-hint">数値＝前半区間の基準比（−が速い）／各馬の過去走から推定・上ほど先頭で通過</div>
+        ${bandsHtml}
+        <div class="pf-note"><b>読み筋：</b>${note}</div>
+      </div>
+    </details>`;
+}
+
 function renderPredictionPanel(raceNo) {
   const container = document.getElementById(`yoso-panel-${raceNo}`);
   if (!container) return;
@@ -13311,7 +13429,7 @@ function renderPredictionPanel(raceNo) {
             .sort((a, b) => parseInt(a.ninki) - parseInt(b.ninki)).slice(0, 2).map(h => h.horseName);
           if (_favNames.length) _sub = `<span class="vbb-sub">｜＋馬単 ${_vh.horseName}→（${_favNames.join('・')}）も過去検証104%（高分散）</span>`;
         }
-        valueBetBadge = `<div class="value-bet-bar">💰 <b>単勝妙味${_isTop ? 'ゾーン' : '：' + _vh.horseName}</b>（手動指数の軸${_isTop ? '＝◎' : '・◎とは別馬'}・単勝${_vod.toFixed(1)}倍）＝検証で単勝ROI約101%の帯（全◎平均88%比+13pt）${_sub}</div>`;
+        valueBetBadge = `<div class="value-bet-bar">💰 <b>単勝妙味${_isTop ? 'ゾーン' : '：' + _vh.horseName}</b>（手動指数の軸${_isTop ? '＝◎' : '・◎とは別馬'}・単勝${_vod.toFixed(1)}倍）＝検証で単勝ROI約92%の相対妙味帯（全◎平均88%比+約4pt・控除内だが市場より優位）${_sub}</div>`;
       }
     }
   }
@@ -13431,6 +13549,7 @@ function renderPredictionPanel(raceNo) {
     ${legWarnBadge}
     ${marketBackBadge}
     ${paceBiasBadge}
+    ${buildPaceFormationHtml(raceNo)}
     <div style="overflow-x:auto;">${tableHtml}</div>
     <div id="yoso-backtest-${raceNo}"></div>
     <p style="font-size:10px;color:#374151;margin-top:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:6px 10px;line-height:1.7">
