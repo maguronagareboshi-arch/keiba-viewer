@@ -6275,9 +6275,12 @@ async function bulkFetchMonth() {
           if (!parsed || !parsed.horses || !parsed.horses.length) { err++; return; }
           const _needOdds = parsed.horses.some(h => !(parseFloat(h.odds) > 0));
           if (_needOdds) rkTotal++;   // ← この日が遅い＝ここが増える（診断表示）
+          // コメントは2024/03開始。それ以前はページ不在＝取得を試みると全プロキシ空振りで
+          // 毎レース数秒空費するため、古い日付は取得自体をスキップする（古い月の遅さの主因を解消）。
+          const _wantCmt = withComments && date >= KV_COMMENT_START;
           const [rk, cr] = await Promise.all([
             _needOdds ? _fetchRakutenOddsRace(date, rn).catch(() => ({})) : Promise.resolve({}),
-            withComments ? fetchPostRaceComments(date, rn, parsed.horses.map(h => h.horseName)).catch(() => null) : Promise.resolve(null),
+            _wantCmt ? fetchPostRaceComments(date, rn, parsed.horses.map(h => h.horseName)).catch(() => null) : Promise.resolve(null),
           ]);
           if (rk && Object.keys(rk).length) parsed.horses.forEach(h => { const u = parseInt(h.umaBan); if (!(parseFloat(h.odds) > 0) && rk[u] > 0) h.odds = String(rk[u]); });
           const rf = refund[rn];
@@ -7516,6 +7519,14 @@ async function fetchAllComments() {
   const btn = document.querySelector('[onclick="fetchAllComments()"]');
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 取得中...'; }
 
+  // 表示中の日付が2024/03（コメント開始）より前なら取得を試みても全レース空振りで遅いだけ。
+  const _cmtDate = allRacesData[raceNos[0]]?.raceInfo?.raceDate || currentDate || '';
+  if (_cmtDate && _cmtDate < KV_COMMENT_START) {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-info-circle"></i> この日はコメント対象外（2024/03以降）'; btn.style.background = '#d97706';
+      setTimeout(() => { btn.innerHTML = '<i class="fas fa-comments"></i> 全レースコメント一括取得'; btn.style.background = '#0e7490'; }, 4000); }
+    return;
+  }
+
   let totalMatched = 0;
   let done = 0;
   for (const raceNo of raceNos) {
@@ -7572,6 +7583,11 @@ async function fetchAllComments() {
 // ============================================================
 
 /** URLを生成: keiba.or.jp/?postracecomment=YYYYMMDDNN */
+// keiba.or.jp のレース後コメント（postracecomment）は 2024/03 開始。それ以前は
+// ページが存在せず、取得を試みると全プロキシ空振り→リトライ待機(最大9秒)を毎レース空費する
+// （月間一括取得で古い月が極端に遅くなる主因）。この日付より前はコメント取得を丸ごとスキップする。
+const KV_COMMENT_START = '2024/03/01';
+
 function buildCommentUrl(raceDate, raceNo) {
   const dateStr = raceDate.replace(/\//g, ''); // "2026/06/21" → "20260621"
   const raceStr = String(raceNo).padStart(2, '0'); // 10 → "10"
