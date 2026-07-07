@@ -103,6 +103,19 @@ tr:nth-child(even) td { background: var(--row-alt); }
 td.l { text-align: left; }
 td.num { font-variant-numeric: tabular-nums; }
 td.small { font-size: 11px; line-height: 1.5; text-align: left; }
+/* スマホ(≤760px)のみ: ①馬名列を左端固定 ③根拠をタップ展開（デスクトップは一切変えない） */
+@media (max-width: 760px) {
+  td.stickyname, th.stickyname { position: sticky; left: 0; z-index: 2; box-shadow: 2px 0 5px rgba(0,0,0,.18); }
+  td.stickyname { background: var(--panel); }
+  tr:nth-child(even) td.stickyname { background: var(--row-alt); }
+  th.stickyname { z-index: 3; background: var(--chip-bg); }
+  td.konkyo { max-width: 96px; cursor: pointer; }
+  td.konkyo .kv { display: inline-block; max-width: 76px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+  td.konkyo::after { content: '▾'; color: var(--accent); font-size: 11px; margin-left: 2px; }
+  td.konkyo.open { max-width: 62vw; white-space: normal; }
+  td.konkyo.open .kv { max-width: none; overflow: visible; white-space: normal; }
+  td.konkyo.open::after { content: '▴'; }
+}
 .waku { display: inline-block; width: 20px; border-radius: 4px; font-weight: bold; }
 .w1 { background: var(--waku1-bg); color: var(--waku1-tx); border: 1px solid var(--border); }
 .w2 { background: var(--waku2-bg); color: var(--waku2-tx); }
@@ -858,7 +871,7 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku) {
       <td style="font-size:16px">${r.mark || ''}</td>
       <td><span class="waku w${e.waku || 1}">${e.waku ?? ''}</span></td>
       <td>${e.umaban ?? ''}</td>
-      <td class="l"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a></td>
+      <td class="l stickyname"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a></td>
       <td class="num ${r.mark === '◎' ? 'best' : ''}">${r.aiDev != null ? r.aiDev.toFixed(1) : '-'}</td>
       <td class="num ${r.mark === '◎' ? 'best' : ''}">${r.winP != null ? (r.winP * 100).toFixed(0) + '%' : '-'}</td>
       <td class="num">${r.score != null ? (50 + r.score * 10).toFixed(1) : '-'}</td>
@@ -866,7 +879,7 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku) {
       <td class="num">${r.cz != null ? r.cz.toFixed(1) : '-'}</td>
       <td class="num" data-live-odds="${e.umaban}">${e.win_odds ?? '-'}${e.pop != null ? `(${e.pop})` : ''}</td>
       <td>${r.myomi ? '💰' : ''}</td>
-      <td class="small">${esc(konkyo)}</td>
+      <td class="small konkyo"><span class="kv">${esc(konkyo)}</span></td>
     </tr>`;
   }).join('');
 
@@ -875,7 +888,7 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku) {
   <div id="evMonitor" class="note" hidden></div>
   <div class="card"><div class="tablewrap">
     <table>
-      <tr><th>AI印</th><th>枠</th><th>番</th><th>馬名</th><th>AI予測</th><th>勝率</th><th>総合</th><th>SI</th><th>調教</th><th>単勝(人気)</th><th>妙味</th><th>根拠</th></tr>
+      <tr><th>AI印</th><th>枠</th><th>番</th><th class="stickyname">馬名</th><th>AI予測</th><th>勝率</th><th>総合</th><th>SI</th><th>調教</th><th>単勝(人気)</th><th>妙味</th><th>根拠</th></tr>
       ${rows}
     </table>
   </div>
@@ -1679,7 +1692,9 @@ async function init() {
     if (hl) { e.preventDefault(); const nm = hl.textContent.trim();
       hl.dataset.hid ? openHorseModal(hl.dataset.hid, true, nm) : openHorseModal(hl.dataset.horse, false, nm); return; }
     const od = e.target.closest('[data-live-odds]');
-    if (od) { e.stopPropagation(); showOddsFlow(od.dataset.liveOdds, od); }
+    if (od) { e.stopPropagation(); showOddsFlow(od.dataset.liveOdds, od); return; }
+    const kk = e.target.closest('td.konkyo');   // スマホ: 根拠をタップで展開/折りたたみ
+    if (kk) kk.classList.toggle('open');
   });
   // オッズ推移ポップアップを画面クリックで閉じる
   document.addEventListener('click', (e) => {
