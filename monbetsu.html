@@ -1590,6 +1590,7 @@ async function selectRace(raceId, sub) {
 function selectDate(d) {
   state.date = d;
   state.month = d.slice(0, 7);
+  try { localStorage.setItem('mb_last_date', d); } catch (e) { /* プライベートモード等は無視 */ }
   renderMonths();
   renderDates();
   const races = state.dates[d] || [];
@@ -1680,7 +1681,11 @@ async function init() {
     if (hr && state.dates[hd].some((r) => r.race_id === hr)) { renderTabs(); await selectRace(hr); return; }
     selectDate(hd);
   } else {
-    selectDate(dates[0]);
+    // 初期日付: 前回選択（タブを閉じても記憶） → 今日 → 最新 の優先順
+    let saved = null;
+    try { saved = localStorage.getItem('mb_last_date'); } catch (e) { /* 無視 */ }
+    const today = jstToday();
+    selectDate((saved && state.dates[saved]) ? saved : (state.dates[today] ? today : dates[0]));
   }
 }
 init();

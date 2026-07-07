@@ -762,6 +762,7 @@ async function initMain(dates) {
         title="${esc(r.klass || '')} ${esc(r.name || '')}">${r.race_no}R<small>${r.distance_m || '?'}m</small></button>`).join('');
   };
   const loadDate = async (date) => {
+    try { localStorage.setItem('mb_sim_date', date); } catch (e) { /* プライベートモード等は無視 */ }
     state.races = await state.source.listRaces(date);
     if (state.races.length) {
       const meta = state.races[0];
@@ -817,7 +818,16 @@ async function initMain(dates) {
     $('speedBtn').textContent = `速度 x${state.speed}`;
   });
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { loadCss(); drawTrack(); drawHorses(); });
-  await loadDate(dates[0]);
+  // 初期日付: 前回選択（タブを閉じても記憶） → 今日 → 最新 の優先順
+  let initDate = null;
+  try { initDate = localStorage.getItem('mb_sim_date'); } catch (e) { /* 無視 */ }
+  if (!initDate || !dates.includes(initDate)) {
+    const n = new Date();
+    const today = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+    initDate = dates.includes(today) ? today : dates[0];
+  }
+  $('dateSel').value = initDate;
+  await loadDate(initDate);
 }
 init();
 </script>
