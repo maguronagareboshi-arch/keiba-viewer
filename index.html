@@ -280,6 +280,7 @@ body.dark-mode .value-bet-bar{background:#3f3506!important;border-color:#a16207!
 body.dark-mode .danger-fav-bar{background:#2d0000!important;border-color:#b91c1c!important;color:#fca5a5!important}
 body.dark-mode .leg-warn-bar{background:#2a1400!important;border-color:#c2410c!important;color:#fdba74!important}
 body.dark-mode .market-back-bar{background:#071a30!important;border-color:#1d4ed8!important;color:#93c5fd!important}
+body.dark-mode .ana-run-bar{background:#2a0630!important;border-color:#a21caf!important;color:#f0abfc!important}
 body.dark-mode .ev-monitor-bar{background:#052e16!important;border-color:#16a34a!important;color:#bbf7d0!important}
 body.dark-mode .ev-monitor-bar.skip{background:#1e293b!important;border-color:#475569!important;color:#cbd5e1!important}
 body.dark-mode .ev-monitor-bar.caution{background:#2a1a00!important;border-color:#b45309!important;color:#fcd34d!important}
@@ -1046,6 +1047,9 @@ const KV_APP_CSS = [
       '.leg-warn-bar .lwb-sub{font-size:11px;opacity:.85;font-weight:500}',
       '.market-back-bar{margin-bottom:10px;background:#eff6ff;border:1.5px solid #2563eb;border-radius:8px;padding:7px 12px;font-size:12px;color:#1e40af;font-weight:600}',
       '.market-back-bar .mbb-sub{font-size:11px;opacity:.85;font-weight:500}',
+      // ⚡穴馬激走バッジ（指数下位の2-3着ライン候補）
+      '.ana-run-bar{margin-bottom:10px;background:#fdf4ff;border:1.5px solid #c026d3;border-radius:8px;padding:7px 12px;font-size:12px;color:#86198f;font-weight:600}',
+      '.ana-run-bar .arb-sub{font-size:11px;opacity:.85;font-weight:500}',
       // 💹 EVモニター（中穴×傾斜・単勝）
       '.ev-monitor-bar{margin-bottom:10px;background:#f0fdf4;border:2px solid #16a34a;border-radius:10px;padding:9px 13px;font-size:12px;color:#14532d}',
       '.ev-monitor-bar.skip{background:#f8fafc;border:1.5px solid #cbd5e1;color:#475569}',
@@ -14212,6 +14216,53 @@ function renderPredictionPanel(raceNo) {
     }
   }
 
+  // ── ⚡穴馬激走バッジ（指数下位の2-3着ライン候補・表示専用）──
+  //    残差分析（指数6番手以下66,979頭・2026-07-07）：下位馬のベース複勝率11.4%に対し
+  //    ①騎手×厩舎コンボ好調(comboN≥0.5)=24.1% ②逃げ先行型(cornN≥1)=21.0%
+  //    ③前走展開不利の免罪(paceCtxN>0)=20.3% と該当馬は複勝率が約2倍。
+  //    指数への組み込みはWFで正味+63頭/7909Rと微小のため、印は汚さずライン構築の人間支援に使う。
+  let anaBadge = '';
+  if (scored.length >= 7) {
+    const _allCombo = getComboStatsAll();
+    // 前走展開文脈（backtest paceCtxN と同一定義・直近3走のうち高知走のみ）
+    const _paceCtxLive = hName => {
+      let tough = false, gifted = false, excused = false;
+      const _ld = lsRead();
+      for (const h of getHorseHistoryBefore(hName, raceInfo.raceDate, raceNo).slice(0, 3)) {
+        if (h.babaCode !== '31') continue;
+        const rrec = _ld[`race_31_${h.raceDate}_${h.raceNo}`];
+        if (!rrec || !rrec.first3f) continue;
+        const pd = getPaceDevLabel(rrec.distance, rrec.race_class, rrec.track_cond, rrec.first3f);
+        if (!pd) continue;
+        const c1 = parseInt(String(h.corner || '').split('-')[0]);
+        const ch = parseInt(h.chakujun);
+        if (isNaN(c1) || c1 <= 0 || isNaN(ch)) continue;
+        if (pd.dev <= -0.6 && c1 <= 3 && ch <= 3) tough = true;
+        if (pd.dev <= -1.0 && c1 >= 6 && ch <= 3) gifted = true;
+        if (pd.dev <= -1.0 && c1 <= 3 && ch >= 4) excused = true;
+      }
+      return (tough ? 0.5 : 0) + (gifted ? -0.4 : 0) + (excused ? 0.4 : 0);
+    };
+    const _anaHits = [];
+    scored.forEach((s, idx) => {
+      if (idx < 5 || s.totalScore == null) return;   // 指数6番手以下のみ
+      const why = [];
+      const cm = Yoso.comboMod(_allCombo[`${s.jockey}_${s.trainer}`]);
+      if (cm >= 0.5) why.push('厩舎コンボ好調');
+      if (s.cornMod >= 1) why.push('逃げ先行型');
+      let pcv = 0;
+      try { pcv = _paceCtxLive(s.horse.horseName || ''); } catch (e) {}
+      if (pcv > 0) why.push('前走展開不利の免罪');
+      if (why.length) _anaHits.push({ s, idx, why, nSig: why.length });
+    });
+    if (_anaHits.length) {
+      _anaHits.sort((a, b) => b.nSig - a.nSig || a.idx - b.idx);
+      const _items = _anaHits.slice(0, 3).map(x =>
+        `<b>${x.s.horse.horseName}</b>（${x.idx + 1}番手・${x.why.join('＋')}）`).join('　');
+      anaBadge = `<div class="ana-run-bar">⚡ <b>穴馬激走注意</b>：${_items}<span class="arb-sub">｜この型の指数下位馬は複勝20〜24%（下位平均11%・66,979頭の実測）。ワイド・3連単の2-3着ラインに一考</span></div>`;
+    }
+  }
+
   // 🧠 学習重み適用中の表示（表示のみ・重みが未保存なら何も出さない＝従来式）
   const _mlWNote = getMlLiveWeights();
   const mlNote = _mlWNote
@@ -14251,6 +14302,7 @@ function renderPredictionPanel(raceNo) {
     ${dangerFavBadge}
     ${legWarnBadge}
     ${marketBackBadge}
+    ${anaBadge}
     ${paceBiasBadge}
     ${buildPaceFormationHtml(raceNo)}
     ${buildJockeyChangeDiag(raceNo)}
