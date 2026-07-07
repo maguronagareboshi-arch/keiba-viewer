@@ -1,0 +1,27 @@
+name: odds-capture
+# 高知・門別のライブオッズを Cloudflare Worker の /capture 経由で記録する。
+# Cloudflare 側 cron が発火しないため、GitHub Actions（公開リポジトリ＝無料無制限）で確実に叩く。
+# トークンはリポジトリ Secret: CAPTURE_TOKEN（＝Worker の WRITE_TOKEN）。
+on:
+  schedule:
+    # UTC 5分おき・5〜12時台 = JST 14〜21時台（高知・門別の発売窓をカバー）
+    - cron: '*/5 5-12 * * *'
+  workflow_dispatch: {}   # 手動テスト用（Actions画面から実行可）
+permissions: {}
+concurrency:
+  group: odds-capture
+  cancel-in-progress: false
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - name: hit capture endpoint
+        env:
+          TOKEN: ${{ secrets.CAPTURE_TOKEN }}
+        run: |
+          code=$(curl -sS -m 30 -o resp.json -w "%{http_code}" \
+            "https://keiba-proxydeploy.maguronagareboshi.workers.dev/capture?token=${TOKEN}")
+          echo "HTTP ${code}"
+          cat resp.json || true
+          echo
+          test "${code}" = "200"
