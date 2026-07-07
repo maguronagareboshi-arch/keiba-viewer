@@ -512,16 +512,25 @@ function aiConfidence(scores) {
   return { gap, tier, label: CONF_TIERS[tier] };
 }
 
-// 坂路3F最速の偏差値（調教）
+// 坂路調教偏差（3F最速＋終いの加速/失速を0.49倍で加味）
+// 検証: 同じ3F合計でも終い1Fが中間より速い（加速）か遅い（バテ）かで複勝率±6〜7pt
 function cyoZFromWorks(cyo) {
   const hb = state.stats && state.stats.hanro;
+  const fb = state.stats && state.stats.hanro_finish;
   if (!cyo || !hb || !hb.std) return null;
-  let best = null;
+  let best = null;  // 3F最速の坂路追切
   for (const w of (cyo.works || [])) {
-    const t3 = w.times && w.times.t_half;
-    if (t3 && (w.course || '').includes('坂')) best = best == null || t3 < best ? t3 : best;
+    const th = w.times && w.times.t_half;
+    if (th && (w.course || '').includes('坂') && (best == null || th < best.th))
+      best = { th, t3: w.times.t_3f, t1: w.times.t_1f };
   }
-  return best == null ? null : 50 + 10 * (hb.mean - best) / hb.std;
+  if (best == null) return null;
+  let z = 50 + 10 * (hb.mean - best.th) / hb.std;
+  if (fb && fb.std && best.t3 && best.t1) {   // 終い加速 = (中間F − 終いF)
+    const accel = (best.t3 - best.t1) - best.t1;
+    z += 4.9 * Math.max(-2, Math.min(2, (accel - fb.mean) / fb.std));
+  }
+  return z;
 }
 
 // 坂路の200m毎ラップ＋加速/失速/好走判定（t4/t3/t2/t1=累計・zは偏差値）。カレンダーと調教タブで共用。
@@ -1239,16 +1248,21 @@ function analysisHtml(st) {
   const bandOrder = ['1000', '1100', '1200', '15-16', '1700', '1800+'];
   const sireList = Object.entries(sst).filter(([, e]) => e.n >= 25).sort((a, b) => (b[1].rate || 0) - (a[1].rate || 0));
   const pct = (v) => v == null ? '-' : `${Math.round(v * 100)}%`;
+  // 延長/短縮は標本20走以上のときだけ数値表示（少数のブレを出さない）
+  const pctN = (v, n) => (v == null || !n || n < 20) ? '-' : `${Math.round(v * 100)}%`;
   const sireRow = ([name, e]) => {
     const bd = bandOrder.filter((b) => e.bands[b]).map((b) => `${b.replace('15-16', '1500/1600')}:${pct(e.bands[b].rate)}`).join('　');
-    return `<tr><td class="l">${esc(name)}</td><td class="num">${e.n}</td><td class="num">${rateBar(e.rate)}</td>
-      <td class="num">${pct(e.good)}</td><td class="num">${pct(e.omo)}</td><td class="small l">${bd}</td></tr>`;
+    return `<tr><td class="l">${esc(name)}</td><td class="num">${e.n}</td>
+      <td class="num">${pct(e.win)}</td><td class="num">${rateBar(e.rate)}</td>
+      <td class="num">${pct(e.good)}</td><td class="num">${pct(e.omo)}</td>
+      <td class="num">${pctN(e.ext, e.ext_n)}</td><td class="num">${pctN(e.sht, e.sht_n)}</td>
+      <td class="small l">${bd}</td></tr>`;
   };
-  const sireTable = `<h3 class="sec">血統別成績（父の門別複勝率・砂適性／複勝率順・25走以上）</h3>
+  const sireTable = `<h3 class="sec">血統別成績（父の門別成績／複勝率順・25走以上）</h3>
     <div class="card tablewrap"><table>
-      <tr><th>父</th><th>出走</th><th>複勝率</th><th>良(白砂)</th><th>重</th><th>距離帯別 複勝率</th></tr>
+      <tr><th>父</th><th>出走</th><th>勝率</th><th>複勝率</th><th>良</th><th>重</th><th>延長</th><th>短縮</th><th>距離帯別 複勝率</th></tr>
       ${sireList.slice(0, 30).map(sireRow).join('')}
-    </table><div class="legend">門別の砂で複勝率が高い父＝砂適性の高い血統。良(白砂)と重で差がある父、距離帯で得意不得意がある父も。AI予想にも <b>sire_rate</b>（父の砂適性）として反映済み。下位も参考: ${sireList.slice(-4).map(([n]) => esc(n)).join('・')} など芝血統は苦戦傾向。</div></div>`;
+    </table><div class="legend">勝率＝1着率／複勝率＝3着内率。良と重で差がある父、距離帯で得意不得意がある父も。<b>延長</b>＝前走より距離を伸ばした時／<b>短縮</b>＝縮めた時の複勝率（20走以上のみ表示）。AI予想にも <b>sire_rate</b>（父の砂適性）として反映済み。下位も参考: ${sireList.slice(-4).map(([n]) => esc(n)).join('・')} など芝血統は苦戦傾向。</div></div>`;
 
   // 基準タイム（クラス別。'全'はフォールバック用なので非表示）
   const clsOrder = { '2歳': 0, '3歳': 1, '3歳以上': 2 };
