@@ -163,7 +163,6 @@ tr.clickable:hover td { background: var(--chip-bg); }
 <body>
 <header>
   <h1>門別ビューア</h1>
-  <span class="badge" id="srcBadge">データ源: -</span>
   <div class="viewtabs" id="viewTabs">
     <button data-view="race" class="active">レース</button>
     <button data-view="analysis">分析</button>
@@ -1641,13 +1640,11 @@ async function init() {
     try {
       state.dates = await providers[name].listDates();
       state.provider = providers[name];
-      $('srcBadge').textContent = `データ源: ${providers[name].label}`;
       break;
     } catch (e) { /* 次のプロバイダへ */ }
   }
   if (!state.provider) {
     $('raceView').innerHTML = '<div class="empty">データがありません</div>';
-    $('srcBadge').textContent = 'データ源: なし';
     return;
   }
   // 統計は裏で読み込み（指数・テン偏差値に使う）
