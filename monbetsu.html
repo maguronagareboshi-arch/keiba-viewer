@@ -944,6 +944,21 @@ function recordOdds(rid, live) {
   }
 }
 
+// Workerが記録済みの推移スナップショット（monbetsu_odds）を取り込む。
+// 画面を発走間際に開いても、朝→発走前の流れが最初から見える。未作成/未記録なら無害にスキップ。
+async function seedRecordedOdds(rd, raceNo, hist) {
+  try {
+    const rows = await sbGet(`monbetsu_odds?race_date=eq.${rd}&race_no=eq.${raceNo}&order=captured_at.asc&select=uma_ban,odds,captured_at`);
+    for (const r of rows || []) {
+      if (r.odds == null) continue;
+      const um = String(r.uma_ban), d = new Date(r.captured_at);
+      const t = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      const arr = hist[um] = hist[um] || [];
+      if (!arr.length || arr[arr.length - 1].o !== r.odds) arr.push({ t, o: r.odds });
+    }
+  } catch (e) { /* テーブル未作成/未記録なら朝＋ライブのみで動作 */ }
+}
+
 async function startLiveOdds(raceMeta) {
   clearInterval(state.oddsTimer); state.oddsTimer = null;
   const rd = raceMeta.race_date || raceMeta.date;
@@ -956,6 +971,7 @@ async function startLiveOdds(raceMeta) {
     const um = td.dataset.liveOdds, o = parseFloat(td.textContent);
     if (!hist[um] && !isNaN(o)) hist[um] = [{ t: '朝', o }];
   }
+  await seedRecordedOdds(rd, raceMeta.race_no, hist);  // 記録済み推移を取り込み（発走前の流れを復元）
   const run = async () => {
     const live = await fetchLiveOdds(rd, raceMeta.race_no);
     if (state.raceId === rid && state.view === 'race') { applyLiveOdds(live); recordOdds(rid, live); }
