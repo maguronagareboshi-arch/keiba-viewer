@@ -1131,7 +1131,12 @@ async function renderCyokyo() {
     if (L.length < 2) return '<td></td>';
     const last = L[L.length - 1], bestEarlier = Math.min(...L.slice(0, -1));
     const up = last <= bestEarlier + 0.1, down = last >= bestEarlier + 0.5;  // 尻上がり / 終い掛かる
-    const tag = up ? ' <span class="badge conf-S">加速</span>' : down ? ' <span class="badge conf-C">失速</span>' : '';
+    // 好走パターン: 偏差値60+ × 加速（実測複勝率59%）。同60+でも失速は44%
+    const z = hensachi(w.t3);
+    const strong = up && z != null && z >= 60;
+    const tag = strong ? ' <span class="badge conf-S">🔥好走</span>'
+      : up ? ' <span class="badge conf-S">加速</span>'
+        : down ? ' <span class="badge conf-C">失速</span>' : '';
     const cls = up ? 'arrow-up' : down ? 'bias-front' : '';
     const s = L.map((v, k) => k === L.length - 1 ? `<b class="${cls}">${v.toFixed(1)}</b>` : v.toFixed(1)).join('-');
     return `<td class="small l">${s}${tag}</td>`;
@@ -1174,7 +1179,7 @@ async function renderCyokyo() {
       <tr><th>#</th><th>馬名</th><th>馬齢</th><th>厩舎</th><th>コース</th><th>馬場</th><th>4F</th><th>3F</th><th>2F</th><th>1F</th><th>ラップ(200m毎)</th><th>偏差値</th><th>着順</th><th>最終追い</th><th>短評</th></tr>
       ${hanroRows || '<tr><td colspan="15">この日の坂路追切はありません</td></tr>'}
     </table>
-    <div class="legend"><span class="sw f"></span> 3F上位3本。偏差値は全期間の坂路3F分布（${hb ? `${hb.mean}±${hb.std}秒・n=${hb.n.toLocaleString()}本` : '-'}）基準・50が平均。着順は各馬の次走結果。<span class="badge arrow-up">最終追い</span>＝その次走前で最後の追切（本馬場を含め最後の1本）。ラップ＝200m毎の実測（累計から算出・左が入り→右が終い）。<span class="badge conf-S">加速</span>＝終いが最速級＝尻上がり／<span class="badge conf-C">失速</span>＝終いが明確に掛かる（入りが速くてもバテ気配）。</div>
+    <div class="legend"><span class="sw f"></span> 3F上位3本。偏差値は全期間の坂路3F分布（${hb ? `${hb.mean}±${hb.std}秒・n=${hb.n.toLocaleString()}本` : '-'}）基準・50が平均。着順は各馬の次走結果。<span class="badge arrow-up">最終追い</span>＝その次走前で最後の追切（本馬場を含め最後の1本）。ラップ＝200m毎の実測（累計から算出・左が入り→右が終い）。<span class="badge conf-S">加速</span>＝終いが最速級＝尻上がり／<span class="badge conf-C">失速</span>＝終いが明確に掛かる（入りが速くてもバテ気配）。<span class="badge conf-S">🔥好走</span>＝偏差値60+×加速（実測 次走複勝率59%・全26,409本の最終追い分析）。</div>
   </div>
   ${honba.length ? `<div class="card tablewrap">
     <b>本馬場（${cyokyoState.date}）</b>
