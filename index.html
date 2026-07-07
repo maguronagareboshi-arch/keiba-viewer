@@ -4,6 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>高知競馬ビューア</title>
+  <!-- PWA（ホーム画面追加でアプリとして起動）。パスは相対＝github.io/keiba-viewer と独自ドメイン両対応 -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="高知競馬">
+  <meta name="theme-color" content="#1a56a0">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <!-- PDF出力ライブラリ -->
@@ -877,6 +886,37 @@ const KV_APP_CSS = [
       /* ── ポジションクリック詳細エリア ── */
       '.ana-click-hint{font-size:10px;font-weight:400;color:#7c3aed;margin-left:auto;display:inline-flex;align-items:center;gap:3px;opacity:.7}',
       '.ana-pos-detail{margin-top:8px;background:#fff;border:1.5px solid #c4b5fd;border-radius:6px;padding:10px 12px;animation:fadeIn .2s ease}',
+      // ポジション詳細モーダル：スマホ幅では「表」を「1頭=1カード」に変換。馬名は横一行フル表示、
+      // 位置データ(枠/向正面/直線/ペース)はラベル付きチップで2行目に。横スライド完全に無し。
+      '@media(max-width:640px){',
+      '  #pos-detail-modal thead{display:none}',
+      '  #pos-detail-modal table,#pos-detail-modal tbody{display:block;width:100%}',
+      '  #pos-detail-modal .pd-row{display:flex;flex-wrap:wrap;align-items:center;column-gap:6px;row-gap:5px;padding:9px 12px!important}',
+      '  #pos-detail-modal .pd-row>td{border:none!important;padding:0!important}',
+      '  #pos-detail-modal .pd-chaku{order:1}',
+      '  #pos-detail-modal .pd-ninki{order:2}',
+      '  #pos-detail-modal .pd-name{order:3;flex:1 1 auto;min-width:0;text-align:left!important;font-size:14px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '  #pos-detail-modal .pd-r{order:4;margin-left:auto}',
+      '  #pos-detail-modal .pd-meta{order:5;flex:0 0 auto;font-size:11px!important;line-height:1.2;display:inline-flex;align-items:center;gap:4px;background:#eef2f7;border-radius:6px;padding:3px 8px!important;color:#334155!important}',
+      '  #pos-detail-modal .pd-meta::before{content:attr(data-label);font-size:9px;opacity:.65;font-weight:700}',
+      '  body.dark-mode #pos-detail-modal .pd-meta{background:rgba(255,255,255,.09);color:#c8d8ec!important}',
+      '  body.dark-mode #pos-detail-modal .pd-row{border-bottom-color:#1e3048!important}',
+      '}',
+      // 馬場傾向まとめ：スマホ幅では「表」を「1日=1カード」に変換。日付をヘッダー、各指標をラベル付き行で。
+      '@media(max-width:640px){',
+      '  #track-trend-table thead{display:none}',
+      '  #track-trend-table table,#track-trend-table tbody{display:block;width:100%}',
+      '  #track-trend-table .tt-row{display:block;border:1px solid #e2e8f0;border-radius:10px;padding:8px 12px 10px;margin-bottom:10px;background:#fff}',
+      '  #track-trend-table .tt-row>td{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:5px 0!important;text-align:right!important;white-space:normal!important;border:none!important;border-top:1px solid #f1f5f9}',
+      '  #track-trend-table .tt-cell[data-label]::before{content:attr(data-label);font-size:11px;color:#64748b;font-weight:600;text-align:left;flex:0 0 auto;white-space:nowrap}',
+      '  #track-trend-table .tt-row>td.tt-baba{display:none!important}',
+      '  #track-trend-table .tt-row>td.tt-date{display:block!important;font-size:15px;font-weight:800;color:#1a1a2e;text-align:left!important;padding:0 0 4px!important;border:none!important}',
+      '  #track-trend-table .tt-row>td.tt-memo{display:block!important;text-align:left!important;padding:8px 0 0!important;border-top:1px solid #f1f5f9}',
+      '  body.dark-mode #track-trend-table .tt-row{background:#0d1826;border-color:#1e3048}',
+      '  body.dark-mode #track-trend-table .tt-row>td{border-top-color:#16273b}',
+      '  body.dark-mode #track-trend-table .tt-row>td.tt-date{color:#7dd3fc}',
+      '  body.dark-mode #track-trend-table .tt-cell[data-label]::before{color:#8fa3be}',
+      '}',
       /* ── ポジションマトリクス ── */
       '.ana-matrix-wrap{overflow-x:auto;margin-top:4px}',
       '.ana-matrix-table{border-collapse:collapse;font-size:12px;min-width:300px}',
@@ -7380,15 +7420,15 @@ function renderTrackTrend() {
       ? `<span class="track-cond-badge track-cond-${trackCondClass(cond)}" style="padding:2px 8px;border-radius:8px;font-size:12px">${cond}</span>`
       : `<span style="color:#9ca3af">—</span>`;
 
-    return `<tr style="border-bottom:1px solid #f1f5f9">
-      <td style="padding:8px 10px;white-space:nowrap;font-weight:600;color:#1a1a2e">${g.date}</td>
-      <td style="padding:8px 10px;white-space:nowrap;color:#374151">${getBabaName(g.baba)}</td>
-      <td style="padding:8px 10px;text-align:center">${condCell}</td>
-      <td style="padding:8px 10px;text-align:center">${biasCell}</td>
-      <td style="padding:8px 10px;text-align:center">${horseBiasCell}</td>
-      <td style="padding:8px 10px;text-align:center">${condCell2}</td>
-      <td style="padding:8px 4px;color:#6b7280;font-size:11px;text-align:center">${g.races.length}R</td>
-      <td style="padding:8px 10px">
+    return `<tr class="tt-row" style="border-bottom:1px solid #f1f5f9">
+      <td class="tt-date" style="padding:8px 10px;white-space:nowrap;font-weight:600;color:#1a1a2e">${g.date}</td>
+      <td class="tt-baba" style="padding:8px 10px;white-space:nowrap;color:#374151">${getBabaName(g.baba)}</td>
+      <td class="tt-cell" data-label="馬場状態" style="padding:8px 10px;text-align:center">${condCell}</td>
+      <td class="tt-cell" data-label="馬場差(良比較)" style="padding:8px 10px;text-align:center">${biasCell}</td>
+      <td class="tt-cell" data-label="馬基準差" style="padding:8px 10px;text-align:center">${horseBiasCell}</td>
+      <td class="tt-cell" data-label="条件内比較" style="padding:8px 10px;text-align:center">${condCell2}</td>
+      <td class="tt-cell" data-label="レース数" style="padding:8px 4px;color:#6b7280;font-size:11px;text-align:center">${g.races.length}R</td>
+      <td class="tt-memo" style="padding:8px 10px">
         <input type="text" value="${memoVal}" placeholder="馬場傾向を入力..."
           onchange="saveDaySettings('${g.baba}','${g.date}',{memo:this.value})"
           style="width:100%;padding:5px 8px;border:1.5px solid #e2e8f0;border-radius:6px;font-size:12px;color:#374151;outline:none;background:#fff"
@@ -11418,17 +11458,17 @@ function openPosDetailModal(label,type,wArr,lArr){
     const icon=isUpset?'<span style="color:#d97706;font-weight:900;margin-right:3px">★</span>':isFavLose?'<span style="color:#dc2626;font-weight:900;margin-right:3px">⚠</span>':'';
     const rowBg=isUpset?'#fffbeb':isFavLose?'#fff1f2':isWin?'#f0fdf4':'#ffffff';
     const wkn=Math.min(Math.max(parseInt(h.wakuBan)||1,1),8);
-    return `<tr style="background:${rowBg};border-bottom:1px solid #f1f5f9">
-      <td style="padding:5px 6px;text-align:center;white-space:nowrap"><span style="background:#e2e8f0;border-radius:4px;padding:1px 5px;font-size:10px;font-weight:700">${h.raceNo}R</span></td>
-      <td style="padding:5px 6px;text-align:center"><span class="chakujun-badge ${cCls(h.chakujun)}" style="font-size:11px;min-width:20px;height:20px">${c}</span></td>
-      <td style="padding:5px 6px;text-align:center;font-size:11px;${nkStyle(n)}">${nStr}</td>
-      <td style="padding:5px 8px;font-size:12px;font-weight:700;white-space:nowrap">${icon}${h.horseName}</td>
-      <td style="padding:5px 6px;text-align:center"><span class="waku-badge waku-${wkn}" style="font-size:10px;width:20px;height:20px">${h.wakuBan||'—'}</span></td>
-      <td style="padding:5px 6px;text-align:center;font-size:11px;color:#475569">${h.mukaeShoumen||'—'}</td>
-      <td style="padding:5px 6px;text-align:center;font-size:11px;color:#475569">${h.shoumenStraight||'—'}</td>
-      <td style="padding:5px 6px;text-align:center;font-size:10px;color:#64748b">${h.paceType||'—'}</td>
-      <td style="padding:5px 6px;font-family:monospace;font-size:10px;color:#374151">${h.time||'—'}</td>
-      <td style="padding:5px 6px;font-family:monospace;font-size:10px;color:#7c3aed">${h.agari3f||'—'}</td>
+    return `<tr class="pd-row" style="background:${rowBg};border-bottom:1px solid #f1f5f9">
+      <td class="pd-r" style="padding:5px 6px;text-align:center;white-space:nowrap"><span style="background:#e2e8f0;border-radius:4px;padding:1px 5px;font-size:10px;font-weight:700">${h.raceNo}R</span></td>
+      <td class="pd-chaku" style="padding:5px 6px;text-align:center"><span class="chakujun-badge ${cCls(h.chakujun)}" style="font-size:11px;min-width:20px;height:20px">${c}</span></td>
+      <td class="pd-ninki" style="padding:5px 6px;text-align:center;font-size:11px;${nkStyle(n)}">${nStr}</td>
+      <td class="pd-name" style="padding:5px 8px;font-size:12px;font-weight:700;white-space:nowrap">${icon}${h.horseName}</td>
+      <td class="pd-meta" data-label="枠" style="padding:5px 6px;text-align:center"><span class="waku-badge waku-${wkn}" style="font-size:10px;width:20px;height:20px">${h.wakuBan||'—'}</span></td>
+      <td class="pd-meta" data-label="向正面" style="padding:5px 6px;text-align:center;font-size:11px;color:#475569">${h.mukaeShoumen||'—'}</td>
+      <td class="pd-meta" data-label="直線" style="padding:5px 6px;text-align:center;font-size:11px;color:#475569">${h.shoumenStraight||'—'}</td>
+      <td class="pd-meta" data-label="ペース" style="padding:5px 6px;text-align:center;font-size:10px;color:#64748b">${h.paceType||'—'}</td>
+      <td class="pd-col-sec pd-meta" data-label="タイム" style="padding:5px 6px;font-family:monospace;font-size:10px;color:#374151">${h.time||'—'}</td>
+      <td class="pd-col-sec pd-meta" data-label="上がり" style="padding:5px 6px;font-family:monospace;font-size:10px;color:#7c3aed">${h.agari3f||'—'}</td>
     </tr>`;
   }).join('');
   modal.innerHTML=`<div style="background:#fff;border-radius:14px;max-width:720px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35);overflow:hidden;margin:auto">
@@ -11451,8 +11491,8 @@ function openPosDetailModal(label,type,wArr,lArr){
           <th style="padding:6px;font-size:10px;color:#64748b;font-weight:600">向正面</th>
           <th style="padding:6px;font-size:10px;color:#64748b;font-weight:600">直線</th>
           <th style="padding:6px;font-size:10px;color:#64748b;font-weight:600">ペース</th>
-          <th style="padding:6px;font-size:10px;color:#64748b;font-weight:600">タイム</th>
-          <th style="padding:6px;font-size:10px;color:#64748b;font-weight:600">上がり</th>
+          <th class="pd-col-sec" style="padding:6px;font-size:10px;color:#64748b;font-weight:600">タイム</th>
+          <th class="pd-col-sec" style="padding:6px;font-size:10px;color:#64748b;font-weight:600">上がり</th>
         </tr></thead>
         <tbody>${rowsHtml||'<tr><td colspan="10" style="text-align:center;color:#9ca3af;padding:16px">データなし</td></tr>'}</tbody>
       </table>
