@@ -306,6 +306,33 @@ body.dark-mode .pf-note b{color:#c8d8ec!important}
 body.dark-mode .jc-hot{color:#4ade80!important}
 body.dark-mode .jc-cold{color:#f87171!important}
 body.dark-mode .jcs-bl{color:#93c5fd!important}
+body.dark-mode .jc-help{color:#8fa3be!important}
+body.dark-mode .jc-filter-label{color:#c8d8ec!important}
+body.dark-mode .jc-sum{background:#0d1826!important;border-color:#1e3048!important}
+body.dark-mode .jc-sum--b{background:#0c2438!important;border-color:#1d4ed8!important}
+body.dark-mode .jc-sum--g{background:#04250f!important;border-color:#166534!important}
+body.dark-mode .jc-sum-label{color:#8fa3be!important}
+body.dark-mode .jc-sum--b .jc-sum-label{color:#93c5fd!important}
+body.dark-mode .jc-sum--g .jc-sum-label{color:#86efac!important}
+body.dark-mode .jc-sum-val{color:#c8d8ec!important}
+body.dark-mode .jc-sum--b .jc-sum-val{color:#60a5fa!important}
+body.dark-mode .jc-sum--g .jc-sum-val{color:#4ade80!important}
+body.dark-mode .jc-sum-sub{color:#4a5e76!important}
+body.dark-mode .ana-matrix-table td{border-color:#1e3048!important}
+body.dark-mode .ana-matrix-table .matrix-row-header{background:#131a33!important;color:#c4b5fd!important;border-right-color:#4c1d95!important}
+body.dark-mode .matrix-total{background:#131a33!important;border-color:#1e3048!important}
+body.dark-mode .matrix-total--empty{background:#131a33!important;color:#4a5e76!important}
+body.dark-mode .matrix-total .matrix-rate{color:#c4b5fd!important}
+body.dark-mode .matrix-count{color:#8fa3be!important}
+body.dark-mode .matrix-empty{color:#334155!important}
+body.dark-mode .matrix-hot{background:#2a1a00!important;border-color:#b45309!important}
+body.dark-mode .matrix-hot .matrix-rate{color:#fcd34d!important}
+body.dark-mode .matrix-best{background:#04250f!important;border-color:#16a34a!important}
+body.dark-mode .matrix-best .matrix-rate{color:#4ade80!important}
+body.dark-mode .matrix-cold{background:#2d0000!important}
+body.dark-mode .matrix-cold .matrix-rate{color:#f87171!important}
+body.dark-mode .matrix-legend{color:#8fa3be!important}
+body.dark-mode .ana-matrix-cell-detail{background:#0d1826!important;border-color:#4c1d95!important}
 body.dark-mode .leg-warn-bar{background:#1f1200!important;border-color:#c2410c!important;color:#fdba74!important}
 body.dark-mode .cv-verdict-card{background:#0c2438!important;border-color:#1d4ed8!important;color:#bfdbfe!important}
 body.dark-mode .cv-verdict-card .cv-verdict-title{color:#7dd3fc!important}
@@ -728,6 +755,8 @@ const KV_APP_CSS = [
       '.ana-sum-sub{font-size:11px;color:#6b7280}',
       '.pace-text-high{color:#e84040 !important}.pace-text-mid{color:#e8a020 !important}.pace-text-slow{color:#3090e0 !important}.pace-text-none{color:#6b7280 !important}',
       '.ana-charts-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}',
+      // グリッド/フレックス子のmin-width:auto対策：幅広テーブルがページ全体を横に押し広げるのを防ぐ
+      '.ana-charts-grid>*{min-width:0}',
       '.ana-chart-card{background:#f4f6fa;border:1.5px solid #e2e8f0;border-radius:6px;padding:12px 14px}',
       '.ana-chart-card--wide{grid-column:1/-1}',
       '.ana-chart-title{font-size:12px;font-weight:700;color:#1a56a0;margin-bottom:10px;display:flex;align-items:center;gap:6px}',
@@ -858,6 +887,26 @@ const KV_APP_CSS = [
       '.matrix-cold{background:#fee2e2 !important}',
       '.matrix-cold .matrix-rate{color:#9ca3af}',
       '.matrix-empty{color:#d1d5db;font-size:12px}',
+      // 合計セル・凡例（インライン色をクラス化＝ダーク対応 2026-07-08）
+      '.matrix-total{background:#f8f5ff;font-weight:700;text-align:center;border:1px solid #e2e8f0}',
+      '.matrix-total .matrix-rate{color:#5b21b6}',
+      '.matrix-total--empty{background:#f8f5ff;color:#9ca3af;text-align:center}',
+      '.matrix-legend{font-size:11px;color:#6b7280;margin-top:6px}',
+      // 乗り替わり分析：サマリーカード・フィルタ（クラス化＝ダーク対応）
+      '.jc-help{font-size:12px;color:#6b7280;margin-bottom:8px;line-height:1.7}',
+      '.jc-filter-label{font-size:12px;color:#374151;font-weight:600}',
+      '.jc-sum{flex:1;min-width:150px;border-radius:8px;padding:6px 12px;border:1px solid #e2e8f0;background:#f8fafc}',
+      '.jc-sum--b{background:#eff6ff;border-color:#bfdbfe}',
+      '.jc-sum--g{background:#f0fdf4;border-color:#bbf7d0}',
+      '.jc-sum-label{font-size:10px;font-weight:700;color:#475569}',
+      '.jc-sum--b .jc-sum-label{color:#1e40af}',
+      '.jc-sum--g .jc-sum-label{color:#166534}',
+      '.jc-sum-val{font-size:16px;font-weight:800;color:#334155}',
+      '.jc-sum--b .jc-sum-val{color:#1d4ed8}',
+      '.jc-sum--g .jc-sum-val{color:#16a34a}',
+      '.jc-sum-sub{font-size:10px;font-weight:400;margin-left:4px;color:#94a3b8}',
+      // スマホ：分析系テーブルを390px幅に収める（横スライド不要に）＋ページの横はみ出し封じ
+      '@media(max-width:640px){.page-section{overflow-x:clip}.ana-matrix-table{min-width:0;width:100%}.ana-matrix-table th,.ana-matrix-table td{padding:5px 5px;font-size:11px;white-space:normal}.ana-matrix-table .matrix-row-header{font-size:10px;padding:5px 4px}.matrix-rate{font-size:12px}.matrix-count{font-size:9px}.matrix-tap-hint{display:none}}',
       /* ── 好走/凡走タブ ── */
       '.ana-result-tabs{display:flex;gap:6px;margin-bottom:0;border-bottom:2px solid #e2e8f0;padding-bottom:0}',
       '.ana-result-tab{display:inline-flex;align-items:center;gap:6px;padding:8px 18px;border:1.5px solid #d1d5db;border-bottom:none;border-radius:8px 8px 0 0;background:#f1f5f9;color:#6b7280;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:-2px;position:relative;font-family:inherit;transition:all .15s}',
@@ -1249,9 +1298,10 @@ const KV_APP_CSS = [
       <button class="header-nav-btn" data-page="deban" onclick="switchPage('deban')"><i class="fas fa-list-ul"></i> 出馬表</button>
       <button class="header-nav-btn" data-page="bunseki" onclick="switchPage('bunseki')"><i class="fas fa-chart-bar"></i> 分析</button>
       <button class="header-nav-btn" data-page="baba" onclick="switchPage('baba')"><i class="fas fa-chart-area"></i> 馬場傾向</button>
-      <button class="header-nav-btn" data-page="saved" onclick="switchPage('saved')"><i class="fas fa-database"></i> 保存データ</button>
+      <button class="header-nav-btn" data-page="jchg" onclick="switchPage('jchg')"><i class="fas fa-exchange-alt"></i> 乗り替わり</button>
+      <button class="header-nav-btn admin-only" data-page="saved" onclick="switchPage('saved')"><i class="fas fa-database"></i> 保存データ</button>
       <button class="header-nav-btn" data-page="f3avg" onclick="switchPage('f3avg')"><i class="fas fa-stopwatch"></i> 前半3F基準</button>
-      <button class="header-nav-btn" data-page="psfhist" onclick="switchPage('psfhist')"><i class="fas fa-gem"></i> PSF履歴</button>
+      <button class="header-nav-btn admin-only" data-page="psfhist" onclick="switchPage('psfhist')"><i class="fas fa-gem"></i> PSF履歴</button>
     </div>
   </nav>
 </header>
@@ -1405,25 +1455,6 @@ const KV_APP_CSS = [
 
 <!-- ページ: 分析 -->
 <div id="page-bunseki" class="page-section page-hidden">
-
-  <!-- 乗り替わり分析 -->
-  <section class="search-card" id="jockey-change-card">
-    <h2 class="section-title"><i class="fas fa-exchange-alt"></i> 乗り替わり分析（誰から誰へ乗せ替えたら熱い／危険か）</h2>
-    <p style="font-size:12px;color:#6b7280;margin-bottom:8px;line-height:1.7">前走から騎手が替わった全レースを集計。<b>乗替先</b>＝その騎手に乗せ替えた時の複勝率／<b>通常</b>＝その騎手の全騎乗複勝率／<b>差</b>＝乗替−通常（＋なら乗替時に上乗せ＝勝負気配）。<b>A→Bペア</b>は特定の乗せ替え組み合わせ別。</p>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-      <label style="font-size:12px;color:#374151;font-weight:600">対象年</label>
-      <select id="jc-year" class="form-input" style="max-width:120px;font-size:12px" onchange="renderJockeyChangeAnalysis()">
-        <option value="">全期間</option>
-      </select>
-      <label style="font-size:12px;color:#374151;font-weight:600;margin-left:6px">厩舎</label>
-      <select id="jc-trainer" class="form-input" style="max-width:150px;font-size:12px" onchange="renderJockeyChangeAnalysis()">
-        <option value="">全厩舎（高知）</option>
-      </select>
-      <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#374151;cursor:pointer;margin-left:6px"><input type="checkbox" id="jc-final" style="width:15px;height:15px;accent-color:#7c3aed" onchange="renderJockeyChangeAnalysis()"> ファイナルのみ</label>
-      <span style="font-size:11px;color:#9ca3af">※厩舎は高知所属のみ・年を絞ると引退騎手も除外</span>
-    </div>
-    <div id="jockey-change-body"><p style="color:#9ca3af;font-size:13px">分析ページを開くと自動集計します…</p></div>
-  </section>
 
   <!-- 分析パネル -->
   <section class="analysis-section" id="analysis-section">
@@ -1694,6 +1725,27 @@ const KV_APP_CSS = [
 
 </div><!-- /page-bunseki -->
 
+<!-- ページ: 乗り替わり分析（「その他」配下・2026-07-08に分析ページから独立） -->
+<div id="page-jchg" class="page-section page-hidden">
+  <section class="search-card" id="jockey-change-card">
+    <h2 class="section-title"><i class="fas fa-exchange-alt"></i> 乗り替わり分析（誰から誰へ乗せ替えたら熱い／危険か）</h2>
+    <p class="jc-help">前走から騎手が替わった全レースを集計。<b>乗替先</b>＝その騎手に乗せ替えた時の複勝率／<b>通常</b>＝その騎手の全騎乗複勝率／<b>差</b>＝乗替−通常（＋なら乗替時に上乗せ＝勝負気配）。<b>A→Bペア</b>は特定の乗せ替え組み合わせ別。</p>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+      <label class="jc-filter-label">対象年</label>
+      <select id="jc-year" class="form-input" style="max-width:120px;font-size:12px" onchange="renderJockeyChangeAnalysis()">
+        <option value="">全期間</option>
+      </select>
+      <label class="jc-filter-label" style="margin-left:6px">厩舎</label>
+      <select id="jc-trainer" class="form-input" style="max-width:150px;font-size:12px" onchange="renderJockeyChangeAnalysis()">
+        <option value="">全厩舎（高知）</option>
+      </select>
+      <label class="jc-filter-label" style="display:flex;align-items:center;gap:5px;cursor:pointer;margin-left:6px"><input type="checkbox" id="jc-final" style="width:15px;height:15px;accent-color:#7c3aed" onchange="renderJockeyChangeAnalysis()"> ファイナルのみ</label>
+      <span style="font-size:11px;color:#9ca3af">※厩舎は高知所属のみ・年を絞ると引退騎手も除外</span>
+    </div>
+    <div id="jockey-change-body"><p style="color:#9ca3af;font-size:13px">このページを開くと自動集計します…</p></div>
+  </section>
+</div><!-- /page-jchg -->
+
 <!-- ページ: 前半3F基準表 -->
 <div id="page-f3avg" class="page-section page-hidden">
   <section class="search-card">
@@ -1857,9 +1909,10 @@ const KV_APP_CSS = [
   <button type="button" class="kbn-btn" id="kbn-more" onclick="toggleKbnMore()"><i class="fas fa-ellipsis-h"></i><span>その他</span></button>
 </nav>
 <div id="kbn-more-menu" class="hidden">
-  <button type="button" onclick="switchPage('saved')"><i class="fas fa-database"></i> 保存データ</button>
+  <button type="button" onclick="switchPage('jchg')"><i class="fas fa-exchange-alt"></i> 乗り替わり分析</button>
+  <button type="button" class="admin-only" onclick="switchPage('saved')"><i class="fas fa-database"></i> 保存データ</button>
   <button type="button" onclick="switchPage('f3avg')"><i class="fas fa-stopwatch"></i> 前半3F基準</button>
-  <button type="button" onclick="switchPage('psfhist')"><i class="fas fa-gem"></i> PSF履歴</button>
+  <button type="button" class="admin-only" onclick="switchPage('psfhist')"><i class="fas fa-gem"></i> PSF履歴</button>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -1938,7 +1991,9 @@ let _currentPage = 'search';
 let _navReady = false;
 
 function switchPage(pageId, _fromPop) {
-  ['search','deban','bunseki','baba','saved','f3avg','psfhist'].forEach(id => {
+  // 閲覧者は管理者専用ページ（保存データ・PSF履歴）へは入れない
+  if (typeof isAdminMode === 'function' && !isAdminMode() && ['saved', 'psfhist'].includes(pageId)) pageId = 'search';
+  ['search','deban','bunseki','baba','jchg','saved','f3avg','psfhist'].forEach(id => {
     const el = document.getElementById('page-' + id);
     if (el) el.classList.toggle('page-hidden', id !== pageId);
   });
@@ -1947,7 +2002,7 @@ function switchPage(pageId, _fromPop) {
   });
   // 「その他」配下のページでは下部ナビの⋯をアクティブに
   const _moreBtn = document.getElementById('kbn-more');
-  if (_moreBtn) _moreBtn.classList.toggle('active', ['saved', 'f3avg', 'psfhist'].includes(pageId));
+  if (_moreBtn) _moreBtn.classList.toggle('active', ['jchg', 'saved', 'f3avg', 'psfhist'].includes(pageId));
   if (typeof toggleKbnMore === 'function') toggleKbnMore(false);
   window.scrollTo(0, 0);
   _currentPage = pageId;
@@ -1956,7 +2011,8 @@ function switchPage(pageId, _fromPop) {
     try { history.pushState({ kvPage: pageId }, ''); } catch(e) {}
   }
   // 分析ページに切り替えたとき自動レンダリング
-  if (pageId === 'bunseki') { setTimeout(() => { try { renderAnalysis(); } catch(e){} try { renderJockeyChangeAnalysis(); } catch(e){} }, 0); }
+  if (pageId === 'bunseki') { setTimeout(() => { try { renderAnalysis(); } catch(e){} }, 0); }
+  if (pageId === 'jchg')    { setTimeout(() => { try { renderJockeyChangeAnalysis(); } catch(e){} }, 0); }
   if (pageId === 'deban')   { setTimeout(() => { try { (Object.keys(allRacesData).length ? showDebanRaceView : showDebanDateList)(); } catch(e){} }, 0); }
   if (pageId === 'baba')    { setTimeout(() => { try { renderTrackTrend(); } catch(e){} }, 0); }
   if (pageId === 'saved')   { setTimeout(() => { try { renderSavedList(); } catch(e){} }, 0); }
@@ -6514,9 +6570,9 @@ function renderJockeyChangeAnalysis() {
   const _chgF = pct(chgTot.f, chgTot.n), _contF = pct(contTot.f, contTot.n);
   const _sumDiff = +(_chgF - _contF).toFixed(1);
   const summaryBar = `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px">
-    <div style="flex:1;min-width:150px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:6px 12px"><div class="jcs-bl" style="font-size:10px;font-weight:700">乗り替わり</div><div style="font-size:16px;font-weight:800;color:#1d4ed8">${_chgF}%<span style="font-size:10px;font-weight:400;color:#60a5fa;margin-left:4px">複勝・${chgTot.n.toLocaleString()}件</span></div></div>
-    <div style="flex:1;min-width:150px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:6px 12px"><div style="font-size:10px;color:#166534;font-weight:700">継続（同騎手・乗替なし）</div><div style="font-size:16px;font-weight:800;color:#16a34a">${_contF}%<span style="font-size:10px;font-weight:400;color:#4ade80;margin-left:4px">複勝・${contTot.n.toLocaleString()}件</span></div></div>
-    <div style="flex:1;min-width:120px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:6px 12px"><div style="font-size:10px;color:#475569;font-weight:700">差（乗替−継続）</div><div style="font-size:16px;font-weight:800" class="${_sumDiff > 0 ? 'jc-hot' : _sumDiff < 0 ? 'jc-cold' : ''}">${_sumDiff > 0 ? '+' : ''}${_sumDiff}pt</div></div>
+    <div class="jc-sum jc-sum--b"><div class="jc-sum-label">乗り替わり</div><div class="jc-sum-val">${_chgF}%<span class="jc-sum-sub">複勝・${chgTot.n.toLocaleString()}件</span></div></div>
+    <div class="jc-sum jc-sum--g"><div class="jc-sum-label">継続（同騎手・乗替なし）</div><div class="jc-sum-val">${_contF}%<span class="jc-sum-sub">複勝・${contTot.n.toLocaleString()}件</span></div></div>
+    <div class="jc-sum" style="min-width:120px"><div class="jc-sum-label">差（乗替−継続）</div><div style="font-size:16px;font-weight:800" class="${_sumDiff > 0 ? 'jc-hot' : _sumDiff < 0 ? 'jc-cold' : ''}">${_sumDiff > 0 ? '+' : ''}${_sumDiff}pt</div></div>
   </div>`;
   const cls = v => v >= 45 ? 'jc-hot' : v < 20 ? 'jc-cold' : '';
   const dcls = v => v > 0 ? 'jc-hot' : v < 0 ? 'jc-cold' : '';
@@ -11561,10 +11617,10 @@ function renderPositionMatrix(validHorses,winners,topN){
   });
 
   const totCellHtml=(win,all)=>{
-    if(!all)return`<td style="background:#f8f5ff;color:#9ca3af;text-align:center">—</td>`;
+    if(!all)return`<td class="matrix-total--empty">—</td>`;
     const r=Math.round(win/all*100);
-    return`<td style="background:#f8f5ff;font-weight:700;text-align:center;border:1px solid #e2e8f0">
-      <div class="ana-matrix-cell"><span class="matrix-rate" style="color:#5b21b6">${r}%</span><span class="matrix-count">${win}/${all}走</span></div>
+    return`<td class="matrix-total">
+      <div class="ana-matrix-cell"><span class="matrix-rate">${r}%</span><span class="matrix-count">${win}/${all}走</span></div>
     </td>`;
   };
 
@@ -11601,7 +11657,7 @@ function renderPositionMatrix(validHorses,winners,topN){
   usedStraight.forEach(s=>{ html+=totCellHtml(colTotals[s].win,colTotals[s].all); });
   html+=totCellHtml(grandWin,grandAll)+'</tr>';
   html+='</tbody></table>';
-  html+=`<p style="font-size:11px;color:#6b7280;margin-top:6px">
+  html+=`<p class="matrix-legend">
     <span style="display:inline-block;width:12px;height:12px;background:#dcfce7;border:2px solid #22c55e;border-radius:2px;vertical-align:middle;margin-right:3px"></span>最高好走率&nbsp;&nbsp;
     <span style="display:inline-block;width:12px;height:12px;background:#fef3c7;border:2px solid #f59e0b;border-radius:2px;vertical-align:middle;margin-right:3px"></span>好走率50%以上&nbsp;&nbsp;
     <span style="display:inline-block;width:12px;height:12px;background:#fee2e2;border-radius:2px;vertical-align:middle;margin-right:3px"></span>0%&nbsp;&nbsp;※2走以上のセルに適用
@@ -14285,20 +14341,9 @@ function renderPredictionPanel(raceNo) {
       <button type="button" id="yoso-fetch-all-btn-${raceNo}" onclick="fetchAllByNameForRace(${raceNo})" style="padding:4px 12px;background:#1a56a0;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;"><i class="fas fa-download"></i> データ自動取得</button>
       <span id="yoso-fetch-status-${raceNo}" style="font-size:11px;color:#6b7280;white-space:nowrap;"></span>
     </div>
-    ${(() => {
-      // 💎PSF妙味バッジ（現行◎と不一致のときのみ・表示専用で印には一切影響しない）
-      const _pt = (typeof computePsfScores === 'function') ? (computePsfScores(raceNo)?.top ?? null) : null;
-      const _topName = (scored[0] && scored[0].totalScore != null) ? scored[0].horse.horseName : null;
-      if (!_pt || _pt === _topName) return '';
-      const _ph = horses.find(h => h.horseName === _pt);
-      const _po = _ph ? parseFloat(_ph.odds) : NaN;
-      const _inBand = !isNaN(_po) && _po >= 3 && _po < 10;
-      return `<div class="psf-value-bar">💎 <b>PSF妙味：${_pt}</b>（位置構造モデルの単独推し・検証635RでROI112.9%）${!isNaN(_po) ? `｜単勝${_po.toFixed(1)}倍${_inBand ? '＝<b>本域</b>' : '（本域は3〜10倍）'}` : '｜オッズ未取得（本域は3〜10倍）'}</div>`;
-    })()}
     ${mlNote}
     ${buildEvMonitorHtml(raceNo, container._selCond)}
     ${confidenceBadge}
-    ${valueBetBadge}
     ${dangerFavBadge}
     ${legWarnBadge}
     ${marketBackBadge}
