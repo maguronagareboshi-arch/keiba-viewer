@@ -1354,6 +1354,34 @@ function renderHorseModal(results, cyokyo) {
     </tr>`;
   }).join('');
 
+  // ---- 条件別成績（距離・馬場・時間帯=レース番号）着別度数と複勝率 ----
+  const rr = results.filter((r) => r.finish != null && r.chihou_races);
+  const tally = (rs) => {
+    const t = [0, 0, 0, 0];
+    for (const r of rs) { const f = r.finish; t[f === 1 ? 0 : f === 2 ? 1 : f === 3 ? 2 : 3]++; }
+    const n = rs.length, top3 = t[0] + t[1] + t[2];
+    return { n, chaku: `${t[0]}-${t[1]}-${t[2]}-${t[3]}`, fuku: n ? top3 / n : 0 };
+  };
+  const groupBy = (keyFn) => {
+    const m = new Map();
+    for (const r of rr) { const k = keyFn(r); if (k == null) continue; (m.get(k) || m.set(k, []).get(k)).push(r); }
+    return m;
+  };
+  const bdRows = (m, order) => (order || [...m.keys()]).filter((k) => m.has(k)).map((k) => {
+    const t = tally(m.get(k));
+    return `<tr><td class="l">${esc(String(k))}</td><td class="num">${t.n}</td><td class="num">${t.chaku}</td><td class="num ${t.fuku >= 0.5 ? 'best' : ''}">${(t.fuku * 100).toFixed(0)}%</td></tr>`;
+  }).join('');
+  const bdTable = (title, rows) => `<div><h4 style="margin:8px 0 2px;font-size:13px">${title}</h4><table>
+    <tr><th>条件</th><th>数</th><th>着別(1-2-3-着外)</th><th>複勝率</th></tr>${rows || '<tr><td colspan="4">-</td></tr>'}</table></div>`;
+  const distM = groupBy((r) => (r.chihou_races.distance_m ? r.chihou_races.distance_m + 'm' : null));
+  const goingM = groupBy((r) => r.chihou_races.going);
+  const rnoM = groupBy((r) => { const n = r.chihou_races.race_no; return n == null ? null : n <= 4 ? '1-4R(前半)' : n <= 8 ? '5-8R(中盤)' : '9-12R(後半)'; });
+  const distOrder = [...distM.keys()].sort((a, b) => parseInt(a) - parseInt(b));
+  const bdHtml = rr.length ? `
+    <h3 class="sec">条件別成績（着別度数・複勝率）</h3>
+    <div class="grid2">${bdTable('距離別', bdRows(distM, distOrder))}${bdTable('馬場状態別', bdRows(goingM, ['良', '稍重', '重', '不良']))}</div>
+    ${bdTable('時間帯別（レース番号・門別はナイターでRが遅いほど夜＝砂が締まる傾向）', bdRows(rnoM, ['1-4R(前半)', '5-8R(中盤)', '9-12R(後半)']))}` : '';
+
   // 調教履歴（全レースの works を日付降順に統合・重複除去）
   const seen = new Set();
   const works = [];
@@ -1400,6 +1428,7 @@ function renderHorseModal(results, cyokyo) {
       <tr><th>日付</th><th>場R</th><th>馬齢</th><th>クラス</th><th>距離</th><th>馬場</th><th>着</th><th>騎手</th><th>タイム</th><th>前3F</th><th>上3F</th><th>通過</th><th>4角</th><th>人気</th><th>単勝</th><th>馬体重</th></tr>
       ${resRows || '<tr><td colspan="16">成績なし</td></tr>'}
     </table></div>
+    ${bdHtml}
     <h3 class="sec">調教履歴（新しい順）</h3>
     <div class="note">${bestLine}</div>
     <div class="tablewrap"><table>
