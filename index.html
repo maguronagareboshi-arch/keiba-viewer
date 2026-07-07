@@ -280,6 +280,11 @@ body.dark-mode .value-bet-bar{background:#3f3506!important;border-color:#a16207!
 body.dark-mode .danger-fav-bar{background:#2d0000!important;border-color:#b91c1c!important;color:#fca5a5!important}
 body.dark-mode .leg-warn-bar{background:#2a1400!important;border-color:#c2410c!important;color:#fdba74!important}
 body.dark-mode .market-back-bar{background:#071a30!important;border-color:#1d4ed8!important;color:#93c5fd!important}
+body.dark-mode .ev-monitor-bar{background:#052e16!important;border-color:#16a34a!important;color:#bbf7d0!important}
+body.dark-mode .ev-monitor-bar.skip{background:#1e293b!important;border-color:#475569!important;color:#cbd5e1!important}
+body.dark-mode .ev-monitor-bar.caution{background:#2a1a00!important;border-color:#b45309!important;color:#fcd34d!important}
+body.dark-mode .ev-monitor-bar .evb-row{background:rgba(0,0,0,.25)!important;border-color:#166534!important}
+body.dark-mode .ev-monitor-bar .evb-metric{color:#86efac!important}
 body.dark-mode .pf-details{background:#0d1520!important;border-color:#1e3048!important}
 body.dark-mode .pf-summary{color:#c8d8ec!important}
 body.dark-mode .pf-body{background:#0a1119!important;border-top-color:#16273b!important}
@@ -1041,6 +1046,19 @@ const KV_APP_CSS = [
       '.leg-warn-bar .lwb-sub{font-size:11px;opacity:.85;font-weight:500}',
       '.market-back-bar{margin-bottom:10px;background:#eff6ff;border:1.5px solid #2563eb;border-radius:8px;padding:7px 12px;font-size:12px;color:#1e40af;font-weight:600}',
       '.market-back-bar .mbb-sub{font-size:11px;opacity:.85;font-weight:500}',
+      // 💹 EVモニター（中穴×傾斜・単勝）
+      '.ev-monitor-bar{margin-bottom:10px;background:#f0fdf4;border:2px solid #16a34a;border-radius:10px;padding:9px 13px;font-size:12px;color:#14532d}',
+      '.ev-monitor-bar.skip{background:#f8fafc;border:1.5px solid #cbd5e1;color:#475569}',
+      '.ev-monitor-bar.caution{background:#fffbeb;border:1.5px solid #f59e0b;color:#92400e}',
+      '.ev-monitor-bar .evb-head{font-weight:800;font-size:13px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}',
+      '.ev-monitor-bar .evb-tag{font-size:10px;font-weight:800;background:#16a34a;color:#fff;border-radius:4px;padding:1px 7px}',
+      '.ev-monitor-bar .evb-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:7px;padding:7px 9px;background:rgba(255,255,255,.7);border:1px solid #bbf7d0;border-radius:7px}',
+      '.ev-monitor-bar .evb-uma{min-width:22px;height:22px;border-radius:4px;background:#14532d;color:#fff;font-weight:900;display:inline-flex;align-items:center;justify-content:center;font-size:12px}',
+      '.ev-monitor-bar .evb-name{font-weight:800;font-size:13px}',
+      '.ev-monitor-bar .evb-metric{font-size:11px;color:#166534;font-family:monospace}',
+      '.ev-monitor-bar .evb-stake{margin-left:auto;font-weight:900;font-size:15px;color:#fff;background:#16a34a;border-radius:6px;padding:3px 11px;white-space:nowrap}',
+      '.ev-monitor-bar .evb-sub{font-size:10px;opacity:.9;font-weight:500;margin-top:7px;line-height:1.6}',
+      '.ev-monitor-bar .evb-fetch{font-size:11px;font-weight:800;background:#16a34a;color:#fff;border:none;border-radius:6px;padding:4px 12px;cursor:pointer}',
       '.pf-details{margin-bottom:10px;border:1px solid #dbe3ef;border-radius:8px;background:#f8fafc;overflow:hidden}',
       '.pf-summary{cursor:pointer;padding:7px 12px;font-size:12px;font-weight:800;color:#334155;display:flex;align-items:center;gap:8px;list-style:none}',
       '.pf-summary::-webkit-details-marker{display:none}',
@@ -5534,6 +5552,7 @@ function idbPut(key, val) {
       window._comboStatsAllCache = null;
       window._horseBiasCache = {};
       window._f3BenchCache = null;
+      window._evMapsCache = null;
     }, 150);
   }
   openIDB().then(db => {
@@ -5684,6 +5703,7 @@ async function _idbBulkPut(obj) {
   window._comboStatsAllCache = null;
   window._horseBiasCache = {};
   window._f3BenchCache = null;
+  window._evMapsCache = null;
 }
 
 // ============================================================
@@ -6384,7 +6404,7 @@ async function _bulkFetchRun(monthsList, label) {
     }
     // first3f・ペース自動補完（今回保存分に効く）＋基準タイム系のキャッシュ無効化（データ増を反映）
     try { backfillFirst3fFrom1400m(); backfillPaceLabels(); backfillPaceType(); } catch(e) {}
-    window._f3BenchCache = null; window._leadFrontBench = null; window._frontBaseCache = null; window._comboStatsCache = null; window._jcMapsCache = null;
+    window._f3BenchCache = null; window._leadFrontBench = null; window._frontBaseCache = null; window._comboStatsCache = null; window._jcMapsCache = null; window._evMapsCache = null;
     loadSavedData();
     if (typeof initAnalysisDateSelect === 'function') initAnalysisDateSelect();
     _bulkLog(`${_bulkCancel ? '⏹ 中止しました。' : '✅ 完了！'} ${label}：<b>${savedR}レース・${savedH}頭</b>を保存${withComments?`（コメント${cmt}件）`:''}${err?`／エラー${err}`:''}`);
@@ -13580,6 +13600,232 @@ function buildPaceFormationHtml(raceNo) {
     </details>`;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 💹 EVモニター（中穴×傾斜・単勝）— ウォークフォワード検証で唯一「継続100%超」
+ *    だった買い方をライブ提示する。
+ *  戦略＝単勝オッズ10〜20倍 かつ モデル勝率×オッズ>1.0 の馬を、EVに応じた傾斜額で
+ *        単勝1点買い（実払戻検証：2021-26 全年100%超・計129%／傾斜166%・上位除外でも頑健）。
+ *  モデル＝レース単位・条件付きロジット（16特徴量+log(オッズ)・z正規化・全14,653R学習）。
+ *  ★特徴量は runYosoBacktest と同一定義で再計算する。computeYosoScored のライブ base は
+ *    アンカー＋ペース＋ポジション補正の「仕様差」があり訓練分布とズレるため、ここでは
+ *    backtest と厳密一致の“非アンカー・当日バイアスのみ”base／“ペース伸縮前”cornN を使う。
+ *  ※市場を入力に持つモデルのため最終オッズで最も正確。ライブ変動オッズでの実効は
+ *    前向きペーパートレードで検証中（memory: kochi-walkforward-ml-verdict）。
+ * ═══════════════════════════════════════════════════════════════════════════ */
+const KV_EV_MODEL = {
+  FN: ['base','condNew','distNew','rotN','clsN','cornN','trendN','weightN','agariN','comboN','marginN','winStrN','jockeyChgN','takiN','cornConsistN','rakuN'],
+  mean:    [38.993818,0.012664,-0.067212,-0.174736,-0.000893,-0.931007,-0.025287,-0.025957,-1.086338,-0.090458,-0.280095,0.008352,0.199378,0.014728,0.003027,0.124291,3.02541],
+  std:     [13.07071,1.113188,0.544827,0.376235,0.371473,1.349301,0.740008,0.094795,0.415427,0.543692,0.427872,0.062987,1.594666,0.092843,0.582292,0.675127,1.490624],
+  weights: [0.173133,0.008697,-0.007631,-0.006132,0.039985,0.100385,0.039914,0.033711,0.112903,0.115689,0.004005,0.007881,-0.008765,-0.013328,-0.037066,0.022714,-1.299585],
+  oddsLo: 10, oddsHi: 20, evTh: 1.0,                  // 中穴帯＆EVプラス閾値
+  stakeK: 300000, stakeMin: 1000, stakeCap: 30000,   // 傾斜額 = clamp(K×(EV−1))・上限＝プール自己インパクトの実務天井
+  invLo: 1.05, invHi: 1.6                             // 学習ドメイン（Σ1/oddsの健全域）
+};
+
+/** EV特徴量用の全IDB集計マップ（backtestと同一材料）。データ変更時は _evMapsCache=null で無効化。 */
+function _evGetMaps() {
+  if (window._evMapsCache) return window._evMapsCache;
+  const lsData = lsRead();
+  const agariByDist = {}, winnerSIMap = {}, officialByHorse = new Map();
+  for (const k in lsData) {
+    const v = lsData[k];
+    if (!v) continue;
+    if (k.startsWith('official_') && v.type === 'official' && v.horseName && v.races && v.races.length) officialByHorse.set(v.horseName, v.races);
+    if (v.type !== 'horse') continue;
+    if (v.agari3f) { const a = parseFloat(v.agari3f); if (!(isNaN(a) || a < 30 || a > 50)) { const d = getDistNum(v.distance); if (d) { (agariByDist[d] || (agariByDist[d] = { s: 0, n: 0 })); agariByDist[d].s += a; agariByDist[d].n++; } } }
+    if (parseInt(v.chakujun) === 1 && v.time) {
+      const wp = k.split('_');
+      if (wp.length >= 4 && wp[0] === '31') {
+        const wrk = `${wp[0]}_${wp[1]}_${wp[2]}`;
+        if (winnerSIMap[wrk] == null) {
+          const wb = getDayBiasForDate(wp[0], wp[1]) ?? null;
+          const rc = lsData[`race_${wp[0]}_${wp[1]}_${parseInt(wp[2])}`] || {};
+          const wsi = calcSpeedIndex(v.time, rc.distance || '', rc.race_class || '', rc.track_cond || v.trackCond || '', wb, v.kinryo, null);
+          if (wsi != null) winnerSIMap[wrk] = wsi;
+        }
+      }
+    }
+  }
+  const getAgRef = d => {
+    if (agariByDist[d] && agariByDist[d].n >= 10) return agariByDist[d].s / agariByDist[d].n;
+    const ns = Object.entries(agariByDist).filter(([, x]) => x.n >= 10).sort((a, b) => Math.abs(+a[0] - d) - Math.abs(+b[0] - d));
+    return ns.length ? ns[0][1].s / ns[0][1].n : 38.5;
+  };
+  return (window._evMapsCache = { getAgRef, winnerSIMap, officialByHorse });
+}
+
+/** 1頭ぶんのEV特徴量ベクトル（16項目・backtest定義と厳密一致）。base算出不可（真のデビュー馬）は null。 */
+function _evHorseFeatures(hName, entry, ctx, maps) {
+  const { raceDate, rNo, raceCls, raceDist, rdistNum, curCR, selCond } = ctx;
+  const fullHist = getHorseHistory(hName);
+  const preHist = fullHist.filter(h => h.raceDate < raceDate || (h.raceDate === raceDate && parseInt(h.raceNo) < rNo));
+  const kochiPre = preHist.filter(h => h.babaCode === '31');
+  const otherPre = preHist.filter(h => h.babaCode !== '31');
+
+  // base：非アンカー・当日バイアスのみ（backtest _siForBT と同一）
+  const _siForBT = h => calcSpeedIndex(h.time, h.distance, h.raceClass, h.trackCond, getDayBiasForDate(h.babaCode, h.raceDate) ?? null, h.kinryo, null);
+  const { list: siList } = Yoso.buildSIList(kochiPre, otherPre, _siForBT);
+  let base = Yoso.baseFromSIList(siList);
+  if (base == null) { base = Yoso.estimateTransferScore(preHist, raceCls, hName, maps.officialByHorse); if (base == null) return null; }
+
+  const allSIcd = Yoso.siWithCondList(preHist, h => getDayBiasForDate(h.babaCode, h.raceDate) ?? null);
+  const gAvg = allSIcd.length ? allSIcd.reduce((s, x) => s + x.si, 0) / allSIcd.length : null;
+  const cSIs = allSIcd.filter(x => x.cond === selCond).map(x => x.si);
+  const cAvg = cSIs.length ? cSIs.reduce((a, b) => a + b, 0) / cSIs.length : null;
+  const condNew = Yoso.condMod(cAvg, gAvg, allSIcd.length);
+
+  const ndSIs = allSIcd.filter(x => x.dist && rdistNum && Math.abs(x.dist - rdistNum) <= 100).map(x => x.si);
+  const ndAvg = ndSIs.length ? ndSIs.reduce((a, b) => a + b, 0) / ndSIs.length : null;
+  const distNew = Yoso.distExtAdj(Yoso.distMod(ndAvg, gAvg), preHist[0] ? getDistNum(preHist[0].distance) : null, rdistNum);
+
+  const rotN = preHist[0] ? Yoso.rotMod(raceDate, preHist[0].raceDate) : 0;
+  const clsN = preHist[0] ? Yoso.classMod(curCR, preHist[0].raceClass) : 0;
+  const _a4cB = Yoso.avg4C(preHist);
+  const cornN = Yoso.cornMod(_a4cB.avg, _a4cB.count);           // ペース伸縮前の生値（scanData準拠）
+  const trendN = Yoso.trendMod(siList);
+  const weightN = Yoso.weightMod(Yoso.weightChange(entry.weight, preHist[0]?.weight));
+  const agariN = Yoso.agariMod(maps.getAgRef(rdistNum), Yoso.agariAvg(preHist, rdistNum));
+  const comboN = Yoso.comboMod(getComboStatsAll()[`${(entry.jockey || '').trim()}_${(entry.trainer || '').trim()}`]);
+  const marginN = Yoso.marginMod(Yoso.marginAvgGap(preHist));
+
+  let winStrN = 0;
+  if (marginN > 0 && preHist.length >= 1 && parseInt(preHist[0].chakujun) > 1) {
+    const _ph0 = preHist[0];
+    const _wSI = maps.winnerSIMap[`${_ph0.babaCode}_${_ph0.raceDate}_${_ph0.raceNo}`];
+    if (_wSI != null && siList.length >= 2) winStrN = Yoso.winStrMod(_wSI - siList.reduce((s, v) => s + v, 0) / siList.length);
+  }
+
+  const _getJWRbt = name => { const s = lookupJockeyStats(name); if (!s) return 12; const src = (s.recent?.n >= 30 ? s.recent : null) || s.all; return src?.wr ?? 12; };
+  let jockeyChgN = 0;
+  if (entry.jockey && preHist.length >= 1) {
+    const _pj = (preHist[0].jockey || '').trim(), _cj = (entry.jockey || '').trim();
+    if (_pj && _pj !== _cj) jockeyChgN = Yoso.jockeyChgMod(_getJWRbt(_cj) - _getJWRbt(_pj));
+  }
+  const takiN = preHist.length >= 2 ? Yoso.takiMod(raceDate, preHist[0].raceDate, preHist[1].raceDate) : 0;
+  const cornConsistN = Yoso.cornConsistMod(Yoso.cornConsistAvg(preHist));
+  const rakuN = rakuShoBonus(kochiPre[0]);
+
+  return [base, condNew, distNew, rotN, clsN, cornN, trendN, weightN, agariN, comboN, marginN, winStrN, jockeyChgN, takiN, cornConsistN, rakuN];
+}
+
+/**
+ * 💹 EVベット算出。戻り値 { runners:[{uma,name,odds,p,ev,inWindow,stake}], invSum, inDomain, nOdds }｜不能は null。
+ * selCond 省略時はレースの馬場状態を使用。
+ */
+function computeEvBets(raceNo, selCond) {
+  const data = allRacesData[raceNo];
+  if (!data || !data.horses.length) return null;
+  const raceInfo = data.raceInfo;
+  const M = KV_EV_MODEL;
+  const ctx = {
+    raceDate: raceInfo.raceDate || '',
+    rNo: parseInt(raceNo),
+    raceCls: raceInfo.raceClass || raceInfo.race_class || '',
+    raceDist: String(raceInfo.distance || '').replace(/[^\d]/g, ''),
+    selCond: selCond || raceInfo.trackCond || raceInfo.track_cond || '良',
+  };
+  ctx.rdistNum = parseInt(ctx.raceDist) || 0;
+  ctx.curCR = YOSO_CLASS_RANK[getEffectiveClass(ctx.raceCls)] || 0;
+  const maps = _evGetMaps();
+
+  // オッズが有効な出走馬でレースを構成
+  const cand = data.horses
+    .map(h => ({ h, uma: parseInt(h.umaBan), odds: parseFloat(h.odds) }))
+    .filter(x => !isNaN(x.uma) && !isNaN(x.odds) && x.odds > 0);
+  if (cand.length < 5) return { runners: [], invSum: 0, inDomain: false, nOdds: cand.length };
+
+  const invSum = cand.reduce((s, x) => s + 1 / x.odds, 0);
+  const inDomain = invSum >= M.invLo && invSum <= M.invHi;
+
+  const scored = [];
+  for (const c of cand) {
+    const feat = _evHorseFeatures(c.h.horseName || '', c.h, ctx, maps);
+    if (!feat) continue; // 真のデビュー馬はプールから除外（scanDataと同じ扱い）
+    feat.push(Math.log(c.odds)); // 17項目め = log(オッズ)
+    let sc = 0;
+    for (let f = 0; f < feat.length; f++) sc += M.weights[f] * ((feat[f] - M.mean[f]) / M.std[f]);
+    scored.push({ uma: c.uma, name: c.h.horseName || '', odds: c.odds, sc });
+  }
+  if (scored.length < 5) return { runners: [], invSum, inDomain, nOdds: cand.length };
+
+  const mx = Math.max(...scored.map(s => s.sc));
+  let Z = 0; scored.forEach(s => { s.e = Math.exp(s.sc - mx); Z += s.e; });
+  const runners = scored.map(s => {
+    const p = s.e / Z;
+    const ev = p * s.odds;
+    const inWindow = s.odds >= M.oddsLo && s.odds < M.oddsHi && ev > M.evTh;
+    let stake = 0;
+    if (inWindow) stake = Math.max(M.stakeMin, Math.min(M.stakeCap, Math.round(M.stakeK * (ev - 1) / 100) * 100));
+    return { uma: s.uma, name: s.name, odds: s.odds, p, ev, inWindow, stake };
+  }).sort((a, b) => b.ev - a.ev);
+  return { runners, invSum, inDomain, nOdds: cand.length };
+}
+
+/** EVモニターのライブオッズ取得→パネル再描画（予想パネル専用の取得ボタン用）。 */
+async function fetchOddsForEv(raceNo) {
+  const btn = document.getElementById(`ev-fetch-btn-${raceNo}`);
+  if (btn) { btn.disabled = true; btn.textContent = '取得中...'; }
+  try {
+    await fetchLiveOdds(raceNo);
+    renderHorseRows(raceNo, allRacesData[raceNo].horses);
+    if (allRacesData[raceNo]?.horses.some(h => h.postComment)) _renderCommentsInTable(raceNo);
+  } catch (e) {
+    console.warn('[ev-odds]', raceNo, e);
+    if (btn) { btn.disabled = false; btn.textContent = '💹 未発売/取得失敗（再試行）'; }
+    return;
+  }
+  renderPredictionPanel(raceNo); // EVモニターを再計算して反映
+}
+
+/** 💹 EVモニターのHTML。オッズ未取得なら取得ボタン、該当なしは見送り、該当ありは傾斜額つきで提示。 */
+function buildEvMonitorHtml(raceNo, selCond) {
+  let res;
+  try { res = computeEvBets(raceNo, selCond); } catch (e) { console.warn('[ev]', e); return ''; }
+  if (!res) return '';
+  const M = KV_EV_MODEL;
+  const _yen = n => '¥' + n.toLocaleString('en-US');
+  const _head = (tag, tagBg) => `<div class="evb-head">💹 EVモニター<span style="font-weight:600;font-size:11px;opacity:.85">中穴×傾斜・単勝</span>${tag ? `<span class="evb-tag" style="${tagBg ? 'background:' + tagBg : ''}">${tag}</span>` : ''}</div>`;
+
+  // オッズ未取得
+  if (res.nOdds < 5) {
+    return `<div class="ev-monitor-bar skip">${_head('', '')}
+      <div style="margin-top:6px">単勝オッズが未取得です。取得するとEV（勝率×オッズ）を計算し、中穴の勝負どころを判定します。
+        <button type="button" id="ev-fetch-btn-${raceNo}" class="evb-fetch" style="margin-left:6px" onclick="fetchOddsForEv(${raceNo})">💹 オッズ取得してEV計算</button></div></div>`;
+  }
+
+  const bets = res.runners.filter(r => r.inWindow);
+  const cautionHtml = !res.inDomain
+    ? `<div class="evb-sub" style="color:#b45309">⚠️ オッズ合計が確定域（Σ1/odds ${M.invLo}〜${M.invHi}）の外（現在${res.invSum.toFixed(2)}）＝未発売直後や締切間際の可能性。確定オッズで再計算を推奨。</div>`
+    : '';
+
+  if (bets.length) {
+    const rows = bets.map(b => `
+      <div class="evb-row">
+        <span class="evb-uma">${b.uma}</span>
+        <span class="evb-name">${b.name || '—'}</span>
+        <span class="evb-metric">単勝${b.odds.toFixed(1)}倍 / 勝率${(b.p * 100).toFixed(1)}% / EV<b>${b.ev.toFixed(2)}</b></span>
+        <span class="evb-stake">${_yen(b.stake)}</span>
+      </div>`).join('');
+    const total = bets.reduce((s, b) => s + b.stake, 0);
+    return `<div class="ev-monitor-bar${res.inDomain ? '' : ' caution'}">${_head('勝負', '')}
+      ${rows}
+      <div class="evb-sub">推奨額＝EV傾斜（¥${(M.stakeK / 10000).toFixed(0)}万×(EV−1)・1点上限${_yen(M.stakeCap)}）。単勝のみ・1点買い。合計 <b>${_yen(total)}</b>。
+        検証：この帯（10〜20倍×EV&gt;1.0）は実払戻で2021-26全年100%超・計129%（傾斜166%）。資金に応じ額は調整可。${cautionHtml ? '' : ''}</div>
+      ${cautionHtml}</div>`;
+  }
+
+  // 該当なし＝見送り。参考に最上位EV馬を1頭示す。
+  const top = res.runners[0];
+  const refWhy = top
+    ? (top.odds < M.oddsLo ? `最上位EVは${top.name}だが単勝${top.odds.toFixed(1)}倍＝人気すぎ（本域10〜20倍）`
+      : top.odds >= M.oddsHi ? `最上位EVは${top.name}だが単勝${top.odds.toFixed(1)}倍＝大穴（本域10〜20倍）`
+      : `中穴帯にEV>1.0の馬がいない（最高EV ${top.ev.toFixed(2)}）`)
+    : '';
+  return `<div class="ev-monitor-bar skip">${_head('見送り', '#64748b')}
+    <div style="margin-top:5px">このレースは中穴×EVプラスの条件に該当なし＝<b>見送り推奨</b>。${refWhy ? '<br><span style="font-size:11px;opacity:.85">' + refWhy + '</span>' : ''}</div>
+    ${cautionHtml}</div>`;
+}
+
 function renderPredictionPanel(raceNo) {
   const container = document.getElementById(`yoso-panel-${raceNo}`);
   if (!container) return;
@@ -13963,6 +14209,7 @@ function renderPredictionPanel(raceNo) {
       return `<div class="psf-value-bar">💎 <b>PSF妙味：${_pt}</b>（位置構造モデルの単独推し・検証635RでROI112.9%）${!isNaN(_po) ? `｜単勝${_po.toFixed(1)}倍${_inBand ? '＝<b>本域</b>' : '（本域は3〜10倍）'}` : '｜オッズ未取得（本域は3〜10倍）'}</div>`;
     })()}
     ${mlNote}
+    ${buildEvMonitorHtml(raceNo, container._selCond)}
     ${confidenceBadge}
     ${valueBetBadge}
     ${dangerFavBadge}
