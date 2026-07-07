@@ -715,7 +715,7 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku) {
       <td class="num">${e.kinryo ?? ''}</td>
       <td class="l">${esc(e.trainer)}</td>
       <td class="num">${e.body_weight ?? ''}${e.weight_diff != null ? `(${fmtDiff(e.weight_diff)})` : ''}</td>
-      <td class="num">${e.win_odds ?? ''}${e.pop != null ? `(${e.pop})` : ''}</td>
+      <td class="num" data-live-odds="${e.umaban}">${e.win_odds ?? ''}${e.pop != null ? `(${e.pop})` : ''}</td>
       <td class="num ${s != null && top3S.includes(s) ? 'best' : ''}">${s != null ? s.toFixed(1) : '-'}</td>
       <td class="num ${h != null && h === topH ? 'f1' : ''}">${h != null ? h.toFixed(1) : '-'}</td>
       <td class="num ${cz != null && cz === topC ? 'a1' : ''}">${cz != null ? cz.toFixed(1) : '-'}</td>
@@ -727,7 +727,7 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku) {
   }).join('');
 
   return raceHeaderHtml(raceMeta) + `
-  <div class="card"><div class="tablewrap">
+  <div class="card"><div style="text-align:right;margin-bottom:4px"><span id="oddsUpdated" class="badge"></span></div><div class="tablewrap">
     <table>
       <tr><th>枠</th><th>番</th><th>AI印</th>
       <th>馬名</th><th>性齢</th><th>減</th><th>騎手</th><th>斤量</th><th>厩舎</th><th>馬体重</th><th>単勝(人気)</th>
@@ -822,14 +822,14 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku) {
       <td class="num">${r.score != null ? (50 + r.score * 10).toFixed(1) : '-'}</td>
       <td class="num">${r.si != null ? r.si.toFixed(0) : '-'}</td>
       <td class="num">${r.cz != null ? r.cz.toFixed(1) : '-'}</td>
-      <td class="num">${e.win_odds ?? '-'}${e.pop != null ? `(${e.pop})` : ''}</td>
+      <td class="num" data-live-odds="${e.umaban}">${e.win_odds ?? '-'}${e.pop != null ? `(${e.pop})` : ''}</td>
       <td>${r.myomi ? '💰' : ''}</td>
       <td class="small">${esc(konkyo)}</td>
     </tr>`;
   }).join('');
 
   return raceHeaderHtml(raceMeta) + `
-  <div class="note">直近の馬場: ${recentBias || 'データなし'}　印は学習モデル（勝ちやすさ）順。</div>
+  <div class="note">直近の馬場: ${recentBias || 'データなし'}　印は学習モデル（勝ちやすさ）順。　<span id="oddsUpdated" class="badge"></span></div>
   <div class="card"><div class="tablewrap">
     <table>
       <tr><th>AI印</th><th>枠</th><th>番</th><th>馬名</th><th>AI予測</th><th>勝率</th><th>総合</th><th>SI</th><th>調教</th><th>単勝(人気)</th><th>妙味</th><th>根拠</th></tr>
@@ -893,7 +893,58 @@ function cyokyoRaceHtml(raceMeta, entries, cyokyo, history) {
   <div class="legend">調教偏差＝坂路3F最速の偏差値（50が平均）。ラップは200m毎・<span class="badge conf-S">加速</span>尻上がり／<span class="badge conf-C">失速</span>終い掛かる／<span class="badge conf-S">🔥好走</span>偏差値60+×加速（実測複勝59%）。</div></div>`;
 }
 
+// ---- リアルタイムオッズ（keiba.go.jp・門別=馬場コード36、Workerプロキシ経由でCORS回避）----
+const ODDS_PROXY = 'https://keiba-proxydeploy.maguronagareboshi.workers.dev/?url=';
+const jstToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+async function fetchLiveOdds(raceDate, raceNo) {
+  if (!raceDate || !raceNo) return null;
+  const url = `https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/OddsTanFuku?k_raceDate=${raceDate.replace(/-/g, '/')}&k_raceNo=${raceNo}&k_babaCode=36`;
+  try {
+    const html = await (await fetch(ODDS_PROXY + encodeURIComponent(url))).text();
+    if (html.indexOf('odd_popular_table_02') < 0) return null;
+    const m = html.match(/odd_popular_table_02[\s\S]*?<tbody>([\s\S]*?)<\/tbody>/);
+    const body = m ? m[1] : '';
+    const odds = {};
+    for (const tr of (body.match(/<tr[^>]*>[\s\S]*?<\/tr>/g) || [])) {
+      const tds = [...tr.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((x) => x[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim());
+      if (tds.length < 4) continue;
+      const uma = parseInt(tds[1]), o = parseFloat(tds[3]);
+      if (uma >= 1 && uma <= 20 && o > 0) odds[uma] = o;
+    }
+    if (!Object.keys(odds).length) return null;
+    const pop = {};
+    Object.entries(odds).sort((a, b) => a[1] - b[1]).forEach(([um], i) => { pop[um] = i + 1; });
+    const pm = html.match(/(\d{1,2}):(\d{2})\s*発走/);
+    return { odds, pop, postTime: pm ? `${pm[1]}:${pm[2]}` : null };
+  } catch (e) { return null; }
+}
+
+function applyLiveOdds(live) {
+  if (!live) return;
+  for (const td of document.querySelectorAll('#raceView [data-live-odds]')) {
+    const o = live.odds[+td.dataset.liveOdds], p = live.pop[+td.dataset.liveOdds];
+    td.textContent = o != null ? `${o}${p ? `(${p})` : ''}` : '-';
+  }
+  const n = new Date(), badge = $('oddsUpdated');
+  if (badge) badge.textContent = `🔴ライブ ${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}更新${live.postTime ? `（発走${live.postTime}）` : ''}`;
+}
+
+async function startLiveOdds(raceMeta) {
+  clearInterval(state.oddsTimer); state.oddsTimer = null;
+  const rd = raceMeta.race_date || raceMeta.date;
+  if (rd !== jstToday() || !(state.sub === 'yosou' || state.sub === 'syutuba')) return;
+  const run = async () => {
+    const rid = state.raceId;
+    const live = await fetchLiveOdds(rd, raceMeta.race_no);
+    if (state.raceId === rid && state.view === 'race') applyLiveOdds(live);
+  };
+  await run();
+  state.oddsTimer = setInterval(run, 60000);
+}
+
 async function renderRaceView() {
+  clearInterval(state.oddsTimer); state.oddsTimer = null;
   $('raceView').innerHTML = '<div class="empty">読み込み中…</div>';
   const raceId = state.raceId;
   try {
@@ -938,6 +989,7 @@ async function renderRaceView() {
         : state.sub === 'cyokyo'
           ? cyokyoRaceHtml(raceMeta, entries, cyokyo, history)
           : syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku);
+      startLiveOdds(raceMeta);   // 当日レースは現在オッズをライブ取得・自動更新
     }
   } catch (e) {
     $('raceView').innerHTML = `<div class="empty">読み込み失敗: ${esc(e.message)}</div>`;
@@ -1361,6 +1413,7 @@ function renderHorseModal(results, cyokyo) {
 // ============================================================
 function switchView(v) {
   state.view = v;
+  if (v !== 'race') { clearInterval(state.oddsTimer); state.oddsTimer = null; }  // レース以外はライブオッズ停止
   $('raceRoot').hidden = v !== 'race';
   $('analysisRoot').hidden = v !== 'analysis';
   $('cyokyoRoot').hidden = v !== 'cyokyo';
