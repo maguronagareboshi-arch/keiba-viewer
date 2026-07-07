@@ -369,11 +369,21 @@ function devValue(value, e, fld) {
   return 50 + 10 * (e[fld].mean - value) / e[fld].std;
 }
 // 1走分の総合指数: 走破タイム50% + テン3F25% + 上がり3F25%（欠測は重み再配分）
+// v2新基準: タイムは日別馬場差+斤量、上がりはレース前半ペースで補正
+// （検証: duel_final.py 古馬2025-26ホールドアウト t=3.73有意・◎複勝+1.1pt）
 function runShisu(run) {
   const e = baseEntry(run.dist, run.going, run.cls);
-  const parts = [[devValue(run.tsec, e, 'time'), 0.5],
+  const da = ((state.stats && state.stats.shisu_day_adj) || {})[run.date] || 0;   // 馬場差(z)
+  const rp = (state.stats && state.stats.race_pace) || {};
+  const pz = (run.race_id != null && rp[run.race_id] != null) ? rp[run.race_id] : 0;  // 前半ペース(z)
+  const kin = run.kin != null ? run.kin : 55;
+  let t = devValue(run.tsec, e, 'time');
+  if (t != null) t = t - 10 * da + 0.5 * (kin - 55);
+  let l = devValue(run.l3, e, 'last3f');
+  if (l != null) l = l - 5 * pz;
+  const parts = [[t, 0.5],
                  [devValue(run.f3, e, 'first3f'), 0.25],
-                 [devValue(run.l3, e, 'last3f'), 0.25]].filter(([v]) => v != null);
+                 [l, 0.25]].filter(([v]) => v != null);
   if (!parts.length) return null;
   const wsum = parts.reduce((s, [, w]) => s + w, 0);
   return parts.reduce((s, [v, w]) => s + v * w, 0) / wsum;
@@ -424,14 +434,26 @@ function modelScore(e, history, race, cyoZ) {
   const runs = (history[e.horse_id] || []).filter((r) => r.race_id !== race.race_id);
   if (!runs.length) return null;
   const cbias = (state.stats && state.stats.corner4_daily) || {};
+  const sda = (state.stats && state.stats.shisu_day_adj) || {};
+  const rpz = (state.stats && state.stats.race_pace) || {};
   // 各過去走を z 値化（新しい順→計算では最新を last に）
+  // 学習と同一のzスケール（旧実装は偏差値のまま渡していてスケール不一致だった）
+  // ＋v2補正: タイムz=馬場差+斤量 / 上がりz=レース前半ペース（build_model.py v2と厳密一致）
   const P = runs.slice(0, 8).map((r) => {
     const be = baseEntry(r.dist, r.going, r.cls);
     const d = r.dist || 1000;
     const pos = POS4[r.c4];
     const trip = (pos != null && cbias[r.date] != null) ? cbias[r.date] * Math.max(-1, Math.min(1, pos)) : 0;
+    const z = (v, fld) => { const dv = devValue(v, be, fld); return dv == null ? null : (dv - 50) / 10; };
+    const da = sda[r.date] || 0;
+    const pv = (r.race_id != null && rpz[r.race_id] != null) ? rpz[r.race_id] : 0;
+    const kin = r.kin != null ? r.kin : 55;
+    let tz = z(r.tsec, 'time');
+    if (tz != null) tz = tz - da + 0.05 * (kin - 55);
+    let lz = z(r.l3, 'last3f');
+    if (lz != null) lz = lz - 0.5 * pv;
     return {
-      tz: devValue(r.tsec, be, 'time'), fz: devValue(r.f3, be, 'first3f'), lz: devValue(r.l3, be, 'last3f'),
+      tz, fz: z(r.f3, 'first3f'), lz,
       date: r.date, dist: d, band: d <= 1100 ? 1 : d <= 1200 ? 2 : 3, clsRank: clsRank(r.cls === '2歳' ? '2歳' : r.cls), trip,
       clsR: { '2歳': 0, '3歳': 1, '3歳以上': 2 }[r.cls] ?? 2,
     };
@@ -839,7 +861,7 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku) {
       ${rows}
     </table>
   </div>
-  <div class="legend"><b>AI印・AI予測</b>＝学習モデル（リッジ回帰）の勝ちやすさ。検証（後半990R）で◎勝率39.3%・複勝率71.5%（従来指数36.2%・67.5%を上回る）。<b>勝率</b>＝スコアから推定した各馬の単勝的中確率（過去4年で較正・全馬合計100%）。総合＝指数/SI/調教/テンの加重。💰＝スピード指数1位×4番人気以下（回収率108%）。</div></div>`;
+  <div class="legend"><b>AI印・AI予測</b>＝学習モデル（リッジ回帰・v2馬場差補正）の勝ちやすさ。検証（後半908R）で◎勝率40.6%・複勝率73.5%（従来指数35.8%・67.2%を上回る）。指数も馬場差・斤量・ペース補正済み。<b>勝率</b>＝スコアから推定した各馬の単勝的中確率（過去4年で較正・全馬合計100%）。総合＝指数/SI/調教/テンの加重。💰＝スピード指数1位×4番人気以下（回収率108%）。</div></div>`;
 }
 
 // レース単位の調教ビュー（各馬の最新坂路追切・ラップ判定・調教偏差順）
