@@ -1359,18 +1359,18 @@ const KV_APP_CSS = [
     <div style="text-align:center;margin-bottom:20px">
       <div style="font-size:36px;margin-bottom:8px">🔐</div>
       <h2 style="margin:0;font-size:18px;font-weight:700;color:#1a1a2e">管理者ログイン</h2>
-      <p style="margin:4px 0 0;font-size:12px;color:#6b7280">パスワードを入力してください</p>
+      <p style="margin:4px 0 0;font-size:12px;color:#6b7280">書き込みトークンを入力してください</p>
     </div>
     <form onsubmit="doAdminLogin();return false;" style="margin-bottom:0">
       <input type="text" name="username" value="admin" autocomplete="username" style="display:none" aria-hidden="true">
       <div style="margin-bottom:16px">
         <input type="password" id="admin-pw-input" class="form-input"
-          placeholder="パスワード"
+          placeholder="書き込みトークン"
           autocomplete="current-password"
-          style="text-align:center;letter-spacing:4px;font-size:16px">
+          style="text-align:center;font-size:14px">
       </div>
       <div id="admin-login-error" style="display:none;color:#ef4444;font-size:12px;text-align:center;margin-bottom:10px;padding:6px;background:#fef2f2;border-radius:6px">
-        <i class="fas fa-exclamation-circle"></i> パスワードが違います
+        <i class="fas fa-exclamation-circle"></i> トークンが違います
       </div>
       <button type="submit"
         style="width:100%;background:linear-gradient(135deg,#1a56a0,#0f3d7a);color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:700;cursor:pointer">
@@ -1378,7 +1378,7 @@ const KV_APP_CSS = [
       </button>
     </form>
     <p style="text-align:center;font-size:11px;color:#9ca3af;margin-top:14px;margin-bottom:0">
-      管理者モード以外では数値・ポジションの<br>手入力ができません
+      トークンはこの端末にのみ保存され、公開ソースには<br>含まれません。閲覧のみの方は入力不要です。
     </p>
   </div>
 </div>
@@ -5500,10 +5500,12 @@ const SUPABASE_HEADERS = {
 
 // ============================================================
 // Cloudflare Worker プロキシ（書き込み専用）
-// Worker デプロイ後に WORKER_URL と WRITE_TOKEN を設定すること。
+// ★セキュリティ：書き込みトークンはソースにベタ書きしない（公開サイトのソースから盗まれ、
+//   誰でもDB全消去/改ざんが可能になるため・2026-07-08修正）。管理者が「管理者ログイン」で
+//   一度だけ入力し、その端末の localStorage(kv_write_token) にのみ保持する。閲覧者は書込不可。
 // ============================================================
 const WORKER_URL = 'https://keiba-proxydeploy.maguronagareboshi.workers.dev';
-const WRITE_TOKEN = 'kochi-2026-abc123';
+function getWriteToken() { return localStorage.getItem('kv_write_token') || ''; }
 
 /** Supabase REST API：upsert（INSERT OR UPDATE）— Worker 経由で書き込み */
 async function apiUpsert(table, id, payload) {
@@ -5513,7 +5515,7 @@ async function apiUpsert(table, id, payload) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Write-Token': WRITE_TOKEN,
+        'X-Write-Token': getWriteToken(),
         'Prefer': 'resolution=merge-duplicates,return=minimal',
       },
       body: JSON.stringify(body),
@@ -7793,7 +7795,7 @@ async function deleteSavedDay(event, date, baba) {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          'X-Write-Token': WRITE_TOKEN,
+          'X-Write-Token': getWriteToken(),
         },
       });
     } catch(e) { console.warn('[delete]', table, id, e); }
@@ -12749,29 +12751,17 @@ function screenshotHorseModal() {
 // ════════════════════════════════════════════════════════
 //  管理者モード
 // ════════════════════════════════════════════════════════
-// パスワードはlocalStorageに保存するhashで管理
-// ※静的サイトなので完全なセキュリティは担保できないが
-//   パブリックユーザーの誤操作防止として機能する
-const ADMIN_HASH_KEY = 'kv_admin_hash';
-// デフォルトパスワード: "kochi2024admin"
-// sha256ハッシュの代わりにbtoa+簡易難読化で保持
-const ADMIN_PW_ENCODED = btoa('a2\x6fchi\x32\x300\x32\x34\x61\x64mi\x6e').split('').map((c,i)=>c).join('');
-
-function _adminPwToToken(pw) {
-  // 簡易トークン化（btoa）
-  try { return btoa(unescape(encodeURIComponent(pw + ':kvadmin'))); } catch(e){ return null; }
-}
-
-// 管理者ログインの一時無効化フラグ（2026-07-02）：trueの間は常に管理者扱いで
-// ログイン不要・関連ボタンも非表示。元のログイン制に戻すには false にするだけ。
-const KV_ADMIN_ALWAYS = true;
+// 管理者判定＝書き込みトークン保有（2026-07-08）。旧パスワード方式は廃止。
+// トークンはソースに含めず、管理者ログインで入力→localStorage(kv_write_token)にのみ保持。
+// ════════════════════════════════════════════════════════
 
 function isAdminMode() {
-  // 【開発用】手動トグル（localStorage kv_dev_admin）が最優先。'1'=管理者/'0'=閲覧者。
+  // 【開発用】手動トグル（localStorage kv_dev_admin）が最優先＝UI確認用。'1'=管理者/'0'=閲覧者。
+  //   ※ただし実際の書き込みは getWriteToken() のトークンが正しくないと Worker が401で弾く。
   const dev = localStorage.getItem('kv_dev_admin');
   if (dev !== null) return dev === '1';
-  if (KV_ADMIN_ALWAYS) return true;
-  return sessionStorage.getItem('kv_admin_session') === '1';
+  // 管理者＝この端末に有効な書き込みトークンを保有している（＝データ取得/保存が可能）。
+  return !!localStorage.getItem('kv_write_token');
 }
 
 /** 【開発用】管理者⇔閲覧者を手動トグル（完成後はこの関数とボタン・isAdminModeのdev分岐を削除） */
@@ -12796,13 +12786,8 @@ function applyModeUI() {
   const badge  = document.getElementById('admin-mode-badge');
   const loginBtn  = document.getElementById('admin-login-btn');
   const logoutBtn = document.getElementById('admin-logout-btn');
-  if (KV_ADMIN_ALWAYS) {
-    // ログイン制無効化中はバッジ・ログイン・ログアウトを全部隠す（ヘッダーもすっきり）
-    if (badge)     badge.classList.add('hidden');
-    if (loginBtn)  loginBtn.classList.add('hidden');
-    if (logoutBtn) logoutBtn.classList.add('hidden');
-    return;
-  }
+  const devBtn = document.getElementById('dev-admin-btn');
+  if (devBtn) devBtn.classList.add('hidden');  // 開発用トグルは公開版では隠す（本物のログイン/ログアウトに集約）
   if (badge)  badge.classList.toggle('hidden', !isAdmin);
   if (loginBtn)  loginBtn.classList.toggle('hidden', isAdmin);
   if (logoutBtn) logoutBtn.classList.toggle('hidden', !isAdmin);
@@ -12824,53 +12809,41 @@ function closeAdminLogin() {
   if (modal) modal.style.display = 'none';
 }
 
-function doAdminLogin() {
+async function doAdminLogin() {
   const inp = document.getElementById('admin-pw-input');
   if (!inp) return;
-  const pw = inp.value;
+  const token = inp.value.trim();
   const errEl = document.getElementById('admin-login-error');
-  // 保存済みカスタムパスワードがあればそちらを優先
-  const savedToken = localStorage.getItem(ADMIN_HASH_KEY);
-  const inputToken = _adminPwToToken(pw);
-  // デフォルトPW確認
-  const defaultOk = (pw === 'kochi2024admin');
-  const customOk  = savedToken && (inputToken === savedToken);
-  if (defaultOk || customOk) {
-    sessionStorage.setItem('kv_admin_session', '1');
+  const btn = document.querySelector('#admin-login-modal button[type=submit]');
+  if (!token) { if (errEl) { errEl.textContent = 'トークンを入力してください'; errEl.style.display = 'block'; } return; }
+  if (btn) { btn.disabled = true; btn.dataset._l = btn.innerHTML; btn.innerHTML = '確認中...'; }
+  // Worker にトークンを検証（存在しないID DELETE＝0行・データは変わらない。204=有効/401=無効）
+  let ok = false;
+  try {
+    const res = await fetch(`${WORKER_URL}/rest/v1/keiba_races?id=eq.__auth_probe__`, {
+      method: 'DELETE', headers: { 'X-Write-Token': token },
+    });
+    ok = (res.status !== 401 && res.status !== 403);
+  } catch (e) { ok = false; }
+  if (btn) { btn.disabled = false; if (btn.dataset._l) btn.innerHTML = btn.dataset._l; }
+  if (ok) {
+    localStorage.setItem('kv_write_token', token);
     closeAdminLogin();
     applyModeUI();
-    // パスワード変更ダイアログを初回ログイン時に促す（デフォルトPWのみ）
-    if (defaultOk && !savedToken) {
-      setTimeout(() => {
-        if (confirm('デフォルトパスワードでログインしました。\nセキュリティのためパスワードを変更しますか？')) {
-          openChangePwDialog();
-        }
-      }, 300);
-    }
+    if (typeof _currentPage === 'string' && typeof switchPage === 'function') switchPage(_currentPage, true);
   } else {
-    if (errEl) errEl.style.display = 'block';
-    inp.value = '';
-    inp.focus();
+    if (errEl) { errEl.innerHTML = '<i class="fas fa-exclamation-circle"></i> トークンが違います'; errEl.style.display = 'block'; }
+    inp.value = ''; inp.focus();
   }
 }
 
 function adminLogout() {
-  if (!confirm('管理者モードからログアウトしますか？')) return;
+  if (!confirm('管理者モードからログアウトしますか？\n（この端末から書き込みトークンを削除します。データ閲覧は引き続き可能です）')) return;
+  localStorage.removeItem('kv_write_token');
   sessionStorage.removeItem('kv_admin_session');
   applyModeUI();
+  if (typeof _currentPage === 'string' && typeof switchPage === 'function') switchPage(_currentPage, true);
 }
-
-function openChangePwDialog() {
-  const newPw = prompt('新しいパスワードを入力してください（6文字以上）');
-  if (!newPw || newPw.length < 6) { alert('パスワードは6文字以上で設定してください。'); return; }
-  const confirm2 = prompt('もう一度入力してください');
-  if (newPw !== confirm2) { alert('パスワードが一致しません。'); return; }
-  localStorage.setItem(ADMIN_HASH_KEY, _adminPwToToken(newPw));
-  alert('✅ パスワードを変更しました。次回から新しいパスワードでログインできます。');
-}
-
-// パスワード変更メニュー（管理者モード中に使用）
-window.openChangePwDialog = openChangePwDialog;
 
 // 初期化（ページロード時にモード適用）
 document.addEventListener('DOMContentLoaded', () => {
