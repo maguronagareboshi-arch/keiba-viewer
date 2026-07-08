@@ -944,6 +944,12 @@ const KV_APP_CSS = [
       '.pace-label-high{background:#fee2e2;color:#e84040}.pace-label-mid{background:#fef3c7;color:#e8a020}.pace-label-slow{background:#e0f0ff;color:#3090e0}.pace-label-none{background:#f0f0f0;color:#999}',
       '.ana-td-uchi0{background:#dbeafe;font-weight:700}.ana-td-uchi1{background:#dcfce7;font-weight:700}.ana-td-soto2{background:#fef9c3;font-weight:700}.ana-td-soto3{background:#ffedd5;font-weight:700}.ana-td-soto4{background:#fee2e2;font-weight:700}',
       '.ana-td-s-uchi{background:#dcfce7;font-weight:700}.ana-td-s-naka{background:#fef9c3;font-weight:700}.ana-td-s-soto{background:#fee2e2;font-weight:700}',
+      // 位置色セル（好走/凡走馬一覧）のダーク対応：色相を保ちつつ暗背景＋明文字（明るく浮くのを解消）
+      'body.dark-mode .ana-td-uchi0{background:#0c2438!important;color:#7dd3fc!important}',
+      'body.dark-mode .ana-td-uchi1,body.dark-mode .ana-td-s-uchi{background:#08301d!important;color:#4ade80!important}',
+      'body.dark-mode .ana-td-soto2,body.dark-mode .ana-td-s-naka{background:#2c2708!important;color:#f6d24a!important}',
+      'body.dark-mode .ana-td-soto3{background:#341f0b!important;color:#fdba74!important}',
+      'body.dark-mode .ana-td-soto4,body.dark-mode .ana-td-s-soto{background:#341114!important;color:#f87171!important}',
       '.app-footer{text-align:center;padding:18px;font-size:12px;color:#6b7280;border-top:1px solid #e2e8f0;margin-top:20px}',
       '.app-footer a{color:#1a56a0;text-decoration:none}',
       '@media(max-width:1300px){.col-trainer,.col-belong{display:none}}',
