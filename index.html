@@ -950,6 +950,42 @@ const KV_APP_CSS = [
       'body.dark-mode .ana-td-soto2,body.dark-mode .ana-td-s-naka{background:#2c2708!important;color:#f6d24a!important}',
       'body.dark-mode .ana-td-soto3{background:#341f0b!important;color:#fdba74!important}',
       'body.dark-mode .ana-td-soto4,body.dark-mode .ana-td-s-soto{background:#341114!important;color:#f87171!important}',
+      // 本日の好走傾向バー（出馬表内・馬場バイアス）
+      '.dbias{background:linear-gradient(135deg,#f0f7ff,#eef4fb);border:1px solid #d6e4f5;border-radius:12px;padding:10px 14px;margin-bottom:2px}',
+      '.dbias--wait{background:#f8fafc;border-color:#e2e8f0}',
+      '.dbias-wait-txt{font-size:12px;color:#94a3b8;display:flex;align-items:center;gap:6px}',
+      '.dbias-head{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:8px}',
+      '.dbias-title{font-size:13.5px;font-weight:800;color:#1a56a0}',
+      '.dbias-sub{font-size:11px;color:#1e40af;background:#e0ecfb;border-radius:20px;padding:2px 9px;font-weight:700}',
+      '.dbias-more{margin-left:auto;background:#1a56a0;color:#fff;border:none;border-radius:7px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}',
+      '.dbias-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px}',
+      '.dbias-chip{font-size:12px;font-weight:700;border-radius:20px;padding:3px 11px;color:#334155;background:#fff;border:1px solid #dbe6f3}',
+      '.dbias-chip b{margin-left:2px}',
+      '.dbias-chip--hot{background:#fef3c7;border-color:#fcd34d;color:#92400e}',
+      '.dbias-chip--cool{background:#dbeafe;border-color:#93c5fd;color:#1e40af}',
+      '.dbias-chip--mid{background:#f1f5f9;border-color:#e2e8f0;color:#475569}',
+      '.dbias-bars{display:flex;flex-direction:column;gap:5px}',
+      '.dbias-bar{display:flex;align-items:center;gap:5px;flex-wrap:wrap}',
+      '.dbias-bar-label{font-size:11px;font-weight:700;color:#64748b;min-width:44px}',
+      '.dbias-seg{font-size:11px;color:#64748b;background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:2px 8px;white-space:nowrap}',
+      '.dbias-seg b{color:#1e293b;margin-left:3px}',
+      '.dbias-seg b::after{content:"%";font-size:9px;font-weight:400;opacity:.7}',
+      '.dbias-seg--top{background:#dcfce7;border-color:#86efac;color:#166534}',
+      '.dbias-seg--top b{color:#15803d}',
+      '.dbias-seg--low{opacity:.45}',
+      'body.dark-mode .dbias{background:linear-gradient(135deg,#0d1f38,#0c1a30);border-color:#1e3048}',
+      'body.dark-mode .dbias--wait{background:#0d1826;border-color:#1e2e44}',
+      'body.dark-mode .dbias-wait-txt{color:#7386a0}',
+      'body.dark-mode .dbias-title{color:#7dd3fc}',
+      'body.dark-mode .dbias-sub{background:#0c2438;color:#93c5fd}',
+      'body.dark-mode .dbias-chip{background:#0d1826;border-color:#22344e;color:#cbd5e1}',
+      'body.dark-mode .dbias-chip--hot{background:#3a2f08;border-color:#7c5e10;color:#fde047}',
+      'body.dark-mode .dbias-chip--cool{background:#0c2438;border-color:#1d4ed8;color:#93c5fd}',
+      'body.dark-mode .dbias-chip--mid{background:#1a2334;border-color:#22344e;color:#94a3b8}',
+      'body.dark-mode .dbias-seg{background:#0d1826;border-color:#22344e;color:#94a3b8}',
+      'body.dark-mode .dbias-seg b{color:#e2e8f0}',
+      'body.dark-mode .dbias-seg--top{background:#08301d;border-color:#166534;color:#4ade80}',
+      'body.dark-mode .dbias-seg--top b{color:#4ade80}',
       '.app-footer{text-align:center;padding:18px;font-size:12px;color:#6b7280;border-top:1px solid #e2e8f0;margin-top:20px}',
       '.app-footer a{color:#1a56a0;text-decoration:none}',
       '@media(max-width:1300px){.col-trainer,.col-belong{display:none}}',
@@ -1664,6 +1700,9 @@ const KV_APP_CSS = [
     <div id="race-tabs-section" class="race-tabs-section hidden">
       <div class="race-tabs" id="race-tabs"></div>
     </div>
+
+    <!-- 本日の好走傾向（この日の確定結果から馬場バイアスを自動表示） -->
+    <div id="deban-bias-panel" class="dbias hidden"></div>
 
     <!-- 出馬表メインエリア -->
     <div id="race-content-area"></div>
@@ -3539,9 +3578,10 @@ function switchRaceTab(raceNo) {
   const area=document.getElementById('race-content-area');
   area.querySelectorAll('[data-race-section]').forEach(el=>el.style.display='none');
   const existing=document.getElementById(`race-section-${raceNo}`);
-  if(existing){existing.style.display='';updateRaceSummaryBar(raceNo);return;}
+  if(existing){existing.style.display='';updateRaceSummaryBar(raceNo);try{renderDebanBias();}catch(e){}return;}
   renderRaceContent(raceNo);
   updateRaceSummaryBar(raceNo);
+  try{renderDebanBias();}catch(e){}
 }
 
 function renderRaceContent(raceNo) {
@@ -8388,6 +8428,91 @@ function showDebanDateList() {
 function showDebanRaceView() {
   document.getElementById('deban-date-list-card')?.classList.add('hidden');
   document.getElementById('race-layout-wrap')?.classList.remove('hidden');
+  try { renderDebanBias(); } catch (e) {}
+}
+
+/** 本日の好走傾向：読込中の日の確定結果から馬場バイアス（前残り/内外/ペース）を出馬表内に自動表示。 */
+function renderDebanBias() {
+  const panel = document.getElementById('deban-bias-panel');
+  if (!panel) return;
+  const races = Object.values(allRacesData || {});
+  const runners = [];
+  races.forEach(rd => {
+    const rno = rd.raceInfo && rd.raceInfo.raceNo;
+    (rd.horses || []).forEach(h => {
+      const ch = parseInt(h.chakujun);
+      if (isNaN(ch) || ch < 1) return;
+      runners.push({ ch, mukae: h.mukaeShoumen || '', str: h.shoumenStraight || '', pace: h.paceType || '', c1: parseInt(String(h.corner || '').split('-')[0]), rno });
+    });
+  });
+  const resRaces = new Set(runners.map(r => r.rno)).size;
+  if (runners.length < 12 || resRaces < 2) {
+    panel.className = 'dbias dbias--wait';
+    panel.innerHTML = '<span class="dbias-wait-txt"><i class="fas fa-hourglass-half"></i> 本日の好走傾向は、レース確定後（2R以上）に自動表示されます</span>';
+    return;
+  }
+  const winners = runners.filter(r => r.ch <= 3);
+  const wN = winners.length;
+  const rate = (key, val) => { const tot = runners.filter(r => r[key] === val).length; if (!tot) return null; return { r: Math.round(100 * winners.filter(r => r[key] === val).length / tot), n: tot }; };
+  // 前残り度（勝ち上位馬のうち1角3番手以内の割合）
+  const frontVals = winners.map(r => r.c1).filter(c => !isNaN(c));
+  const frontRate = frontVals.length ? Math.round(100 * frontVals.filter(c => c <= 3).length / frontVals.length) : null;
+  // 内外バイアス（勝ち上位馬の向正面が内寄り or 外寄り）
+  const innW = winners.filter(r => r.mukae === '最内' || r.mukae === '内').length;
+  const outW = winners.filter(r => r.mukae === '外3' || r.mukae === '大外').length;
+  const posN = winners.filter(r => r.mukae).length;
+  // ペース基調（確定レースの多数派ペース）
+  const paceCount = {}; runners.forEach(r => { if (r.pace) paceCount[r.pace] = (paceCount[r.pace] || 0) + 1; });
+  const topPace = Object.keys(paceCount).sort((a, b) => paceCount[b] - paceCount[a])[0];
+
+  const chip = (label, val, tone) => `<span class="dbias-chip dbias-chip--${tone}">${label}<b>${val}</b></span>`;
+  const chips = [];
+  if (frontRate != null) chips.push(chip('前残り度 ', frontRate + '%', frontRate >= 55 ? 'hot' : frontRate <= 38 ? 'cool' : 'mid'));
+  // 内外バイアスは直線（決着）位置の好走率で判定＝バーと一致させる
+  const strRate = v => { const tot = runners.filter(r => r.str === v).length; return tot >= 4 ? Math.round(100 * winners.filter(r => r.str === v).length / tot) : null; };
+  const inR = strRate('内'), otR = strRate('外');
+  if (inR != null && otR != null) {
+    const bias = inR > otR + 10 ? ['内有利', 'hot'] : otR > inR + 10 ? ['外有利', 'cool'] : ['内外フラット', 'mid'];
+    chips.push(chip('', bias[0], bias[1]));
+  }
+  if (topPace) chips.push(chip('多くは ', topPace + 'ペース', topPace === 'スロー' ? 'hot' : topPace === 'ハイ' ? 'cool' : 'mid'));
+
+  // 位置別 好走率バー（N≥4の最大値をハイライト・少数Nは淡色）
+  const barRow = (title, key, vals) => {
+    const cells = vals.map(v => ({ v, d: rate(key, v) })).filter(x => x.d);
+    if (!cells.length) return '';
+    const elig = cells.filter(c => c.d.n >= 4);
+    const mx = elig.length ? Math.max(...elig.map(c => c.d.r)) : -1;
+    return `<div class="dbias-bar"><span class="dbias-bar-label">${title}</span>${cells.map(c => `<span class="dbias-seg${(c.d.r === mx && c.d.n >= 4) ? ' dbias-seg--top' : ''}${c.d.n < 4 ? ' dbias-seg--low' : ''}" title="${c.v}：好走率${c.d.r}%・${c.d.n}頭">${c.v}<b>${c.d.r}</b></span>`).join('')}</div>`;
+  };
+  const bars = barRow('向正面', 'mukae', ['最内', '内', '外2', '外3', '大外'])
+    + barRow('直線', 'str', ['内', '中', '外']);
+
+  if (!chips.length && !bars.trim()) {
+    panel.className = 'dbias dbias--wait';
+    panel.innerHTML = '<span class="dbias-wait-txt"><i class="fas fa-info-circle"></i> この日は位置・ペースの入力がないため傾向を表示できません（分析タブで入力後に反映）</span>';
+    return;
+  }
+
+  panel.className = 'dbias';
+  panel.innerHTML =
+    `<div class="dbias-head"><span class="dbias-title"><i class="fas fa-chart-simple"></i> 本日の好走傾向</span>` +
+    `<span class="dbias-sub">${resRaces}R確定・${wN}好走</span>` +
+    `<button class="dbias-more" onclick="_gotoAnaForDay()">詳しく分析 <i class="fas fa-arrow-right"></i></button></div>` +
+    `<div class="dbias-chips">${chips.join('')}</div>` +
+    `<div class="dbias-bars">${bars}</div>`;
+}
+
+/** 出馬表で読込中の日を、分析ページで開く（日付を自動選択して即描画）。 */
+function _gotoAnaForDay() {
+  const sel = document.getElementById('ana-date-select');
+  if (sel && typeof currentDate !== 'undefined' && currentDate) {
+    const want = `${currentDate}__${currentBaba}`;
+    if (![...sel.options].some(o => o.value === want)) { try { initAnalysisDateSelect(); } catch (e) {} }
+    if ([...sel.options].some(o => o.value === want)) sel.value = want;
+  }
+  switchPage('bunseki');
+  setTimeout(() => { try { renderAnalysis(); } catch (e) {} }, 0);
 }
 
 function restoreFromSaved(date, baba) {
