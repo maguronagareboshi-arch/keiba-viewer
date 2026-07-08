@@ -89,7 +89,7 @@ td.l { text-align: left; }
     <div class="card">
       <canvas id="track" width="900" height="480"></canvas>
       <canvas id="strip" width="900" height="100"></canvas>
-      <div class="note">↑ 拡大ビュー: 1馬身（2.4m）単位の正確な差で表示（目盛り5馬身刻み・最大22px/馬身）。先頭の位置は走行方向に連動 — 向正面では右端、正面（ゴール前）では左端に自動反転。ゴールが近づくと赤線が現れます。</div>
+      <div class="note">↑ 拡大ビュー: 1馬身（2.4m）単位の正確な差で表示（表示幅は最小10馬身まで拡大・馬群が広がると自動フィット）。先頭の位置は走行方向に連動 — 向正面では右端、正面（ゴール前）では左端に自動反転。ゴールが近づくと赤線が現れます。</div>
       <div class="note">門別競馬場実寸比: 1周1,600m(外)/1,376m(内)・直線330m(外)/218m(内)・右回り・1200m/2000mは引き込み線から発走。
       過去5走のテン3F・上がり3Fを<b>距離×馬場×クラスの基準タイムに対する偏差値</b>に換算し、この距離の標準タイム±能力差で走らせる（距離延長で生スピードを持ち込まない）。
       <b>展開モデル</b>: 出走各馬のテン速度から先行争い→<b>ペース</b>（ハイ/ミドル/スロー）を推定し、ハイでは先行馬が上がりで失速・スローは前残り、距離延長で先行馬ほど<b>スタミナ</b>消耗、後方馬は外を回るロス、を反映（門別＝前有利がベース）。</div>
@@ -719,7 +719,7 @@ function drawStrip() {
   const dir = state.stripDir || 1;
   const spreadB = (leader - ranked[ranked.length - 1].s) / BASHIN;
   const usable = SW - 90;
-  const pxPerB = Math.min(22, usable / Math.max(spreadB, 3));  // 22px/馬身まで拡大（30馬身超は自動縮小）
+  const pxPerB = usable / Math.max(spreadB + 1.5, 10);  // 表示幅は最小10馬身（馬群が広がればフィットに自動拡大）
   const anchorX = dir > 0 ? SW - 45 : 45;
   // 走路帯
   sctx.fillStyle = css['--track-dirt'];
@@ -728,14 +728,15 @@ function drawStrip() {
   sctx.fillStyle = css['--sub'];
   sctx.font = 'bold 11px sans-serif'; sctx.textAlign = dir > 0 ? 'right' : 'left';
   sctx.fillText(dir > 0 ? '進行方向 ▶' : '◀ 進行方向', dir > 0 ? SW - 6 : 6, 9);
-  // 5馬身刻みの目盛り
+  // 目盛り（ズームに応じて2馬身/5馬身刻み）
+  const stepB = pxPerB >= 30 ? 2 : 5;
   sctx.strokeStyle = css['--rail']; sctx.lineWidth = 1;
   sctx.fillStyle = css['--sub']; sctx.font = '10px sans-serif'; sctx.textAlign = 'center';
-  for (let b = 1; b * 5 * pxPerB < usable; b++) {
-    const x = anchorX - dir * b * 5 * pxPerB;
+  for (let b = 1; b * stepB * pxPerB < usable; b++) {
+    const x = anchorX - dir * b * stepB * pxPerB;
     sctx.beginPath(); sctx.moveTo(x, 12); sctx.lineTo(x, 18); sctx.stroke();
     sctx.beginPath(); sctx.moveTo(x, 74); sctx.lineTo(x, 80); sctx.stroke();
-    sctx.fillText(`${b * 5}馬身`, x, 94);
+    sctx.fillText(`${b * stepB}馬身`, x, 94);
   }
   // ゴール線（先頭の前方が視界に入ったら）
   const dtgPx = (state.dist - leader) / BASHIN * pxPerB;
