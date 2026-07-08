@@ -88,8 +88,8 @@ td.l { text-align: left; }
   <div class="layout">
     <div class="card">
       <canvas id="track" width="900" height="480"></canvas>
-      <canvas id="strip" width="900" height="100"></canvas>
-      <div class="note">↑ 拡大ビュー: 1馬身（2.4m）単位の正確な差で表示（表示幅は最小10馬身まで拡大・馬群が広がると自動フィット）。先頭の位置は走行方向に連動 — 向正面では右端、正面（ゴール前）では左端に自動反転。ゴールが近づくと赤線が現れます。</div>
+      <canvas id="strip" width="900" height="210"></canvas>
+      <div class="note">↑ 拡大ビュー: 1馬身（2.4m）単位の正確な差で表示（表示幅は最小10馬身まで拡大・馬群が広がると自動フィット・馬体の大きさも実寸1馬身に連動）。先頭の位置は走行方向に連動 — 向正面では右端、正面（ゴール前）では左端に自動反転。ゴールが近づくと赤線が現れます。</div>
       <div class="note">門別競馬場実寸比: 1周1,600m(外)/1,376m(内)・直線330m(外)/218m(内)・右回り・1200m/2000mは引き込み線から発走。
       過去5走のテン3F・上がり3Fを<b>距離×馬場×クラスの基準タイムに対する偏差値</b>に換算し、この距離の標準タイム±能力差で走らせる（距離延長で生スピードを持ち込まない）。
       <b>展開モデル</b>: 出走各馬のテン速度から先行争い→<b>ペース</b>（ハイ/ミドル/スロー）を推定し、ハイでは先行馬が上がりで失速・スローは前残り、距離延長で先行馬ほど<b>スタミナ</b>消耗、後方馬は外を回るロス、を反映（門別＝前有利がベース）。</div>
@@ -721,9 +721,15 @@ function drawStrip() {
   const usable = SW - 90;
   const pxPerB = usable / Math.max(spreadB + 1.5, 10);  // 表示幅は最小10馬身（馬群が広がればフィットに自動拡大）
   const anchorX = dir > 0 ? SW - 45 : 45;
+  // 馬体サイズを馬身スケールに連動（鼻先〜尻尾≒1.24L ≒ 実寸1馬身 → L≒0.8×pxPerB）
+  const L = Math.max(20, Math.min(0.8 * pxPerB, 62));
+  const bandTop = 12, bandBot = SH - 22;
+  // 3段レーン（馬サイズに応じた間隔・帯の中で上下センタリング）
+  const laneStep = Math.min((bandBot - bandTop - 0.9 * L) / 2, 1.1 * L + 14);
+  const y0 = bandTop + 0.42 * L + Math.max(0, (bandBot - bandTop - 0.9 * L - 2 * laneStep) / 2);
   // 走路帯
   sctx.fillStyle = css['--track-dirt'];
-  sctx.fillRect(0, 12, SW, 68);
+  sctx.fillRect(0, bandTop, SW, bandBot - bandTop);
   // 進行方向インジケータ
   sctx.fillStyle = css['--sub'];
   sctx.font = 'bold 11px sans-serif'; sctx.textAlign = dir > 0 ? 'right' : 'left';
@@ -734,18 +740,18 @@ function drawStrip() {
   sctx.fillStyle = css['--sub']; sctx.font = '10px sans-serif'; sctx.textAlign = 'center';
   for (let b = 1; b * stepB * pxPerB < usable; b++) {
     const x = anchorX - dir * b * stepB * pxPerB;
-    sctx.beginPath(); sctx.moveTo(x, 12); sctx.lineTo(x, 18); sctx.stroke();
-    sctx.beginPath(); sctx.moveTo(x, 74); sctx.lineTo(x, 80); sctx.stroke();
-    sctx.fillText(`${b * stepB}馬身`, x, 94);
+    sctx.beginPath(); sctx.moveTo(x, bandTop); sctx.lineTo(x, bandTop + 6); sctx.stroke();
+    sctx.beginPath(); sctx.moveTo(x, bandBot - 6); sctx.lineTo(x, bandBot); sctx.stroke();
+    sctx.fillText(`${b * stepB}馬身`, x, SH - 8);
   }
   // ゴール線（先頭の前方が視界に入ったら）
   const dtgPx = (state.dist - leader) / BASHIN * pxPerB;
   const gx = anchorX + dir * dtgPx;
   if (gx > -20 && gx < SW + 20) {
     sctx.strokeStyle = css['--goal']; sctx.lineWidth = 3;
-    sctx.beginPath(); sctx.moveTo(gx, 8); sctx.lineTo(gx, 84); sctx.stroke();
+    sctx.beginPath(); sctx.moveTo(gx, bandTop - 4); sctx.lineTo(gx, bandBot + 4); sctx.stroke();
     sctx.fillStyle = css['--goal'];
-    sctx.fillText('GOAL', Math.max(18, Math.min(gx, SW - 18)), 94);
+    sctx.fillText('GOAL', Math.max(18, Math.min(gx, SW - 18)), SH - 8);
   }
   // 砂埃（走行中に蹄付近から発生・後方へ流れて消える）
   state.dust = state.dust || [];
@@ -758,15 +764,15 @@ function drawStrip() {
     sctx.fillStyle = `rgba(196,176,146,${(a * 0.5).toFixed(2)})`;
     sctx.beginPath(); sctx.arc(pt.x, pt.y, 1.2 + (1 - a) * 3.5, 0, Math.PI * 2); sctx.fill();
   }
-  // 馬（順位で3段・ギャロップアニメーション）
+  // 馬（順位で3段・ギャロップアニメーション・馬体は1馬身スケール）
   ranked.forEach((h, i) => {
     const x = anchorX - dir * (leader - h.s) / BASHIN * pxPerB;
-    const y = 24 + (i % 3) * 21;
-    const hoofs = drawGallopHorse(sctx, x, y, 30, phaseOf(h), dir,
+    const y = y0 + (i % 3) * laneStep;
+    const hoofs = drawGallopHorse(sctx, x, y, L, phaseOf(h), dir,
       css[`--waku${h.waku}-bg`], css[`--waku${h.waku}-tx`], h.umaban, coatOf(h));
     if (state.running && h.s < state.dist && Math.random() < 0.35 && state.dust.length < 140) {
       const hf = hoofs[Math.floor(Math.random() * 2)];   // 後脚の蹄から
-      state.dust.push({ x: hf[0], y: Math.min(hf[1], 78), vx: -dir * (1.2 + Math.random() * 1.6), vy: -(0.2 + Math.random() * 0.5), age: 0, max: 14 + Math.random() * 8 });
+      state.dust.push({ x: hf[0], y: Math.min(hf[1], bandBot - 2), vx: -dir * (1.2 + Math.random() * 1.6), vy: -(0.2 + Math.random() * 0.5), age: 0, max: 14 + Math.random() * 8 });
     }
   });
   sctx.textBaseline = 'alphabetic';
@@ -921,7 +927,8 @@ async function initMain(dates) {
       <div class="note">1,000回試行（${ms}ms）・平均ペース <b>${paceLabelOf(state.mcPaceZ ?? 0)}</b>（${(state.mcPaceZ ?? 0) >= 0 ? '+' : ''}${(state.mcPaceZ ?? 0).toFixed(2)}）。各試行でフィールドの先行争い→ペースを算出し、ハイは先行馬のスタミナ消耗・スローは前残りを反映。期待値 = 勝率 × 単勝オッズ。<b>1.00以上（緑）が理論上プラスの買い目</b>。オッズは出馬表取得時点のもの。</div>`;
   });
   $('speedBtn').addEventListener('click', () => {
-    state.speed = state.speed === 6 ? 3 : state.speed === 3 ? 12 : 6;
+    const SPEEDS = [1, 3, 6, 12];   // x1=実時間（1000mを約63秒かけて観る）
+    state.speed = SPEEDS[(SPEEDS.indexOf(state.speed) + 1) % SPEEDS.length];
     $('speedBtn').textContent = `速度 x${state.speed}`;
   });
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { loadCss(); drawTrack(); drawHorses(); });

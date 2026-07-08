@@ -1085,7 +1085,7 @@ async function renderRaceView() {
   const raceId = state.raceId;
   if (state.sub === 'sim') {   // このレースの展開シミュレータを埋め込み表示
     $('raceView').innerHTML = `<div class="card" style="padding:0;overflow:hidden;border-radius:8px">
-      <iframe src="simulator.html?race=${encodeURIComponent(raceId)}&embed=1" style="width:100%;height:820px;border:0;display:block" title="展開シミュレータ" loading="lazy"></iframe></div>
+      <iframe src="simulator.html?race=${encodeURIComponent(raceId)}&embed=1" style="width:100%;height:920px;border:0;display:block" title="展開シミュレータ" loading="lazy"></iframe></div>
       <div class="note">このレースの展開シミュレータ（テン3F/上がり実績で隊列・伸びを再現・1000回モンテカルロで勝率/複勝率/EV）。全画面は上部の🎲シミュレータから。</div>`;
     return;
   }
