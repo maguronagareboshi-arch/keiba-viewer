@@ -142,6 +142,9 @@ td.best { background: var(--hl-best) !important; font-weight: bold; }
 .bias-front { color: var(--bias-front); font-weight: bold; }
 .bias-back { color: var(--bias-back); font-weight: bold; }
 .kyaku { display: inline-block; font-size: 10px; padding: 0 4px; border-radius: 3px; background: var(--chip-bg); color: var(--sub); }
+.triptag { display: inline-block; font-size: 10px; font-weight: 700; padding: 0 4px; border-radius: 3px; margin-left: 2px; line-height: 1.6; cursor: help; }
+.tg-gyaku { background: rgba(204,138,46,0.16); color: #cc8a2e; }
+.tg-megumi { background: rgba(106,143,208,0.15); color: #6a8fd0; }
 h3.sec { font-size: 14px; margin: 16px 0 6px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
@@ -650,7 +653,7 @@ function seisekiHtml(data, aiMark) {
       <td class="num">${esc(r.time_str)}</td>
       <td>${esc(r.margin)}</td>
       <td class="num">${esc(r.passing)}</td>
-      <td>${esc(r.corner4_pos)}</td>
+      <td>${esc(r.corner4_pos)}${tripTag(race.date || race.race_date, r.corner4_pos)}</td>
       <td class="l fold"><span class="kv">${esc(r.comment)}</span></td>
       <td class="num ${f3rank(r.first3f) <= 3 ? 'f1' : ''}">${r.first3f != null ? r.first3f.toFixed(1) : ''}</td>
       <td class="num ${a3rank(r.last3f) <= 3 ? 'a1' : ''}">${r.last3f != null ? r.last3f.toFixed(1) : ''}</td>
@@ -674,13 +677,27 @@ function seisekiHtml(data, aiMark) {
 }
 
 // ---- 出馬表サブビュー（keibabook風＋能力表＋調教） ----
+// その走の「馬場逆行/恵まれ」バッジ。内外バイアス(corner4_inout・正=外伸び)×自分の4角レーン。
+// 逆行=その日と逆のレーンで力を出せず過小評価かも / 恵=有利なレーンで実力以上に見えるかも。表示専用。
+function tripTag(date, c4) {
+  const b = (state.stats && state.stats.corner4_inout) || {};
+  const bias = b[date], lane = POS4[c4];
+  if (bias == null || lane == null) return '';
+  const tf = bias * (lane / 2);
+  const dir = bias > 0 ? '外伸び' : '内伸び';
+  if (tf <= -0.06) return ` <span class="triptag tg-gyaku" title="この日は${dir}傾向。${c4}を通り不利な巡り＝力を出し切れず過小評価かも（次走で見直せる）">逆</span>`;
+  if (tf >= 0.06) return ` <span class="triptag tg-megumi" title="この日は${dir}傾向。${c4}を通り恵まれた巡り＝実力以上に見えているかも">恵</span>`;
+  return '';
+}
+
 function pastRunHtml(run) {
   if (!run) return '';
   const fin = run.fin != null ? `${run.fin}着` : '除/取';
   return `${mmdd(run.date)}${run.sex ? ` <span class="kyaku">${esc(run.sex)}</span>` : ''} ${run.dist ?? '?'}m ${fin}` +
     (run.f3 != null ? ` テン${run.f3.toFixed(1)}` : '') +
     (run.l3 != null ? ` 上${run.l3.toFixed(1)}` : '') +
-    (run.kyaku ? ` <span class="kyaku">${run.kyaku}</span>` : '');
+    (run.kyaku ? ` <span class="kyaku">${run.kyaku}</span>` : '') +
+    tripTag(run.date, run.c4);
 }
 function workHtml(w) {
   if (!w) return '';
@@ -1657,7 +1674,7 @@ function renderHorseModal(results, cyokyo) {
       <td class="l">${esc(r.jockey || '')}</td><td class="num">${esc(r.time_str || '')}</td>
       <td class="num">${r.first3f != null ? r.first3f.toFixed(1) : ''}</td>
       <td class="num">${r.last3f != null ? r.last3f.toFixed(1) : ''}</td>
-      <td class="num">${esc(r.passing || '')}</td><td>${esc(r.corner4_pos || '')}</td>
+      <td class="num">${esc(r.passing || '')}</td><td>${esc(r.corner4_pos || '')}${tripTag(ra.race_date, r.corner4_pos)}</td>
       <td class="num">${r.pop != null ? r.pop + '人' : ''}</td>
       <td class="num">${r.win_odds ?? ''}</td>
       <td class="num">${r.body_weight ?? ''}${r.weight_diff != null ? `(${fmtDiff(r.weight_diff)})` : ''}</td>
