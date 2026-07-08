@@ -659,6 +659,16 @@ const KV_APP_CSS = [
       'body.dark-mode .ps-body{color:#e2e8f0}',
       'body.dark-mode .ps-mut{color:#a8a29e}',
       'body.dark-mode .ps-line{color:#fdba74;border-color:#7c2d12}',
+      // ===== モダンリフレッシュ（攻めた見た目：ガラス質＋グラデ背景＋アニメ）=====
+      '@keyframes kvFadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}',
+      'body{background:radial-gradient(680px 460px at 88% -6%,rgba(56,189,248,.12),transparent 60%),radial-gradient(560px 420px at 6% 106%,rgba(124,58,237,.09),transparent 60%),linear-gradient(165deg,#eef3fb,#f4f6fa 45%,#e9f0fa) fixed #f4f6fa}',
+      '.search-card,.race-header-card,.saved-card{background:rgba(255,255,255,.72);backdrop-filter:blur(14px) saturate(125%);-webkit-backdrop-filter:blur(14px) saturate(125%);border-radius:16px;box-shadow:0 10px 34px rgba(15,23,42,.10),0 1px 2px rgba(15,23,42,.05);transition:box-shadow .28s ease;animation:kvFadeUp .42s ease both}',
+      '.search-card,.saved-card{border:1px solid rgba(255,255,255,.65)}',
+      '.search-card:hover,.saved-card:hover{box-shadow:0 16px 46px rgba(15,23,42,.15),0 2px 4px rgba(15,23,42,.06)}',
+      '.ac-val{background:linear-gradient(135deg,#1a56a0,#38bdf8);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}',
+      'body.dark-mode .search-card,body.dark-mode .race-header-card,body.dark-mode .saved-card{background:rgba(17,27,45,.60)!important;backdrop-filter:blur(16px) saturate(120%);-webkit-backdrop-filter:blur(16px) saturate(120%);box-shadow:0 12px 42px rgba(0,0,0,.48)!important}',
+      'body.dark-mode .search-card,body.dark-mode .saved-card{border:1px solid rgba(56,189,248,.14)!important}',
+      'body.dark-mode .ac-val{background:linear-gradient(135deg,#7dd3fc,#a5b4fc);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}',
       // 出馬表タブ：開催日リスト
       '.ddi-month{font-size:12px;font-weight:800;color:#6b7280;margin:12px 0 6px}',
       '.ddi-month:first-child{margin-top:0}',
@@ -2353,9 +2363,20 @@ async function _renderAccessCounter() {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/site_stats?select=key,n&key=in.(total,d_${dk},d_${yk})`, { headers: SUPABASE_HEADERS });
     const rows = await res.json();
     const map = {}; (Array.isArray(rows) ? rows : []).forEach(r => { map[r.key] = r.n; });
-    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = (v != null ? Number(v).toLocaleString('en-US') : '0'); };
+    const set = (id, v) => { const el = document.getElementById(id); if (el) _animateNum(el, Number(v) || 0); };
     set('ac-total', map['total']); set('ac-today', map['d_' + dk]); set('ac-yesterday', map['d_' + yk]);
   } catch (e) { console.warn('[access-counter]', e); }
+}
+
+/** 数字をカウントアップ（0→to・イージング）。fmtで整形（既定は千区切り整数）。 */
+function _animateNum(el, to, dur, fmt) {
+  if (!el) return; dur = dur || 850; fmt = fmt || (v => Math.round(v).toLocaleString('en-US'));
+  if (typeof to !== 'number' || !isFinite(to)) { el.textContent = fmt(0); return; }
+  el.textContent = fmt(to); // フォールバック：rAFが動かなくても最終値は必ず表示（カウントアップは装飾）
+  if (typeof requestAnimationFrame !== 'function') return;
+  const t0 = performance.now();
+  const step = now => { const p = Math.min((now - t0) / dur, 1); const e = 1 - Math.pow(1 - p, 3); el.textContent = fmt(to * e); if (p < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
 }
 
 // ── レース展開リプレイ（コーナー通過順アニメ）─────────────────────────
@@ -2555,10 +2576,13 @@ function renderBetsPage() {
   const hr = settled ? Math.round(hits / settled * 1000) / 10 : 0;
   const plC = pl >= 0 ? 'bn-pos' : 'bn-neg', roiC = roi >= 100 ? 'bn-pos' : 'bn-neg';
   document.getElementById('bn-summary').innerHTML =
-    `<div class="bn-stat"><div class="bn-stat-label">収支</div><div class="bn-stat-val ${plC}">${pl >= 0 ? '+' : ''}${pl.toLocaleString()}</div></div>` +
-    `<div class="bn-stat"><div class="bn-stat-label">回収率</div><div class="bn-stat-val ${roiC}">${roi}%</div></div>` +
-    `<div class="bn-stat"><div class="bn-stat-label">的中率</div><div class="bn-stat-val">${hr}%</div></div>` +
+    `<div class="bn-stat"><div class="bn-stat-label">収支</div><div class="bn-stat-val ${plC}" id="bnv-pl">${pl >= 0 ? '+' : ''}${pl.toLocaleString()}</div></div>` +
+    `<div class="bn-stat"><div class="bn-stat-label">回収率</div><div class="bn-stat-val ${roiC}" id="bnv-roi">${roi}%</div></div>` +
+    `<div class="bn-stat"><div class="bn-stat-label">的中率</div><div class="bn-stat-val" id="bnv-hr">${hr}%</div></div>` +
     `<div class="bn-stat"><div class="bn-stat-label">的中/件数</div><div class="bn-stat-val">${hits}/${settled}</div></div>`;
+  _animateNum(document.getElementById('bnv-pl'), pl, 750, v => (v >= 0 ? '+' : '') + Math.round(v).toLocaleString('en-US'));
+  _animateNum(document.getElementById('bnv-roi'), roi, 750, v => (Math.round(v * 10) / 10) + '%');
+  _animateNum(document.getElementById('bnv-hr'), hr, 750, v => (Math.round(v * 10) / 10) + '%');
   _bnRenderChart(labels, pts);
   const bdRows = BET_TYPES.filter(t => bd[t].n > 0).map(t => { const o = bd[t]; const roiT = o.stake ? Math.round(o.pay / o.stake * 1000) / 10 : null; return `<div class="bn-bd-row"><span>${t} <span class="bn-muted">${o.n}件</span></span><span>的中${o.hit}${roiT != null ? '・回収' + roiT + '%' : ''}</span></div>`; }).join('');
   document.getElementById('bn-breakdown').innerHTML = bdRows ? ('<div class="bn-breakdown">' + bdRows + '</div>') : '';
