@@ -645,6 +645,20 @@ const KV_APP_CSS = [
       'body.dark-mode .bn-b-miss{background:#3a1114;color:#f87171}',
       'body.dark-mode .bn-b-pending{background:#1a2334;color:#94a3b8}',
       'body.dark-mode .bn-b-pay{background:#3a2f08;color:#fde047}',
+      // 🎯 このレースの狙い目カード
+      '.pick-summary{background:linear-gradient(135deg,#fff7ed,#fef2f2);border:1px solid #fecaca;border-radius:12px;padding:12px 14px;margin-bottom:12px}',
+      '.ps-head{font-size:14px;font-weight:800;color:#9a3412;margin-bottom:9px}',
+      '.ps-copy{background:none;border:none;cursor:pointer;font-size:14px;float:right;line-height:1;padding:0}',
+      '.ps-row{display:flex;align-items:baseline;gap:8px;margin:5px 0;font-size:13px;flex-wrap:wrap}',
+      '.ps-tag{color:#fff;font-size:11px;font-weight:800;border-radius:5px;padding:2px 8px;flex-shrink:0;min-width:38px;text-align:center}',
+      '.ps-body{color:#1e293b;min-width:0}',
+      '.ps-mut{color:#78716c;font-size:11px}',
+      '.ps-line{margin-top:9px;padding-top:9px;border-top:1px dashed #fecaca;font-size:12px;color:#7c2d12;line-height:1.6}',
+      'body.dark-mode .pick-summary{background:linear-gradient(135deg,#1f1408,#1f0f0f);border-color:#7c2d12}',
+      'body.dark-mode .ps-head{color:#fdba74}',
+      'body.dark-mode .ps-body{color:#e2e8f0}',
+      'body.dark-mode .ps-mut{color:#a8a29e}',
+      'body.dark-mode .ps-line{color:#fdba74;border-color:#7c2d12}',
       // 出馬表タブ：開催日リスト
       '.ddi-month{font-size:12px;font-weight:800;color:#6b7280;margin:12px 0 6px}',
       '.ddi-month:first-child{margin-top:0}',
@@ -2497,6 +2511,14 @@ function _bnAddBet() {
   _betsWrite(bets);
   document.getElementById('bn-sel').value = ''; document.getElementById('bn-memo').value = '';
   renderBetsPage();
+}
+function _copyPickText(btn) {
+  const card = btn.closest('.pick-summary'); if (!card) return;
+  const rows = [...card.querySelectorAll('.ps-row')].map(r => r.querySelector('.ps-tag').textContent + '：' + r.querySelector('.ps-body').textContent.replace(/\s+/g, ' ').trim());
+  const line = (card.querySelector('.ps-line') || {}).textContent || '';
+  const txt = '🎯 狙い目\n' + rows.join('\n') + '\n' + line + '\n#高知競馬';
+  const done = () => { const o = btn.textContent; btn.textContent = '✓'; setTimeout(() => btn.textContent = o, 1200); };
+  if (navigator.clipboard) navigator.clipboard.writeText(txt).then(done).catch(() => {});
 }
 function _bnDelete(id) { if (!confirm('この記録を削除しますか？')) return; _betsWrite(_betsRead().filter(b => b.id !== id)); renderBetsPage(); }
 function _bnSetPayout(id, val) { const p = parseInt(val); if (isNaN(p) || p < 0) return; const bets = _betsRead(); const b = bets.find(x => x.id === id); if (b) { b.payout = p; _betsWrite(bets); renderBetsPage(); } }
@@ -14463,6 +14485,8 @@ function renderPredictionPanel(raceNo) {
   // スコア計算は共通コア computeYosoScored に委譲（出馬表のAI印列と同一の結果）
   const { scored, comboStats: _comboStats, raceDist } = computeYosoScored(raceNo, container._selCond);
   container._scored = scored; // デバッグ・検証用（リファクタ時のスコア一致確認に使用）
+  // 🎯狙い目カード用：各バッジが実際に採用した馬を捕捉（カードと詳細バッジの不一致を防ぐ）
+  let _pickDanger = null, _pickSleeper = null, _pickValue = null;
 
   // ── マーク割り当て（◎○▲△××）──
   const MARKS = ['◎', '○', '▲', '△', '×', '×'];
@@ -14707,6 +14731,7 @@ function renderPredictionPanel(raceNo) {
           if (_favNames.length) _sub = `<span class="vbb-sub">｜＋馬単 ${_vh.horseName}→（${_favNames.join('・')}）も過去検証104%（高分散）</span>`;
         }
         valueBetBadge = `<div class="value-bet-bar">💰 <b>単勝妙味${_isTop ? 'ゾーン' : '：' + _vh.horseName}</b>（手動指数の軸${_isTop ? '＝◎' : '・◎とは別馬'}・単勝${_vod.toFixed(1)}倍）＝検証で単勝ROI約92%の相対妙味帯（全◎平均88%比+約4pt・控除内だが市場より優位）${_sub}</div>`;
+        _pickValue = { name: _vh.horseName, odds: _vod, isTop: _isTop };
       }
     }
   }
@@ -14749,6 +14774,7 @@ function renderPredictionPanel(raceNo) {
       }
       if (_dfReasons.length) {
         dangerFavBadge = `<div class="danger-fav-bar">⚠️ <b>危険な1番人気：${_dfH.horseName}</b>（${_dfReasons.join('・')}）＝検証でこのタイプの1番人気は複勝54%（通常79%）<span class="dfb-sub">｜2,386Rの実測・5期間全てで劣後</span></div>`;
+        _pickDanger = { name: _dfH.horseName, reasons: _dfReasons.slice() };
       }
     }
   }
@@ -14828,6 +14854,7 @@ function renderPredictionPanel(raceNo) {
     });
     if (_anaHits.length) {
       _anaHits.sort((a, b) => b.nSig - a.nSig || a.idx - b.idx);
+      _pickSleeper = { name: _anaHits[0].s.horse.horseName, idx: _anaHits[0].idx, why: _anaHits[0].why.slice() };
       const _items = _anaHits.slice(0, 3).map(x =>
         `<b>${x.s.horse.horseName}</b>（${x.idx + 1}番手・${x.why.join('＋')}）`).join('　');
       anaBadge = `<div class="ana-run-bar">⚡ <b>穴馬激走注意</b>：${_items}<span class="arb-sub">｜この型の指数下位馬は複勝20〜24%（下位平均11%・66,979頭の実測）。ワイド・3連単の2-3着ラインに一考</span></div>`;
@@ -14839,6 +14866,33 @@ function renderPredictionPanel(raceNo) {
   const mlNote = _mlWNote
     ? `<div style="margin-bottom:8px;font-size:10px;color:#9ca3af">🧠 学習重み適用中（${_mlWNote.races}R学習・${(_mlWNote.trainedAt || '').slice(0, 10)}）— 精度検証の二段基準クリア済み。補正項を学習済み実効倍率で合成しています。</div>`
     : '';
+
+  // ── 🎯 このレースの狙い目カード（◎/中穴妙味/穴/危険を1枚に束ねた見どころ）──
+  //    既存バッジが採用した馬（_pickDanger/_pickSleeper/_pickValue）とEVモニターを再利用＝詳細と矛盾しない。
+  let pickSummary = '';
+  if (_viewMode !== 'after') {
+    const _hm = scored[0];
+    if (_hm && _hm.totalScore != null) {
+      const _g = (scored[1] && scored[1].totalScore != null) ? +(_hm.totalScore - scored[1].totalScore).toFixed(1) : null;
+      const _cw2 = getMlLiveWeights();
+      const _thHi2 = _cw2?.tiers?.c2 ?? 6, _thLo2 = _cw2?.tiers?.c1 ?? 2.5;
+      let _confTxt = '標準', _confIcon = '⚪';
+      if (_g != null) { if (_g >= _thHi2) { _confTxt = '断然'; _confIcon = '🟢'; } else if (_g < _thLo2) { _confTxt = '接戦'; _confIcon = '🟡'; } }
+      let _evPick = null;
+      try { const _er = computeEvBets(raceNo, container._selCond); if (_er && _er.runners) _evPick = _er.runners.find(r => r.inWindow) || null; } catch (e) {}
+      const _row = (label, color, body) => `<div class="ps-row"><span class="ps-tag" style="background:${color}">${label}</span><span class="ps-body">${body}</span></div>`;
+      let _rows = _row('本命', '#dc2626', `◎ <b>${_hm.horse.horseName}</b> <span class="ps-mut">${_confIcon}${_confTxt}${_g != null ? '（差' + (_g >= 0 ? '+' : '') + _g + '）' : ''}</span>`);
+      if (_evPick) _rows += _row('妙味', '#7c3aed', `中穴 <b>${_evPick.name}</b> <span class="ps-mut">単勝${_evPick.odds.toFixed(1)}倍・EV${_evPick.ev.toFixed(2)}｜モデル妙味帯</span>`);
+      else if (_pickValue) _rows += _row('妙味', '#7c3aed', `<b>${_pickValue.name}</b> <span class="ps-mut">単勝${_pickValue.odds.toFixed(1)}倍・手動指数の軸</span>`);
+      if (_pickSleeper) _rows += _row('穴', '#0891b2', `2-3着に <b>${_pickSleeper.name}</b> <span class="ps-mut">${_pickSleeper.idx + 1}番手・${_pickSleeper.why.join('＋')}</span>`);
+      if (_pickDanger) _rows += _row('危険', '#b45309', `⚠️ <b>${_pickDanger.name}</b> <span class="ps-mut">${_pickDanger.reasons.join('・')}</span>`);
+      const _line = `${_confTxt === '断然' ? '本命◎が抜けています' : _confTxt === '接戦' ? '上位が僅差で頭は割れそう' : '標準的な力関係'}。`
+        + (_evPick ? `中穴妙味は${_evPick.name}（${_evPick.odds.toFixed(1)}倍）。` : _pickValue ? `妙味は${_pickValue.name}。` : '明確な中穴妙味は薄めです。')
+        + (_pickSleeper ? `穴なら${_pickSleeper.name}を2-3着に。` : '')
+        + (_pickDanger ? `人気の${_pickDanger.name}は割引が必要。` : '');
+      pickSummary = `<div class="pick-summary"><div class="ps-head">🎯 このレースの狙い目<button class="ps-copy" onclick="_copyPickText(this)" title="狙い目をコピー">📋</button></div>${_rows}<div class="ps-line">${_line}</div></div>`;
+    }
+  }
 
   container.innerHTML = `
     <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -14856,6 +14910,7 @@ function renderPredictionPanel(raceNo) {
       <button type="button" id="yoso-fetch-all-btn-${raceNo}" onclick="fetchAllByNameForRace(${raceNo})" style="padding:4px 12px;background:#1a56a0;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;"><i class="fas fa-download"></i> データ自動取得</button>
       <span id="yoso-fetch-status-${raceNo}" style="font-size:11px;color:#6b7280;white-space:nowrap;"></span>
     </div>
+    ${pickSummary}
     ${mlNote}
     ${buildEvMonitorHtml(raceNo, container._selCond)}
     ${confidenceBadge}
