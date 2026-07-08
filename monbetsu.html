@@ -448,6 +448,8 @@ function modelScore(e, history, race, cyoZ) {
   if (!m) return null;
   const runs = (history[e.horse_id] || []).filter((r) => r.race_id !== race.race_id);
   if (!runs.length) return null;
+  // 不利run判定（出遅れ/不利語）。build_model.py TROUBLE_WORDS と厳密一致（訓練/推論一致）。
+  const TROUBLE_WORDS = ['出遅', '不利', '詰ま', '躓', 'ふらつ', '挟ま', '包ま', '行き場', '接触', 'ヨレ', 'ササ'];
   const cbias = (state.stats && state.stats.corner4_daily) || {};
   const sda = (state.stats && state.stats.shisu_day_adj) || {};
   const rpz = (state.stats && state.stats.race_pace) || {};
@@ -471,10 +473,14 @@ function modelScore(e, history, race, cyoZ) {
       tz, fz: z(r.f3, 'first3f'), lz,
       date: r.date, dist: d, band: d <= 1100 ? 1 : d <= 1200 ? 2 : 3, clsRank: clsRank(r.cls === '2歳' ? '2歳' : r.cls), trip,
       clsR: { '2歳': 0, '3歳': 1, '3歳以上': 2 }[r.cls] ?? 2,
+      trouble: TROUBLE_WORDS.some((w) => (r.comment || '').indexOf(w) >= 0),
     };
   });
   const tz = P.map((p) => p.tz).filter((v) => v != null);
   if (!tz.length) return null;
+  // 実力タイム集約は不利run(出遅れ等)を除外。全走が不利なら全走で代替（新→古順）。
+  const tzc0 = P.filter((p) => p.tz != null && !p.trouble).map((p) => p.tz);
+  const tzClean = tzc0.length ? tzc0 : tz;
   const fz = P.map((p) => p.fz).filter((v) => v != null);
   const lz = P.map((p) => p.lz).filter((v) => v != null);
   const last = P[0];  // 最新走
@@ -491,7 +497,7 @@ function modelScore(e, history, race, cyoZ) {
   };
   const tRank = clsRank(race.klass);
   const f = {
-    time_mean: wmean(tz), time_best: Math.max(...tz), time_last: last.tz != null ? last.tz : wmean(tz),
+    time_mean: wmean(tzClean), time_best: Math.max(...tzClean), time_last: tzClean[0],
     f3_best: fz.length ? Math.max(...fz) : 0, l3_best: lz.length ? Math.max(...lz) : 0,
     n_runs: Math.min(P.length, 8) / 8,
     days_off: last.date ? Math.min(daysBetween(race.date || race.race_date, last.date), 90) / 90 : 0.3,
