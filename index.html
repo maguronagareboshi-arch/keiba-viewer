@@ -2189,16 +2189,20 @@ function _simRestoreState() {
   if (page === 'deban' && p.get('date')) {
     const date = p.get('date'), baba = p.get('baba') || '31', r = parseInt(p.get('r'));
     const prefix = `race_${baba}_${date}_`;
-    const tryRestore = (attempt) => {
+    let restored = false, fetched = false;
+    const poll = (attempt) => {
+      // ① 既にメモリに読み込み済み（保存復元 or ネット取得完了）→ レース切替して終了
+      const loaded = (typeof allRacesData === 'object') && Object.values(allRacesData).some(d => d && d.raceInfo && d.raceInfo.raceDate === date);
+      if (loaded) { if (!isNaN(r) && typeof switchRaceTab === 'function') { try { switchRaceTab(r); } catch (e) {} } return; }
+      // ② IDB(保存データ)にあれば保存復元（即時・オフラインOK）
       const ls = (typeof lsRead === 'function') ? lsRead() : {};
-      const hasDay = Object.keys(ls).some(k => k.indexOf(prefix) === 0);
-      if (!hasDay) { if (attempt < 40) setTimeout(() => tryRestore(attempt + 1), 150); return; }
-      try {
-        restoreFromSaved(date, baba);
-        if (!isNaN(r) && typeof switchRaceTab === 'function') setTimeout(() => { try { switchRaceTab(r); } catch (e) {} }, 150);
-      } catch (e) { console.warn('[sim restore deban]', e); }
+      const inIdb = Object.keys(ls).some(k => k.indexOf(prefix) === 0);
+      if (inIdb && !restored) { restored = true; try { restoreFromSaved(date, baba); } catch (e) {} }
+      // ③ IDBに無ければ（今日のレース等・未保存）ネットから取得（1回だけ）
+      else if (!inIdb && !fetched && attempt >= 6 && typeof loadSavedDay === 'function') { fetched = true; try { loadSavedDay(date, baba); } catch (e) {} }
+      if (attempt < 60) setTimeout(() => poll(attempt + 1), 200);
     };
-    tryRestore(0);
+    poll(0);
   } else if (page === 'bunseki') {
     const ad = p.get('anadate');
     if (ad) {
