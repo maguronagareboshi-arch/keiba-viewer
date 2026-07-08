@@ -215,6 +215,9 @@ body.dark-mode .hm-hint{color:#8fa3be!important}
 body.dark-mode .hm-cmt{background:#0c2a33!important;border-color:#0e5a6b!important;color:#dbe7f0!important}
 body.dark-mode .hm-cmt .hm-cmt-meta,body.dark-mode .hm-cmt .hm-cmt-meta span{color:#7dd3fc!important}
 body.dark-mode .hm-table td{color:#dbe4ee!important;border-color:#22304a!important}
+body.dark-mode .hm-table th{border-right-color:#1e4a86!important}
+body.dark-mode .hm-table tbody tr{border-bottom-color:#22304a!important;background:transparent}
+body.dark-mode .hm-table tbody tr:nth-child(even){background:#111c2e!important}
 body.dark-mode .hm-row-win{background:#2a2400!important}
 body.dark-mode .hm-row-win:hover{background:#3a3206!important}
 body.dark-mode .hm-match-cell{background:#3a3206!important;color:#fde68a!important}
@@ -878,17 +881,22 @@ const KV_APP_CSS = [
       '.hm-stat-sub{font-size:11px;color:#6b7280}',
       '.hm-hint{font-size:11px;color:#6b7280;margin-bottom:6px;display:flex;align-items:center;gap:6px}',
       /* hm-tableはスクショ対象。overflow-xなし・全カラムを収める小サイズ設定 */
-      '.hm-table{font-size:10.5px;width:100%;min-width:900px;table-layout:fixed;border-collapse:collapse}',
+      '.hm-table{font-size:11px;width:100%;min-width:900px;table-layout:fixed;border-collapse:collapse}',
       '.hm-table thead tr{background:#1a56a0}',
-      '.hm-table th,.hm-table td{padding:4px 4px;white-space:normal;word-break:break-all;vertical-align:middle;text-align:center}',
+      '.hm-table th,.hm-table td{padding:5px 4px;white-space:normal;vertical-align:middle;text-align:center;border-right:1px solid #eef2f7}',
+      '.hm-table th:last-child,.hm-table td:last-child{border-right:none}',
+      /* 長文のレース名・コメントだけ任意位置で改行（数字は break-all を使わず＝文字単位で割れない） */
+      '.hm-table td.col-rname,.hm-table td.col-comment{white-space:normal!important;word-break:break-word;overflow-wrap:anywhere}',
+      '.hm-table tbody tr{border-bottom:1px solid #e8edf4}',
+      '.hm-table tbody tr:nth-child(even){background:#f7f9fc}',
       '.hm-table th{font-size:10px;font-weight:700;color:#fff;white-space:nowrap;word-break:normal}',
       /* カラム幅の固定（col-idx追加済み・合計≒100%） */
       '.hm-table .col-date{width:7%}.hm-table .col-rname{width:9%}.hm-table .col-cls{width:5%}',
       '.hm-table .col-dist{width:5.5%}.hm-table .col-track{width:4.5%}.hm-table .col-rank{width:4.5%}',
-      '.hm-table .col-first3f{width:5%}.hm-table .col-last3f{width:5%}.hm-table .col-time{width:6.5%}',
+      '.hm-table .col-first3f{width:5%}.hm-table .col-last3f{width:5%}.hm-table .col-front{width:5.5%}.hm-table .col-time{width:6.5%}',
       '.hm-table .col-idx{width:4.5%}.hm-table .col-agari-idx{width:4.5%}.hm-table .col-weight{width:6.5%}.hm-table .col-pace{width:7%}.hm-table .col-mid{width:5%}',
       '.hm-table .col-str{width:4.5%}.hm-table .col-jockey{width:7%}.hm-table .col-interval{width:5.5%}',
-      '.hm-table .col-comment{width:14%}',
+      '.hm-table .col-comment{width:9.5%}',
       /* スクショ時クラス付与で全行表示 */
       '.capture-mode .table-wrapper{overflow:visible!important;max-height:none!important}',
       '.hm-row-win{background:#fffbeb!important}.hm-row-win:hover{background:#fef3c7!important}',
