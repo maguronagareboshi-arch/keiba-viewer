@@ -14664,14 +14664,34 @@ const KV_EV_MODEL = {
   mean:    [38.993818,0.012664,-0.067212,-0.174736,-0.000893,-0.931007,-0.025287,-0.025957,-1.086338,-0.090458,-0.280095,0.008352,0.199378,0.014728,0.003027,0.124291,3.02541],
   std:     [13.07071,1.113188,0.544827,0.376235,0.371473,1.349301,0.740008,0.094795,0.415427,0.543692,0.427872,0.062987,1.594666,0.092843,0.582292,0.675127,1.490624],
   weights: [0.173133,0.008697,-0.007631,-0.006132,0.039985,0.100385,0.039914,0.033711,0.112903,0.115689,0.004005,0.007881,-0.008765,-0.013328,-0.037066,0.022714,-1.299585],
-  oddsLo: 10, oddsHi: 20, evTh: 1.0,                  // 中穴帯＆EVプラス閾値
+  oddsLo: 10, oddsHi: 20,                              // 中穴帯（この帯でのみ買い推奨を出す）
+  evCalLo: 1.5, evCalHi: 2.0,                          // 買い推奨の閾値＝キャリブレーション後EVがこの窓に入る時だけ（下記2026-07-09検証）
   stakeK: 300000, stakeMin: 1000, stakeCap: 30000,   // 傾斜額 = clamp(K×(EV−1))・上限＝プール自己インパクトの実務天井
   invLo: 1.05, invHi: 1.6,                            // 学習ドメイン（Σ1/oddsの健全域）
   // 体重ガード（2026-07-07採用）：今日の馬体重が「その馬の好走時(3着内)平均」から極端に乖離した馬をEV買いから除外。
   //   生EDA(各12,000頭超)：好走時比 +12kg超の太目=勝率6.1%・−8kg超のガレ=7.3%（標準帯10.8%）＝ほぼ半減。
   //   体重を持たないモデルはこの馬のEVを過大評価する（EVの罠）。年別WFで除外するとEV買いROI 130→140%（全6年100%超維持）。
-  wDevFuto: 12, wDevGare: -8
+  wDevFuto: 12, wDevGare: -8,
+  // 【2026-07-09 確率キャリブレーション採用】楽天の実払戻データ(2023/10-2026/07・286日/3,007R)で検証した結果、
+  //   このsoftmax確率pは自信があるほど過大評価(40%予測→実際51.7%)という体系的な歪みがあった(Brier 0.0675)。
+  //   下記アンカーは「予測確率ビンの中央値→そのビンの実勝率」の実測値(区分線形補間、範囲外は最終区間の比率で外挿)。
+  //   補正後の p×odds を calEvLo〜calEvHi の狭い窓に絞ったところ、286日を前半/後半に分けた両方の期間で
+  //   独立に黒字(前半119.1%・後半157.4%・通算136.5%、n=119、100円均一賭け)を確認できた検証済みの窓。
+  //   他の券種(複勝・馬連・ワイド・馬単・3連複・3連単)は同じ手法で網羅的に探索したが有意なポケットは見つからず、
+  //   このpCal窓は現時点で「唯一の実配当ベースで再現性のあるエッジ」。単勝10-20倍以外では絶対に使わないこと。
+  calAnchors: [[0.025,0.017],[0.075,0.064],[0.125,0.121],[0.175,0.149],[0.25,0.222],[0.35,0.311],[0.55,0.517]]
 };
+
+/** KV_EV_MODEL.calAnchorsによる区分線形補間で、softmax確率の過大評価を補正する（2026-07-09採用・上記メモ参照）。 */
+function _calibrateEvP(p) {
+  const A = KV_EV_MODEL.calAnchors;
+  const pts = [[0, 0], ...A, [1, A[A.length - 1][1] / A[A.length - 1][0]]];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    if (p >= a[0] && p <= b[0]) { const t = (p - a[0]) / (b[0] - a[0] || 1e-9); return a[1] + t * (b[1] - a[1]); }
+  }
+  return p;
+}
 
 /** EV特徴量用の全IDB集計マップ（backtestと同一材料）。データ変更時は _evMapsCache=null で無効化。 */
 function _evGetMaps() {
@@ -14828,11 +14848,13 @@ function computeEvBets(raceNo, selCond) {
         else if (weightDev <= M.wDevGare) weightWarn = 'gare';
       }
     }
-    const evOk = s.odds >= M.oddsLo && s.odds < M.oddsHi && ev > M.evTh;
-    const inWindow = evOk && !weightWarn;                   // 買い推奨＝EV該当かつ体重ガード通過
+    const pCal = _calibrateEvP(p);           // 過大評価を補正した確率（2026-07-09採用）
+    const evCal = pCal * s.odds;             // 補正後EV＝実配当ベースで検証済みの買い判定に使う値
+    const evOk = s.odds >= M.oddsLo && s.odds < M.oddsHi && evCal >= M.evCalLo && evCal < M.evCalHi;
+    const inWindow = evOk && !weightWarn;                   // 買い推奨＝検証済みの補正後EV窓かつ体重ガード通過
     let stake = 0;
-    if (inWindow) stake = Math.max(M.stakeMin, Math.min(M.stakeCap, Math.round(M.stakeK * (ev - 1) / 100) * 100));
-    return { uma: s.uma, name: s.name, odds: s.odds, p, ev, inWindow, stake, weightDev, weightWarn, evOk };
+    if (inWindow) stake = Math.max(M.stakeMin, Math.min(M.stakeCap, Math.round(M.stakeK * (evCal - 1) / 100) * 100));
+    return { uma: s.uma, name: s.name, odds: s.odds, p, ev, pCal, evCal, inWindow, stake, weightDev, weightWarn, evOk };
   }).sort((a, b) => b.ev - a.ev);
   return { runners, invSum, inDomain, nOdds: cand.length };
 }
@@ -14876,7 +14898,7 @@ function buildEvMonitorHtml(raceNo, selCond) {
     : '';
   const _wLabel = r => r.weightWarn === 'futo' ? `太目 +${r.weightDev}kg` : `ガレ ${r.weightDev}kg`;
   const warnHtml = warned.length
-    ? `<div class="evb-sub">⚖️ 体重ガードで除外（好走時比で極端＝この帯は勝率6〜7%のEVの罠）：${warned.map(r => `<b>${r.name}</b>（${r.odds.toFixed(1)}倍・EV${r.ev.toFixed(2)}／${_wLabel(r)}）`).join('　')}</div>`
+    ? `<div class="evb-sub">⚖️ 体重ガードで除外（好走時比で極端＝この帯は勝率6〜7%のEVの罠）：${warned.map(r => `<b>${r.name}</b>（${r.odds.toFixed(1)}倍・補正後EV${r.evCal.toFixed(2)}／${_wLabel(r)}）`).join('　')}</div>`
     : '';
 
   if (bets.length) {
@@ -14884,14 +14906,14 @@ function buildEvMonitorHtml(raceNo, selCond) {
       <div class="evb-row">
         <span class="evb-uma">${b.uma}</span>
         <span class="evb-name">${b.name || '—'}</span>
-        <span class="evb-metric">単勝${b.odds.toFixed(1)}倍 / 勝率${(b.p * 100).toFixed(1)}% / EV<b>${b.ev.toFixed(2)}</b></span>
+        <span class="evb-metric">単勝${b.odds.toFixed(1)}倍 / 補正後勝率${(b.pCal * 100).toFixed(1)}% / 補正後EV<b>${b.evCal.toFixed(2)}</b></span>
         <span class="evb-stake">${_yen(b.stake)}</span>
       </div>`).join('');
     const total = bets.reduce((s, b) => s + b.stake, 0);
     return `<div class="ev-monitor-bar${res.inDomain ? '' : ' caution'}">${_head('勝負', '')}
       ${rows}
-      <div class="evb-sub">推奨額＝EV傾斜（¥${(M.stakeK / 10000).toFixed(0)}万×(EV−1)・1点上限${_yen(M.stakeCap)}）。単勝のみ・1点買い。合計 <b>${_yen(total)}</b>。
-        検証：この帯（10〜20倍×EV&gt;1.0・体重ガード後）は実払戻で2021-26全年100%超・ROI約140%。資金に応じ額は調整可。</div>
+      <div class="evb-sub">推奨額＝補正後EV傾斜（¥${(M.stakeK / 10000).toFixed(0)}万×(補正後EV−1)・1点上限${_yen(M.stakeCap)}）。単勝のみ・1点買い。合計 <b>${_yen(total)}</b>。
+        検証：この帯（単勝${M.oddsLo}〜${M.oddsHi}倍×補正後EV${M.evCalLo}〜${M.evCalHi}・体重ガード後）は、モデルの確率が自信過剰だった歪みを実払戻データで補正した上で、286日を前半/後半に分けても両方黒字（通算ROI約136%・n=119）を確認済み（2026-07-09検証）。まだ検証件数は多くないため、資金は控えめに。</div>
       ${warnHtml}${cautionHtml}</div>`;
   }
 
@@ -14900,12 +14922,12 @@ function buildEvMonitorHtml(raceNo, selCond) {
   const refWhy = warned.length
     ? `EV該当馬（${warned[0].name}）は体重ガードで除外（${_wLabel(warned[0])}）`
     : top
-      ? (top.odds < M.oddsLo ? `最上位EVは${top.name}だが単勝${top.odds.toFixed(1)}倍＝人気すぎ（本域10〜20倍）`
-        : top.odds >= M.oddsHi ? `最上位EVは${top.name}だが単勝${top.odds.toFixed(1)}倍＝大穴（本域10〜20倍）`
-        : `中穴帯にEV>1.0の馬がいない（最高EV ${top.ev.toFixed(2)}）`)
+      ? (top.odds < M.oddsLo ? `最上位EVは${top.name}だが単勝${top.odds.toFixed(1)}倍＝人気すぎ（本域${M.oddsLo}〜${M.oddsHi}倍）`
+        : top.odds >= M.oddsHi ? `最上位EVは${top.name}だが単勝${top.odds.toFixed(1)}倍＝大穴（本域${M.oddsLo}〜${M.oddsHi}倍）`
+        : `中穴帯に補正後EV${M.evCalLo}〜${M.evCalHi}の馬がいない（最高補正後EV ${top.evCal.toFixed(2)}）`)
       : '';
   return `<div class="ev-monitor-bar skip">${_head('見送り', '#64748b')}
-    <div style="margin-top:5px">このレースは中穴×EVプラスの条件に該当なし＝<b>見送り推奨</b>。${refWhy ? '<br><span style="font-size:11px;opacity:.85">' + refWhy + '</span>' : ''}</div>
+    <div style="margin-top:5px">このレースは中穴×補正後EVの条件に該当なし＝<b>見送り推奨</b>。${refWhy ? '<br><span style="font-size:11px;opacity:.85">' + refWhy + '</span>' : ''}</div>
     ${warned.length ? warnHtml : ''}${cautionHtml}</div>`;
 }
 
