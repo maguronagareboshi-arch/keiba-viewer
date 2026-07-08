@@ -695,6 +695,8 @@ const KV_APP_CSS = [
       'body.dark-mode .jc-srccell{background:#0d1826!important}',
       'body.dark-mode .jc-src-item{border-color:#1e2e44}',
       'body.dark-mode .jc-src-pair{color:#e2e8f0}',
+      '.jc-verdict{font-size:11.5px;margin-bottom:7px;padding:5px 9px;background:#eef4ff;border-radius:6px;color:#1e293b}',
+      'body.dark-mode .jc-verdict{background:#0f2436;color:#cbd9ea}',
       // 出馬表タブ：開催日リスト
       '.ddi-month{font-size:12px;font-weight:800;color:#6b7280;margin:12px 0 6px}',
       '.ddi-month:first-child{margin-top:0}',
@@ -7241,9 +7243,9 @@ function renderJockeyChangeAnalysis() {
       const st = jfSrcTr[r.tr] || {};
       const srcs = Object.keys(st).filter(A => st[A].n >= 2).map(A => ({ A, n: st[A].n, fuku: pct(st[A].f, st[A].n), win: pct(st[A].w, st[A].n) })).sort((a, b) => b.fuku - a.fuku || b.n - a.n);
       const verdict = (r.chg != null && r.cont != null)
-        ? (r.diff >= 5 ? `<b style="color:#16a34a">乗り替わりが買い</b>（乗替${r.chg}% ＞ 継続${r.cont}%）` : r.diff <= -5 ? `<b style="color:#dc2626">継続の方が良い</b>（継続${r.cont}% ＞ 乗替${r.chg}%）` : `ほぼ互角（乗替${r.chg}%・継続${r.cont}%）`)
+        ? (r.diff >= 5 ? `<b class="jc-hot">乗り替わりが買い</b>（乗替${r.chg}% ＞ 継続${r.cont}%）` : r.diff <= -5 ? `<b class="jc-cold">継続の方が良い</b>（継続${r.cont}% ＞ 乗替${r.chg}%）` : `ほぼ互角（乗替${r.chg}%・継続${r.cont}%）`)
         : (r.chg != null ? `乗替のみ ${r.chg}%（継続データなし）` : r.cont != null ? `継続のみ ${r.cont}%（乗替データなし）` : '—');
-      const srcHtml = `<div style="font-size:11.5px;margin-bottom:7px;padding:5px 9px;background:#eef4ff;border-radius:6px">${r.tr}での判定：${verdict}</div>`
+      const srcHtml = `<div class="jc-verdict">${r.tr}での判定：${verdict}</div>`
         + (srcs.length
           ? `<div style="font-size:11px;font-weight:800;color:#64748b;margin-bottom:4px">誰から ${jf} に乗り替わると良い／悪いか（複勝率の高い順・n≥2）</div>` + srcs.map(s => `<div class="jc-src-item"><span class="jc-src-pair">${s.A} → <b>${jf}</b></span><span class="jc-src-meta">勝率${s.win}%</span><span class="${cls(s.fuku)}" style="font-weight:800">複勝${s.fuku}%</span><span class="jc-src-meta">${s.n}件</span></div>`).join('')
           : '<div style="color:#9ca3af;font-size:11px">n≥2の乗せ替え元がありません（この厩舎はサンプル不足）</div>');
