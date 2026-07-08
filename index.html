@@ -12756,11 +12756,8 @@ function screenshotHorseModal() {
 // ════════════════════════════════════════════════════════
 
 function isAdminMode() {
-  // 【開発用】手動トグル（localStorage kv_dev_admin）が最優先＝UI確認用。'1'=管理者/'0'=閲覧者。
-  //   ※ただし実際の書き込みは getWriteToken() のトークンが正しくないと Worker が401で弾く。
-  const dev = localStorage.getItem('kv_dev_admin');
-  if (dev !== null) return dev === '1';
-  // 管理者＝この端末に有効な書き込みトークンを保有している（＝データ取得/保存が可能）。
+  // 管理者＝この端末に書き込みトークンを保有している（＝データ取得/保存が可能）。トークンはlocalStorageのみ。
+  // ※旧・開発用トグル(kv_dev_admin)の優先判定は廃止（ログアウトが効かなくなる不具合の原因だったため）。
   return !!localStorage.getItem('kv_write_token');
 }
 
@@ -12868,6 +12865,7 @@ async function doAdminLogin() {
 function adminLogout() {
   if (!confirm('管理者モードからログアウトしますか？\n（この端末から書き込みトークンを削除します。データ閲覧は引き続き可能です）')) return;
   localStorage.removeItem('kv_write_token');
+  localStorage.removeItem('kv_dev_admin');   // 旧・開発用トグルの残骸も消す（ログアウトを確実に効かせる）
   sessionStorage.removeItem('kv_admin_session');
   applyModeUI();
   if (typeof _currentPage === 'string' && typeof switchPage === 'function') switchPage(_currentPage, true);
