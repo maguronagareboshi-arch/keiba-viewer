@@ -1339,13 +1339,14 @@ function analysisHtml(st) {
   // 馬場バイアス（直近20日・門別平均との相対値）＋4角位置バイアス
   const dates = Object.keys(st.bias_daily).sort().reverse().slice(0, 20);
   const fmtDev = (v) => (v == null ? '-' : `${v > 0 ? '+' : ''}${v.toFixed(2)}`);
-  const c4d = st.corner4_daily || {};
-  const c4label = (v) => (v == null ? '-' : v >= 0.15 ? '内有利' : v <= -0.15 ? '外有利' : 'フラット');
+  // 4角位置＝能力統制版(corner4_inout・正=外伸び)。逆/恵バッジと同じ指標で統一。
+  const c4io = st.corner4_inout || {};
+  const c4label = (v) => (v == null ? '-' : v >= 0.10 ? '外有利' : v <= -0.10 ? '内有利' : 'フラット');
   const biasRows = dates.map((d) => {
     const b = st.bias_daily[d];
     const cls = b.label === '前有利' ? 'bias-front' : b.label === '差し有利' ? 'bias-back' : '';
-    const c4 = c4d[d];
-    const c4cls = c4 == null ? '' : c4 >= 0.15 ? 'bias-back' : c4 <= -0.15 ? 'bias-front' : '';
+    const c4 = c4io[d];
+    const c4cls = c4 == null ? '' : c4 >= 0.10 ? 'bias-front' : c4 <= -0.10 ? 'bias-back' : '';
     const kk = ['逃げ', '先行', '差し', '追込'].map((k) =>
       b.kyaku[k] ? `<td class="num">${rateBar(b.kyaku[k].rate)} <span class="kyaku">${b.kyaku[k].top3}/${b.kyaku[k].n}</span></td>` : '<td>-</td>').join('');
     return `<tr><td>${d}</td><td class="${cls}">${b.label}</td>
