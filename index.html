@@ -669,6 +669,13 @@ const KV_APP_CSS = [
       'body.dark-mode .search-card,body.dark-mode .race-header-card,body.dark-mode .saved-card{background:rgba(17,27,45,.60)!important;backdrop-filter:blur(16px) saturate(120%);-webkit-backdrop-filter:blur(16px) saturate(120%);box-shadow:0 12px 42px rgba(0,0,0,.48)!important}',
       'body.dark-mode .search-card,body.dark-mode .saved-card{border:1px solid rgba(56,189,248,.14)!important}',
       'body.dark-mode .ac-val{background:linear-gradient(135deg,#7dd3fc,#a5b4fc);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}',
+      // 一目で分かるアクセント：カード上端のグラデ帯＋ヘッダー下のグラデ線
+      '.search-card,.saved-card{position:relative}',
+      '.search-card::before,.saved-card::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#1a56a0,#38bdf8 55%,#7c3aed);border-radius:14px 14px 0 0}',
+      'body.dark-mode .search-card::before,body.dark-mode .saved-card::before{background:linear-gradient(90deg,#38bdf8,#22d3ee 45%,#a78bfa);box-shadow:0 0 14px rgba(56,189,248,.45)}',
+      '.app-header{border-bottom:2px solid transparent;border-image:linear-gradient(90deg,#38bdf8,#7c3aed) 1}',
+      '.section-title>i{background:linear-gradient(135deg,#1a56a0,#38bdf8);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}',
+      'body.dark-mode .section-title>i{background:linear-gradient(135deg,#7dd3fc,#a78bfa);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}',
       // 出馬表タブ：開催日リスト
       '.ddi-month{font-size:12px;font-weight:800;color:#6b7280;margin:12px 0 6px}',
       '.ddi-month:first-child{margin-top:0}',
