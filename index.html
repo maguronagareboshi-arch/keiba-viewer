@@ -604,6 +604,47 @@ const KV_APP_CSS = [
       '.rp-leg-chip{width:18px;height:18px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:900;flex-shrink:0}',
       '.rp-leg-rank{color:#8fa3be;font-size:10px;font-weight:700}',
       '.btn-replay{background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}',
+      // 収支ノート（マイ的中トラッカー）
+      '.bn-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}',
+      '.bn-stat{background:#f4f6fa;border:1px solid #e2e8f0;border-radius:10px;padding:10px 6px;text-align:center}',
+      '.bn-stat-label{font-size:11px;color:#64748b;font-weight:600;margin-bottom:3px}',
+      '.bn-stat-val{font-size:18px;font-weight:800;font-family:monospace;line-height:1.2}',
+      '.bn-pos{color:#059669}', '.bn-neg{color:#dc2626}',
+      '.bn-chart-wrap{position:relative;height:180px;margin-bottom:8px}',
+      '.bn-breakdown{margin-top:4px}',
+      '.bn-bd-row{display:flex;justify-content:space-between;font-size:12px;padding:5px 2px;border-top:1px solid #f1f5f9;color:#475569}',
+      '.bn-h3{font-size:14px;font-weight:800;color:#1a56a0;margin:0 0 12px}',
+      '.bn-form{display:grid;grid-template-columns:1fr 1fr;gap:10px}',
+      '.bn-field{display:flex;flex-direction:column;gap:3px;font-size:12px;color:#475569}',
+      '.bn-field>span{font-weight:600}',
+      '.bn-field input,.bn-field select{padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px;font-family:inherit;background:#fff;color:#0f172a}',
+      '.bn-add-btn{grid-column:1/-1;background:#1a56a0;color:#fff;border:none;border-radius:8px;padding:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}',
+      '.bn-hint{font-size:11px;color:#94a3b8;margin:9px 0 0;line-height:1.55}',
+      '.bn-muted{color:#94a3b8;font-weight:400;font-size:12px}',
+      '.bn-row{display:flex;align-items:center;gap:8px;padding:9px 2px;border-bottom:1px solid #eef2f7;font-size:13px;flex-wrap:wrap}',
+      '.bn-row-main{display:flex;align-items:center;gap:8px;flex:1;min-width:0;flex-wrap:wrap}',
+      '.bn-rr{background:#eef2f7;border-radius:6px;padding:2px 7px;font-weight:700;font-size:11px;color:#475569;white-space:nowrap}',
+      '.bn-type{font-weight:700;color:#1e293b}', '.bn-sel{font-family:monospace;font-weight:700;color:#0f172a}',
+      '.bn-stake{color:#64748b;font-size:12px}',
+      '.bn-badge{padding:3px 9px;border-radius:20px;font-size:12px;font-weight:800;white-space:nowrap}',
+      '.bn-b-hit{background:#dcfce7;color:#166534}', '.bn-b-miss{background:#fee2e2;color:#991b1b}',
+      '.bn-b-pending{background:#f1f5f9;color:#64748b}', '.bn-b-pay{background:#fef9c3;color:#854d0e}',
+      '.bn-pay-input{width:84px;padding:5px 7px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-family:inherit}',
+      '.bn-del{background:none;border:none;color:#cbd5e1;cursor:pointer;font-size:15px;padding:2px 6px;flex-shrink:0}',
+      // 収支ノート ダーク
+      'body.dark-mode .bn-stat{background:#0d1826;border-color:#22344e}',
+      'body.dark-mode .bn-stat-label{color:#94a3b8}',
+      'body.dark-mode .bn-bd-row{border-color:#1e2e44;color:#cbd5e1}',
+      'body.dark-mode .bn-h3{color:#7dd3fc}',
+      'body.dark-mode .bn-field{color:#cbd5e1}',
+      'body.dark-mode .bn-field input,body.dark-mode .bn-field select,body.dark-mode .bn-pay-input{background:#0d1826;border-color:#334155;color:#e2e8f0}',
+      'body.dark-mode .bn-row{border-color:#1e2e44}',
+      'body.dark-mode .bn-rr{background:#1e293b;color:#cbd5e1}',
+      'body.dark-mode .bn-type{color:#e2e8f0}', 'body.dark-mode .bn-sel{color:#f1f5f9}',
+      'body.dark-mode .bn-b-hit{background:#062e1c;color:#4ade80}',
+      'body.dark-mode .bn-b-miss{background:#3a1114;color:#f87171}',
+      'body.dark-mode .bn-b-pending{background:#1a2334;color:#94a3b8}',
+      'body.dark-mode .bn-b-pay{background:#3a2f08;color:#fde047}',
       // 出馬表タブ：開催日リスト
       '.ddi-month{font-size:12px;font-weight:800;color:#6b7280;margin:12px 0 6px}',
       '.ddi-month:first-child{margin-top:0}',
@@ -1881,6 +1922,35 @@ const KV_APP_CSS = [
   </section>
 </div>
 
+<!-- ページ: 収支ノート（マイ的中トラッカー） -->
+<div id="page-bets" class="page-section page-hidden">
+  <section class="search-card">
+    <h2 class="section-title"><i class="fas fa-wallet"></i> 💰 収支ノート</h2>
+    <div class="bn-summary" id="bn-summary"></div>
+    <div class="bn-chart-wrap"><canvas id="bn-chart"></canvas></div>
+    <div id="bn-breakdown"></div>
+  </section>
+  <section class="search-card">
+    <h3 class="bn-h3">＋ 馬券を記録</h3>
+    <div class="bn-form">
+      <label class="bn-field"><span>日付</span><input type="date" id="bn-date"></label>
+      <label class="bn-field bn-narrow"><span>R</span><input type="number" id="bn-r" min="1" max="12" value="1"></label>
+      <label class="bn-field"><span>券種</span>
+        <select id="bn-type"><option>単勝</option><option>複勝</option><option>馬連</option><option>馬単</option><option>ワイド</option><option>3連複</option><option>3連単</option></select>
+      </label>
+      <label class="bn-field"><span>買い目（馬番）</span><input type="text" id="bn-sel" placeholder="例: 7 / 7-3 / 7-3-1"></label>
+      <label class="bn-field bn-narrow"><span>金額(円)</span><input type="number" id="bn-stake" min="100" step="100" value="500"></label>
+      <label class="bn-field"><span>メモ</span><input type="text" id="bn-memo" placeholder="任意"></label>
+      <button class="bn-add-btn" onclick="_bnAddBet()">記録する</button>
+    </div>
+    <p class="bn-hint">単勝は確定オッズから自動精算。他券種は着順から的中を自動判定し、的中時に払戻金を入れると回収率に反映されます。（その日のデータを開いていないと「未取得」になります）</p>
+  </section>
+  <section class="search-card">
+    <h3 class="bn-h3">記録一覧 <span id="bn-count" class="bn-muted"></span></h3>
+    <div id="bn-list"></div>
+  </section>
+</div>
+
 <!-- ページ: 保存データ -->
 <div id="page-saved" class="page-section page-hidden">
 
@@ -2028,6 +2098,7 @@ const KV_APP_CSS = [
   <button type="button" class="kbn-btn" id="kbn-more" onclick="toggleKbnMore()"><i class="fas fa-ellipsis-h"></i><span>その他</span></button>
 </nav>
 <div id="kbn-more-menu" class="hidden">
+  <button type="button" class="admin-only" onclick="switchPage('bets')"><i class="fas fa-wallet"></i> 💰 収支ノート</button>
   <button type="button" onclick="switchPage('jchg')"><i class="fas fa-exchange-alt"></i> 乗り替わり分析</button>
   <button type="button" class="admin-only" onclick="switchPage('saved')"><i class="fas fa-database"></i> 保存データ</button>
   <button type="button" onclick="switchPage('f3avg')"><i class="fas fa-stopwatch"></i> 前半3F基準</button>
@@ -2133,8 +2204,8 @@ let _navReady = false;
 
 function switchPage(pageId, _fromPop) {
   // 閲覧者は管理者専用ページ（保存データ・PSF履歴）へは入れない
-  if (typeof isAdminMode === 'function' && !isAdminMode() && ['saved', 'psfhist'].includes(pageId)) pageId = 'search';
-  ['search','deban','bunseki','baba','jchg','saved','f3avg','psfhist'].forEach(id => {
+  if (typeof isAdminMode === 'function' && !isAdminMode() && ['saved', 'psfhist', 'bets'].includes(pageId)) pageId = 'search';
+  ['search','deban','bunseki','baba','jchg','saved','f3avg','psfhist','bets'].forEach(id => {
     const el = document.getElementById('page-' + id);
     if (el) el.classList.toggle('page-hidden', id !== pageId);
   });
@@ -2143,7 +2214,7 @@ function switchPage(pageId, _fromPop) {
   });
   // 「その他」配下のページでは下部ナビの⋯をアクティブに
   const _moreBtn = document.getElementById('kbn-more');
-  if (_moreBtn) _moreBtn.classList.toggle('active', ['jchg', 'saved', 'f3avg', 'psfhist'].includes(pageId));
+  if (_moreBtn) _moreBtn.classList.toggle('active', ['jchg', 'saved', 'f3avg', 'psfhist', 'bets'].includes(pageId));
   if (typeof toggleKbnMore === 'function') toggleKbnMore(false);
   window.scrollTo(0, 0);
   _currentPage = pageId;
@@ -2159,6 +2230,7 @@ function switchPage(pageId, _fromPop) {
   if (pageId === 'saved')   { setTimeout(() => { try { renderSavedList(); } catch(e){} }, 0); }
   if (pageId === 'f3avg')   { setTimeout(() => { try { renderF3Averages(); } catch(e){} }, 0); }
   if (pageId === 'psfhist') { setTimeout(() => { try { renderPsfHistory(); } catch(e){} }, 0); }
+  if (pageId === 'bets')    { setTimeout(() => { try { renderBetsPage(); } catch(e){} }, 0); }
 }
 
 // ブラウザ戻る/進むの処理
@@ -2366,6 +2438,121 @@ function rpRestart() { const st = window._rp; if (!st) return; st.progress = 0; 
 function rpSeek(v) { const st = window._rp; if (!st) return; st.progress = Math.max(0, Math.min(1, v / 1000)); st.last = performance.now(); rpRender(); }
 function rpSetSpeed(s, btn) { const st = window._rp; if (st) st.speed = s; document.querySelectorAll('.rp-spd').forEach(b => b.classList.remove('active')); if (btn) btn.classList.add('active'); }
 function closeRaceReplay() { const st = window._rp; if (st) { st.playing = false; if (st.raf) cancelAnimationFrame(st.raf); } const m = document.getElementById('race-replay-modal'); if (m) m.classList.add('hidden'); }
+
+// ── 収支ノート（マイ的中トラッカー）─────────────────────────────────
+const BET_TYPES = ['単勝', '複勝', '馬連', '馬単', 'ワイド', '3連複', '3連単'];
+const _BET_NSEL = { '単勝': 1, '複勝': 1, '馬連': 2, '馬単': 2, 'ワイド': 2, '3連複': 3, '3連単': 3 };
+function _betsRead() { try { return JSON.parse(localStorage.getItem('kv_bets') || '[]'); } catch (e) { return []; } }
+function _betsWrite(a) { localStorage.setItem('kv_bets', JSON.stringify(a)); }
+function _bnEsc(s) { return String(s).replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c])); }
+function _betLookupRace(baba, date, r) {
+  const ls = lsRead(); const pref = (baba || '31') + '_' + date + '_' + r + '_'; const m = {};
+  for (const k in ls) { if (k.indexOf(pref) !== 0) continue; const v = ls[k]; if (!v || v.type !== 'horse') continue;
+    const uma = parseInt(k.slice(pref.length)); if (isNaN(uma)) continue;
+    const chaku = parseInt(v.chakujun), odds = parseFloat(v.odds);
+    m[uma] = { chaku: isNaN(chaku) ? null : chaku, odds: isNaN(odds) ? null : odds };
+  }
+  return m;
+}
+function _settleBet(bet) {
+  const m = _betLookupRace(bet.baba, bet.date, bet.r);
+  const umas = Object.keys(m);
+  if (!umas.length) return { status: 'no_data' };
+  const byC = {}; umas.forEach(u => { const c = m[u].chaku; if (c) byC[c] = parseInt(u); });
+  if (byC[1] == null) return { status: 'pending' };
+  const n = umas.length, placeLine = n >= 8 ? 3 : n >= 5 ? 2 : 1;
+  const sel = (bet.sel || []).map(Number);
+  const ch = u => m[u] ? m[u].chaku : null;
+  const sSort = arr => arr.slice().sort((a, b) => a - b).join(',');
+  const t = bet.type; let hit = false;
+  if (t === '単勝') hit = ch(sel[0]) === 1;
+  else if (t === '複勝') hit = ch(sel[0]) != null && ch(sel[0]) <= placeLine;
+  else if (t === 'ワイド') hit = sel.length === 2 && ch(sel[0]) != null && ch(sel[1]) != null && ch(sel[0]) <= placeLine && ch(sel[1]) <= placeLine;
+  else if (t === '馬連') hit = sSort(sel) === sSort([byC[1], byC[2]]);
+  else if (t === '馬単') hit = sel[0] === byC[1] && sel[1] === byC[2];
+  else if (t === '3連複') hit = sSort(sel) === sSort([byC[1], byC[2], byC[3]]);
+  else if (t === '3連単') hit = sel[0] === byC[1] && sel[1] === byC[2] && sel[2] === byC[3];
+  if (!hit) return { status: 'settled', hit: false, payout: 0, pl: -bet.stake };
+  let payout = null;
+  if (t === '単勝') { const o = m[sel[0]] && m[sel[0]].odds; payout = o ? Math.round(bet.stake * o) : null; }
+  else payout = (bet.payout != null) ? bet.payout : null;
+  if (payout == null) return { status: 'need_payout', hit: true };
+  return { status: 'settled', hit: true, payout, pl: payout - bet.stake };
+}
+function _bnAddBet() {
+  const date = (document.getElementById('bn-date').value || '').replace(/-/g, '/');
+  const r = parseInt(document.getElementById('bn-r').value);
+  const type = document.getElementById('bn-type').value;
+  const selRaw = document.getElementById('bn-sel').value.trim();
+  const stake = parseInt(document.getElementById('bn-stake').value);
+  const memo = document.getElementById('bn-memo').value.trim();
+  if (!date) { alert('日付を入力してください'); return; }
+  if (!r || r < 1 || r > 12) { alert('Rは1〜12で入力してください'); return; }
+  const sel = selRaw.split(/[-\s,>→＞]+/).map(x => parseInt(x)).filter(x => !isNaN(x));
+  const need = _BET_NSEL[type];
+  if (sel.length !== need) { alert(type + 'は馬番を' + need + 'つ入力してください（例: ' + (need === 1 ? '7' : need === 2 ? '7-3' : '7-3-1') + '）'); return; }
+  if (!stake || stake < 100) { alert('金額は100円以上で入力してください'); return; }
+  const bets = _betsRead();
+  bets.push({ id: 'b' + Date.now() + Math.random().toString(36).slice(2, 6), date, baba: '31', r, type, sel, stake, payout: null, memo, createdAt: Date.now() });
+  _betsWrite(bets);
+  document.getElementById('bn-sel').value = ''; document.getElementById('bn-memo').value = '';
+  renderBetsPage();
+}
+function _bnDelete(id) { if (!confirm('この記録を削除しますか？')) return; _betsWrite(_betsRead().filter(b => b.id !== id)); renderBetsPage(); }
+function _bnSetPayout(id, val) { const p = parseInt(val); if (isNaN(p) || p < 0) return; const bets = _betsRead(); const b = bets.find(x => x.id === id); if (b) { b.payout = p; _betsWrite(bets); renderBetsPage(); } }
+function _bnRenderChart(labels, pts) {
+  const cv = document.getElementById('bn-chart'); if (!cv || typeof Chart === 'undefined') return;
+  if (window._bnChart) { try { window._bnChart.destroy(); } catch (e) {} window._bnChart = null; }
+  const ctx = cv.getContext('2d');
+  if (!pts.length) { ctx.clearRect(0, 0, cv.width, cv.height); return; }
+  const dark = document.body.classList.contains('dark-mode');
+  const col = pts[pts.length - 1] >= 0 ? '#059669' : '#dc2626';
+  window._bnChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets: [{ label: '累計収支', data: pts, borderColor: col, backgroundColor: col + '22', fill: true, tension: 0.2, pointRadius: 2, borderWidth: 2 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: dark ? '#94a3b8' : '#64748b', maxTicksLimit: 8, font: { size: 10 } }, grid: { display: false } },
+        y: { ticks: { color: dark ? '#94a3b8' : '#64748b', font: { size: 10 }, callback: v => Number(v).toLocaleString() }, grid: { color: dark ? '#1e2e44' : '#eef2f7' } }
+      } }
+  });
+}
+function renderBetsPage() {
+  const dEl = document.getElementById('bn-date');
+  if (dEl && !dEl.value) { const t = new Date(); dEl.value = t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0'); }
+  const bets = _betsRead().slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.createdAt - b.createdAt));
+  const rows = bets.map(b => ({ bet: b, s: _settleBet(b) }));
+  let stakeSum = 0, payoutSum = 0, hits = 0, settled = 0, cum = 0; const pts = [], labels = [];
+  const bd = {}; BET_TYPES.forEach(t => bd[t] = { n: 0, hit: 0, stake: 0, pay: 0 });
+  rows.forEach(({ bet, s }) => {
+    bd[bet.type].n++;
+    if (s.status === 'settled') { settled++; stakeSum += bet.stake; payoutSum += s.payout; if (s.hit) hits++; cum += s.pl; pts.push(cum); labels.push(bet.date.slice(5) + ' ' + bet.r + 'R'); if (s.hit) bd[bet.type].hit++; bd[bet.type].stake += bet.stake; bd[bet.type].pay += s.payout; }
+  });
+  const pl = payoutSum - stakeSum;
+  const roi = stakeSum ? Math.round(payoutSum / stakeSum * 1000) / 10 : 0;
+  const hr = settled ? Math.round(hits / settled * 1000) / 10 : 0;
+  const plC = pl >= 0 ? 'bn-pos' : 'bn-neg', roiC = roi >= 100 ? 'bn-pos' : 'bn-neg';
+  document.getElementById('bn-summary').innerHTML =
+    `<div class="bn-stat"><div class="bn-stat-label">収支</div><div class="bn-stat-val ${plC}">${pl >= 0 ? '+' : ''}${pl.toLocaleString()}</div></div>` +
+    `<div class="bn-stat"><div class="bn-stat-label">回収率</div><div class="bn-stat-val ${roiC}">${roi}%</div></div>` +
+    `<div class="bn-stat"><div class="bn-stat-label">的中率</div><div class="bn-stat-val">${hr}%</div></div>` +
+    `<div class="bn-stat"><div class="bn-stat-label">的中/件数</div><div class="bn-stat-val">${hits}/${settled}</div></div>`;
+  _bnRenderChart(labels, pts);
+  const bdRows = BET_TYPES.filter(t => bd[t].n > 0).map(t => { const o = bd[t]; const roiT = o.stake ? Math.round(o.pay / o.stake * 1000) / 10 : null; return `<div class="bn-bd-row"><span>${t} <span class="bn-muted">${o.n}件</span></span><span>的中${o.hit}${roiT != null ? '・回収' + roiT + '%' : ''}</span></div>`; }).join('');
+  document.getElementById('bn-breakdown').innerHTML = bdRows ? ('<div class="bn-breakdown">' + bdRows + '</div>') : '';
+  const listEl = document.getElementById('bn-list');
+  document.getElementById('bn-count').textContent = bets.length ? ('(' + bets.length + '件)') : '';
+  if (!bets.length) { listEl.innerHTML = '<p class="bn-muted" style="padding:8px 2px">まだ記録がありません。上のフォームから馬券を記録してみましょう。</p>'; return; }
+  listEl.innerHTML = rows.slice().reverse().map(({ bet, s }) => {
+    let badge;
+    if (s.status === 'no_data') badge = '<span class="bn-badge bn-b-pending">その日を未取得</span>';
+    else if (s.status === 'pending') badge = '<span class="bn-badge bn-b-pending">結果待ち</span>';
+    else if (s.status === 'need_payout') badge = `<span class="bn-badge bn-b-pay">的中！</span><input type="number" class="bn-pay-input" placeholder="払戻¥" onchange="_bnSetPayout('${bet.id}',this.value)">`;
+    else if (s.hit) badge = `<span class="bn-badge bn-b-hit">${s.pl >= 0 ? '+' : ''}${s.pl.toLocaleString()}</span><span class="bn-muted">払戻¥${s.payout.toLocaleString()}</span>`;
+    else badge = `<span class="bn-badge bn-b-miss">−${bet.stake.toLocaleString()}</span>`;
+    return `<div class="bn-row"><div class="bn-row-main"><span class="bn-rr">${bet.date.slice(5)} ${bet.r}R</span><span class="bn-type">${bet.type}</span><span class="bn-sel">${bet.sel.join('-')}</span><span class="bn-stake">¥${bet.stake.toLocaleString()}</span>${bet.memo ? '<span class="bn-muted">' + _bnEsc(bet.memo) + '</span>' : ''}</div>${badge}<button class="bn-del" onclick="_bnDelete('${bet.id}')" title="削除">🗑</button></div>`;
+  }).join('');
+}
 
 /** スマホプレビュー(iframe)内で、親から引き継いだ page / レース日 を復元する。
  *  IDB(ローカルDB)の読み込みは非同期なので、対象日のデータが揃うまで待ってから復元する。 */
