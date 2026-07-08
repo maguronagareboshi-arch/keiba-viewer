@@ -1287,8 +1287,8 @@ function analysisHtml(st) {
   // 走破タイムを秒→分秒(M:SS.s)へ（例 73.9→1:13.9）。門別は全て60秒超。
   const mmss = (s) => { if (s == null) return '-'; const m = Math.floor(s / 60); return `${m}:${(s - m * 60).toFixed(1).padStart(4, '0')}`; };
   // クラス別(2歳限定/3歳限定/3歳以上)にセクション分け・馬場は良/重系を横並び
-  const clsLabel = { '2歳': '2歳限定', '3歳': '3歳限定', '3歳以上': '3歳以上（古馬含む）' };
-  const btByClass = ['2歳', '3歳', '3歳以上'].map((cls) => {
+  const clsLabel = { '2歳': '2歳限定', '3歳': '3歳限定' };
+  const btByClass = ['2歳', '3歳'].map((cls) => {
     const dists = [...new Set(Object.keys(st.base_times)
       .filter((k) => { const p = k.split('_'); return p[2] === cls; })
       .map((k) => +k.split('_')[0]))].sort((a, b) => a - b);
@@ -1307,6 +1307,19 @@ function analysisHtml(st) {
       <div class="card tablewrap"><table>
       <tr><th>距離</th><th>走破タイム(良)</th><th>走破タイム(重系)</th><th>良の前半3F/上り3F</th><th>N(良+重)</th></tr>${rows}</table></div>`;
   }).join('');
+  // 3歳以上(古馬)はクラス別マトリクス（C4とA級を混ぜない）。行=距離・列=クラス・走破タイム(良)平均
+  const koba = st.base_times_koba || {};
+  const presentCls = new Set(Object.keys(koba).map((k) => k.split('_')[2]));
+  const kobaCls = ['C4', 'C3', 'C2', 'C1', 'B', 'A', 'OP'].filter((c) => presentCls.has(c));
+  const kobaDists = [...new Set(Object.keys(koba).map((k) => +k.split('_')[0]))].sort((a, b) => a - b);
+  const kobaMatrix = (kobaDists.length && kobaCls.length) ? `<h4 class="sec" style="margin:12px 0 4px;font-size:14px">3歳以上（クラス別・走破タイム 良の平均）</h4>
+    <div class="card tablewrap"><table>
+      <tr><th>距離</th>${kobaCls.map((c) => `<th>${c}</th>`).join('')}</tr>
+      ${kobaDists.map((d) => `<tr><td><b>${d}m</b></td>${kobaCls.map((c) => {
+        const e = koba[`${d}_良_${c}`];
+        return e && e.time ? `<td class="num"><b>${mmss(e.time.mean)}</b><br><span class="small" style="opacity:.6">n${e.time.n}</span></td>` : '<td class="num" style="opacity:.4">-</td>';
+      }).join('')}</tr>`).join('')}
+    </table><div class="legend">古馬戦を<b>実クラス（C4〜A・オープン）で分けた</b>走破タイム(良)の平均。C4とA級を混ぜないのでクラス毎の時計水準が分かる（右ほど上位＝速い）。空欄はサンプル不足。母数の少ないB/A/OPは別定・ハンデ混在で振れます。</div></div>` : '';
 
   // 騎手・厩舎（勝率順）
   const rankTable = (obj, label) => {
@@ -1330,6 +1343,7 @@ function analysisHtml(st) {
   ${bmsTable}
   <h3 class="sec">基準タイム（クラス別・走破タイムは分秒の平均。偏差値/指数の土台）</h3>
   ${btByClass}
+  ${kobaMatrix}
   <div class="grid2">${rankTable(st.jockeys, '騎手')}${rankTable(st.trainers, '厩舎')}</div>`;
 }
 
@@ -1485,14 +1499,18 @@ function openPedModal(type, name) {
   const list = ((type === 'bms' ? st.bms_horses : st.sire_horses) || {})[name] || [];
   $('horseModal').hidden = false;
   $('horseModalTitle').textContent = `${type === 'bms' ? '母父' : '父'} ${name} の産駒（門別・${list.length}頭）`;
-  const rows = list.map(([hn, n, w, t]) => `<tr>
+  const rows = list.map(([hn, n, c1, c2, c3]) => {
+    const t3 = c1 + c2 + c3, out = n - t3;
+    return `<tr>
     <td class="l"><a class="horse-link" data-horse="${esc(hn)}"><b>${esc(hn)}</b></a></td>
-    <td class="num">${n}</td><td class="num">${w}</td>
-    <td class="num ${n && w / n >= 0.15 ? 'best' : ''}">${n ? Math.round(w / n * 100) : 0}%</td>
-    <td class="num ${n && t / n >= 0.4 ? 'best' : ''}">${n ? Math.round(t / n * 100) : 0}%</td></tr>`).join('');
+    <td class="num">${n}</td>
+    <td class="num small">${c1}-${c2}-${c3}-${out}</td>
+    <td class="num ${n && c1 / n >= 0.15 ? 'best' : ''}">${n ? Math.round(c1 / n * 100) : 0}%</td>
+    <td class="num ${n && t3 / n >= 0.4 ? 'best' : ''}">${n ? Math.round(t3 / n * 100) : 0}%</td></tr>`;
+  }).join('');
   $('horseModalBody').innerHTML = `<div class="card tablewrap"><table>
-    <tr><th>産駒</th><th>走数</th><th>勝</th><th>勝率</th><th>複勝率</th></tr>${rows || '<tr><td colspan="5">データなし</td></tr>'}</table>
-    <div class="legend">走数の多い順。産駒名をタップでその馬の成績・調教。門別出走のある産駒のみ。</div></div>`;
+    <tr><th>産駒</th><th>走数</th><th>着別(1-2-3-着外)</th><th>勝率</th><th>複勝率</th></tr>${rows || '<tr><td colspan="5">データなし</td></tr>'}</table>
+    <div class="legend">走数の多い順。着別＝1着-2着-3着-着外の度数。産駒名をタップでその馬の成績・調教。門別出走のある産駒のみ。</div></div>`;
 }
 
 async function openHorseModal(nameOrId, byId, displayName) {
