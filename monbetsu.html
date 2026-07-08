@@ -776,7 +776,7 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku) {
       <td class="l">${esc(e.jockey)}</td>
       <td class="num">${e.kinryo ?? ''}</td>
       <td class="l">${esc(e.trainer)}</td>
-      <td class="num">${e.body_weight ?? ''}${e.weight_diff != null ? `(${fmtDiff(e.weight_diff)})` : ''}</td>
+      <td class="num" data-live-weight="${e.umaban}">${e.body_weight ?? ''}${e.weight_diff != null ? `(${fmtDiff(e.weight_diff)})` : ''}</td>
       <td class="num" data-live-odds="${e.umaban}">${e.win_odds ?? ''}${e.pop != null ? `(${e.pop})` : ''}</td>
       <td class="num ${s != null && top3S.includes(s) ? 'best' : ''}">${s != null ? s.toFixed(1) : '-'}</td>
       <td class="num ${h != null && h === topH ? 'f1' : ''}">${h != null ? h.toFixed(1) : '-'}</td>
@@ -989,6 +989,37 @@ async function fetchLiveOdds(raceDate, raceNo) {
   } catch (e) { return null; }
 }
 
+// 当日馬体重（keiba.go.jp 出走表 DebaTable）。計量発表後（発走60〜70分前頃）に値が入る。
+// モデルには使わない（体重変化は全量検定で無価値と確定）・表示のみ。
+async function fetchLiveWeights(raceDate, raceNo) {
+  if (!raceDate || !raceNo) return null;
+  const url = `https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/DebaTable?k_raceDate=${raceDate.replace(/-/g, '/')}&k_raceNo=${raceNo}&k_babaCode=36`;
+  try {
+    const html = await (await fetch(ODDS_PROXY + encodeURIComponent(url))).text();
+    if (html.indexOf('horseNum') < 0) return null;
+    const out = {};
+    const re = /class="horseNum"[^>]*>\s*(\d+)\s*<\/td>[\s\S]*?class="odds_weight"[^>]*>[\s\S]*?<\/td>\s*[\s\S]*?class="odds_weight"[^>]*>([\s\S]*?)<\/td>/g;
+    let m;
+    while ((m = re.exec(html))) {
+      const um = +m[1];
+      const cell = m[2].replace(/<[^>]+>/g, ' ');
+      const wm = cell.match(/(\d{3})/), dm = cell.match(/\(([-+±]?\d+)\)/);
+      if (um >= 1 && um <= 20 && wm && +wm[1] >= 300 && +wm[1] <= 650) {
+        out[um] = { w: +wm[1], d: dm ? dm[1] : null };
+      }
+    }
+    return Object.keys(out).length ? out : null;
+  } catch (e) { return null; }
+}
+
+function applyLiveWeights(wts) {
+  if (!wts) return;
+  for (const td of document.querySelectorAll('#raceView [data-live-weight]')) {
+    const v = wts[+td.dataset.liveWeight];
+    if (v) td.textContent = `${v.w}${v.d != null ? `(${v.d})` : ''}`;
+  }
+}
+
 function applyLiveOdds(live) {
   if (!live) return;
   for (const td of document.querySelectorAll('#raceView [data-live-odds]')) {
@@ -1110,7 +1141,15 @@ async function startLiveOdds(raceMeta) {
   updateEvMonitor(domOdds);
   const run = async () => {
     const live = await fetchLiveOdds(rd, raceMeta.race_no);
-    if (state.raceId === rid && state.view === 'race') { applyLiveOdds(live); recordOdds(rid, live); }
+    // 当日馬体重: 計量発表まで毎回試行→取れたら保持（変わらないので再取得しない）
+    state.liveWeights = state.liveWeights || {};
+    if (!state.liveWeights[rid]) {
+      const wts = await fetchLiveWeights(rd, raceMeta.race_no);
+      if (wts) state.liveWeights[rid] = wts;
+    }
+    if (state.raceId === rid && state.view === 'race') {
+      applyLiveOdds(live); applyLiveWeights(state.liveWeights[rid]); recordOdds(rid, live);
+    }
   };
   await run();
   state.oddsTimer = setInterval(run, 60000);
