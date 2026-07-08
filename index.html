@@ -620,6 +620,9 @@ const KV_APP_CSS = [
       '.bn-field input,.bn-field select{padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px;font-family:inherit;background:#fff;color:#0f172a}',
       '.bn-add-btn{grid-column:1/-1;background:#1a56a0;color:#fff;border:none;border-radius:8px;padding:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}',
       '.bn-hint{font-size:11px;color:#94a3b8;margin:9px 0 0;line-height:1.55}',
+      '.bn-fetch-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px}',
+      '.bn-fetch-btn{padding:7px 14px;background:#bf0000;color:#fff;border:none;border-radius:7px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px}',
+      '.bn-fetch-btn:disabled{opacity:.6;cursor:default}',
       '.bn-muted{color:#94a3b8;font-weight:400;font-size:12px}',
       '.bn-row{display:flex;align-items:center;gap:8px;padding:9px 2px;border-bottom:1px solid #eef2f7;font-size:13px;flex-wrap:wrap}',
       '.bn-row-main{display:flex;align-items:center;gap:8px;flex:1;min-width:0;flex-wrap:wrap}',
@@ -2091,6 +2094,11 @@ const KV_APP_CSS = [
       <button class="bn-add-btn" onclick="_bnAddBet()">記録する</button>
     </div>
     <p class="bn-hint">単勝は確定オッズから自動精算。他券種は着順から的中を自動判定し、的中時に払戻金を入れると回収率に反映されます。（その日のデータを開いていないと「未取得」になります）</p>
+    <div class="bn-fetch-row">
+      <button type="button" id="bn-fetch-btn" class="bn-fetch-btn" onclick="_bnFetchPayouts()"><i class="fas fa-download"></i> 楽天から払戻を取得</button>
+      <span id="bn-fetch-status" class="bn-muted"></span>
+    </div>
+    <p class="bn-hint">上の「日付」欄の開催日について、楽天競馬の払戻ページから馬複・3連複・3連単などの払戻金を自動取得し、的中済みで金額未入力の記録にだけ反映します（着順自体の的中判定は変えません）。</p>
   </section>
   <section class="search-card">
     <h3 class="bn-h3">記録一覧 <span id="bn-count" class="bn-muted"></span></h3>
@@ -2663,6 +2671,52 @@ function _copyPickText(btn) {
   const txt = '🎯 狙い目\n' + rows.join('\n') + '\n' + line + '\n#高知競馬';
   const done = () => { const o = btn.textContent; btn.textContent = '✓'; setTimeout(() => btn.textContent = o, 1200); };
   if (navigator.clipboard) navigator.clipboard.writeText(txt).then(done).catch(() => {});
+}
+// bet.type(アプリの券種名) → 楽天払戻ページの表記 の対応（馬連=馬複／3連複=三連複／3連単=三連単、他は同名）
+const _RAKUTEN_TYPE_MAP = { '単勝': '単勝', '複勝': '複勝', '馬連': '馬複', '馬単': '馬単', 'ワイド': 'ワイド', '3連複': '三連複', '3連単': '三連単' };
+/** 楽天競馬の払戻ページから当日の払戻金を取得し、的中済み(need_payout)の馬券にだけ自動反映する（管理者専用）。 */
+async function _bnFetchPayouts() {
+  if (!isAdminMode()) { alert('払戻の自動取得は管理者のみ可能です。'); return; }
+  const dateVal = document.getElementById('bn-date').value;
+  if (!dateVal) { alert('日付を入力してください'); return; }
+  const date = dateVal.replace(/-/g, '/');
+  const btn = document.getElementById('bn-fetch-btn');
+  const statusEl = document.getElementById('bn-fetch-status');
+  if (btn) { btn.disabled = true; btn.textContent = '取得中...'; }
+  if (statusEl) statusEl.textContent = '';
+  let divs;
+  try { divs = await fetchRakutenDividendsForDay(date); }
+  catch (e) { if (statusEl) statusEl.textContent = '⚠️ 取得に失敗しました'; if (btn) { btn.disabled = false; btn.textContent = '📥 楽天から払戻を取得'; } return; }
+  if (!Object.keys(divs).length) {
+    if (statusEl) statusEl.textContent = 'この日の払戻データが見つかりませんでした（開催前／まだ確定していない可能性）';
+    if (btn) { btn.disabled = false; btn.textContent = '📥 楽天から払戻を取得'; }
+    return;
+  }
+  const bets = _betsRead();
+  let filled = 0, checked = 0, notFound = 0;
+  bets.forEach(b => {
+    if (b.date !== date) return;
+    const s = _settleBet(b);
+    if (s.status !== 'need_payout') return;   // 的中確定・払戻未登録の馬券だけを対象（既存の的中判定はそのまま信頼）
+    checked++;
+    const entries = divs[b.r]; const rkType = _RAKUTEN_TYPE_MAP[b.type];
+    if (!entries || !rkType) { notFound++; return; }
+    const cands = entries.filter(e => e.type === rkType);
+    const sel = (b.sel || []).map(Number);
+    let match = null;
+    if (b.type === '馬単' || b.type === '3連単') {
+      const selStr = sel.join('-');
+      match = cands.find(e => e.combo === selStr);
+    } else {
+      const selSorted = sel.slice().sort((a, c) => a - c).join(',');
+      match = cands.find(e => e.combo.split('-').map(Number).sort((a, c) => a - c).join(',') === selSorted);
+    }
+    if (match) { b.payout = match.yen; filled++; } else { notFound++; }
+  });
+  _betsWrite(bets);
+  if (btn) { btn.disabled = false; btn.textContent = '📥 楽天から払戻を取得'; }
+  if (statusEl) statusEl.textContent = `✅ ${date}：的中済み${checked}件中 ${filled}件の払戻を反映しました` + (notFound ? `（${notFound}件は照合できず）` : '');
+  renderBetsPage();
 }
 function _bnDelete(id) { if (!confirm('この記録を削除しますか？')) return; _betsWrite(_betsRead().filter(b => b.id !== id)); renderBetsPage(); }
 function _bnSetPayout(id, val) { const p = parseInt(val); if (isNaN(p) || p < 0) return; const bets = _betsRead(); const b = bets.find(x => x.id === id); if (b) { b.payout = p; _betsWrite(bets); renderBetsPage(); } }
@@ -6892,6 +6946,47 @@ async function _fetchRakutenOddsRace(date, rn) {
     if (!(uma >= 1 && uma <= 18)) continue;
     const o = parseFloat(tan);
     if (o >= 1 && out[uma] == null) out[uma] = o;
+  }
+  return out;
+}
+
+/**
+ * 楽天競馬の「払戻金」ページから、指定日の全レース分の払戻を1回のfetchで取得する。
+ * URLはRACEIDに日付を含むが、レース番号部分はどれを指定しても同じ日の11-12R全部が
+ * 1ページに載る（構造: <h3 class="headline">…{n}R…</h3> の後に払戻テーブルが続く）。
+ * 戻り値: { [raceNo]: [{type:'単勝'|'複勝'|'馬単'|'ワイド'|'枠複'|'三連複'|'枠単'|'三連単'|'馬複',
+ *                       combo:'7-9'（馬番のハイフン区切り文字列・単勝等は単独）, yen:数値, ninki:'2番人気'}, ...] }
+ * 「総票数」以降の投票数内訳テーブル（同じth/td構造）は誤パース防止のため各レース毎に切り捨てる。
+ */
+async function fetchRakutenDividendsForDay(date) {
+  const out = {};
+  const ymd = String(date).replace(/[^0-9]/g, '');
+  if (ymd.length !== 8) return out;
+  const raceId = `${ymd}31000000${'01'}`;  // レース番号部分はダミーでも当日全レース分が返る
+  let html;
+  try { html = await fetchHtmlWithProxy(`https://keiba.rakuten.co.jp/race_dividend/list/RACEID/${raceId}`, 15000); }
+  catch (e) { return out; }
+  const parts = html.split(/<h3 class="headline"><span>■<\/span>(\d+)R/);
+  for (let i = 1; i < parts.length; i += 2) {
+    const rno = parseInt(parts[i]);
+    let block = parts[i + 1] || '';
+    const cut = block.indexOf('総票数');
+    if (cut > 0) block = block.slice(0, cut);
+    const entries = [];
+    const re = /<th scope="row">([^<]+)<\/th>\s*<td class="number"[^>]*>([\s\S]*?)<\/td>\s*<td class="money"[^>]*>([\s\S]*?)<\/td>\s*<td class="rank"[^>]*>([\s\S]*?)<\/td>/g;
+    let m;
+    while ((m = re.exec(block))) {
+      const typ = m[1].trim();
+      const nums = m[2].split(/<br\s*\/?>/).map(s => s.trim()).filter(Boolean);
+      const moneys = m[3].split(/<br\s*\/?>/).map(s => s.trim()).filter(Boolean);
+      const ranks = m[4].split(/<br\s*\/?>/).map(s => s.trim()).filter(Boolean);
+      for (let j = 0; j < nums.length; j++) {
+        const yen = parseInt((moneys[j] || '').replace(/[^\d]/g, ''), 10);
+        if (!yen) continue;
+        entries.push({ type: typ, combo: nums[j], yen, ninki: ranks[j] || '' });
+      }
+    }
+    if (entries.length) out[rno] = entries;
   }
   return out;
 }
