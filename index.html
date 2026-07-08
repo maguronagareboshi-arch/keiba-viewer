@@ -677,6 +677,7 @@ const KV_APP_CSS = [
       '.section-title>i{background:linear-gradient(135deg,#1a56a0,#38bdf8);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}',
       'body.dark-mode .section-title>i{background:linear-gradient(135deg,#7dd3fc,#a78bfa);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}',
       // 乗り替わり分析：騎手タップで乗せ替え元の内訳
+      '.jc-tbl th,.jc-tbl td{padding:6px 8px!important;font-size:11.5px!important;letter-spacing:-.01em}',
       '.jc-jkrow{cursor:pointer}',
       '.jc-jkrow:hover td{background:#f1f5f9}',
       '.jc-caret{display:inline-block;transition:transform .15s;color:#94a3b8;margin-right:4px;font-size:10px}',
@@ -7160,24 +7161,26 @@ function renderJockeyChangeAnalysis() {
   const cls = v => v >= 45 ? 'jc-hot' : v < 20 ? 'jc-cold' : '';
   const dcls = v => v > 0 ? 'jc-hot' : v < 0 ? 'jc-cold' : '';
   const pairTbl = arr => arr.map(r => `<tr>
-    <td>${r.pk}</td><td class="${cls(r.fuku)}" style="text-align:right;font-weight:800">${r.fuku}%</td>
+    <td>${r.pk}</td><td style="text-align:right">${r.win}%</td>
+    <td class="${cls(r.fuku)}" style="text-align:right;font-weight:800">${r.fuku}%</td>
     <td style="text-align:right;color:#94a3b8">${r.n}</td></tr>`).join('');
   const _minPair = tf ? 2 : (yf ? 8 : 20);
   const pairRows = Object.entries(pair).filter(([k, v]) => v.n >= _minPair)
-    .map(([pk, v]) => ({ pk, n: v.n, fuku: pct(v.f, v.n) })).sort((a, b) => b.fuku - a.fuku);
+    .map(([pk, v]) => ({ pk, n: v.n, fuku: pct(v.f, v.n), win: pct(v.w || 0, v.n) })).sort((a, b) => b.fuku - a.fuku);
+  const _pairHead = '<thead><tr><th style="text-align:left">乗せ替え</th><th style="text-align:right">勝率</th><th style="text-align:right">複勝</th><th style="text-align:right">件数</th></tr></thead>';
   const _pairPanels = `
     <div style="flex:1;min-width:280px;display:flex;flex-direction:column;gap:12px">
       <div>
         <div style="font-size:13px;font-weight:800;color:#16a34a;margin-bottom:4px">🔥 熱い乗替ペア（A→B・n≥${_minPair}・上位15）</div>
-        <div class="table-wrapper"><table class="deban-table" style="font-size:12px">
-          <thead><tr><th style="text-align:left">乗せ替え</th><th style="text-align:right">複勝</th><th style="text-align:right">件数</th></tr></thead>
-          <tbody>${pairTbl(pairRows.slice(0, 15)) || '<tr><td colspan="3" style="color:#9ca3af">該当なし</td></tr>'}</tbody></table></div>
+        <div class="table-wrapper"><table class="deban-table jc-tbl">
+          ${_pairHead}
+          <tbody>${pairTbl(pairRows.slice(0, 15)) || '<tr><td colspan="4" style="color:#9ca3af">該当なし</td></tr>'}</tbody></table></div>
       </div>
       <div>
         <div style="font-size:13px;font-weight:800;color:#dc2626;margin-bottom:4px">⚠️ 危険な乗替ペア（A→B・n≥${_minPair}・下位15）</div>
-        <div class="table-wrapper"><table class="deban-table" style="font-size:12px">
-          <thead><tr><th style="text-align:left">乗せ替え</th><th style="text-align:right">複勝</th><th style="text-align:right">件数</th></tr></thead>
-          <tbody>${pairTbl(pairRows.slice(-15).reverse()) || '<tr><td colspan="3" style="color:#9ca3af">該当なし</td></tr>'}</tbody></table></div>
+        <div class="table-wrapper"><table class="deban-table jc-tbl">
+          ${_pairHead}
+          <tbody>${pairTbl(pairRows.slice(-15).reverse()) || '<tr><td colspan="4" style="color:#9ca3af">該当なし</td></tr>'}</tbody></table></div>
       </div>
     </div>`;
 
@@ -7200,12 +7203,12 @@ function renderJockeyChangeAnalysis() {
         .sort((a, b) => (b.n >= 2) - (a.n >= 2) || b.fuku - a.fuku || b.n - a.n);   // 2件以上を優先（1件だけの100%が上を埋めないように）
       const srcHtml = srcs.length
         ? `<div style="font-size:11px;font-weight:800;color:#64748b;margin-bottom:4px">誰から ${r.J} に乗り替わった時が良いか（複勝率順）</div>`
-          + srcs.map(s => `<div class="jc-src-item"><span class="jc-src-pair">${s.A} → <b>${r.J}</b></span><span class="${cls(s.fuku)}" style="font-weight:800">${s.fuku}%</span><span class="jc-src-meta">勝率${s.win}%・${s.n}件</span></div>`).join('')
+          + srcs.map(s => `<div class="jc-src-item"><span class="jc-src-pair">${s.A} → <b>${r.J}</b></span><span class="jc-src-meta">勝率${s.win}%</span><span class="${cls(s.fuku)}" style="font-weight:800">複勝${s.fuku}%</span><span class="jc-src-meta">${s.n}件</span></div>`).join('')
         : '<div style="color:#9ca3af;font-size:11px">この厩舎での乗せ替えデータがありません（継続騎乗のみ）</div>';
       return `<tr class="jc-jkrow" onclick="var d=document.getElementById('jcsrc-${i}');if(d){d.classList.toggle('hidden');this.classList.toggle('jc-open')}">
       <td style="font-weight:700"><span class="jc-caret">▸</span>${r.J}${r.J === mainJk ? ' <span style="font-size:9px;font-weight:800;background:#7c3aed;color:#fff;border-radius:3px;padding:0 4px">主戦</span>' : ''}</td>
-      <td class="${cls(r.allF)}" style="text-align:right;font-weight:800">${r.allF}%${_sn(r.n)}</td>
       <td class="${wcls(r.win)}" style="text-align:right">${r.win}%</td>
+      <td class="${cls(r.allF)}" style="text-align:right;font-weight:800">${r.allF}%${_sn(r.n)}</td>
       <td class="${cls(r.chg)}" style="text-align:right">${r.chg != null ? r.chg + '%' : '—'}${r.chgN ? _sn(r.chgN) : ''}</td>
       <td class="${cls(r.cont)}" style="text-align:right">${r.cont != null ? r.cont + '%' : '—'}${r.contN ? _sn(r.contN) : ''}</td></tr>
       <tr id="jcsrc-${i}" class="hidden"><td colspan="5" class="jc-srccell">${srcHtml}</td></tr>`;
@@ -7219,8 +7222,8 @@ function renderJockeyChangeAnalysis() {
           <div style="font-size:13px;font-weight:800;color:#374151;margin-bottom:4px">👤 この厩舎の騎手別成績（起用数順／<span style="color:#7c3aed">主戦</span>＝最多起用）</div>
           <div style="font-size:10.5px;color:#0891b2;margin-bottom:4px">▸ 騎手をタップすると「誰からこの騎手に乗り替わった時が良いか」の内訳が開きます</div>
           <div class="table-wrapper" style="max-height:420px;overflow-y:auto">
-            <table class="deban-table" style="font-size:12px">
-              <thead><tr><th style="text-align:left">騎手</th><th style="text-align:right" title="この厩舎の馬に乗った時の複勝率（右の小数字＝騎乗数）">複勝</th><th style="text-align:right" title="この厩舎の馬に乗った時の勝率（1着率）">勝率</th><th style="text-align:right" title="この厩舎がこの騎手に乗せ替えた時の複勝率">乗替時</th><th style="text-align:right" title="この騎手が前走から継続した時の複勝率">継続時</th></tr></thead>
+            <table class="deban-table jc-tbl">
+              <thead><tr><th style="text-align:left">騎手</th><th style="text-align:right" title="この厩舎の馬に乗った時の勝率（1着率）">勝率</th><th style="text-align:right" title="この厩舎の馬に乗った時の複勝率（右の小数字＝騎乗数）">複勝</th><th style="text-align:right" title="この厩舎がこの騎手に乗せ替えた時の複勝率">乗替時</th><th style="text-align:right" title="この騎手が前走から継続した時の複勝率">継続時</th></tr></thead>
               <tbody>${jkTbl || '<tr><td colspan="5" style="color:#9ca3af">データ不足</td></tr>'}</tbody>
             </table>
           </div>
@@ -7234,20 +7237,34 @@ function renderJockeyChangeAnalysis() {
     const destRows = Object.entries(byB).filter(([k, v]) => v.n >= _minDest)
       .map(([B, v]) => { const cont = sameB[B] ? pct(sameB[B].f, sameB[B].n) : null; const chg = pct(v.f, v.n); return { B, n: v.n, chg, cont, contN: sameB[B] ? sameB[B].n : 0, diff: cont != null ? +(chg - cont).toFixed(1) : null }; })
       .sort((a, b) => b.chg - a.chg);
-    const destTbl = destRows.map(r => `<tr>
-      <td style="font-weight:700;cursor:help;border-bottom:1px dotted #94a3b8" title="${jkTip(r.B).replace(/"/g, '&quot;')}">${r.B}</td>
+    const _minSrcN = yf ? 2 : 3;
+    const destTbl = destRows.map((r, i) => {
+      // この騎手への乗せ替え元の内訳（○○→この騎手・全厩舎・複勝率順）
+      const srcs = Object.entries(pair).filter(([pk, v]) => v.n >= _minSrcN && pk.endsWith(' → ' + r.B))
+        .map(([pk, v]) => ({ A: pk.split(' → ')[0], n: v.n, fuku: pct(v.f, v.n), win: pct(v.w || 0, v.n) }))
+        .sort((a, b) => b.fuku - a.fuku || b.n - a.n).slice(0, 12);
+      const srcHtml = (srcs.length
+        ? `<div style="font-size:11px;font-weight:800;color:#64748b;margin-bottom:4px">誰から ${r.B} に乗り替わった時が良いか（n≥${_minSrcN}・複勝率順・上位12）</div>`
+          + srcs.map(s => `<div class="jc-src-item"><span class="jc-src-pair">${s.A} → <b>${r.B}</b></span><span class="jc-src-meta">勝率${s.win}%</span><span class="${cls(s.fuku)}" style="font-weight:800">複勝${s.fuku}%</span><span class="jc-src-meta">${s.n}件</span></div>`).join('')
+        : `<div style="color:#9ca3af;font-size:11px">n≥${_minSrcN}の乗せ替え元データがありません</div>`)
+        + `<div class="jc-src-meta" style="margin-top:6px;white-space:pre-line">${jkTip(r.B)}</div>`;
+      return `<tr class="jc-jkrow" onclick="var d=document.getElementById('jcdst-${i}');if(d){d.classList.toggle('hidden');this.classList.toggle('jc-open')}">
+      <td style="font-weight:700"><span class="jc-caret">▸</span>${r.B}</td>
       <td class="${cls(r.chg)}" style="text-align:right;font-weight:800">${r.chg}%</td>
       <td class="${cls(r.cont)}" style="text-align:right">${r.cont != null ? r.cont + '%' : '—'}</td>
       <td class="${dcls(r.diff)}" style="text-align:right;font-weight:700">${r.diff != null ? (r.diff > 0 ? '+' : '') + r.diff : '—'}</td>
-      <td style="text-align:right;color:#94a3b8">${r.n}/${r.contN}</td></tr>`).join('');
+      <td style="text-align:right;color:#94a3b8">${r.n}/${r.contN}</td></tr>
+      <tr id="jcdst-${i}" class="hidden"><td colspan="5" class="jc-srccell">${srcHtml}</td></tr>`;
+    }).join('');
     body.innerHTML = `
       <div style="font-size:11px;color:#9ca3af;margin-bottom:6px">対象：乗り替わり ${chgTot.n.toLocaleString()} 件／継続 ${contTot.n.toLocaleString()} 件（前走との比較）</div>
       ${summaryBar}
       <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
         <div style="flex:1;min-width:320px">
           <div style="font-size:13px;font-weight:800;color:#374151;margin-bottom:4px">🏇 乗替先ランキング（この騎手に乗せ替えた時・n≥${_minDest}・乗替複勝率順）</div>
+          <div style="font-size:10.5px;color:#0891b2;margin-bottom:4px">▸ 騎手をタップすると「誰からこの騎手に乗り替わった時が良いか」の内訳が開きます</div>
           <div class="table-wrapper" style="max-height:420px;overflow-y:auto">
-            <table class="deban-table" style="font-size:12px">
+            <table class="deban-table jc-tbl">
               <thead><tr><th style="text-align:left">乗替先騎手</th><th style="text-align:right">乗替複勝</th><th style="text-align:right">継続複勝</th><th style="text-align:right">差</th><th style="text-align:right" title="乗替件数/継続件数">件数</th></tr></thead>
               <tbody>${destTbl}</tbody>
             </table>
@@ -7255,7 +7272,7 @@ function renderJockeyChangeAnalysis() {
         </div>
         ${_pairPanels}
       </div>
-      <p style="font-size:10.5px;color:#9ca3af;margin-top:8px;line-height:1.6">※乗替複勝＝この騎手に乗せ替えた時／継続複勝＝この騎手が前走から継続した時（乗り替わりなし）／差＝乗替−継続（＋＝乗せ替えた方が良い＝勝負気配）。件数は「乗替/継続」。厩舎を選ぶとその厩舎の主戦・相性が見られます。</p>`;
+      <p style="font-size:10.5px;color:#9ca3af;margin-top:8px;line-height:1.6">※乗替複勝＝この騎手に乗せ替えた時／継続複勝＝この騎手が前走から継続した時（乗り替わりなし）／差＝乗替−継続（＋＝乗せ替えた方が良い＝勝負気配）。件数は「乗替/継続」。<b>騎手タップで乗せ替え元（誰→この騎手）の内訳と、継続/乗替が良い厩舎</b>が見られます。厩舎を選ぶとその厩舎の主戦・相性が見られます。</p>`;
   }
 }
 
