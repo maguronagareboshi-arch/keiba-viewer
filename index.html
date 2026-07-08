@@ -986,6 +986,52 @@ const KV_APP_CSS = [
       'body.dark-mode .dbias-seg b{color:#e2e8f0}',
       'body.dark-mode .dbias-seg--top{background:#08301d;border-color:#166534;color:#4ade80}',
       'body.dark-mode .dbias-seg--top b{color:#4ade80}',
+      // 🧠 AI予想レポート（ルールベース・無料）
+      '.yr-panel{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;margin-top:12px;font-size:13px;line-height:1.7}',
+      '.yr-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}',
+      '.yr-title{font-size:14.5px;font-weight:800;color:#7c3aed}',
+      '.yr-note{font-size:10.5px;color:#94a3b8}',
+      '.yr-sec{margin:12px 0 4px;font-size:13px;font-weight:800;color:#1a56a0;border-left:3px solid #1a56a0;padding-left:8px}',
+      '.yr-kv{display:flex;flex-wrap:wrap;gap:5px 14px;font-size:12.5px;color:#334155}',
+      '.yr-kv b{color:#0f172a}',
+      '.yr-warn{background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:6px 10px;font-size:12px;color:#92400e;margin:6px 0}',
+      '.yr-horse{border:1px solid #eef2f7;border-radius:8px;margin:5px 0;background:#fbfcfe}',
+      '.yr-horse summary{cursor:pointer;padding:7px 10px;font-size:12.5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;list-style:none}',
+      '.yr-horse summary::-webkit-details-marker{display:none}',
+      '.yr-horse[open] summary{border-bottom:1px dashed #e2e8f0}',
+      '.yr-hbody{padding:7px 12px 9px;font-size:12px;color:#334155}',
+      '.yr-hbody div{margin:2px 0}',
+      '.yr-mark{font-size:16px;font-weight:900;min-width:22px;text-align:center}',
+      '.yr-mk-h{color:#dc2626}.yr-mk-t{color:#2563eb}.yr-mk-s{color:#d97706}.yr-mk-x{color:#0891b2}.yr-mk-k{color:#94a3b8}',
+      '.yr-uma{background:#eef2f7;border-radius:5px;padding:1px 7px;font-weight:800;font-size:11px;color:#475569}',
+      '.yr-hname{font-weight:800;color:#0f172a}',
+      '.yr-tags{display:flex;gap:4px;flex-wrap:wrap;margin-left:auto}',
+      '.yr-tag{font-size:10px;border-radius:10px;padding:1px 7px;font-weight:700;background:#f1f5f9;color:#64748b}',
+      '.yr-tag--p{background:#dcfce7;color:#166534}',
+      '.yr-tag--m{background:#fee2e2;color:#991b1b}',
+      '.yr-plus{color:#15803d}','.yr-minus{color:#b91c1c}','.yr-quirk{color:#7c3aed}',
+      '.yr-buy{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;margin:4px 0;font-size:12.5px}',
+      '.yr-buy b{color:#1a56a0}',
+      '.yr-selfcheck{background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:8px 12px;font-size:11.5px;color:#5b21b6;margin-top:8px;line-height:1.65}',
+      '.yr-btn{padding:4px 12px;background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px}',
+      // ダーク
+      'body.dark-mode .yr-panel{background:#0d1826;border-color:#22344e}',
+      'body.dark-mode .yr-title{color:#c4b5fd}',
+      'body.dark-mode .yr-sec{color:#7dd3fc;border-color:#38bdf8}',
+      'body.dark-mode .yr-kv{color:#cbd5e1}','body.dark-mode .yr-kv b{color:#f1f5f9}',
+      'body.dark-mode .yr-warn{background:#3a2f08;border-color:#7c5e10;color:#fde047}',
+      'body.dark-mode .yr-horse{background:#101c30;border-color:#1e2e44}',
+      'body.dark-mode .yr-horse[open] summary{border-color:#1e2e44}',
+      'body.dark-mode .yr-hbody{color:#cbd5e1}',
+      'body.dark-mode .yr-uma{background:#1e293b;color:#cbd5e1}',
+      'body.dark-mode .yr-hname{color:#f1f5f9}',
+      'body.dark-mode .yr-tag{background:#1a2334;color:#94a3b8}',
+      'body.dark-mode .yr-tag--p{background:#08301d;color:#4ade80}',
+      'body.dark-mode .yr-tag--m{background:#3a1114;color:#f87171}',
+      'body.dark-mode .yr-plus{color:#4ade80}','body.dark-mode .yr-minus{color:#f87171}','body.dark-mode .yr-quirk{color:#c4b5fd}',
+      'body.dark-mode .yr-buy{background:#101c30;border-color:#1e2e44}',
+      'body.dark-mode .yr-buy b{color:#7dd3fc}',
+      'body.dark-mode .yr-selfcheck{background:#1e1533;border-color:#4c1d95;color:#c4b5fd}',
       '.app-footer{text-align:center;padding:18px;font-size:12px;color:#6b7280;border-top:1px solid #e2e8f0;margin-top:20px}',
       '.app-footer a{color:#1a56a0;text-decoration:none}',
       '@media(max-width:1300px){.col-trainer,.col-belong{display:none}}',
@@ -14768,6 +14814,191 @@ function buildEvMonitorHtml(raceNo, selCond) {
     ${warned.length ? warnHtml : ''}${cautionHtml}</div>`;
 }
 
+// ── 🧠 AI予想レポート（ルールベース予想エンジン・無料/オフライン）─────────────
+// チャット予想の手順をJS化：当日バイアス×脚質整合(全印一貫)・コメント癖辞書(位置取り照合つき)・
+// 持ち時計比較・展開シミュレーション(気性難の代替シナリオ)・危険な人気馬/穴の根拠明示・自己チェック。
+// 指数本体(computeYosoScored)には一切手を触れない表示レイヤー。
+const _YR_QUIRKS = [
+  { k: 'sand',  re: /砂を被|揉まれ/, label: '砂を被ると嫌がる', neg: true },
+  { k: 'gate',  re: /ゲート.{0,6}(失敗|遅れ|うるさい|駐立)|出負け|出遅れ/, label: 'ゲート難', neg: true },
+  { k: 'kisho', re: /気難し|ムラがあ|真面目では|集中力|気合が入りにくい|遊んでい/, label: '気性に課題', neg: true },
+  { k: 'zubu',  re: /ズブ|反応が鈍|進む気が無/, label: 'ズブい・反応が鈍い', neg: true },
+  { k: 'front', re: /前に行った方|先行した方|逃げれて楽/, label: '前向きな競馬が合う' },
+  { k: 'wet',   re: /雨馬場の方|湿った(方|馬場)が良/, label: '湿った馬場が良い' },
+  { k: 'dry',   re: /乾いた馬場|普通の馬場の方/, label: '乾いた馬場が良い' },
+  { k: 'distLong', re: /距離は?長い|mは長い/, label: '距離が長い(厩舎談)', neg: true },
+  { k: 'late',  re: /終いは(確実|伸び)|一脚は使|よく追い込/, label: '終いは確実' },
+  { k: 'good',  re: /調子は良|状態は良|良化|走りは良かった/, label: '状態は良さそう' },
+];
+const _YR_CLS = { 'A': 5, 'B': 4, 'C1': 3, 'C2': 2, 'C3': 1 };
+function _yrSec(t) { const m = String(t || '').match(/(\d+):(\d+\.\d)/); return m ? parseInt(m[1]) * 60 + parseFloat(m[2]) : null; }
+function _yrWet(c) { return c === '不良' || c === '重' || c === '稍重'; }
+function _yrC1(cn) { const v = parseInt(String(cn || '').split('-')[0]); return isNaN(v) || v < 1 ? null : v; }
+
+function _yrProfile(h, ctx) {
+  const name = h.horseName || '';
+  let hist = [];
+  try { hist = getHorseHistoryBefore(name, ctx.date, ctx.rno).filter(x => x.babaCode === '31').slice(0, 5); } catch (e) {}
+  const c1s = hist.map(r => _yrC1(r.corner)).filter(v => v != null);
+  const avgC1 = c1s.length ? c1s.reduce((a, b) => a + b, 0) / c1s.length : null;
+  let style = '不明', styleCls = 'mid';
+  if (avgC1 != null) { style = avgC1 <= 2.4 ? '逃げ' : avgC1 <= 4.5 ? '先行' : avgC1 <= 7 ? '中団' : '後方'; styleCls = avgC1 <= 4.5 ? 'front' : avgC1 <= 7 ? 'mid' : 'back'; }
+  const jizai = c1s.length >= 3 && Math.min(...c1s) <= 2 && Math.max(...c1s) >= 6;
+  const atDist = hist.filter(r => String(r.distance || '').replace(/[^\d]/g, '') === ctx.dist);
+  const distTimes = atDist.map(r => _yrSec(r.time)).filter(v => v);
+  const wetRuns = hist.filter(r => _yrWet(r.trackCond));
+  const wetTop3 = wetRuns.filter(r => parseInt(r.chakujun) <= 3).length;
+  const quirks = {};
+  hist.slice(0, 4).forEach((r, i) => { const cm = r.postComment || ''; if (!cm) return;
+    _YR_QUIRKS.forEach(q => { if (q.re.test(cm) && !quirks[q.k]) quirks[q.k] = { label: q.label, neg: !!q.neg, recent: i < 2 }; }); });
+  // 教訓②:「距離長い」コメントは同距離の敗戦の位置取りと照合＝前で試していなければ「未知」扱い
+  if (quirks.distLong) { const frontTried = atDist.some(r => { const c = _yrC1(r.corner); return c != null && c <= 4; });
+    if (!frontTried) quirks.distLong.unknown = true; }
+  const wm = String(h.weight || '').match(/(\d{3})\(([+-]?\d+)\)/);
+  const lastCls = hist[0] ? (_YR_CLS[getEffectiveClass(hist[0].raceClass)] || null) : null;
+  const nowCls = _YR_CLS[getEffectiveClass(ctx.cls)] || null;
+  return { h, name, uma: h.umaBan, hist, nHist: hist.length, style, styleCls, jizai, avgC1,
+    distBest: distTimes.length ? Math.min(...distTimes) : null, distTop3: atDist.filter(r => parseInt(r.chakujun) <= 3).length, distN: atDist.length,
+    wetN: wetRuns.length, wetTop3, quirks, wDelta: wm ? +wm[2] : null,
+    clsUp: (lastCls != null && nowCls != null) ? nowCls - lastCls : 0,
+    lastCh: hist[0] ? (parseInt(hist[0].chakujun) || null) : null,
+    ninki: parseInt(h.ninki) || null, odds: parseFloat(h.odds) || null };
+}
+
+function _yrBuild(raceNo) {
+  const data = allRacesData[raceNo]; if (!data || !data.horses.length) return null;
+  const ri = data.raceInfo;
+  const ctx = { date: ri.raceDate, rno: parseInt(raceNo), dist: String(ri.distance || '').replace(/[^\d]/g, ''),
+    cls: ri.raceClass || '', cond: ri.trackCond || '', isFinal: /ファイナル/.test(ri.raceName || '') };
+  // ── 当日バイアス（このレースより前の確定Rのみ＝結果リーク防止）──
+  let fN = 0, fH = 0, mN = 0, mH = 0, bN = 0, bH = 0, favHit = 0, favN = 0, resR = 0;
+  Object.keys(allRacesData).map(Number).filter(rn => rn < ctx.rno).forEach(rn => {
+    let has = false;
+    (allRacesData[rn].horses || []).forEach(x => { const ch = parseInt(x.chakujun); if (isNaN(ch)) return; has = true;
+      const c1 = _yrC1(x.corner); if (c1 != null) { if (c1 <= 3) { fN++; if (ch <= 3) fH++; } else if (c1 <= 7) { mN++; if (ch <= 3) mH++; } else { bN++; if (ch <= 3) bH++; } }
+      if (parseInt(x.ninki) === 1) { favN++; if (ch <= 3) favHit++; } });
+    if (has) resR++;
+  });
+  const frontRate = fN >= 8 ? Math.round(100 * fH / fN) : null;
+  const backRate = bN >= 5 ? Math.round(100 * bH / bN) : null;
+  const biasMode = frontRate == null ? 'unknown' : frontRate >= 52 ? 'front' : frontRate <= 35 ? 'back' : 'flat';
+  // ── AI指数・EV ──
+  let aiMap = {}, aiOk = false;
+  try { computeYosoScored(raceNo).scored.forEach((s, i) => { aiMap[s.horse.horseName] = { rank: i + 1, sc: s.totalScore }; if (s.totalScore != null) aiOk = true; }); } catch (e) {}
+  let evList = [];
+  try { const er = computeEvBets(raceNo); if (er && er.runners) evList = er.runners; } catch (e) {}
+  // ── 各馬プロファイル＋調整スコア ──
+  const ps = data.horses.map(h => _yrProfile(h, ctx));
+  const fieldBest = Math.min(...ps.map(p => p.distBest).filter(v => v), Infinity);
+  const wetToday = _yrWet(ctx.cond);
+  ps.forEach(p => {
+    const ai = aiMap[p.name] || {};
+    p.aiRank = ai.rank || 99; p.aiSc = ai.sc;
+    let adj = 0; const plus = [], minus = [], notes = [];
+    // 教訓⑤: バイアスは全馬に一貫適用
+    if (biasMode === 'front') { if (p.styleCls === 'front') { adj += 2.5; plus.push('前有利の馬場×' + p.style + '脚質が合致'); }
+      else if (p.styleCls === 'back') { adj -= 3; minus.push('前有利の今日、後方脚質は展開待ち'); } }
+    else if (biasMode === 'back') { if (p.styleCls === 'back') { adj += 2; plus.push('差し優勢の馬場×追い込み脚質'); }
+      else if (p.styleCls === 'front') { adj -= 1.5; minus.push('差し優勢の今日、前は苦しい'); } }
+    if (p.jizai) { adj += 1; plus.push('位置取り自在（教訓⑥：番手戦法で差し切れる型）'); }
+    if (wetToday) { if (p.wetTop3 >= 2) { adj += 1.5; plus.push('渋った馬場【' + p.wetTop3 + '好走】実績'); }
+      if (p.quirks.wet) { adj += 1; plus.push('厩舎談「湿った馬場が良い」×今日' + ctx.cond); }
+      if (p.quirks.dry) { adj -= 2; minus.push('厩舎談「乾いた馬場が良い」×今日' + ctx.cond); } }
+    if (p.distBest != null && isFinite(fieldBest)) { const d = +(p.distBest - fieldBest).toFixed(1);
+      p.timeDef = d;
+      if (d <= 0.05) { adj += 1.5; plus.push('当該距離の持ち時計がメンバー最速'); }
+      else if (d >= 1.2) { adj -= 2; minus.push('持ち時計がメンバー最速比+' + d + '秒不足'); } }
+    if (p.quirks.sand && parseInt(p.h.wakuBan) <= 4 && p.styleCls !== 'front') { adj -= 2.5; minus.push('砂被りNG×内枠×先行力不足は致命的'); }
+    if (p.quirks.gate && p.quirks.gate.recent) { adj -= 1.5; minus.push('直近にゲート難'); }
+    if (p.quirks.kisho) { adj -= 1; minus.push('気性に課題（ムラ駆け注意）'); }
+    if (p.quirks.zubu) { adj -= 1; minus.push('ズブさ・反応の鈍さ'); }
+    if (p.quirks.distLong && !p.quirks.distLong.unknown) { adj -= 1.5; minus.push('厩舎が距離長いと明言'); }
+    if (p.quirks.distLong && p.quirks.distLong.unknown) { notes.push('「距離長い」談あるが前付けは未試行＝未知（教訓②）'); }
+    if (p.quirks.front && biasMode === 'front') { adj += 1; plus.push('前向きな競馬が合う×前有利'); }
+    if (p.quirks.late) { plus.push('終いは確実（3着紐の価値）'); }
+    if (p.quirks.good) { plus.push('陣営コメントの状態良し'); }
+    if (p.wDelta != null && Math.abs(p.wDelta) >= 10) { adj -= 2; minus.push('馬体重' + (p.wDelta > 0 ? '+' : '') + p.wDelta + 'kgの大幅変動'); }
+    if (p.clsUp > 0) { adj -= 1; minus.push('昇級戦'); }
+    if (p.clsUp < 0) { adj += 1.5; plus.push('降級で相手弱化'); }
+    if (p.nHist <= 1) { notes.push('高知' + p.nHist + '走のみ＝データ不足（転入直後）'); }
+    p.adj = adj; p.plus = plus; p.minus = minus; p.notes = notes;
+    p.final = (p.aiSc != null ? p.aiSc : 0) + adj;
+  });
+  // ── 印（AI指数＋調整の総合順）──
+  ps.sort((a, b) => b.final - a.final);
+  const MK = ['◎', '○', '▲', '△', '△'];
+  ps.forEach((p, i) => { p.mark = i < 5 ? MK[i] : '消し'; });
+  // ☆穴: EVモデルが評価する15倍以上（教訓④）を1頭（印下位から昇格）
+  const hole = ps.find(p => { if (p.mark !== '消し' && p.mark !== '△') return false; const ev = evList.find(r => r.name === p.name);
+    return ev && p.odds >= 15 && ev.ev >= 0.55 && (p.styleCls === 'front' || p.quirks.late || biasMode !== 'front'); });
+  if (hole) hole.mark = '☆';
+  // ── 展開（教訓③: 気性難逃げ馬の代替シナリオ）──
+  const nige = ps.filter(p => p.avgC1 != null && (p.avgC1 <= 2.4 || p.hist.slice(0, 3).some(r => _yrC1(r.corner) === 1)));
+  const senko = ps.filter(p => p.styleCls === 'front' && !nige.includes(p));
+  let paceTxt, paceWarn = '';
+  if (nige.length >= 3) paceTxt = 'ハイ寄り（逃げ' + nige.length + '頭で先行争い激化）';
+  else if (nige.length === 2) paceTxt = '平均〜ややハイ（' + nige.map(p => p.name).join('と') + 'のハナ争い）';
+  else if (nige.length === 1) { paceTxt = 'スロー〜平均（' + nige[0].name + 'の単騎逃げ濃厚＝前残り警戒）';
+    if (nige[0].quirks.kisho) paceWarn = '⚠️ 逃げ候補' + nige[0].name + 'は気性に課題＝行けなかった場合は隊列一変・別の先行馬の楽逃げまで想定（教訓③）'; }
+  else paceTxt = 'スロー（明確な逃げ馬不在＝position争い）';
+  // ── 危険な人気馬（人気1-5位で「減点根拠あり×エンジン評価が人気より低い」馬）──
+  const danger = ps.filter((p, idx) => p.ninki && p.ninki <= 5 && p.minus.length >= 1 && idx + 1 > p.ninki + 1)
+    .sort((a, b) => a.ninki - b.ninki)[0] || null;
+  return { ctx, ri, ps, biasMode, frontRate, backRate, resR, favHit, favN, paceTxt, paceWarn, nige, senko, hole, danger, evList, aiOk };
+}
+
+function renderYosoReport(raceNo) {
+  const host = document.getElementById('yoso-report-' + raceNo); if (!host) return;
+  const R = _yrBuild(raceNo);
+  if (!R) { host.innerHTML = '<div class="yr-panel">データがありません</div>'; return; }
+  if (!R.aiOk) { host.innerHTML = '<div class="yr-panel">各馬の過去データが不足しています（「データ自動取得」を先に実行してください）</div>'; return; }
+  const esc = s => String(s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+  const biasTxt = R.biasMode === 'unknown' ? '不明（確定レース不足＝過去データ中心で判断）'
+    : R.biasMode === 'front' ? '前有利（1角3番手内の複勝' + R.frontRate + '%）'
+    : R.biasMode === 'back' ? '差し優勢（前の複勝' + R.frontRate + '%と低調）' : 'フラット（前' + R.frontRate + '%）';
+  const mkCls = m => m === '◎' ? 'yr-mk-h' : m === '○' ? 'yr-mk-t' : m === '▲' || m === '△' ? 'yr-mk-s' : m === '☆' ? 'yr-mk-x' : 'yr-mk-k';
+  const horseHtml = R.ps.map((p, i) => {
+    const tags = [];
+    if (p.plus.length) tags.push('<span class="yr-tag yr-tag--p">+' + p.plus.length + '</span>');
+    if (p.minus.length) tags.push('<span class="yr-tag yr-tag--m">-' + p.minus.length + '</span>');
+    tags.push('<span class="yr-tag">' + p.style + '</span>');
+    if (p.ninki) tags.push('<span class="yr-tag">' + p.ninki + '人気</span>');
+    const body =
+      (p.plus.length ? '<div class="yr-plus">＋ ' + p.plus.map(esc).join('／') + '</div>' : '') +
+      (p.minus.length ? '<div class="yr-minus">− ' + p.minus.map(esc).join('／') + '</div>' : '') +
+      (Object.keys(p.quirks).length ? '<div class="yr-quirk">癖：' + Object.values(p.quirks).map(q => esc(q.label)).join('・') + '</div>' : '') +
+      (p.notes.length ? '<div>※ ' + p.notes.map(esc).join('／') + '</div>' : '') +
+      '<div style="color:#94a3b8">AI指数' + (p.aiSc != null ? p.aiSc.toFixed(1) : '—') + '（' + p.aiRank + '位）・補正' + (p.adj >= 0 ? '+' : '') + p.adj.toFixed(1) + (p.timeDef != null ? '・時計差+' + p.timeDef + 's' : '') + '</div>';
+    return '<details class="yr-horse"' + (i < 3 ? ' open' : '') + '><summary><span class="yr-mark ' + mkCls(p.mark) + '">' + p.mark + '</span><span class="yr-uma">' + p.uma + '</span><span class="yr-hname">' + esc(p.name) + '</span><span style="font-size:11px;color:#94a3b8">' + esc(p.h.jockey || '') + '</span><span class="yr-tags">' + tags.join('') + '</span></summary><div class="yr-hbody">' + body + '</div></details>';
+  }).join('');
+  const top5 = R.ps.slice(0, 5);
+  const m1 = top5[0], m2 = top5[1], m3 = top5[2];
+  const holeTxt = R.hole ? R.hole.uma + ' ' + R.hole.name + '（' + R.hole.odds + '倍）— ' + (R.hole.plus[0] || 'EVモデルが能力を認める過小評価（教訓④）') : 'なし（該当馬不在）';
+  const himo = [...new Set(top5.slice(2).map(p => p.uma).concat(R.hole ? [R.hole.uma] : []))].filter(u => u !== m1.uma && u !== m2.uma);
+  const buys = R.ctx.isFinal
+    ? '<div class="yr-buy"><b>ファイナル警戒（教訓①）</b>：人気軸を疑い広く。3連複 ' + m1.uma + '-（' + m2.uma + ',' + m3.uma + '）-（印全部＋☆）／ワイド ' + m1.uma + '-☆</div>'
+    : '<div class="yr-buy"><b>堅め</b>：馬複 ' + m1.uma + '-' + m2.uma + '　<b>本線</b>：馬単 ' + m1.uma + '→' + m2.uma + '・3連複 ' + m1.uma + '-' + m2.uma + '-（' + himo.join(',') + '）　<b>穴</b>：' + (R.hole ? 'ワイド ' + m1.uma + '-' + R.hole.uma : '3連単2列目に△を厚く') + '</div>';
+  // 自己チェック（教訓⑤: 上位印とバイアスの整合を機械検証）
+  const mism = top5.slice(0, 3).filter(p => R.biasMode === 'front' && p.styleCls === 'back');
+  const selfck = '自己チェック：' +
+    (R.biasMode !== 'unknown' ? '上位3頭の脚質は' + top5.slice(0, 3).map(p => p.style).join('/') + (mism.length ? '——' + mism.map(p => p.name).join('・') + 'は後方脚質だが時計/終い根拠で残置（要注意）' : '＝当日バイアスと整合✓') : '当日バイアス不明のため過去データ中心で判断') +
+    '／コメントは位置取りと照合済（教訓②）' + (R.ctx.isFinal ? '／ファイナル＝荒れ前提で紐を拡張（教訓①）' : '') +
+    (R.danger ? '／危険視した' + R.danger.ninki + '人気の根拠：' + esc(R.danger.minus[0] || '') : '') + '。';
+  host.innerHTML = '<div class="yr-panel">' +
+    '<div class="yr-head"><span class="yr-title">🧠 AI予想レポート</span><span class="yr-note">ルールエンジン（端末内で計算・通信なし）／これは支援情報で的中を保証しません</span></div>' +
+    '<div class="yr-sec">■ レース概要</div><div class="yr-kv"><span>距離 <b>' + R.ctx.dist + 'm</b></span><span>クラス <b>' + esc(R.ctx.cls || '—') + '</b></span><span>馬場 <b>' + esc(R.ctx.cond || '—') + '</b></span><span>想定ペース <b>' + esc(R.paceTxt) + '</b></span><span>馬場傾向 <b>' + biasTxt + '</b></span>' + (R.favN ? '<span>本日1人気 <b>' + R.favHit + '/' + R.favN + '3着内</b></span>' : '') + '</div>' +
+    (R.ctx.isFinal ? '<div class="yr-warn">⚠️ ファイナルレース＝実力接近で大荒れ名物。人気を鵜呑みにしない（教訓①）</div>' : '') +
+    (R.paceWarn ? '<div class="yr-warn">' + esc(R.paceWarn) + '</div>' : '') +
+    '<div class="yr-sec">■ 展開予想</div><div style="font-size:12.5px">逃げ候補：' + (R.nige.length ? R.nige.map(p => esc(p.name)).join('・') : 'なし') + '／先行：' + (R.senko.length ? R.senko.map(p => esc(p.name)).join('・') : '—') + '</div>' +
+    '<div class="yr-sec">■ 各馬評価（タップで根拠）</div>' + horseHtml +
+    '<div class="yr-sec">■ 最終順位予想</div><div style="font-size:12.5px">' + top5.map((p, i) => (i + 1) + '位 ' + p.uma + ' ' + esc(p.name)).join('　→　') + '</div>' +
+    '<div class="yr-sec">■ 買い目候補</div>' + buys +
+    '<div class="yr-sec">■ 危険な人気馬</div><div style="font-size:12.5px">' + (R.danger ? '<b>' + esc(R.danger.name) + '（' + R.danger.ninki + '人気' + R.danger.odds + '倍）</b>：' + R.danger.minus.map(esc).join('・') : '上位人気に明確な減点なし') + '</div>' +
+    '<div class="yr-sec">■ 狙いたい穴馬</div><div style="font-size:12.5px">' + esc(holeTxt) + '</div>' +
+    '<div class="yr-selfcheck">' + selfck + '</div>' +
+    '</div>';
+}
+
 function renderPredictionPanel(raceNo) {
   const container = document.getElementById(`yoso-panel-${raceNo}`);
   if (!container) return;
@@ -15215,6 +15446,7 @@ function renderPredictionPanel(raceNo) {
       ${displayBtnHtml}
       ${afterBtnHtml}
       <span style="margin-left:auto"></span>
+      <button type="button" class="yr-btn" onclick="renderYosoReport(${raceNo});setTimeout(()=>{document.getElementById('yoso-report-${raceNo}')?.scrollIntoView({behavior:'smooth',block:'start'})},50)" title="バイアス×脚質×コメント癖×持ち時計から予想レポートを生成（端末内計算・無料）">🧠 AI予想レポート</button>
       <button type="button" onclick="runYosoBacktest(${raceNo})" title="過去全レースで予想精度を検証（約10秒）" style="padding:4px 10px;background:#f3f4f6;color:#374151;border:1px solid #e2e8f0;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">📈 精度検証</button>
       <button type="button" id="yoso-fetch-all-btn-${raceNo}" onclick="fetchAllByNameForRace(${raceNo})" style="padding:4px 12px;background:#1a56a0;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;"><i class="fas fa-download"></i> データ自動取得</button>
       <span id="yoso-fetch-status-${raceNo}" style="font-size:11px;color:#6b7280;white-space:nowrap;"></span>
@@ -15232,6 +15464,7 @@ function renderPredictionPanel(raceNo) {
     ${buildJockeyChangeDiag(raceNo)}
     <div style="overflow-x:auto;">${tableHtml}</div>
     <div id="yoso-backtest-${raceNo}"></div>
+    <div id="yoso-report-${raceNo}"></div>
     <p style="font-size:10px;color:#374151;margin-top:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:6px 10px;line-height:1.7">
       <b>総合スコア ＝ SI ＋ 馬場 ＋ 距離 ＋ トレンド ＋ コンボ ＋ 脚質 ＋ その他</b>（この7つを足すと総合になります）。<br>
       <b>その他</b>＝表に列がない補正の合計：ローテ・昇降級・馬体重・上がり3F・着差・勝ち馬強さ・乗替・叩き・コーナー一貫性・前走楽勝・相対SI。<br>
