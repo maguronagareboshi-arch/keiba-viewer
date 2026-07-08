@@ -367,6 +367,9 @@ body.dark-mode .ana-bar-rate{color:#e2e8f0!important}
 body.dark-mode .ana-bar-count{color:#8fa3be!important}
 body.dark-mode .ana-chart-title{color:#7dd3fc!important}
 body.dark-mode .ana-empty{color:#8fa3be!important}
+body.dark-mode .ac-stat{background:#0d1826!important;border-color:#1e3048!important}
+body.dark-mode .ac-label{color:#8fa3be!important}
+body.dark-mode .ac-val{color:#7dd3fc!important}
 body.dark-mode .matrix-hot{background:#2a1a00!important;border-color:#b45309!important}
 body.dark-mode .matrix-hot .matrix-rate{color:#fcd34d!important}
 body.dark-mode .matrix-best{background:#04250f!important;border-color:#16a34a!important}
@@ -576,6 +579,11 @@ const KV_APP_CSS = [
       '.search-btns--col .btn{width:100%;justify-content:center}',
       // 管理者専用UI（非管理者=public-modeでは非表示）
       'body.public-mode .admin-only{display:none!important}',
+      // アクセスカウンター（管理者のみ）
+      '.ac-row{display:flex;gap:12px;flex-wrap:wrap}',
+      '.ac-stat{flex:1;min-width:88px;background:#f4f6fa;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}',
+      '.ac-label{font-size:10px;font-weight:700;color:#6b7280}',
+      '.ac-val{font-size:22px;font-weight:800;color:#1a56a0;font-family:monospace;line-height:1.25}',
       // 出馬表タブ：開催日リスト
       '.ddi-month{font-size:12px;font-weight:800;color:#6b7280;margin:12px 0 6px}',
       '.ddi-month:first-child{margin-top:0}',
@@ -1421,6 +1429,18 @@ const KV_APP_CSS = [
 <!-- ページ: 検索 -->
 <div id="page-search" class="page-section">
 
+  <!-- アクセスカウンター（管理者のみ） -->
+  <section class="search-card admin-only" id="access-counter-card">
+    <h2 class="section-title"><i class="fas fa-chart-line"></i> アクセス
+      <span style="margin-left:auto;font-size:10px;font-weight:400;color:#9ca3af">1日1カウント（端末ごと）</span>
+    </h2>
+    <div class="ac-row">
+      <div class="ac-stat"><div class="ac-label">累計</div><div class="ac-val" id="ac-total">—</div></div>
+      <div class="ac-stat"><div class="ac-label">今日</div><div class="ac-val" id="ac-today">—</div></div>
+      <div class="ac-stat"><div class="ac-label">昨日</div><div class="ac-val" id="ac-yesterday">—</div></div>
+    </div>
+  </section>
+
   <!-- 週間開催予定 -->
   <section class="search-card" id="weekly-schedule-card">
     <h2 class="section-title"><i class="fas fa-calendar-week"></i> 今週の開催予定（高知）
@@ -2179,6 +2199,37 @@ function toggleSimMode() {
   document.body.appendChild(ov);
 }
 
+// ── アクセスカウンター（1端末1日1カウント・表示は管理者のみ）─────────────
+function _acDayKey(d) { d = d || new Date(); return '' + d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0'); }
+/** 訪問を1回だけ加算（同一端末は1日1回）。集計はSupabaseの bump_stat 関数（匿名でも+1だけ可）。 */
+async function _bumpAccessCounter() {
+  if (typeof KV_IS_SIM !== 'undefined' && KV_IS_SIM) return;   // プレビューiframeでは数えない
+  const dk = _acDayKey();
+  if (!localStorage.getItem('kv_visit_' + dk)) {
+    localStorage.setItem('kv_visit_' + dk, '1');
+    const bump = k => fetch(SUPABASE_URL + '/rest/v1/rpc/bump_stat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY },
+      body: JSON.stringify({ k })
+    }).catch(() => {});
+    try { await Promise.all([bump('total'), bump('d_' + dk)]); } catch (e) {}
+  }
+  _renderAccessCounter();
+}
+/** カウンター表示を更新（管理者のみ・累計/今日/昨日）。 */
+async function _renderAccessCounter() {
+  const card = document.getElementById('access-counter-card');
+  if (!card || !isAdminMode()) return;
+  const dk = _acDayKey(), yk = _acDayKey(new Date(Date.now() - 86400000));
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/site_stats?select=key,n&key=in.(total,d_${dk},d_${yk})`, { headers: SUPABASE_HEADERS });
+    const rows = await res.json();
+    const map = {}; (Array.isArray(rows) ? rows : []).forEach(r => { map[r.key] = r.n; });
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = (v != null ? Number(v).toLocaleString('en-US') : '0'); };
+    set('ac-total', map['total']); set('ac-today', map['d_' + dk]); set('ac-yesterday', map['d_' + yk]);
+  } catch (e) { console.warn('[access-counter]', e); }
+}
+
 /** スマホプレビュー(iframe)内で、親から引き継いだ page / レース日 を復元する。
  *  IDB(ローカルDB)の読み込みは非同期なので、対象日のデータが揃うまで待ってから復元する。 */
 function _simRestoreState() {
@@ -2270,6 +2321,8 @@ document.addEventListener('DOMContentLoaded', () => {
   _setHeaderHVar();
   // sim内（プレビューiframe）では入れ子防止のためスマホ表示ボタンを隠す
   if (KV_IS_SIM) document.getElementById('sim-mode-btn')?.classList.add('hidden');
+  // アクセスカウンター：訪問を加算（1端末1日1回）＋管理者なら表示
+  try { _bumpAccessCounter(); } catch (e) {}
   // resizeイベントが飛ばない環境（エミュレーション・アプリ内ブラウザ等）でも
   // 折返しによる高さ変化を確実に拾う（ResizeObserver＋変化時のみ書き込む軽量ポーリング）
   if (window.ResizeObserver) {
@@ -12878,6 +12931,7 @@ function applyModeUI() {
   if (loginBtn)  loginBtn.classList.add('hidden');
   if (badge)  badge.classList.toggle('hidden', !isAdmin);      // 管理者のときだけバッジ表示
   if (logoutBtn) logoutBtn.classList.toggle('hidden', !isAdmin); // 管理者のときだけログアウト表示
+  if (isAdmin && typeof _renderAccessCounter === 'function') { try { _renderAccessCounter(); } catch (e) {} }
 }
 
 /** 管理者ログインの秘密の入口を仕込む：①URLに #admin ②ヘッダーのロゴを5回タップ。閲覧者には何も見えない。 */
