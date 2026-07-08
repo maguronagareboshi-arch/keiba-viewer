@@ -228,6 +228,8 @@ body.dark-mode .bench-item{background:#0d1826!important;border-color:#166534!imp
 body.dark-mode .bench-item-win{background:#04250f!important;border-color:#16a34a!important}
 body.dark-mode .bench-label{color:#8fa3be!important}
 body.dark-mode .bench-val{color:#86efac!important}
+body.dark-mode .bench-track-tab{background:#0d1826!important;color:#8fa3be!important}
+body.dark-mode .bench-track-tab.active{background:#1a56a0!important;border-color:#1a56a0!important;color:#fff!important}
 /* モーダル内の極薄ラベル(#9ca3af/#d1d5db等→暗すぎる#7386a0化)を読める明度に（R:ミドル / N日 等） */
 body.dark-mode .horse-modal [style*="color:#9ca3af"],body.dark-mode .horse-modal [style*="color:#d1d5db"],body.dark-mode .horse-modal [style*="color:#94a3b8"],body.dark-mode .horse-modal [style*="color:#64748b"],body.dark-mode .horse-modal [style*="color:#6b7280"]{color:#93a6c0!important}
 
@@ -1227,12 +1229,15 @@ const KV_APP_CSS = [
       '.lap-leg-item.lap-leg-dim{opacity:0.38}',
       /* ── 管理者モード ── */
       /* 非管理者時：入力・セレクト・ボタン（編集系）を無効化 */
-      'body.public-mode .pace-input{pointer-events:none;background:#f8fafc!important;color:#94a3b8!important;border-color:#e2e8f0!important;-webkit-appearance:none;appearance:none}',
-      'body.public-mode .pace-select{pointer-events:none;background:#f8fafc!important;color:#94a3b8!important;border-color:#e2e8f0!important}',
-      'body.public-mode .pos-select{pointer-events:none;background:#f8fafc!important;color:#94a3b8!important;border-color:#e2e8f0!important}',
-      'body.public-mode .lap-input{pointer-events:none;background:#f8fafc!important;color:#94a3b8!important;border-color:#e2e8f0!important}',
-      'body.public-mode .threef-input{pointer-events:none;background:#f8fafc!important;color:#94a3b8!important;border-color:#e2e8f0!important}',
-      'body.public-mode input[type=text].form-input:not(.url-input),body.public-mode input[type=number].form-input{pointer-events:none;background:#f8fafc!important;color:#94a3b8!important}',
+      'body.public-mode:not(.dark-mode) .pace-input{pointer-events:none;background:#f8fafc!important;color:#94a3b8!important;border-color:#e2e8f0!important;-webkit-appearance:none;appearance:none}',
+      'body.public-mode:not(.dark-mode) .pace-select{pointer-events:none;background:#f8fafc!important;color:#94a3b8!important;border-color:#e2e8f0!important}',
+      'body.public-mode:not(.dark-mode) .pos-select{pointer-events:none;background:#f8fafc!important;color:#94a3b8!important;border-color:#e2e8f0!important}',
+      'body.public-mode:not(.dark-mode) .lap-input{pointer-events:none;background:#f8fafc!important;color:#94a3b8!important;border-color:#e2e8f0!important}',
+      'body.public-mode:not(.dark-mode) .threef-input{pointer-events:none;background:#f8fafc!important;color:#94a3b8!important;border-color:#e2e8f0!important}',
+      'body.public-mode:not(.dark-mode) input[type=text].form-input:not(.url-input),body.public-mode:not(.dark-mode) input[type=number].form-input{pointer-events:none;background:#f8fafc!important;color:#94a3b8!important}',
+      /* ダークモード時の閲覧無効化：色はdark-modeのルールに任せ、無効化はopacityのみで表現 */
+      'body.public-mode.dark-mode .pace-input,body.public-mode.dark-mode .pace-select,body.public-mode.dark-mode .pos-select,body.public-mode.dark-mode .lap-input,body.public-mode.dark-mode .threef-input{pointer-events:none;opacity:.55}',
+      'body.public-mode.dark-mode input[type=text].form-input:not(.url-input),body.public-mode.dark-mode input[type=number].form-input{pointer-events:none;opacity:.55}',
       'body.public-mode .pace-btn,.public-mode .pace-btn-reset{pointer-events:none!important;opacity:.45!important}',
       // 閲覧者は「取得（表示のみ・書き込みなし）」は可・「保存/公式成績/コメント（書き込み）」は不可。
       // viewer-okを付けた取得系ボタンだけ無効化から除外する（B案・2026-07-04）
@@ -3931,12 +3936,6 @@ function renderRaceContent(raceNo) {
           <i class="fas fa-trophy" style="font-size:12px;opacity:.7;"></i>
           <span>ランキング</span>
         </button>
-        <button id="tab-btn-card-${raceNo}"
-                onclick="switchViewTab(${raceNo},'card')"
-                style="display:inline-flex;align-items:center;gap:6px;padding:0 18px;height:100%;background:transparent;border:none;border-bottom:3px solid transparent;color:#64748b;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .15s;">
-          <i class="fas fa-th-large" style="font-size:12px;opacity:.7;"></i>
-          <span>カード</span>
-        </button>
       </div>
       <!-- 右：コメント操作 — 絶対配置で右端に固定 -->
       <div id="deban-controls-${raceNo}"
@@ -3964,7 +3963,7 @@ function renderRaceContent(raceNo) {
             <div style="display:flex;justify-content:flex-end;gap:8px;padding:6px 8px 4px;">
               <button type="button" onclick="openCommentSheet(${raceNo})" class="btn btn-secondary btn-sm viewer-ok" title="出走馬全頭の最新コメント10件を一覧表示・PDF/画像で保存">💬 コメント一覧</button>
               <button type="button" id="odds-btn-${raceNo}" onclick="fetchLiveOddsBtn(${raceNo})" class="btn btn-secondary btn-sm viewer-ok" title="公式サイトから単勝オッズ・馬体重を取得（開催日はリアルタイム更新）">💹 オッズ取得</button>
-              <button type="button" id="deban-mode-btn-${raceNo}" onclick="toggleDebanMode(${raceNo})" class="btn btn-secondary btn-sm viewer-ok" title="レース前の出馬表と、結果・記録入力用の表を切り替え">📝 記録表示へ</button>
+              <button type="button" id="deban-mode-btn-${raceNo}" onclick="toggleDebanMode(${raceNo})" class="btn btn-secondary btn-sm admin-only" title="レース前の出馬表と、結果・記録入力用の表を切り替え">📝 記録表示へ</button>
             </div>
             <table class="deban-table" id="deban-table-${raceNo}">
               <thead><tr id="thead-row-${raceNo}">
@@ -4035,10 +4034,6 @@ function renderRaceContent(raceNo) {
       <div id="ranking-panel-${raceNo}">
         <div style="text-align:center;padding:24px;color:#9ca3af;font-size:13px;"><i class="fas fa-spinner fa-spin"></i> 読み込み中...</div>
       </div>
-    </div>
-    <!-- カードビュー -->
-    <div id="view-card-${raceNo}" style="display:none;">
-      <div class="horse-card-grid" id="card-grid-${raceNo}"></div>
     </div>`;
   section.appendChild(tSec);
   // 着順1位から表示（着順未設定馬は末尾に馬番順）
@@ -4719,17 +4714,15 @@ function switchViewTab(raceNo, view) {
   const abilityView = document.getElementById(`view-ability-${raceNo}`);
   const yosoView    = document.getElementById(`view-yoso-${raceNo}`);
   const rankingView = document.getElementById(`view-ranking-${raceNo}`);
-  const cardView    = document.getElementById(`view-card-${raceNo}`);
   const debanBtn    = document.getElementById(`tab-btn-deban-${raceNo}`);
   const abilityBtn  = document.getElementById(`tab-btn-ability-${raceNo}`);
   const yosoBtn     = document.getElementById(`tab-btn-yoso-${raceNo}`);
   const rankingBtn  = document.getElementById(`tab-btn-ranking-${raceNo}`);
-  const cardBtn     = document.getElementById(`tab-btn-card-${raceNo}`);
   const debanCtrl   = document.getElementById(`deban-controls-${raceNo}`);
   if (!debanView || !abilityView) return;
 
-  [debanView, abilityView, yosoView, rankingView, cardView].forEach(v => { if (v) v.style.display = 'none'; });
-  [debanBtn, abilityBtn, yosoBtn, rankingBtn, cardBtn].forEach(b => {
+  [debanView, abilityView, yosoView, rankingView].forEach(v => { if (v) v.style.display = 'none'; });
+  [debanBtn, abilityBtn, yosoBtn, rankingBtn].forEach(b => {
     if (b) { b.style.background='transparent'; b.style.borderBottom='3px solid transparent'; b.style.color='#64748b'; }
   });
   if (debanCtrl) debanCtrl.style.display = 'none';
@@ -4750,10 +4743,6 @@ function switchViewTab(raceNo, view) {
     if (rankingView) rankingView.style.display = '';
     if (rankingBtn) { rankingBtn.style.background='rgba(22,163,74,.08)'; rankingBtn.style.borderBottom='3px solid #16a34a'; rankingBtn.style.color='#16a34a'; }
     renderRankingPanel(raceNo);
-  } else if (view === 'card') {
-    if (cardView) cardView.style.display = '';
-    if (cardBtn) { cardBtn.style.background='rgba(14,116,144,.08)'; cardBtn.style.borderBottom='3px solid #0e7490'; cardBtn.style.color='#0e7490'; }
-    renderCardView(raceNo);
   }
 }
 
@@ -4792,74 +4781,6 @@ function updateRaceSummaryBar(raceNo) {
 // ============================================================
 // C: カードビュー
 // ============================================================
-function renderCardView(raceNo) {
-  const grid = document.getElementById(`card-grid-${raceNo}`);
-  if (!grid || grid.dataset.rendered) return;
-  grid.dataset.rendered = '1';
-  const data = allRacesData[raceNo];
-  if (!data) return;
-  const { horses, raceInfo } = data;
-  const dist = String(raceInfo.distance || '').replace(/[^\d]/g, '');
-  const wakuBgFn = w => { const m={1:'#f0f0f0',2:'#1e40af',3:'#dc2626',4:'#2563eb',5:'#eab308',6:'#16a34a',7:'#f97316',8:'#991b1b'}; return m[Math.min(Math.max(parseInt(w)||1,1),8)]||'#6b7280'; };
-  const wakuFgFn = w => { const n=parseInt(w)||1; return (n===1||n===5)?'#333':'#fff'; };
-  const RANK_BG  = ['#fed7aa','#fef3c7','#dcfce7','#dbeafe','#dbeafe'];
-  const RANK_FG  = ['#92400e','#78350f','#14532d','#1e40af','#1e40af'];
-  const RANK_BAR = ['#f97316','#eab308','#22c55e','#60a5fa','#60a5fa'];
-  const RANK_MRK = ['◎','○','▲','△','△'];
-
-  const horsesWithSI = horses.map(h => {
-    const hist = getHorseHistoryBefore(h.horseName, raceInfo.raceDate, raceNo);
-    const sis = hist.slice(0,5).map(r => {
-      const bias = getDayBiasForDateAndDist(r.babaCode, r.raceDate, r.distance);
-      const avgF3 = getRaceAvgF3(r.babaCode, r.raceDate, r.raceNo);
-      const pAdj = calcPaceAdj(parseFloat(r.first3f), avgF3);
-      return calcSpeedIndex(r.time, r.distance, r.raceClass, r.trackCond, bias, r.kinryo, pAdj);
-    }).filter(v => v != null);
-    const avgSI = sis.length ? sis.reduce((a,b)=>a+b,0)/sis.length : null;
-    const maxSI = sis.length ? Math.max(...sis) : null;
-    return { ...h, avgSI, maxSI };
-  }).sort((a,b) => (b.avgSI??-1) - (a.avgSI??-1));
-
-  const MARK_COL = ['#dc2626','#2563eb','#d97706','#9ca3af','#9ca3af'];
-  grid.innerHTML = horsesWithSI.map((h, idx) => {
-    const hasVal = h.avgSI != null;
-    const bg     = hasVal ? (RANK_BG[idx]  || '#f4f6fa') : '#f4f6fa';
-    const fg     = hasVal ? (RANK_FG[idx]  || '#374151') : '#9ca3af';
-    const barCol = hasVal ? (RANK_BAR[idx] || '#d1d5db') : '#d1d5db';
-    const mark   = hasVal ? (RANK_MRK[idx] || '')        : '';
-    const barPct = hasVal ? Math.min(100, Math.max(0, ((h.avgSI - 20) / 50) * 100)).toFixed(0) : 0;
-    const wku    = parseInt(h.wakuBan)||Math.ceil((parseInt(h.umaBan)||1)/2);
-    const chaku  = parseInt(h.chakujun);
-    const rankClass = idx < 4 ? `hc-r${idx+1}` : '';
-    const paceClass = h.paceType==='ハイ'?'hc-pace-high':h.paceType==='スロー'?'hc-pace-slow':h.paceType==='ミドル'?'hc-pace-mid':'';
-    const chakuHtml = !isNaN(chaku)&&chaku>0
-      ? `<span style="font-size:10px;font-weight:800;padding:1px 5px;border-radius:10px;background:${chaku===1?'#fef3c7':chaku===2?'#e2e8f0':chaku===3?'#fde8d8':'#f4f6fa'};color:${chaku===1?'#92400e':chaku===2?'#374151':chaku===3?'#c2410c':'#6b7280'};">${chaku}着</span>` : '';
-    return `<div class="horse-card ${rankClass}">
-      <div class="horse-card-top">
-        <span class="horse-card-waku" style="background:${wakuBgFn(wku)};color:${wakuFgFn(wku)};">${h.umaBan||'?'}</span>
-        ${mark?`<span class="horse-card-mark" style="color:${MARK_COL[idx]||'#9ca3af'}">${mark}</span>`:''}
-        <span class="horse-card-name" title="${h.horseName}">${h.horseName}</span>
-      </div>
-      <div class="horse-card-badges">
-        ${chakuHtml}
-        ${h.ninki?`<span class="horse-card-ninki">${h.ninki}人気</span>`:''}
-        ${paceClass?`<span class="hc-pace ${paceClass}">${h.paceType}</span>`:''}
-      </div>
-      <div class="horse-card-si" style="background:${bg};color:${fg};">${hasVal?h.avgSI.toFixed(1):'—'}${mark?`<span class="horse-card-si-mark">${mark}</span>`:''}</div>
-      <div class="horse-card-bar-wrap"><div class="horse-card-bar-fill" style="width:${barPct}%;background:${barCol};"></div></div>
-      <div class="horse-card-stats">
-        <div class="horse-card-stat"><span class="horse-card-stat-label">前半3F</span><span class="horse-card-stat-val">${h.first3f||'—'}</span></div>
-        <div class="horse-card-stat"><span class="horse-card-stat-label">上がり</span><span class="horse-card-stat-val">${h.agari3f||'—'}</span></div>
-        <div class="horse-card-stat"><span class="horse-card-stat-label">最高SI</span><span class="horse-card-stat-val">${h.maxSI!=null?h.maxSI.toFixed(1):'—'}</span></div>
-      </div>
-      <div class="horse-card-footer">
-        <span>${(h.jockey||'').slice(0,6)}</span>
-        ${h.kinryo?`<span class="hc-kinryo">${h.kinryo}kg</span>`:''}
-      </div>
-    </div>`;
-  }).join('');
-}
-
 // ============================================================
 // F: 分割パネル（出馬表右側の指数ランキング）
 // ============================================================
@@ -15528,7 +15449,7 @@ function renderPredictionPanel(raceNo) {
   // 🧠 学習重み適用中の表示（表示のみ・重みが未保存なら何も出さない＝従来式）
   const _mlWNote = getMlLiveWeights();
   const mlNote = _mlWNote
-    ? `<div style="margin-bottom:8px;font-size:10px;color:#9ca3af">🧠 学習重み適用中（${_mlWNote.races}R学習・${(_mlWNote.trainedAt || '').slice(0, 10)}）— 精度検証の二段基準クリア済み。補正項を学習済み実効倍率で合成しています。</div>`
+    ? `<div class="admin-only" style="margin-bottom:8px;font-size:10px;color:#9ca3af">🧠 学習重み適用中（${_mlWNote.races}R学習・${(_mlWNote.trainedAt || '').slice(0, 10)}）— 精度検証の二段基準クリア済み。補正項を学習済み実効倍率で合成しています。</div>`
     : '';
 
   // ── 🎯 このレースの狙い目カード（◎/中穴妙味/穴/危険を1枚に束ねた見どころ）──
@@ -15571,9 +15492,9 @@ function renderPredictionPanel(raceNo) {
       ${afterBtnHtml}
       <span style="margin-left:auto"></span>
       <button type="button" class="yr-btn" onclick="renderYosoReport(${raceNo});setTimeout(()=>{document.getElementById('yoso-report-${raceNo}')?.scrollIntoView({behavior:'smooth',block:'start'})},50)" title="バイアス×脚質×コメント癖×持ち時計から予想レポートを生成（端末内計算・無料）">🧠 AI予想レポート</button>
-      <button type="button" onclick="runYosoBacktest(${raceNo})" title="過去全レースで予想精度を検証（約10秒）" style="padding:4px 10px;background:#f3f4f6;color:#374151;border:1px solid #e2e8f0;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">📈 精度検証</button>
-      <button type="button" id="yoso-fetch-all-btn-${raceNo}" onclick="fetchAllByNameForRace(${raceNo})" style="padding:4px 12px;background:#1a56a0;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;"><i class="fas fa-download"></i> データ自動取得</button>
-      <span id="yoso-fetch-status-${raceNo}" style="font-size:11px;color:#6b7280;white-space:nowrap;"></span>
+      <button type="button" class="admin-only" onclick="runYosoBacktest(${raceNo})" title="過去全レースで予想精度を検証（約10秒）" style="padding:4px 10px;background:#f3f4f6;color:#374151;border:1px solid #e2e8f0;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">📈 精度検証</button>
+      <button type="button" id="yoso-fetch-all-btn-${raceNo}" class="admin-only" onclick="fetchAllByNameForRace(${raceNo})" style="padding:4px 12px;background:#1a56a0;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;"><i class="fas fa-download"></i> データ自動取得</button>
+      <span id="yoso-fetch-status-${raceNo}" class="admin-only" style="font-size:11px;color:#6b7280;white-space:nowrap;"></span>
     </div>
     ${pickSummary}
     ${mlNote}
