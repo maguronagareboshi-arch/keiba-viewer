@@ -142,9 +142,10 @@ td.best { background: var(--hl-best) !important; font-weight: bold; }
 .bias-front { color: var(--bias-front); font-weight: bold; }
 .bias-back { color: var(--bias-back); font-weight: bold; }
 .kyaku { display: inline-block; font-size: 10px; padding: 0 4px; border-radius: 3px; background: var(--chip-bg); color: var(--sub); }
-.triptag { display: inline-block; font-size: 10px; font-weight: 700; padding: 0 4px; border-radius: 3px; margin-left: 2px; line-height: 1.6; cursor: help; }
+.triptag { display: inline-block; font-size: 10px; font-weight: 700; padding: 0 4px; border-radius: 3px; margin-left: 2px; line-height: 1.6; cursor: pointer; }
 .tg-gyaku { background: rgba(204,138,46,0.16); color: #cc8a2e; }
 .tg-megumi { background: rgba(106,143,208,0.15); color: #6a8fd0; }
+.tippop { position: absolute; z-index: 1000; max-width: 240px; background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.5; box-shadow: 0 4px 16px rgba(0,0,0,0.28); }
 h3.sec { font-size: 14px; margin: 16px 0 6px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
@@ -673,7 +674,7 @@ function seisekiHtml(data, aiMark) {
       ${rows}
     </table>
   </div>
-  <div class="legend"><span class="sw f"></span> 前半3F上位3頭　<span class="sw a"></span> 上り3F上位3頭</div></div>`;
+  <div class="legend"><span class="sw f"></span> 前半3F上位3頭　<span class="sw a"></span> 上り3F上位3頭<br>${TRIP_LEGEND}</div></div>`;
 }
 
 // ---- 出馬表サブビュー（keibabook風＋能力表＋調教） ----
@@ -685,9 +686,23 @@ function tripTag(date, c4) {
   if (bias == null || lane == null) return '';
   const tf = bias * (lane / 2);
   const dir = bias > 0 ? '外伸び' : '内伸び';
-  if (tf <= -0.06) return ` <span class="triptag tg-gyaku" title="この日は${dir}傾向。${c4}を通り不利な巡り＝力を出し切れず過小評価かも（次走で見直せる）">逆</span>`;
-  if (tf >= 0.06) return ` <span class="triptag tg-megumi" title="この日は${dir}傾向。${c4}を通り恵まれた巡り＝実力以上に見えているかも">恵</span>`;
+  if (tf <= -0.06) return ` <span class="triptag tg-gyaku" data-tip="この日は${dir}傾向。${c4}を通り不利な巡り＝力を出し切れず過小評価かも（次走で見直せる）">逆</span>`;
+  if (tf >= 0.06) return ` <span class="triptag tg-megumi" data-tip="この日は${dir}傾向。${c4}を通り恵まれた巡り＝実力以上に見えているかも">恵</span>`;
   return '';
+}
+// 逆/恵バッジの凡例（常時表示・スマホ対応）
+const TRIP_LEGEND = '<span class="triptag tg-gyaku">逆</span> その日の馬場と逆のレーンで不利＝過小評価かも（次走見直し）　<span class="triptag tg-megumi">恵</span> 有利なレーンで恵まれ＝次走は割引。バッジをタップで詳細。';
+
+// バッジをタップ→説明ポップアップ（title はスマホで出ないため）
+function showTripPop(el) {
+  let pop = document.getElementById('tripPop');
+  if (!pop) { pop = document.createElement('div'); pop.id = 'tripPop'; pop.className = 'tippop'; pop.hidden = true; document.body.appendChild(pop); }
+  pop.textContent = el.getAttribute('data-tip') || '';
+  pop.hidden = false;
+  const r = el.getBoundingClientRect();
+  const w = 240;
+  pop.style.left = Math.max(8, Math.min(window.scrollX + window.innerWidth - w - 8, window.scrollX + r.left - w / 2 + r.width / 2)) + 'px';
+  pop.style.top = (window.scrollY + r.bottom + 6) + 'px';
 }
 
 function pastRunHtml(run) {
@@ -814,7 +829,7 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku) {
       ${rows}
     </table>
   </div>
-  <div class="legend"><span class="sw b"></span> 指数上位3頭（走破50%＋テン25%＋上がり25%、直近5走平均）　<span class="sw f"></span> テン偏差トップ（直近5走最良）　<span class="sw a"></span> 調教偏差トップ（直近追切の坂路3F最速を全期間分布で換算・50が平均）<br>◎の下のバッジ＝AI信頼度（予測1位と2位のスコア差・過去4年CV検証済）：<span class="badge conf-S">鉄板</span>複勝81%　<span class="badge conf-A">有力</span>73%　<span class="badge conf-B">標準</span>65%　<span class="badge conf-C">波乱</span>62%</div></div>`;
+  <div class="legend"><span class="sw b"></span> 指数上位3頭（走破50%＋テン25%＋上がり25%、直近5走平均）　<span class="sw f"></span> テン偏差トップ（直近5走最良）　<span class="sw a"></span> 調教偏差トップ（直近追切の坂路3F最速を全期間分布で換算・50が平均）<br>◎の下のバッジ＝AI信頼度（予測1位と2位のスコア差・過去4年CV検証済）：<span class="badge conf-S">鉄板</span>複勝81%　<span class="badge conf-A">有力</span>73%　<span class="badge conf-B">標準</span>65%　<span class="badge conf-C">波乱</span>62%<br>近走の${TRIP_LEGEND}</div></div>`;
 }
 
 // ---- 予想サブビュー（A3: 自動印＋根拠＋妙味ゾーン） ----
@@ -1758,6 +1773,7 @@ function renderHorseModal(results, cyokyo) {
       <tr><th>日付</th><th>場R</th><th>馬齢</th><th>クラス</th><th>距離</th><th>馬場</th><th>着</th><th>騎手</th><th>タイム</th><th>前3F</th><th>上3F</th><th>通過</th><th>4角</th><th>人気</th><th>単勝</th><th>馬体重</th></tr>
       ${resRows || '<tr><td colspan="16">成績なし</td></tr>'}
     </table></div>
+    <div class="legend">4角の${TRIP_LEGEND}</div>
     ${bdHtml}
     <h3 class="sec">調教履歴（新しい順）</h3>
     <div class="note">${bestLine}</div>
@@ -1865,6 +1881,15 @@ async function init() {
   document.addEventListener('click', (e) => {
     const p = $('oddsFlowPop');
     if (p && !p.hidden && !e.target.closest('[data-live-odds]') && !e.target.closest('#oddsFlowPop')) p.hidden = true;
+  });
+  // 逆/恵バッジ: タップで説明ポップアップ（キャプチャ段階＝行の展開より先に処理）
+  document.addEventListener('click', (e) => {
+    const tag = e.target.closest('.triptag');
+    if (tag) { e.stopPropagation(); e.preventDefault(); showTripPop(tag); }
+  }, true);
+  document.addEventListener('click', (e) => {
+    const tp = document.getElementById('tripPop');
+    if (tp && !tp.hidden && !e.target.closest('.triptag')) tp.hidden = true;
   });
   $('horseModalClose').addEventListener('click', () => { $('horseModal').hidden = true; });
   $('horseModal').addEventListener('click', (e) => {
