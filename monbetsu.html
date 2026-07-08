@@ -146,6 +146,11 @@ td.best { background: var(--hl-best) !important; font-weight: bold; }
 .tg-gyaku { background: rgba(204,138,46,0.16); color: #cc8a2e; }
 .tg-megumi { background: rgba(106,143,208,0.15); color: #6a8fd0; }
 .tippop { position: absolute; z-index: 1000; max-width: 240px; background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.5; box-shadow: 0 4px 16px rgba(0,0,0,0.28); }
+.eqp { display: inline-block; font-size: 9px; font-weight: 700; padding: 0 3px; border-radius: 3px; margin-left: 2px; line-height: 1.5; cursor: pointer; }
+.eq-bink { background: rgba(220,80,80,0.16); color: #d05050; }
+.eq-cheek { background: rgba(120,170,90,0.16); color: #6a9f4a; }
+.eq-shadow { background: rgba(150,120,200,0.16); color: #8a6ac0; }
+.eq-first { background: #d84040; color: #fff; }
 h3.sec { font-size: 14px; margin: 16px 0 6px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
@@ -267,7 +272,7 @@ const providers = {
     async loadHistory(horseIds) {
       if (!horseIds.length) return {};
       const idlist = horseIds.map(encodeURIComponent).join(',');
-      const rows = await sbGet(`chihou_results?horse_id=in.(${idlist})&select=horse_id,finish,pop,first3f,last3f,time_sec,kinryo,sex_age,passing,corner4_pos,comment,time_str,body_weight,jockey,race_id,chihou_races(race_date,distance_m,going,pace,klass)&order=race_id.desc&limit=2000`);
+      const rows = await sbGet(`chihou_results?horse_id=in.(${idlist})&select=horse_id,umaban,finish,pop,first3f,last3f,time_sec,kinryo,sex_age,passing,corner4_pos,comment,time_str,body_weight,jockey,race_id,chihou_races(race_date,distance_m,going,pace,klass,soubi:extra->>馬装具)&order=race_id.desc&limit=2000`);
       const map = {};
       for (const r of rows) {
         const ra = r.chihou_races || {};
@@ -277,9 +282,13 @@ const providers = {
           f3: r.first3f, l3: r.last3f, tsec: r.time_sec, kin: r.kinryo,
           kyaku: kyakuFromPassing(r.passing), passing: r.passing, c4: r.corner4_pos,
           comment: r.comment, time: r.time_str, weight: r.body_weight, jockey: r.jockey,
+          equip: equipOfRun(ra.soubi, r.umaban),
         });
       }
-      for (const k in map) map[k].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      for (const k in map) {
+        map[k].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        markFirstBlinker(map[k], (run) => run.equip);
+      }
       return map;
     },
     async loadStats() {
@@ -638,6 +647,7 @@ function seisekiHtml(data, aiMark) {
   };
   const f3rank = rank('first3f');
   const a3rank = rank('last3f');
+  const raceEquip = parseEquip((race.extra || {})['馬装具'] || '');   // このレースの装備（発走後に反映）
   const rows = results.map((r) => {
     const fin = r.finish != null ? r.finish : esc(r.finish_note || '-');
     const finCls = r.finish >= 1 && r.finish <= 3 ? `fin${r.finish}` : '';
@@ -646,7 +656,7 @@ function seisekiHtml(data, aiMark) {
       <td class="${finCls}">${fin}</td>
       <td><span class="waku w${r.waku || 1}">${r.waku ?? ''}</span></td>
       <td>${r.umaban ?? ''}</td>
-      <td class="l stickyname"><a class="horse-link" ${r.horse_id ? `data-hid="${esc(r.horse_id)}"` : `data-horse="${esc(r.horse_name)}"`}>${esc(r.horse_name)}</a></td>
+      <td class="l stickyname"><a class="horse-link" ${r.horse_id ? `data-hid="${esc(r.horse_id)}"` : `data-horse="${esc(r.horse_name)}"`}>${esc(r.horse_name)}</a>${equipBadges(raceEquip[r.umaban])}</td>
       <td>${kyaku ? `<span class="kyaku">${kyaku}</span>` : ''}</td>
       <td>${esc(r.sex_age)}</td>
       <td class="num">${r.kinryo ?? ''}</td>
@@ -705,6 +715,43 @@ function showTripPop(el) {
   pop.style.top = (window.scrollY + r.bottom + 6) + 'px';
 }
 
+// ---- 馬装具（ブリンカー/チーク/シャドーロール）＋初ブリンカー ----
+const EQUIP_MAP = { 'ブリンカー': 'ブ', 'チークＰ': 'チ', 'シャドーロール': 'シ' };
+const EQUIP_NAME = { 'ブ': 'ブリンカー', 'チ': 'チークピーシズ', 'シ': 'シャドーロール' };
+// 馬装具テキスト「(2)(9)ブリンカー着用 (2)シャドーロール着用」→ {umaban:[コード]}
+function parseEquip(soubi) {
+  const out = {};
+  if (!soubi) return out;
+  const re = /((?:\(\d+\))+)(ブリンカー|チークＰ|シャドーロール)/g;
+  let m;
+  while ((m = re.exec(soubi))) {
+    const code = EQUIP_MAP[m[2]];
+    let nm; const nre = /\((\d+)\)/g;
+    while ((nm = nre.exec(m[1]))) (out[+nm[1]] = out[+nm[1]] || []).push(code);
+  }
+  return out;
+}
+const equipOfRun = (soubi, umaban) => (parseEquip(soubi)[umaban]) || [];
+// runs(新しい順)に初ブリンカーを付与。以前の走があり、それまでブリンカー無し→初。
+function markFirstBlinker(runs, getEquip) {
+  let seen = false;
+  for (let i = runs.length - 1; i >= 0; i--) {   // 古い→新しい
+    const hasB = getEquip(runs[i]).includes('ブ');
+    if (hasB && !seen && i < runs.length - 1) runs[i]._binkFirst = true;
+    if (hasB) seen = true;
+  }
+}
+// 装備バッジHTML。binkFirst=true でブリンカーを「初ブ」強調に。
+function equipBadges(codes, binkFirst) {
+  if (!codes || !codes.length) return '';
+  return codes.map((c) => {
+    if (c === 'ブ' && binkFirst) return ` <span class="eqp eq-first" data-tip="初ブリンカー＝この馬が初めてブリンカーを着用。一変（急変）に注意">初ブ</span>`;
+    const cls = c === 'ブ' ? 'eq-bink' : c === 'チ' ? 'eq-cheek' : 'eq-shadow';
+    return ` <span class="eqp ${cls}" data-tip="${EQUIP_NAME[c]}着用">${c}</span>`;
+  }).join('');
+}
+const EQUIP_LEGEND = '装備：<span class="eqp eq-bink">ブ</span>ブリンカー <span class="eqp eq-cheek">チ</span>チーク <span class="eqp eq-shadow">シ</span>シャドーロール　<span class="eqp eq-first">初ブ</span>=ブリンカー初着用（一変注意・データ内で初）。タップで詳細。';
+
 function pastRunHtml(run) {
   if (!run) return '';
   const fin = run.fin != null ? `${run.fin}着` : '除/取';
@@ -712,7 +759,8 @@ function pastRunHtml(run) {
     (run.f3 != null ? ` テン${run.f3.toFixed(1)}` : '') +
     (run.l3 != null ? ` 上${run.l3.toFixed(1)}` : '') +
     (run.kyaku ? ` <span class="kyaku">${run.kyaku}</span>` : '') +
-    tripTag(run.date, run.c4);
+    tripTag(run.date, run.c4) +
+    equipBadges(run.equip, run._binkFirst);
 }
 function workHtml(w) {
   if (!w) return '';
@@ -829,7 +877,7 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku) {
       ${rows}
     </table>
   </div>
-  <div class="legend"><span class="sw b"></span> 指数上位3頭（走破50%＋テン25%＋上がり25%、直近5走平均）　<span class="sw f"></span> テン偏差トップ（直近5走最良）　<span class="sw a"></span> 調教偏差トップ（直近追切の坂路3F最速を全期間分布で換算・50が平均）<br>◎の下のバッジ＝AI信頼度（予測1位と2位のスコア差・過去4年CV検証済）：<span class="badge conf-S">鉄板</span>複勝81%　<span class="badge conf-A">有力</span>73%　<span class="badge conf-B">標準</span>65%　<span class="badge conf-C">波乱</span>62%<br>近走の${TRIP_LEGEND}</div></div>`;
+  <div class="legend"><span class="sw b"></span> 指数上位3頭（走破50%＋テン25%＋上がり25%、直近5走平均）　<span class="sw f"></span> テン偏差トップ（直近5走最良）　<span class="sw a"></span> 調教偏差トップ（直近追切の坂路3F最速を全期間分布で換算・50が平均）<br>◎の下のバッジ＝AI信頼度（予測1位と2位のスコア差・過去4年CV検証済）：<span class="badge conf-S">鉄板</span>複勝81%　<span class="badge conf-A">有力</span>73%　<span class="badge conf-B">標準</span>65%　<span class="badge conf-C">波乱</span>62%<br>近走の${TRIP_LEGEND}<br>${EQUIP_LEGEND}</div></div>`;
 }
 
 // ---- 予想サブビュー（A3: 自動印＋根拠＋妙味ゾーン） ----
@@ -1656,7 +1704,7 @@ async function openHorseModal(nameOrId, byId, displayName) {
   $('horseModalTitle').textContent = (displayName || (byId ? '' : nameOrId) || '') + ' の成績・調教';
   $('horseModalBody').innerHTML = '<div class="empty">読み込み中…</div>';
   try {
-    const sel = 'horse_name,finish,pop,win_odds,time_str,first3f,last3f,passing,corner4_pos,comment,sex_age,jockey,body_weight,weight_diff,race_id,chihou_races(race_date,track,race_no,klass,race_name,distance_m,going)';
+    const sel = 'horse_name,umaban,finish,pop,win_odds,time_str,first3f,last3f,passing,corner4_pos,comment,sex_age,jockey,body_weight,weight_diff,race_id,chihou_races(race_date,track,race_no,klass,race_name,distance_m,going,soubi:extra->>馬装具)';
     const filt = byId ? `horse_id=eq.${encodeURIComponent(nameOrId)}` : `horse_name=eq.${encodeURIComponent(nameOrId)}`;
     const results = await withTimeout(sbGet(`chihou_results?${filt}&select=${sel}&order=race_id.desc&limit=40`), 10000);
     const name = displayName || (results[0] && results[0].horse_name) || (byId ? null : nameOrId);
@@ -1671,6 +1719,7 @@ async function openHorseModal(nameOrId, byId, displayName) {
 }
 
 function renderHorseModal(results, cyokyo) {
+  markFirstBlinker(results, (r) => equipOfRun((r.chihou_races || {}).soubi, r.umaban));   // 初ブリンカー判定
   const ymd = (d) => (d ? d.slice(2).replace(/-/g, '/') : '');   // 26/06/25（年度も表示）
   // クラス＝race_name(条件)から級を抽出（C4-2組/オープン/未勝利…）＋特別名(klassがサラ以外の時)
   const classLabel = (ra) => {
@@ -1685,6 +1734,7 @@ function renderHorseModal(results, cyokyo) {
     return `<tr class="${rest ? 'res-rest' : ''}"${rest ? ' hidden' : ''}>
       <td>${ymd(ra.race_date)}</td><td>${esc(ra.track)}${ra.race_no ?? ''}R</td>
       <td>${esc(r.sex_age || '')}</td><td class="l">${classLabel(ra)}</td>
+      <td class="l">${equipBadges(equipOfRun(ra.soubi, r.umaban), r._binkFirst) || '<span class="sub">-</span>'}</td>
       <td>${ra.distance_m ?? ''}m</td><td>${esc(ra.going || '')}</td>
       <td class="${finCls}">${r.finish != null ? r.finish + '着' : '-'}</td>
       <td class="l">${esc(r.jockey || '')}</td><td class="num">${esc(r.time_str || '')}</td>
@@ -1698,7 +1748,7 @@ function renderHorseModal(results, cyokyo) {
   };
   const resRows = results.slice(0, 10).map((r) => resRowHtml(r, false)).join('')
     + results.slice(10).map((r) => resRowHtml(r, true)).join('')
-    + (results.length > 10 ? `<tr><td colspan="16" style="text-align:center;padding:6px"><button class="foldbtn" onclick="const rs=this.closest('table').querySelectorAll('.res-rest');const show=rs[0].hidden;rs.forEach(e=>e.hidden=!show);this.textContent=show?'▲ 閉じる':'▼ 残り${results.length - 10}件を表示'">▼ 残り${results.length - 10}件を表示</button></td></tr>` : '');
+    + (results.length > 10 ? `<tr><td colspan="17" style="text-align:center;padding:6px"><button class="foldbtn" onclick="const rs=this.closest('table').querySelectorAll('.res-rest');const show=rs[0].hidden;rs.forEach(e=>e.hidden=!show);this.textContent=show?'▲ 閉じる':'▼ 残り${results.length - 10}件を表示'">▼ 残り${results.length - 10}件を表示</button></td></tr>` : '');
 
   // ---- 条件別成績（距離・馬場・時間帯=レース番号）着別度数と複勝率 ----
   const rr = results.filter((r) => r.finish != null && r.chihou_races);
@@ -1771,9 +1821,10 @@ function renderHorseModal(results, cyokyo) {
   $('horseModalBody').innerHTML = `
     <h3 class="sec">成績（新しい順）</h3>
     <div class="tablewrap"><table>
-      <tr><th>日付</th><th>場R</th><th>馬齢</th><th>クラス</th><th>距離</th><th>馬場</th><th>着</th><th>騎手</th><th>タイム</th><th>前3F</th><th>上3F</th><th>通過</th><th>4角</th><th>人気</th><th>単勝</th><th>馬体重</th></tr>
-      ${resRows || '<tr><td colspan="16">成績なし</td></tr>'}
+      <tr><th>日付</th><th>場R</th><th>馬齢</th><th>クラス</th><th>装備</th><th>距離</th><th>馬場</th><th>着</th><th>騎手</th><th>タイム</th><th>前3F</th><th>上3F</th><th>通過</th><th>4角</th><th>人気</th><th>単勝</th><th>馬体重</th></tr>
+      ${resRows || '<tr><td colspan="17">成績なし</td></tr>'}
     </table></div>
+    <div class="legend">${EQUIP_LEGEND}</div>
     <div class="legend">4角の${TRIP_LEGEND}</div>
     ${bdHtml}
     <h3 class="sec">調教履歴（新しい順）</h3>
@@ -1883,14 +1934,14 @@ async function init() {
     const p = $('oddsFlowPop');
     if (p && !p.hidden && !e.target.closest('[data-live-odds]') && !e.target.closest('#oddsFlowPop')) p.hidden = true;
   });
-  // 逆/恵バッジ: タップで説明ポップアップ（キャプチャ段階＝行の展開より先に処理）
+  // 逆/恵バッジ・装備バッジ: タップで説明ポップアップ（キャプチャ段階＝行の展開より先に処理）
   document.addEventListener('click', (e) => {
-    const tag = e.target.closest('.triptag');
-    if (tag) { e.stopPropagation(); e.preventDefault(); showTripPop(tag); }
+    const tag = e.target.closest('.triptag, .eqp');
+    if (tag && tag.getAttribute('data-tip')) { e.stopPropagation(); e.preventDefault(); showTripPop(tag); }
   }, true);
   document.addEventListener('click', (e) => {
     const tp = document.getElementById('tripPop');
-    if (tp && !tp.hidden && !e.target.closest('.triptag')) tp.hidden = true;
+    if (tp && !tp.hidden && !e.target.closest('.triptag, .eqp')) tp.hidden = true;
   });
   $('horseModalClose').addEventListener('click', () => { $('horseModal').hidden = true; });
   $('horseModal').addEventListener('click', (e) => {
