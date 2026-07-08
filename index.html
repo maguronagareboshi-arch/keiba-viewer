@@ -2149,6 +2149,22 @@ const KV_IS_SIM = new URLSearchParams(location.search).has('sim');
 function toggleSimMode() {
   const existing = document.getElementById('kv-sim-overlay');
   if (existing) { existing.remove(); return; }
+  // 現在のページ（と出馬表なら読み込み中のレース日・レース番号）をプレビューへ引き継ぐ。
+  // これがないと毎回トップの「検索」に戻ってしまうため。
+  const params = new URLSearchParams({ sim: '1' });
+  const page = (typeof _currentPage === 'string') ? _currentPage : 'search';
+  params.set('page', page);
+  if (page === 'deban' && typeof allRacesData === 'object') {
+    const anyRace = Object.values(allRacesData).find(d => d && d.raceInfo && d.raceInfo.raceDate);
+    if (anyRace) {
+      params.set('date', anyRace.raceInfo.raceDate);
+      params.set('baba', (typeof currentBaba === 'string' ? currentBaba : '31'));
+      if (currentRaceNo != null) params.set('r', currentRaceNo);
+    }
+  } else if (page === 'bunseki') {
+    const d = document.getElementById('ana-date-select')?.value;
+    if (d) params.set('anadate', d);
+  }
   const ov = document.createElement('div');
   ov.id = 'kv-sim-overlay';
   ov.innerHTML = `
@@ -2157,10 +2173,45 @@ function toggleSimMode() {
         <span>📱 スマホ表示プレビュー（390px幅）</span>
         <button type="button" class="kv-sim-close" onclick="toggleSimMode()">✕ 閉じる</button>
       </div>
-      <iframe class="kv-sim-iframe" src="${location.pathname}?sim=1"></iframe>
+      <iframe class="kv-sim-iframe" src="${location.pathname}?${params.toString()}"></iframe>
     </div>`;
   ov.addEventListener('click', e => { if (e.target === ov) toggleSimMode(); });
   document.body.appendChild(ov);
+}
+
+/** スマホプレビュー(iframe)内で、親から引き継いだ page / レース日 を復元する。
+ *  IDB(ローカルDB)の読み込みは非同期なので、対象日のデータが揃うまで待ってから復元する。 */
+function _simRestoreState() {
+  const p = new URLSearchParams(location.search);
+  const page = p.get('page');
+  if (!page || page === 'search') return;
+  try { switchPage(page); } catch (e) {}
+  if (page === 'deban' && p.get('date')) {
+    const date = p.get('date'), baba = p.get('baba') || '31', r = parseInt(p.get('r'));
+    const prefix = `race_${baba}_${date}_`;
+    const tryRestore = (attempt) => {
+      const ls = (typeof lsRead === 'function') ? lsRead() : {};
+      const hasDay = Object.keys(ls).some(k => k.indexOf(prefix) === 0);
+      if (!hasDay) { if (attempt < 40) setTimeout(() => tryRestore(attempt + 1), 150); return; }
+      try {
+        restoreFromSaved(date, baba);
+        if (!isNaN(r) && typeof switchRaceTab === 'function') setTimeout(() => { try { switchRaceTab(r); } catch (e) {} }, 150);
+      } catch (e) { console.warn('[sim restore deban]', e); }
+    };
+    tryRestore(0);
+  } else if (page === 'bunseki') {
+    const ad = p.get('anadate');
+    if (ad) {
+      const tryAna = (attempt) => {
+        const sel = document.getElementById('ana-date-select');
+        const has = sel && [...sel.options].some(o => o.value === ad);
+        if (!has) { if (attempt < 40) setTimeout(() => tryAna(attempt + 1), 150); return; }
+        sel.value = ad;
+        if (typeof renderAnalysis === 'function') { try { renderAnalysis(); } catch (e) {} }
+      };
+      tryAna(0);
+    }
+  }
 }
 
 function _updateDarkModeBtn(isDark) {
@@ -6014,6 +6065,7 @@ async function initDB() {
   if (KV_IS_SIM) {
     loadSavedData();
     if (typeof initAnalysisDateSelect === 'function') initAnalysisDateSelect();
+    setTimeout(() => { try { _simRestoreState(); } catch (e) {} }, 0);
     return;
   }
 
