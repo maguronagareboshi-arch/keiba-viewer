@@ -1013,20 +1013,52 @@ function recordOdds(rid, live) {
     const arr = hist[um] = hist[um] || [];
     if (!arr.length || arr[arr.length - 1].o !== o) arr.push({ t: ts, o });   // 変化した時だけ点を追加
   }
+  saveOddsHist();   // リロードしても消えないよう都度保存
 }
 
-// Workerが記録済みの推移スナップショット（monbetsu_odds）を取り込む。
-// 画面を発走間際に開いても、朝→発走前の流れが最初から見える。未作成/未記録なら無害にスキップ。
+// ---- オッズ推移の永続化（リロードで消える問題の対策） ----
+// localStorage（このブラウザで見ていた分）＋ Supabase記録（5分おきの自動スナップショット）を
+// マージして復元する。日付が変わったら自動破棄。
+const ODDS_STORE_KEY = 'mb_odds_hist_v1';
+function saveOddsHist() {
+  try {
+    if (state.oddsDate) localStorage.setItem(ODDS_STORE_KEY, JSON.stringify({ d: state.oddsDate, h: state.oddsHist || {} }));
+  } catch (e) { /* 容量超過等は無視（表示は生きる） */ }
+}
+function loadOddsHist(rd) {
+  try {
+    const j = JSON.parse(localStorage.getItem(ODDS_STORE_KEY) || 'null');
+    if (j && j.d === rd && j.h) return j.h;
+  } catch (e) { /* 壊れていたら無視 */ }
+  return null;
+}
+// 時刻順マージ（'朝'は先頭扱い・同オッズの連続は1点に圧縮）
+function mergeOddsSeries(a, b) {
+  const keyT = (x) => (x.t === '朝' ? '00:00' : x.t);
+  const all = [...(a || []), ...(b || [])].sort((x, y) => (keyT(x) < keyT(y) ? -1 : keyT(x) > keyT(y) ? 1 : 0));
+  const out = [];
+  for (const p of all) {
+    const last = out[out.length - 1];
+    if (last && last.o === p.o) continue;
+    if (last && last.t === p.t && last.o === p.o) continue;
+    out.push(p);
+  }
+  return out;
+}
+
+// 記録済みスナップショット（monbetsu_odds・5分おき自動記録）を取り込む。
+// 発走間際に開いても・リロードしても、朝→現在の流れが復元される。未記録なら無害にスキップ。
 async function seedRecordedOdds(rd, raceNo, hist) {
   try {
     const rows = await sbGet(`monbetsu_odds?race_date=eq.${rd}&race_no=eq.${raceNo}&order=captured_at.asc&select=uma_ban,odds,captured_at`);
+    const srv = {};
     for (const r of rows || []) {
       if (r.odds == null) continue;
       const um = String(r.uma_ban), d = new Date(r.captured_at);
       const t = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-      const arr = hist[um] = hist[um] || [];
-      if (!arr.length || arr[arr.length - 1].o !== r.odds) arr.push({ t, o: r.odds });
+      (srv[um] = srv[um] || []).push({ t, o: r.odds });
     }
+    for (const um in srv) hist[um] = mergeOddsSeries(hist[um], srv[um]);
   } catch (e) { /* テーブル未作成/未記録なら朝＋ライブのみで動作 */ }
 }
 
@@ -1035,14 +1067,27 @@ async function startLiveOdds(raceMeta) {
   const rd = raceMeta.race_date || raceMeta.date;
   if (rd !== jstToday() || !(state.sub === 'yosou' || state.sub === 'syutuba')) return;
   const rid = raceMeta.race_id || state.raceId;
-  // 朝オッズ（Supabase値）を推移の起点として記録
+  state.oddsDate = rd;
+  // ① 前回このブラウザで見ていた推移を復元（リロードで消えない）
   state.oddsHist = state.oddsHist || {};
+  const stored = loadOddsHist(rd);
+  if (stored) {
+    for (const srid in stored) {
+      const cur = state.oddsHist[srid] = state.oddsHist[srid] || {};
+      for (const um in stored[srid]) {
+        if (!cur[um] || cur[um].length < stored[srid][um].length) cur[um] = stored[srid][um];
+      }
+    }
+  }
   const hist = state.oddsHist[rid] = state.oddsHist[rid] || {};
+  // ② 朝オッズ（Supabase値）を推移の起点として記録
   for (const td of document.querySelectorAll('#raceView [data-live-odds]')) {
     const um = td.dataset.liveOdds, o = parseFloat(td.textContent);
     if (!hist[um] && !isNaN(o)) hist[um] = [{ t: '朝', o }];
   }
-  await seedRecordedOdds(rd, raceMeta.race_no, hist);  // 記録済み推移を取り込み（発走前の流れを復元）
+  // ③ 5分おきの自動スナップショット（Supabase記録）をマージ＝別端末で開いても流れが出る
+  await seedRecordedOdds(rd, raceMeta.race_no, hist);
+  saveOddsHist();
   // EVモニター初期判定（朝オッズベース。以後はライブ更新毎に再判定）
   const domOdds = {};
   for (const td of document.querySelectorAll('#raceView [data-live-odds]')) {
