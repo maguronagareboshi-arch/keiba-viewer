@@ -677,11 +677,9 @@ const KV_APP_CSS = [
       '.section-title>i{background:linear-gradient(135deg,#1a56a0,#38bdf8);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}',
       'body.dark-mode .section-title>i{background:linear-gradient(135deg,#7dd3fc,#a78bfa);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}',
       // 乗り替わり分析：騎手タップで乗せ替え元の内訳
-      '.jc-tbl{table-layout:fixed;width:100%}',
-      '.jc-tbl th,.jc-tbl td{padding:6px 6px!important;font-size:11.5px!important;letter-spacing:-.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-      '.jc-tw-name th:first-child,.jc-tw-name td:first-child{width:19%}',   // 単一騎手名＝狭め（余白を詰める）
-      '.jc-tw-pair th:first-child,.jc-tw-pair td:first-child{width:44%}',   // A→B ペア＝広め
-      '.jc-tbl td.jc-srccell{text-overflow:clip;white-space:normal}',
+      '.jc-tbl{width:auto!important;table-layout:auto;min-width:0}',   // 内容ぴったり幅＝列間の余白を作らない
+      '.jc-tbl th,.jc-tbl td{padding:6px 13px!important;font-size:11.5px!important;white-space:nowrap}',
+      '.jc-tbl td.jc-srccell{white-space:normal;padding:8px 14px!important}',
       '.jc-jkrow{cursor:pointer}',
       '.jc-jkrow:hover td{background:#f1f5f9}',
       '.jc-caret{display:inline-block;transition:transform .15s;color:#94a3b8;margin-right:4px;font-size:10px}',
@@ -7211,13 +7209,13 @@ function renderJockeyChangeAnalysis() {
       .sort((a, b) => b.n - a.n);
     const jkTbl = jkRows.map((r, i) => {
       // この騎手への乗せ替え元の内訳（○○→この騎手・この厩舎内・複勝率順）
-      const srcs = Object.entries(pair).filter(([pk]) => pk.endsWith(' → ' + r.J))
+      const srcs = Object.entries(pair).filter(([pk, v]) => v.n >= 2 && pk.endsWith(' → ' + r.J))
         .map(([pk, v]) => ({ A: pk.split(' → ')[0], n: v.n, fuku: pct(v.f, v.n), win: pct(v.w || 0, v.n) }))
-        .sort((a, b) => (b.n >= 2) - (a.n >= 2) || b.fuku - a.fuku || b.n - a.n);   // 2件以上を優先（1件だけの100%が上を埋めないように）
+        .sort((a, b) => b.fuku - a.fuku || b.n - a.n);   // 複勝率の高い順＝上が良い/下が悪い（1件ノイズは除外）
       const srcHtml = srcs.length
-        ? `<div style="font-size:11px;font-weight:800;color:#64748b;margin-bottom:4px">誰から ${r.J} に乗り替わった時が良いか（複勝率順）</div>`
+        ? `<div style="font-size:11px;font-weight:800;color:#64748b;margin-bottom:4px">誰から ${r.J} に乗り替わると良い／悪いか（複勝率の高い順・上=買い/下=消し・n≥2）</div>`
           + srcs.map(s => `<div class="jc-src-item"><span class="jc-src-pair">${s.A} → <b>${r.J}</b></span><span class="jc-src-meta">勝率${s.win}%</span><span class="${cls(s.fuku)}" style="font-weight:800">複勝${s.fuku}%</span><span class="jc-src-meta">${s.n}件</span></div>`).join('')
-        : '<div style="color:#9ca3af;font-size:11px">この厩舎での乗せ替えデータがありません（継続騎乗のみ）</div>';
+        : '<div style="color:#9ca3af;font-size:11px">n≥2の乗せ替え元がありません（この厩舎はサンプル不足）</div>';
       return `<tr class="jc-jkrow" onclick="var d=document.getElementById('jcsrc-${i}');if(d){d.classList.toggle('hidden');this.classList.toggle('jc-open')}">
       <td style="font-weight:700"><span class="jc-caret">▸</span>${r.J}${r.J === mainJk ? ' <span style="font-size:9px;font-weight:800;background:#7c3aed;color:#fff;border-radius:3px;padding:0 4px">主戦</span>' : ''}</td>
       <td class="${wcls(r.win)}" style="text-align:right">${r.win}%</td>
@@ -7255,9 +7253,9 @@ function renderJockeyChangeAnalysis() {
       // この騎手への乗せ替え元の内訳（○○→この騎手・全厩舎・複勝率順）
       const srcs = Object.entries(pair).filter(([pk, v]) => v.n >= _minSrcN && pk.endsWith(' → ' + r.B))
         .map(([pk, v]) => ({ A: pk.split(' → ')[0], n: v.n, fuku: pct(v.f, v.n), win: pct(v.w || 0, v.n) }))
-        .sort((a, b) => b.fuku - a.fuku || b.n - a.n).slice(0, 12);
+        .sort((a, b) => b.fuku - a.fuku || b.n - a.n).slice(0, 20);
       const srcHtml = (srcs.length
-        ? `<div style="font-size:11px;font-weight:800;color:#64748b;margin-bottom:4px">誰から ${r.B} に乗り替わった時が良いか（n≥${_minSrcN}・複勝率順・上位12）</div>`
+        ? `<div style="font-size:11px;font-weight:800;color:#64748b;margin-bottom:4px">誰から ${r.B} に乗り替わると良い／悪いか（n≥${_minSrcN}・複勝率の高い順・上=買い/下=消し）</div>`
           + srcs.map(s => `<div class="jc-src-item"><span class="jc-src-pair">${s.A} → <b>${r.B}</b></span><span class="jc-src-meta">勝率${s.win}%</span><span class="${cls(s.fuku)}" style="font-weight:800">複勝${s.fuku}%</span><span class="jc-src-meta">${s.n}件</span></div>`).join('')
         : `<div style="color:#9ca3af;font-size:11px">n≥${_minSrcN}の乗せ替え元データがありません</div>`)
         + `<div class="jc-src-meta" style="margin-top:6px;white-space:pre-line">${jkTip(r.B)}</div>`;
