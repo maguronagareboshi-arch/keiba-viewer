@@ -12787,10 +12787,38 @@ function applyModeUI() {
   const loginBtn  = document.getElementById('admin-login-btn');
   const logoutBtn = document.getElementById('admin-logout-btn');
   const devBtn = document.getElementById('dev-admin-btn');
-  if (devBtn) devBtn.classList.add('hidden');  // 開発用トグルは公開版では隠す（本物のログイン/ログアウトに集約）
-  if (badge)  badge.classList.toggle('hidden', !isAdmin);
-  if (loginBtn)  loginBtn.classList.toggle('hidden', isAdmin);
-  if (logoutBtn) logoutBtn.classList.toggle('hidden', !isAdmin);
+  if (devBtn) devBtn.classList.add('hidden');   // 開発用トグルは常に隠す
+  // ★管理者ログインボタンは閲覧者に見せない＝常に隠す。ログインは秘密の入口（URL #admin / ロゴ5回タップ）からのみ。
+  if (loginBtn)  loginBtn.classList.add('hidden');
+  if (badge)  badge.classList.toggle('hidden', !isAdmin);      // 管理者のときだけバッジ表示
+  if (logoutBtn) logoutBtn.classList.toggle('hidden', !isAdmin); // 管理者のときだけログアウト表示
+}
+
+/** 管理者ログインの秘密の入口を仕込む：①URLに #admin ②ヘッダーのロゴを5回タップ。閲覧者には何も見えない。 */
+function _wireSecretAdminEntry() {
+  // ① URLハッシュ #admin / #kanri でログインを開く（ブックマーク可）。開いたらハッシュは消す。
+  const _hashOpen = () => {
+    if (/^#(admin|kanri)$/i.test(location.hash) && !isAdminMode()) {
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+      if (typeof openAdminLogin === 'function') openAdminLogin();
+    }
+  };
+  _hashOpen();
+  window.addEventListener('hashchange', _hashOpen);
+  // ② ヘッダーのロゴ（🐴）を2秒以内に5回タップでログインを開く（スマホ用の隠し入口）
+  const logo = document.querySelector('.header-title');
+  if (logo && !logo._secretWired) {
+    logo._secretWired = true;
+    logo.style.cursor = 'default';
+    let taps = 0, timer = null;
+    logo.addEventListener('click', () => {
+      if (isAdminMode()) return;
+      taps++;
+      clearTimeout(timer);
+      timer = setTimeout(() => { taps = 0; }, 2000);
+      if (taps >= 5) { taps = 0; if (typeof openAdminLogin === 'function') openAdminLogin(); }
+    });
+  }
 }
 
 function openAdminLogin() {
@@ -12848,6 +12876,7 @@ function adminLogout() {
 // 初期化（ページロード時にモード適用）
 document.addEventListener('DOMContentLoaded', () => {
   applyModeUI();
+  try { _wireSecretAdminEntry(); } catch (e) {}
 });
 // 即時適用（DOMContentLoadedより早く実行されるケース対応）
 (function(){ applyModeUI(); })();
