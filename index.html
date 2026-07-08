@@ -14894,36 +14894,42 @@ function _yrBuild(raceNo) {
   ps.forEach(p => {
     const ai = aiMap[p.name] || {};
     p.aiRank = ai.rank || 99; p.aiSc = ai.sc;
-    let adj = 0; const plus = [], minus = [], notes = [];
-    // 教訓⑤: バイアスは全馬に一貫適用
-    if (biasMode === 'front') { if (p.styleCls === 'front') { adj += 2.5; plus.push('前有利の馬場×' + p.style + '脚質が合致'); }
-      else if (p.styleCls === 'back') { adj -= 3; minus.push('前有利の今日、後方脚質は展開待ち'); } }
-    else if (biasMode === 'back') { if (p.styleCls === 'back') { adj += 2; plus.push('差し優勢の馬場×追い込み脚質'); }
-      else if (p.styleCls === 'front') { adj -= 1.5; minus.push('差し優勢の今日、前は苦しい'); } }
+    let adj = 0, hardNeg = 0; const plus = [], minus = [], notes = [];
+    // 教訓⑤: バイアスは全馬に適用。ただし6/27全11Rのバックテストで「後方馬でも2-3着頻発」＝沈めすぎ厳禁(教訓⑦)。
+    //   バイアスは軽い加減点(soft)に留め、消しに落とすのは"実質的な減点"(hardNeg)だけにする。
+    if (biasMode === 'front') { if (p.styleCls === 'front') { adj += 2; plus.push('前有利の馬場×' + p.style + '脚質が合致'); }
+      else if (p.styleCls === 'back') { adj -= 1.5; minus.push('前有利の今日、後方脚質はやや不利'); } }
+    else if (biasMode === 'back') { if (p.styleCls === 'back') { adj += 1.5; plus.push('差し優勢の馬場×追い込み脚質'); }
+      else if (p.styleCls === 'front') { adj -= 1; minus.push('差し優勢の今日、前はやや苦しい'); } }
     if (p.jizai) { adj += 1; plus.push('位置取り自在（教訓⑥：番手戦法で差し切れる型）'); }
     if (wetToday) { if (p.wetTop3 >= 2) { adj += 1.5; plus.push('渋った馬場【' + p.wetTop3 + '好走】実績'); }
       if (p.quirks.wet) { adj += 1; plus.push('厩舎談「湿った馬場が良い」×今日' + ctx.cond); }
-      if (p.quirks.dry) { adj -= 2; minus.push('厩舎談「乾いた馬場が良い」×今日' + ctx.cond); } }
+      if (p.quirks.dry) { adj -= 2; hardNeg++; minus.push('厩舎談「乾いた馬場が良い」×今日' + ctx.cond); } }
     if (p.distBest != null && isFinite(fieldBest)) { const d = +(p.distBest - fieldBest).toFixed(1);
       p.timeDef = d;
       if (d <= 0.05) { adj += 1.5; plus.push('当該距離の持ち時計がメンバー最速'); }
-      else if (d >= 1.2) { adj -= 2; minus.push('持ち時計がメンバー最速比+' + d + '秒不足'); } }
-    if (p.quirks.sand && parseInt(p.h.wakuBan) <= 4 && p.styleCls !== 'front') { adj -= 2.5; minus.push('砂被りNG×内枠×先行力不足は致命的'); }
-    if (p.quirks.gate && p.quirks.gate.recent) { adj -= 1.5; minus.push('直近にゲート難'); }
+      else if (d >= 1.2) { adj -= 2; hardNeg++; minus.push('持ち時計がメンバー最速比+' + d + '秒不足'); } }
+    if (p.quirks.sand && parseInt(p.h.wakuBan) <= 4 && p.styleCls !== 'front') { adj -= 2.5; hardNeg++; minus.push('砂被りNG×内枠×先行力不足は致命的'); }
+    if (p.quirks.gate && p.quirks.gate.recent) { adj -= 1.5; hardNeg++; minus.push('直近にゲート難'); }
     if (p.quirks.kisho) { adj -= 1; minus.push('気性に課題（ムラ駆け注意）'); }
     if (p.quirks.zubu) { adj -= 1; minus.push('ズブさ・反応の鈍さ'); }
-    if (p.quirks.distLong && !p.quirks.distLong.unknown) { adj -= 1.5; minus.push('厩舎が距離長いと明言'); }
+    if (p.quirks.distLong && !p.quirks.distLong.unknown) { adj -= 1.5; hardNeg++; minus.push('厩舎が距離長いと明言'); }
     if (p.quirks.distLong && p.quirks.distLong.unknown) { notes.push('「距離長い」談あるが前付けは未試行＝未知（教訓②）'); }
     if (p.quirks.front && biasMode === 'front') { adj += 1; plus.push('前向きな競馬が合う×前有利'); }
     if (p.quirks.late) { plus.push('終いは確実（3着紐の価値）'); }
     if (p.quirks.good) { plus.push('陣営コメントの状態良し'); }
-    if (p.wDelta != null && Math.abs(p.wDelta) >= 10) { adj -= 2; minus.push('馬体重' + (p.wDelta > 0 ? '+' : '') + p.wDelta + 'kgの大幅変動'); }
-    if (p.clsUp > 0) { adj -= 1; minus.push('昇級戦'); }
+    if (p.wDelta != null && Math.abs(p.wDelta) >= 10) { adj -= 2; hardNeg++; minus.push('馬体重' + (p.wDelta > 0 ? '+' : '') + p.wDelta + 'kgの大幅変動'); }
+    if (p.clsUp > 0) { adj -= 1; hardNeg++; minus.push('昇級戦'); }
     if (p.clsUp < 0) { adj += 1.5; plus.push('降級で相手弱化'); }
     if (p.nHist <= 1) { notes.push('高知' + p.nHist + '走のみ＝データ不足（転入直後）'); }
-    p.adj = adj; p.plus = plus; p.minus = minus; p.notes = notes;
+    p.adj = adj; p.plus = plus; p.minus = minus; p.notes = notes; p.hardMinus = hardNeg > 0;
     p.final = (p.aiSc != null ? p.aiSc : 0) + adj;
   });
+  // 教訓⑨（6/27バックテスト）: 高知データ不足でも人気上位の馬を消しに落とさない＝市場を尊重してフロア。
+  //   R3・R7で無データの1番人気が実1着だが最下位評価だった→データが無い時こそ市場に敬意。
+  const _sf = ps.filter(p => p.aiSc != null).map(p => p.final).sort((a, b) => b - a);
+  const _floor4 = _sf.length ? _sf[Math.min(3, _sf.length - 1)] : 0;
+  ps.forEach(p => { if (p.ninki && p.ninki <= 2 && (p.aiSc == null || p.nHist <= 1) && p.final < _floor4) { p.final = _floor4 + 0.2; if (!p.notes.some(n => /市場評価を尊重/.test(n))) p.notes.push('高知データ不足だが' + p.ninki + '人気＝市場評価を尊重しフロア適用（教訓⑨）'); } });
   // ── 印（AI指数＋調整の総合順）──
   ps.sort((a, b) => b.final - a.final);
   const MK = ['◎', '○', '▲', '△', '△'];
@@ -14941,8 +14947,9 @@ function _yrBuild(raceNo) {
   else if (nige.length === 1) { paceTxt = 'スロー〜平均（' + nige[0].name + 'の単騎逃げ濃厚＝前残り警戒）';
     if (nige[0].quirks.kisho) paceWarn = '⚠️ 逃げ候補' + nige[0].name + 'は気性に課題＝行けなかった場合は隊列一変・別の先行馬の楽逃げまで想定（教訓③）'; }
   else paceTxt = 'スロー（明確な逃げ馬不在＝position争い）';
-  // ── 危険な人気馬（人気1-5位で「減点根拠あり×エンジン評価が人気より低い」馬）──
-  const danger = ps.filter((p, idx) => p.ninki && p.ninki <= 5 && p.minus.length >= 1 && idx + 1 > p.ninki + 1)
+  // ── 危険な人気馬（2-5人気で「実質減点(hardMinus)あり×エンジン評価が人気より2枚以上下」）──
+  //   6/27バックテスト: 旧条件は誤検知3/4（バイアス沈めの副作用で好走馬を危険視）。hardMinus必須＋1人気除外で精度化。
+  const danger = ps.filter((p, idx) => p.ninki && p.ninki >= 2 && p.ninki <= 5 && p.hardMinus && (idx + 1) >= p.ninki + 2)
     .sort((a, b) => a.ninki - b.ninki)[0] || null;
   return { ctx, ri, ps, biasMode, frontRate, backRate, resR, favHit, favN, paceTxt, paceWarn, nige, senko, hole, danger, evList, aiOk };
 }
