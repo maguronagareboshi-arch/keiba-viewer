@@ -560,6 +560,91 @@ function drawTrack() {
     gateMarker(state.dist, state.inner, `${state.dist}m`);
 }
 
+// ---------------- ギャロップ馬の描画（PILプロトタイプから移植） ----------------
+const COATS = ['#96643c', '#6e4628', '#a97a50', '#8f8f94', '#5a3d24', '#7d5533'];  // 鹿毛/黒鹿/栗毛/芦毛…
+const coatOf = (h) => COATS[(h.umaban * 7 + 3) % COATS.length];
+const STRIDE_M = 7.2;                                    // 1完歩≒7.2m（位相の周期）
+const phaseOf = (h) => (h.s / STRIDE_M) * Math.PI * 2 + h.umaban * 0.61;
+
+function gallopLeg(g, ox, oy, phase, off, L, front, color) {
+  // 2セグメント脚: 付け根スイング±0.9rad・位相で膝/飛節が曲がる
+  const a = 0.9 * Math.sin(phase + off);
+  const knee = 0.9 * Math.max(0, Math.sin(phase + off + (front ? 1.0 : 0.6)));
+  const k = front ? knee : -knee;
+  const s1 = 0.22 * L, s2 = 0.20 * L;
+  const x1 = ox + s1 * Math.sin(a), y1 = oy + s1 * Math.cos(a);
+  const x2 = x1 + s2 * Math.sin(a + k), y2 = y1 + s2 * Math.cos(a + k);
+  g.strokeStyle = color; g.lineCap = 'round';
+  g.lineWidth = Math.max(1.5, L * 0.055);
+  g.beginPath(); g.moveTo(ox, oy); g.lineTo(x1, y1); g.stroke();
+  g.lineWidth = Math.max(1.2, L * 0.045);
+  g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+  return [x2, y2];   // 蹄の位置（砂埃用）
+}
+
+function drawGallopHorse(g, cx, cy, L, phase, dir, wakuBg, wakuTx, num, coat) {
+  const X = (x) => cx + dir * x;
+  const dark = '#4a331f';
+  const bob = -0.05 * L * Math.max(0, Math.sin(phase));
+  const st = 1.0 + 0.06 * Math.cos(phase);
+  const by = cy + bob;
+  // 尻尾（なびき）
+  const sway = 0.06 * L * Math.sin(phase + 1.2);
+  g.strokeStyle = dark; g.lineWidth = Math.max(1.5, L * 0.05); g.lineCap = 'round';
+  g.beginPath();
+  g.moveTo(X(-0.34 * L * st), by - 0.10 * L);
+  g.quadraticCurveTo(X(-0.50 * L * st), by - 0.02 * L + sway, X(-0.58 * L * st), by + 0.10 * L + sway * 1.5);
+  g.stroke();
+  // 脚（後2・前2、位相ずらしでロータリーギャロップ風）
+  const hoofs = [];
+  hoofs.push(gallopLeg(g, X(-0.24 * L * st), by + 0.06 * L, phase, 0.0, L, false, dark));
+  hoofs.push(gallopLeg(g, X(-0.20 * L * st), by + 0.06 * L, phase, 0.5, L, false, coat));
+  hoofs.push(gallopLeg(g, X(0.22 * L * st), by + 0.06 * L, phase, Math.PI * 0.95, L, true, dark));
+  hoofs.push(gallopLeg(g, X(0.26 * L * st), by + 0.06 * L, phase, Math.PI * 1.30, L, true, coat));
+  // 胴体
+  g.fillStyle = coat;
+  g.beginPath(); g.ellipse(cx, by - 0.02 * L, 0.36 * L * st, 0.14 * L, 0, 0, Math.PI * 2); g.fill();
+  // 首（前傾・位相で上下）
+  const nd = 0.03 * L * Math.sin(phase + 0.8);
+  g.beginPath();
+  g.moveTo(X(0.18 * L), by - 0.14 * L); g.lineTo(X(0.34 * L), by + 0.02 * L);
+  g.lineTo(X(0.56 * L), by - 0.26 * L + nd); g.lineTo(X(0.46 * L), by - 0.34 * L + nd);
+  g.closePath(); g.fill();
+  // 頭＋耳
+  const hx = X(0.56 * L), hy = by - 0.30 * L + nd;
+  g.fillStyle = dark;
+  g.beginPath(); g.ellipse(hx + dir * 0.05 * L, hy, 0.10 * L, 0.055 * L, dir * 0.35, 0, Math.PI * 2); g.fill();
+  g.beginPath();
+  g.moveTo(hx - dir * 0.01 * L, hy - 0.05 * L); g.lineTo(hx + dir * 0.02 * L, hy - 0.12 * L); g.lineTo(hx + dir * 0.05 * L, hy - 0.05 * L);
+  g.closePath(); g.fill();
+  // たてがみ
+  g.strokeStyle = dark; g.lineWidth = Math.max(1.5, L * 0.05);
+  g.beginPath(); g.moveTo(X(0.46 * L), by - 0.30 * L + nd); g.lineTo(X(0.30 * L), by - 0.16 * L); g.stroke();
+  // 騎手（背に密着・モンキー乗り）
+  const sx = X(0.02 * L), sy = by - 0.15 * L;
+  g.strokeStyle = '#1e1e24'; g.lineWidth = Math.max(1.5, L * 0.05);
+  g.beginPath(); g.moveTo(sx, sy); g.lineTo(X(0.10 * L), by + 0.02 * L); g.stroke();   // 脚
+  g.fillStyle = wakuBg;
+  g.beginPath();
+  g.moveTo(sx - dir * 0.02 * L, sy); g.lineTo(X(0.10 * L), sy - 0.14 * L);
+  g.lineTo(X(0.20 * L), sy - 0.10 * L); g.lineTo(X(0.08 * L), sy + 0.03 * L);
+  g.closePath(); g.fill();
+  g.fillStyle = '#f4f4f4';
+  g.beginPath(); g.arc(X(0.19 * L), sy - 0.14 * L, 0.045 * L, 0, Math.PI * 2); g.fill();  // ヘルメット
+  g.strokeStyle = 'rgba(230,230,230,.8)'; g.lineWidth = 1;
+  g.beginPath(); g.moveTo(X(0.20 * L), sy - 0.08 * L); g.lineTo(hx, hy + 0.02 * L); g.stroke();  // 手綱
+  // ゼッケン（枠色＋馬番）
+  const zx = X(-0.16 * L), z0 = Math.min(zx, zx + dir * 0.24 * L), zw = 0.24 * L;
+  g.fillStyle = wakuBg; g.fillRect(z0, by - 0.10 * L, zw, 0.19 * L);
+  g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 1; g.strokeRect(z0, by - 0.10 * L, zw, 0.19 * L);
+  g.fillStyle = wakuTx;
+  g.font = `bold ${Math.max(8, L * 0.30)}px sans-serif`;
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(num, z0 + zw / 2, by - 0.005 * L);
+  g.textBaseline = 'alphabetic';
+  return hoofs;
+}
+
 function drawHorses() {
   const D = state.dist, inner = state.inner;
   const ranked = [...state.horses].sort((a, b) => b.s - a.s);
@@ -567,15 +652,27 @@ function drawHorses() {
   for (const h of state.horses) {
     h.lane += ((h.targetLane ?? h.lane) - h.lane) * 0.04;
     const p = racePos(D, inner, h.s, -8 + h.lane * 1.4);
+    // 進行方向を向いた馬体（上から見たカプセル・ギャロップで長軸が脈動）
+    const p2 = racePos(D, inner, Math.min(h.s + 3, D), -8 + h.lane * 1.4);
+    const ang = Math.atan2(p2.y - p.y, p2.x - p.x);
+    const ph = phaseOf(h);
+    const rx = 11 * (1 + 0.05 * Math.sin(ph));
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(ang);
+    ctx.fillStyle = coatOf(h);
+    ctx.beginPath(); ctx.ellipse(0, 0, rx, 5.5, 0, 0, Math.PI * 2); ctx.fill();   // 馬体
+    ctx.fillStyle = '#4a331f';
+    ctx.beginPath(); ctx.ellipse(rx * 0.85, 0, 4, 2.6, 0, 0, Math.PI * 2); ctx.fill();  // 頭
+    ctx.restore();
+    // ゼッケン（回転させず水平のまま＝読みやすさ優先）
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 8.5, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, 6.5, 0, Math.PI * 2);
     ctx.fillStyle = css[`--waku${h.waku}-bg`];
     ctx.fill();
-    ctx.strokeStyle = css['--border'];
-    ctx.lineWidth = 1;
-    ctx.stroke();
+    ctx.strokeStyle = css['--border']; ctx.lineWidth = 1; ctx.stroke();
     ctx.fillStyle = css[`--waku${h.waku}-tx`];
-    ctx.font = 'bold 10px sans-serif';
+    ctx.font = 'bold 9px sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(h.umaban, p.x, p.y);
   }
@@ -649,18 +746,27 @@ function drawStrip() {
     sctx.fillStyle = css['--goal'];
     sctx.fillText('GOAL', Math.max(18, Math.min(gx, SW - 18)), 94);
   }
-  // 馬（順位で3段に振り分けて重なりを回避）
+  // 砂埃（走行中に蹄付近から発生・後方へ流れて消える）
+  state.dust = state.dust || [];
+  if (state.running) {
+    for (const pt of state.dust) { pt.x += pt.vx; pt.y += pt.vy; pt.age += 1; }
+    state.dust = state.dust.filter((pt) => pt.age < pt.max);
+  }
+  for (const pt of state.dust) {
+    const a = 1 - pt.age / pt.max;
+    sctx.fillStyle = `rgba(196,176,146,${(a * 0.5).toFixed(2)})`;
+    sctx.beginPath(); sctx.arc(pt.x, pt.y, 1.2 + (1 - a) * 3.5, 0, Math.PI * 2); sctx.fill();
+  }
+  // 馬（順位で3段・ギャロップアニメーション）
   ranked.forEach((h, i) => {
     const x = anchorX - dir * (leader - h.s) / BASHIN * pxPerB;
-    const y = 26 + (i % 3) * 20;
-    sctx.beginPath(); sctx.arc(x, y, 10, 0, Math.PI * 2);
-    sctx.fillStyle = css[`--waku${h.waku}-bg`];
-    sctx.fill();
-    sctx.strokeStyle = css['--border']; sctx.lineWidth = 1;
-    sctx.stroke();
-    sctx.fillStyle = css[`--waku${h.waku}-tx`];
-    sctx.font = 'bold 11px sans-serif'; sctx.textAlign = 'center'; sctx.textBaseline = 'middle';
-    sctx.fillText(h.umaban, x, y);
+    const y = 24 + (i % 3) * 21;
+    const hoofs = drawGallopHorse(sctx, x, y, 30, phaseOf(h), dir,
+      css[`--waku${h.waku}-bg`], css[`--waku${h.waku}-tx`], h.umaban, coatOf(h));
+    if (state.running && h.s < state.dist && Math.random() < 0.35 && state.dust.length < 140) {
+      const hf = hoofs[Math.floor(Math.random() * 2)];   // 後脚の蹄から
+      state.dust.push({ x: hf[0], y: Math.min(hf[1], 78), vx: -dir * (1.2 + Math.random() * 1.6), vy: -(0.2 + Math.random() * 0.5), age: 0, max: 14 + Math.random() * 8 });
+    }
   });
   sctx.textBaseline = 'alphabetic';
 }
@@ -716,7 +822,7 @@ async function loadRace(raceId, meta) {
   for (const id in rawHist) histories[id] = rawHist[id].filter((r) => !r.date || !tgtDate || r.date < tgtDate);
   state.horses = buildHorses(entries, state.dist, race.klass || meta.klass, histories);
   applyPaceMean();   // 想定ペースと各馬の実効速度を算出
-  state.t = 0; state.running = false; lastTs = null; state.stripDir = null;
+  state.t = 0; state.running = false; lastTs = null; state.stripDir = null; state.dust = [];
   if (state.timer) { clearInterval(state.timer); state.timer = null; }
   $('raceLabel').textContent = `${race.date || ''} 門別${meta.race_no}R ${state.dist}m（${state.inner ? '内回り' : '外回り'}）${state.horses.length}頭`;
   $('startBtn').textContent = '▶ スタート';
