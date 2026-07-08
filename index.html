@@ -584,6 +584,26 @@ const KV_APP_CSS = [
       '.ac-stat{flex:1;min-width:88px;background:#f4f6fa;border:1px solid #e2e8f0;border-radius:8px;padding:8px 14px}',
       '.ac-label{font-size:10px;font-weight:700;color:#6b7280}',
       '.ac-val{font-size:22px;font-weight:800;color:#1a56a0;font-family:monospace;line-height:1.25}',
+      // レース展開リプレイ（モーダル内は常にダークトラック調＝テーマ非依存で映える）
+      '.rp-overlay{position:fixed;inset:0;background:rgba(0,0,0,.74);z-index:10002;display:flex;align-items:center;justify-content:center;padding:16px}',
+      '.rp-modal{background:#0b1220;border:1px solid #1e3048;border-radius:16px;width:100%;max-width:760px;box-shadow:0 24px 80px rgba(0,0,0,.6);overflow:hidden;display:flex;flex-direction:column;max-height:94vh}',
+      '.rp-header{display:flex;align-items:center;justify-content:space-between;padding:13px 18px;background:linear-gradient(135deg,#123152,#0b1220);border-bottom:1px solid #1e3048}',
+      '.rp-title{color:#e6edf6;font-size:15px;font-weight:800}',
+      '.rp-close{background:rgba(255,255,255,.1);border:none;color:#cbd5e1;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:15px;flex-shrink:0}',
+      '.rp-stage{padding:6px 10px;background:radial-gradient(130% 90% at 50% 0,#12263f 0,#0a1019 72%);overflow:auto}',
+      '#rp-svg{width:100%;height:auto;display:block}',
+      '.rp-controls{display:flex;align-items:center;gap:10px;padding:10px 16px;border-top:1px solid #1e3048;flex-wrap:wrap}',
+      '.rp-btn{background:#1a56a0;color:#fff;border:none;border-radius:8px;padding:7px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}',
+      '.rp-btn-ghost{background:#1e3048;color:#c8d8ec}',
+      '.rp-seek{flex:1;min-width:110px;accent-color:#38bdf8;cursor:pointer}',
+      '.rp-speed{display:flex;gap:4px}',
+      '.rp-spd{background:#131c2b;color:#8fa3be;border:1px solid #26344a;border-radius:6px;padding:4px 9px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit}',
+      '.rp-spd.active{background:#38bdf8;color:#04141f;border-color:#38bdf8}',
+      '.rp-legend{padding:8px 16px 14px;display:flex;flex-wrap:wrap;gap:5px 10px;font-size:11px;color:#c8d8ec;border-top:1px solid #1e3048;max-height:120px;overflow:auto}',
+      '.rp-leg-item{display:flex;align-items:center;gap:5px;background:#101a2b;border:1px solid #1e3048;border-radius:20px;padding:2px 9px 2px 3px}',
+      '.rp-leg-chip{width:18px;height:18px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:900;flex-shrink:0}',
+      '.rp-leg-rank{color:#8fa3be;font-size:10px;font-weight:700}',
+      '.btn-replay{background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}',
       // 出馬表タブ：開催日リスト
       '.ddi-month{font-size:12px;font-weight:800;color:#6b7280;margin:12px 0 6px}',
       '.ddi-month:first-child{margin-top:0}',
@@ -2014,6 +2034,28 @@ const KV_APP_CSS = [
   <button type="button" class="admin-only" onclick="switchPage('psfhist')"><i class="fas fa-gem"></i> PSF履歴</button>
 </div>
 
+<!-- レース展開リプレイ（コーナー通過順アニメ） -->
+<div id="race-replay-modal" class="rp-overlay hidden" role="dialog" aria-modal="true" onclick="if(event.target===this)closeRaceReplay()">
+  <div class="rp-modal">
+    <div class="rp-header">
+      <div class="rp-title" id="rp-title">展開リプレイ</div>
+      <button class="rp-close" onclick="closeRaceReplay()" aria-label="閉じる">✕</button>
+    </div>
+    <div class="rp-stage"><svg id="rp-svg" xmlns="http://www.w3.org/2000/svg"></svg></div>
+    <div class="rp-controls">
+      <button class="rp-btn" id="rp-play" onclick="rpTogglePlay()">▶ 再生</button>
+      <button class="rp-btn rp-btn-ghost" onclick="rpRestart()">⟲ 最初から</button>
+      <input type="range" id="rp-seek" class="rp-seek" min="0" max="1000" value="0" oninput="rpSeek(this.value)">
+      <div class="rp-speed">
+        <button class="rp-spd" data-s="1" onclick="rpSetSpeed(1,this)">1x</button>
+        <button class="rp-spd" data-s="2" onclick="rpSetSpeed(2,this)">2x</button>
+        <button class="rp-spd" data-s="0.5" onclick="rpSetSpeed(0.5,this)">0.5x</button>
+      </div>
+    </div>
+    <div class="rp-legend" id="rp-legend"></div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 // ============================================================
@@ -2229,6 +2271,101 @@ async function _renderAccessCounter() {
     set('ac-total', map['total']); set('ac-today', map['d_' + dk]); set('ac-yesterday', map['d_' + yk]);
   } catch (e) { console.warn('[access-counter]', e); }
 }
+
+// ── レース展開リプレイ（コーナー通過順アニメ）─────────────────────────
+const _WAKU_BG = { 1: '#ffffff', 2: '#1a1a1a', 3: '#e02020', 4: '#1a6fd0', 5: '#f2c200', 6: '#18a020', 7: '#f26a00', 8: '#f06fa8' };
+const _WAKU_FG = { 1: '#222', 2: '#fff', 3: '#fff', 4: '#fff', 5: '#333', 6: '#fff', 7: '#fff', 8: '#333' };
+function _rpWaku(h) { const w = parseInt(h.wakuBan); if (!isNaN(w) && w >= 1 && w <= 8) return w; const u = parseInt(h.umaBan) || 1; return Math.min(8, Math.ceil(u / 2)); }
+
+function openRaceReplay(raceNo) {
+  const data = allRacesData[raceNo]; if (!data) return;
+  const horses = data.horses || [];
+  const runners = [];
+  horses.forEach(h => {
+    const chaku = parseInt(h.chakujun);
+    const segs = String(h.corner || '').split(/[-‐]/).map(x => parseInt(x)).filter(x => !isNaN(x) && x > 0);
+    if (!segs.length && isNaN(chaku)) return;
+    runners.push({ uma: parseInt(h.umaBan), waku: _rpWaku(h), name: h.horseName || '', segs, chaku: isNaN(chaku) ? null : chaku });
+  });
+  if (runners.length < 2) { alert('このレースは展開データ（コーナー通過順）がありません。'); return; }
+  const segLen = {}; runners.forEach(r => { if (r.segs.length) segLen[r.segs.length] = (segLen[r.segs.length] || 0) + 1; });
+  const segN = parseInt(Object.keys(segLen).sort((a, b) => segLen[b] - segLen[a])[0]) || 4;
+  const N = runners.length;
+  runners.forEach(r => {
+    const s = r.segs.slice(0, segN);
+    while (s.length < segN) s.push(s.length ? s[s.length - 1] : N);
+    const goal = (r.chaku != null) ? r.chaku : s[s.length - 1];
+    r.ranks = s.concat([goal]);
+    for (let i = 0; i < r.ranks.length; i++) { let v = r.ranks[i]; if (isNaN(v) || v < 1) v = (i > 0 ? r.ranks[i - 1] : N); r.ranks[i] = Math.min(Math.max(v, 1), Math.max(N, 12)); }
+  });
+  runners.sort((a, b) => (a.chaku || 99) - (b.chaku || 99));
+  window._rp = { raceNo, runners, N, nStages: segN + 1, segN, progress: 0, playing: false, speed: 1, raf: null, last: 0, duration: 5200 };
+  _rpBuildSvg(); _rpBuildLegend();
+  document.getElementById('rp-title').textContent = (data.raceInfo.raceName || ('第' + raceNo + 'レース')) + ' 展開リプレイ';
+  document.getElementById('race-replay-modal').classList.remove('hidden');
+  document.querySelectorAll('.rp-spd').forEach(b => b.classList.toggle('active', b.dataset.s === '1'));
+  rpRestart();
+  setTimeout(rpTogglePlay, 350);
+}
+function _rpBuildSvg() {
+  const st = window._rp, svg = document.getElementById('rp-svg');
+  const rowH = 24, topPad = 30, botPad = 10, W = 680;
+  const H = topPad + st.N * rowH + botPad, x0 = 52, x1 = W - 22;
+  st.dims = { rowH, topPad, W, H, x0, x1 };
+  const sx = i => x0 + (x1 - x0) * i / (st.nStages - 1);
+  const y = rank => topPad + (rank - 0.5) * rowH;
+  const parts = [];
+  for (let r = 1; r <= st.N; r++) parts.push(`<line x1="${x0}" y1="${y(r)}" x2="${x1}" y2="${y(r)}" stroke="#16273b" stroke-width="1"/>`);
+  for (let i = 0; i < st.nStages; i++) {
+    const xx = sx(i), goal = i === st.nStages - 1;
+    parts.push(`<line x1="${xx}" y1="${topPad - 6}" x2="${xx}" y2="${H - botPad}" stroke="${goal ? '#38bdf8' : '#22344e'}" stroke-width="${goal ? 2 : 1}" ${goal ? '' : 'stroke-dasharray="3 4"'}/>`);
+    parts.push(`<text x="${xx}" y="${topPad - 12}" fill="#9fb2c8" font-size="10" font-weight="700" text-anchor="middle">${goal ? 'ゴール' : (i + 1) + '角'}</text>`);
+  }
+  st.runners.forEach(rr => {
+    const pts = []; for (let i = 0; i < st.nStages; i++) pts.push(sx(i) + ',' + y(rr.ranks[i]));
+    parts.push(`<polyline points="${pts.join(' ')}" fill="none" stroke="${_WAKU_BG[rr.waku]}" stroke-width="2" opacity="0.30" stroke-linejoin="round" stroke-linecap="round"/>`);
+  });
+  st.runners.slice().reverse().forEach(rr => {
+    const medal = rr.chaku === 1 ? '#ffd24a' : rr.chaku === 2 ? '#cbd5e1' : rr.chaku === 3 ? '#e8974a' : null;
+    parts.push(`<g id="rp-chip-${rr.uma}"><circle r="10" fill="${_WAKU_BG[rr.waku]}" stroke="${medal || '#0b1220'}" stroke-width="${medal ? 2.5 : 1}"/><text y="3.6" fill="${_WAKU_FG[rr.waku]}" font-size="11" font-weight="900" text-anchor="middle">${rr.uma}</text></g>`);
+  });
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = parts.join('');
+}
+function _rpBuildLegend() {
+  const st = window._rp, el = document.getElementById('rp-legend'); if (!el) return;
+  el.innerHTML = st.runners.map(rr =>
+    `<span class="rp-leg-item"><span class="rp-leg-chip" style="background:${_WAKU_BG[rr.waku]};color:${_WAKU_FG[rr.waku]}">${rr.uma}</span>${rr.name}<span class="rp-leg-rank">${rr.chaku ? rr.chaku + '着' : '—'}</span></span>`).join('');
+}
+function rpRender() {
+  const st = window._rp; if (!st || !st.dims) return; const d = st.dims;
+  const sf = st.progress * (st.nStages - 1); const i = Math.min(Math.floor(sf), st.nStages - 2); const frac = sf - i;
+  const y = rank => d.topPad + (rank - 0.5) * d.rowH;
+  const px = d.x0 + (d.x1 - d.x0) * st.progress;
+  st.runners.forEach(rr => {
+    const rankNow = rr.ranks[i] + (rr.ranks[i + 1] - rr.ranks[i]) * frac;
+    const g = document.getElementById('rp-chip-' + rr.uma);
+    if (g) g.setAttribute('transform', `translate(${px.toFixed(1)},${y(rankNow).toFixed(1)})`);
+  });
+  const seek = document.getElementById('rp-seek'); if (seek) seek.value = Math.round(st.progress * 1000);
+}
+function rpTogglePlay() {
+  const st = window._rp; if (!st) return; const btn = document.getElementById('rp-play');
+  if (st.playing) { st.playing = false; if (st.raf) cancelAnimationFrame(st.raf); if (btn) btn.textContent = '▶ 再生'; return; }
+  if (st.progress >= 1) st.progress = 0;
+  st.playing = true; st.last = performance.now(); if (btn) btn.textContent = '⏸ 一時停止';
+  const tick = now => {
+    if (!st.playing) return; const dt = now - st.last; st.last = now;
+    st.progress += dt / st.duration * st.speed;
+    if (st.progress >= 1) { st.progress = 1; st.playing = false; if (btn) btn.textContent = '⟲ もう一度'; }
+    rpRender(); if (st.playing) st.raf = requestAnimationFrame(tick);
+  };
+  st.raf = requestAnimationFrame(tick);
+}
+function rpRestart() { const st = window._rp; if (!st) return; st.progress = 0; st.last = performance.now(); rpRender(); }
+function rpSeek(v) { const st = window._rp; if (!st) return; st.progress = Math.max(0, Math.min(1, v / 1000)); st.last = performance.now(); rpRender(); }
+function rpSetSpeed(s, btn) { const st = window._rp; if (st) st.speed = s; document.querySelectorAll('.rp-spd').forEach(b => b.classList.remove('active')); if (btn) btn.classList.add('active'); }
+function closeRaceReplay() { const st = window._rp; if (st) { st.playing = false; if (st.raf) cancelAnimationFrame(st.raf); } const m = document.getElementById('race-replay-modal'); if (m) m.classList.add('hidden'); }
 
 /** スマホプレビュー(iframe)内で、親から引き継いだ page / レース日 を復元する。
  *  IDB(ローカルDB)の読み込みは非同期なので、対象日のデータが揃うまで待ってから復元する。 */
@@ -3148,6 +3285,7 @@ function renderRaceContent(raceNo) {
   const hCard=document.createElement('div'); hCard.className='race-header-card';
   const _movieUrl = buildMovieUrl(raceInfo.raceDate, raceNo, raceInfo.babaCode);
   const _hasMovie  = !!_movieUrl;
+  const _hasReplay = horses.some(h => String(h.corner || '').indexOf('-') >= 0) && horses.some(h => parseInt(h.chakujun) >= 1);
   hCard.innerHTML=`
     <div class="race-title-row" style="flex-wrap:nowrap;">
       <div style="display:flex;align-items:flex-start;gap:14px;min-width:0;flex:1;">
@@ -3155,6 +3293,7 @@ function renderRaceContent(raceNo) {
         <div class="race-title-info" style="min-width:0;flex:1;">
           <div class="race-name-row">
             <h2 class="race-name">${raceInfo.raceName}</h2>
+            ${_hasReplay ? `<button class="btn-replay btn-sm" onclick="openRaceReplay(${raceNo})"><i class="fas fa-play"></i> 展開</button>` : ''}
             ${_hasMovie ? `<button id="movie-btn-${raceNo}" class="btn btn-movie btn-sm" onclick="toggleMoviePanel(${raceNo})" style="flex-shrink:0;"><i class="fas fa-video"></i> 映像</button>` : ''}
           </div>
           <div class="race-meta">
