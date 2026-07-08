@@ -679,10 +679,12 @@ const KV_APP_CSS = [
       // 乗り替わり分析：騎手タップで乗せ替え元の内訳
       '.jc-tbl{width:auto!important;table-layout:auto;min-width:0}',   // 内容ぴったり幅＝列間の余白を作らない
       '.jc-tbl th,.jc-tbl td{padding:6px 13px!important;font-size:11.5px!important;white-space:nowrap}',
+      '.jc-tbl th:first-child,.jc-tbl td:first-child{padding-left:26px!important}',   // ▸ぶんの余白＝見出しと名前を左端で揃える
+      '.jc-tbl td:first-child{position:relative}',
       '.jc-tbl td.jc-srccell{white-space:normal;padding:8px 14px!important}',
       '.jc-jkrow{cursor:pointer}',
       '.jc-jkrow:hover td{background:#f1f5f9}',
-      '.jc-caret{display:inline-block;transition:transform .15s;color:#94a3b8;margin-right:4px;font-size:10px}',
+      '.jc-caret{position:absolute;left:10px;transition:transform .15s;color:#94a3b8;font-size:10px}',   // 絶対配置＝名前を右にずらさない
       '.jc-open .jc-caret{transform:rotate(90deg)}',
       '.jc-srccell{background:#f8fafc!important;padding:8px 14px!important}',
       '.jc-src-item{display:flex;gap:12px;align-items:baseline;font-size:12px;padding:3px 0;border-bottom:1px dashed #e2e8f0;flex-wrap:wrap}',
@@ -7219,10 +7221,11 @@ function renderJockeyChangeAnalysis() {
       return `<tr class="jc-jkrow" onclick="var d=document.getElementById('jcsrc-${i}');if(d){d.classList.toggle('hidden');this.classList.toggle('jc-open')}">
       <td style="font-weight:700"><span class="jc-caret">▸</span>${r.J}${r.J === mainJk ? ' <span style="font-size:9px;font-weight:800;background:#7c3aed;color:#fff;border-radius:3px;padding:0 4px">主戦</span>' : ''}</td>
       <td class="${wcls(r.win)}" style="text-align:right">${r.win}%</td>
-      <td class="${cls(r.allF)}" style="text-align:right;font-weight:800">${r.allF}%${_sn(r.n)}</td>
-      <td class="${cls(r.chg)}" style="text-align:right">${r.chg != null ? r.chg + '%' : '—'}${r.chgN ? _sn(r.chgN) : ''}</td>
-      <td class="${cls(r.cont)}" style="text-align:right">${r.cont != null ? r.cont + '%' : '—'}${r.contN ? _sn(r.contN) : ''}</td></tr>
-      <tr id="jcsrc-${i}" class="hidden"><td colspan="5" class="jc-srccell">${srcHtml}</td></tr>`;
+      <td class="${cls(r.allF)}" style="text-align:right;font-weight:800">${r.allF}%</td>
+      <td class="${cls(r.chg)}" style="text-align:right">${r.chg != null ? r.chg + '%' : '—'}</td>
+      <td class="${cls(r.cont)}" style="text-align:right">${r.cont != null ? r.cont + '%' : '—'}</td>
+      <td style="text-align:right;color:#64748b">${r.n}<span style="color:#b0bccd">·${r.chgN || 0}·${r.contN || 0}</span></td></tr>
+      <tr id="jcsrc-${i}" class="hidden"><td colspan="6" class="jc-srccell">${srcHtml}</td></tr>`;
     }).join('');
     const trTot = Object.values(trJk).reduce((s, v) => s + v.n, 0);
     body.innerHTML = `
@@ -7234,8 +7237,8 @@ function renderJockeyChangeAnalysis() {
           <div style="font-size:10.5px;color:#0891b2;margin-bottom:4px">▸ 騎手をタップすると「誰からこの騎手に乗り替わった時が良いか」の内訳が開きます</div>
           <div class="table-wrapper" style="max-height:420px;overflow-y:auto">
             <table class="deban-table jc-tbl jc-tw-name">
-              <thead><tr><th style="text-align:left">騎手</th><th style="text-align:right" title="この厩舎の馬に乗った時の勝率（1着率）">勝率</th><th style="text-align:right" title="この厩舎の馬に乗った時の複勝率（右の小数字＝騎乗数）">複勝</th><th style="text-align:right" title="この厩舎がこの騎手に乗せ替えた時の複勝率">乗替時</th><th style="text-align:right" title="この騎手が前走から継続した時の複勝率">継続時</th></tr></thead>
-              <tbody>${jkTbl || '<tr><td colspan="5" style="color:#9ca3af">データ不足</td></tr>'}</tbody>
+              <thead><tr><th style="text-align:left">騎手</th><th style="text-align:right" title="この厩舎の馬に乗った時の勝率（1着率）">勝率</th><th style="text-align:right" title="この厩舎の馬に乗った時の複勝率">複勝</th><th style="text-align:right" title="この厩舎がこの騎手に乗せ替えた時の複勝率">乗替時</th><th style="text-align:right" title="この騎手が前走から継続した時の複勝率">継続時</th><th style="text-align:right" title="件数＝全体·乗替·継続の騎乗数">件数</th></tr></thead>
+              <tbody>${jkTbl || '<tr><td colspan="6" style="color:#9ca3af">データ不足</td></tr>'}</tbody>
             </table>
           </div>
         </div>
