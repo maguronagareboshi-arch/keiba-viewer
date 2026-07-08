@@ -451,7 +451,8 @@ function daysBetween(d1, d2) {
 }
 const MODEL_FEATS = ['time_mean', 'time_best', 'time_last', 'f3_best', 'l3_best', 'n_runs',
   'days_off', 'dist_change', 'same_band_z', 'cls_up', 'cls_down', 'wt_change', 'draw_bias',
-  'jockey_r', 'trainer_r', 'trip_adj', 'exact_dist_r', 'waku_rate', 'sire_rate', 'cyo_z'];
+  'jockey_r', 'trainer_r', 'trip_adj', 'exact_dist_r', 'waku_rate', 'sire_rate', 'cyo_z',
+  'rento', 'fresh', 'layoff'];   // 休み明け非線形（build_model.py FEATSと同順）
 const dbandOf = (d) => !d ? null : d <= 1000 ? '1000' : d <= 1100 ? '1100' : d <= 1200 ? '1200'
   : d <= 1600 ? '15-16' : d <= 1700 ? '1700' : '1800+';
 
@@ -529,6 +530,10 @@ function modelScore(e, history, race, cyoZ) {
     waku_rate: (m.waku_r && m.waku_r[`${dbandOf(d)}|${e.waku}`]) ?? 0.28,  // 距離帯×枠の複勝率
     sire_rate: (m.sire_r && m.horse_sire && m.sire_r[m.horse_sire[e.horse_id]]) ?? (m.sire_mean ?? 0.30),  // 父の門別複勝率（砂適性）
     cyo_z: (cyoZ != null ? cyoZ : 50) / 50,  // 直前追切 坂路3F最速の偏差値（状態）
+    // 休み明け非線形（build_model.py と厳密一致）。gap=前走からの日数。
+    rento: (() => { const g = last.date ? daysBetween(race.date || race.race_date, last.date) : 20; return g <= 9 ? 1 : 0; })(),
+    fresh: (() => { const g = last.date ? daysBetween(race.date || race.race_date, last.date) : 20; return (g >= 22 && g <= 45) ? 1 : 0; })(),
+    layoff: (() => { const g = last.date ? daysBetween(race.date || race.race_date, last.date) : 20; return g >= 60 ? 1 : 0; })(),
   };
   let s = m.b;
   for (let i = 0; i < MODEL_FEATS.length; i++) {
