@@ -765,16 +765,22 @@ function drawStrip() {
     sctx.beginPath(); sctx.arc(pt.x, pt.y, 1.2 + (1 - a) * 3.5, 0, Math.PI * 2); sctx.fill();
   }
   // 馬（順位で3段・ギャロップアニメーション・馬体は1馬身スケール）
-  ranked.forEach((h, i) => {
-    const x = anchorX - dir * (leader - h.s) / BASHIN * pxPerB;
-    const y = y0 + (i % 3) * laneStep;
-    const hoofs = drawGallopHorse(sctx, x, y, L, phaseOf(h), dir,
+  // レーンの向き: 先頭勢=ラチ沿いなので、向正面(→)はラチが手前＝先頭を下段に、
+  // 正面(←・ゴール前)はラチが奥＝先頭を上段に（スタンドから見た遠近と一致させる）
+  const entries = ranked.map((h, i) => {
+    const laneIdx = dir > 0 ? 2 - (i % 3) : (i % 3);
+    return { h, x: anchorX - dir * (leader - h.s) / BASHIN * pxPerB, y: y0 + laneIdx * laneStep };
+  });
+  entries.sort((a, b) => a.y - b.y);   // 奥(上)から描いて手前(下)を前面に
+  for (const e of entries) {
+    const h = e.h;
+    const hoofs = drawGallopHorse(sctx, e.x, e.y, L, phaseOf(h), dir,
       css[`--waku${h.waku}-bg`], css[`--waku${h.waku}-tx`], h.umaban, coatOf(h));
     if (state.running && h.s < state.dist && Math.random() < 0.35 && state.dust.length < 140) {
       const hf = hoofs[Math.floor(Math.random() * 2)];   // 後脚の蹄から
       state.dust.push({ x: hf[0], y: Math.min(hf[1], bandBot - 2), vx: -dir * (1.2 + Math.random() * 1.6), vy: -(0.2 + Math.random() * 0.5), age: 0, max: 14 + Math.random() * 8 });
     }
-  });
+  }
   sctx.textBaseline = 'alphabetic';
 }
 
