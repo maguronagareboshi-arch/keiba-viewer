@@ -1261,43 +1261,51 @@ function analysisHtml(st) {
   const pct = (v) => v == null ? '-' : `${Math.round(v * 100)}%`;
   // 延長/短縮は標本20走以上のときだけ数値表示（少数のブレを出さない）
   const pctN = (v, n) => (v == null || !n || n < 20) ? '-' : `${Math.round(v * 100)}%`;
-  const pedRow = ([name, e]) => {
+  const pedRow = (type) => ([name, e]) => {
     const bd = bandOrder.filter((b) => e.bands[b]).map((b) => `${b.replace('15-16', '1500/1600')}:${pct(e.bands[b].rate)}`).join('　');
-    return `<tr><td class="l stickyname">${esc(name)}</td><td class="num">${e.n}</td>
+    return `<tr><td class="l stickyname"><a class="pedname" data-pt="${type}" data-pn="${esc(name)}" style="cursor:pointer;color:var(--accent);text-decoration:underline">${esc(name)}</a></td><td class="num">${e.n}</td>
       <td class="num">${pct(e.win)}</td><td class="num">${rateBar(e.rate)}</td>
       <td class="num">${pct(e.good)}</td><td class="num">${pct(e.omo)}</td>
       <td class="num">${pctN(e.ext, e.ext_n)}</td><td class="num">${pctN(e.sht, e.sht_n)}</td>
       <td class="small l fold"><span class="kv">${bd}</span></td></tr>`;
   };
-  // 父・母父共通の血統成績テーブル（母父=broodmare sire で母系の適性も掘る）
-  const pedTable = (label, statsObj, note) => {
+  // 父・母父共通の血統成績テーブル（母父=broodmare sire で母系の適性も掘る）。名タップで産駒一覧。
+  const pedTable = (label, type, statsObj, note) => {
     const list = Object.entries(statsObj || {}).filter(([, e]) => e.n >= 25).sort((a, b) => (b[1].rate || 0) - (a[1].rate || 0));
     if (!list.length) return '';
-    return `<h3 class="sec">${label}別成績（門別成績／複勝率順・25走以上）</h3>
+    return `<h3 class="sec">${label}別成績（門別成績／複勝率順・25走以上・${label}名タップで産駒一覧）</h3>
     <div class="card tablewrap"><table>
       <tr><th class="stickyname">${label}</th><th>出走</th><th>勝率</th><th>複勝率</th><th>良</th><th>重</th><th>延長</th><th>短縮</th><th>距離帯別 複勝率</th></tr>
-      ${list.slice(0, 30).map(pedRow).join('')}
+      ${list.slice(0, 30).map(pedRow(type)).join('')}
     </table><div class="legend">${note}</div></div>`;
   };
-  const sireTable = pedTable('父', sst, `勝率＝1着率／複勝率＝3着内率。良と重で差がある父、距離帯で得意不得意がある父も。<b>延長</b>＝前走より距離を伸ばした時／<b>短縮</b>＝縮めた時の複勝率（20走以上のみ表示）。AI予想にも <b>sire_rate</b>（父の砂適性）として反映済み。`);
-  const bmsTable = pedTable('母父', st.bms_stats, `<b>母父（母の父＝ブルードメアサイアー）</b>別の門別成績。父だけでなく母系の砂適性・距離適性が見えます。名前が短いのは競馬ブック表記の略称（例: Elusive→Elusive Quality）。父と母父の両面で買い材料を掘れます。`);
+  const sireTable = pedTable('父', 'sire', sst, `勝率＝1着率／複勝率＝3着内率。良と重で差がある父、距離帯で得意不得意がある父も。<b>延長</b>＝前走より距離を伸ばした時／<b>短縮</b>＝縮めた時の複勝率（20走以上のみ表示）。AI予想にも <b>sire_rate</b>（父の砂適性）として反映済み。`);
+  const bmsTable = pedTable('母父', 'bms', st.bms_stats, `<b>母父（母の父＝ブルードメアサイアー）</b>別の門別成績。父だけでなく母系の砂適性・距離適性が見えます。名前が短いのは競馬ブック表記の略称（例: Elusive→Elusive Quality）。父と母父の両面で買い材料を掘れます。`);
 
   // 基準タイム（クラス別。'全'はフォールバック用なので非表示）
   const clsOrder = { '2歳': 0, '3歳': 1, '3歳以上': 2 };
-  const btKeys = Object.keys(st.base_times)
-    .filter((k) => k.split('_')[2] !== '全')
-    .sort((a, b) => {
-      const [da, ga, ca] = a.split('_'); const [db, gb, cb] = b.split('_');
-      return (+da) - (+db) || (clsOrder[ca] ?? 9) - (clsOrder[cb] ?? 9) || ga.localeCompare(gb);
-    });
-  const btRows = btKeys.map((k) => {
-    const [d, g, c] = k.split('_');
-    const e = st.base_times[k];
-    return `<tr><td>${d}m</td><td>${c}</td><td>${g}</td>
-      <td class="num">${e.first3f ? `${e.first3f.mean} ± ${e.first3f.std}` : '-'}</td>
-      <td class="num">${e.last3f ? `${e.last3f.mean} ± ${e.last3f.std}` : '-'}</td>
-      <td class="num">${e.time ? `${e.time.mean} ± ${e.time.std}` : '-'}</td>
-      <td class="num">${e.first3f ? e.first3f.n : e.last3f ? e.last3f.n : ''}</td></tr>`;
+  // 走破タイムを秒→分秒(M:SS.s)へ（例 73.9→1:13.9）。門別は全て60秒超。
+  const mmss = (s) => { if (s == null) return '-'; const m = Math.floor(s / 60); return `${m}:${(s - m * 60).toFixed(1).padStart(4, '0')}`; };
+  // クラス別(2歳限定/3歳限定/3歳以上)にセクション分け・馬場は良/重系を横並び
+  const clsLabel = { '2歳': '2歳限定', '3歳': '3歳限定', '3歳以上': '3歳以上（古馬含む）' };
+  const btByClass = ['2歳', '3歳', '3歳以上'].map((cls) => {
+    const dists = [...new Set(Object.keys(st.base_times)
+      .filter((k) => { const p = k.split('_'); return p[2] === cls; })
+      .map((k) => +k.split('_')[0]))].sort((a, b) => a - b);
+    if (!dists.length) return '';
+    const bt = (d, g) => st.base_times[`${d}_${g}_${cls}`];
+    const rows = dists.map((d) => {
+      const eR = bt(d, '良'), eH = bt(d, '重系');
+      const cell = (e) => e && e.time ? `<b>${mmss(e.time.mean)}</b> <span class="small" style="opacity:.7">±${e.time.std.toFixed(1)}</span>` : '-';
+      const seg = (e, fld) => e && e[fld] ? e[fld].mean.toFixed(1) : '-';
+      return `<tr><td><b>${d}m</b></td>
+        <td class="num">${cell(eR)}</td><td class="num">${cell(eH)}</td>
+        <td class="num small">${seg(eR, 'first3f')} / ${seg(eR, 'last3f')}</td>
+        <td class="num">${eR && eR.time ? eR.time.n : ''}${eH && eH.time ? '+' + eH.time.n : ''}</td></tr>`;
+    }).join('');
+    return `<h4 class="sec" style="margin:12px 0 4px;font-size:14px">${clsLabel[cls]}</h4>
+      <div class="card tablewrap"><table>
+      <tr><th>距離</th><th>走破タイム(良)</th><th>走破タイム(重系)</th><th>良の前半3F/上り3F</th><th>N(良+重)</th></tr>${rows}</table></div>`;
   }).join('');
 
   // 騎手・厩舎（勝率順）
@@ -1320,10 +1328,8 @@ function analysisHtml(st) {
   ${wakuTable}
   ${sireTable}
   ${bmsTable}
-  <h3 class="sec">基準タイム（距離×クラス×馬場・平均±標準偏差 → 偏差値/指数の土台）</h3>
-  <div class="card tablewrap"><table>
-    <tr><th>距離</th><th>クラス</th><th>馬場</th><th>前半3F</th><th>上り3F</th><th>走破タイム</th><th>N</th></tr>${btRows}
-  </table></div>
+  <h3 class="sec">基準タイム（クラス別・走破タイムは分秒の平均。偏差値/指数の土台）</h3>
+  ${btByClass}
   <div class="grid2">${rankTable(st.jockeys, '騎手')}${rankTable(st.trainers, '厩舎')}</div>`;
 }
 
@@ -1472,6 +1478,22 @@ async function renderCyokyo() {
 // ============================================================
 const withTimeout = (p, ms) => Promise.race([p,
   new Promise((_, rej) => setTimeout(() => rej(new Error('タイムアウト（通信が遅い可能性）')), ms))]);
+
+// 父/母父タップ → その血統の産駒一覧（既存の馬モーダルを流用）。産駒名タップで各馬詳細へ。
+function openPedModal(type, name) {
+  const st = state.stats || {};
+  const list = ((type === 'bms' ? st.bms_horses : st.sire_horses) || {})[name] || [];
+  $('horseModal').hidden = false;
+  $('horseModalTitle').textContent = `${type === 'bms' ? '母父' : '父'} ${name} の産駒（門別・${list.length}頭）`;
+  const rows = list.map(([hn, n, w, t]) => `<tr>
+    <td class="l"><a class="horse-link" data-horse="${esc(hn)}"><b>${esc(hn)}</b></a></td>
+    <td class="num">${n}</td><td class="num">${w}</td>
+    <td class="num ${n && w / n >= 0.15 ? 'best' : ''}">${n ? Math.round(w / n * 100) : 0}%</td>
+    <td class="num ${n && t / n >= 0.4 ? 'best' : ''}">${n ? Math.round(t / n * 100) : 0}%</td></tr>`).join('');
+  $('horseModalBody').innerHTML = `<div class="card tablewrap"><table>
+    <tr><th>産駒</th><th>走数</th><th>勝</th><th>勝率</th><th>複勝率</th></tr>${rows || '<tr><td colspan="5">データなし</td></tr>'}</table>
+    <div class="legend">走数の多い順。産駒名をタップでその馬の成績・調教。門別出走のある産駒のみ。</div></div>`;
+}
 
 async function openHorseModal(nameOrId, byId, displayName) {
   const modal = $('horseModal');
@@ -1706,9 +1728,16 @@ async function init() {
     if (p && !p.hidden && !e.target.closest('[data-live-odds]') && !e.target.closest('#oddsFlowPop')) p.hidden = true;
   });
   $('horseModalClose').addEventListener('click', () => { $('horseModal').hidden = true; });
-  $('horseModal').addEventListener('click', (e) => { if (e.target.id === 'horseModal') $('horseModal').hidden = true; });
+  $('horseModal').addEventListener('click', (e) => {
+    const hl = e.target.closest('a.horse-link');   // 産駒一覧などモーダル内の馬名タップ→その馬詳細へ
+    if (hl) { e.preventDefault(); const nm = hl.textContent.trim();
+      hl.dataset.hid ? openHorseModal(hl.dataset.hid, true, nm) : openHorseModal(hl.dataset.horse, false, nm); return; }
+    if (e.target.id === 'horseModal') $('horseModal').hidden = true;
+  });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('horseModal').hidden = true; });
   $('analysisRoot').addEventListener('click', (e) => {
+    const pn = e.target.closest('.pedname');   // 父/母父名タップ→産駒一覧モーダル
+    if (pn) { e.preventDefault(); openPedModal(pn.dataset.pt, pn.dataset.pn); return; }
     const rc = e.target.closest('a[data-rec]');
     if (rc) { e.preventDefault(); openRecordDetail(rc.dataset.rec, rc.dataset.kind); return; }
     if (e.target.id === 'recFold') {
