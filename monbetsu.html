@@ -1258,23 +1258,29 @@ function analysisHtml(st) {
   // 血統別成績（父の門別複勝率・砂適性・馬場別・距離帯別）
   const sst = st.sire_stats || {};
   const bandOrder = ['1000', '1100', '1200', '15-16', '1700', '1800+'];
-  const sireList = Object.entries(sst).filter(([, e]) => e.n >= 25).sort((a, b) => (b[1].rate || 0) - (a[1].rate || 0));
   const pct = (v) => v == null ? '-' : `${Math.round(v * 100)}%`;
   // 延長/短縮は標本20走以上のときだけ数値表示（少数のブレを出さない）
   const pctN = (v, n) => (v == null || !n || n < 20) ? '-' : `${Math.round(v * 100)}%`;
-  const sireRow = ([name, e]) => {
+  const pedRow = ([name, e]) => {
     const bd = bandOrder.filter((b) => e.bands[b]).map((b) => `${b.replace('15-16', '1500/1600')}:${pct(e.bands[b].rate)}`).join('　');
-    return `<tr><td class="l">${esc(name)}</td><td class="num">${e.n}</td>
+    return `<tr><td class="l stickyname">${esc(name)}</td><td class="num">${e.n}</td>
       <td class="num">${pct(e.win)}</td><td class="num">${rateBar(e.rate)}</td>
       <td class="num">${pct(e.good)}</td><td class="num">${pct(e.omo)}</td>
       <td class="num">${pctN(e.ext, e.ext_n)}</td><td class="num">${pctN(e.sht, e.sht_n)}</td>
-      <td class="small l">${bd}</td></tr>`;
+      <td class="small l fold"><span class="kv">${bd}</span></td></tr>`;
   };
-  const sireTable = `<h3 class="sec">血統別成績（父の門別成績／複勝率順・25走以上）</h3>
+  // 父・母父共通の血統成績テーブル（母父=broodmare sire で母系の適性も掘る）
+  const pedTable = (label, statsObj, note) => {
+    const list = Object.entries(statsObj || {}).filter(([, e]) => e.n >= 25).sort((a, b) => (b[1].rate || 0) - (a[1].rate || 0));
+    if (!list.length) return '';
+    return `<h3 class="sec">${label}別成績（門別成績／複勝率順・25走以上）</h3>
     <div class="card tablewrap"><table>
-      <tr><th>父</th><th>出走</th><th>勝率</th><th>複勝率</th><th>良</th><th>重</th><th>延長</th><th>短縮</th><th>距離帯別 複勝率</th></tr>
-      ${sireList.slice(0, 30).map(sireRow).join('')}
-    </table><div class="legend">勝率＝1着率／複勝率＝3着内率。良と重で差がある父、距離帯で得意不得意がある父も。<b>延長</b>＝前走より距離を伸ばした時／<b>短縮</b>＝縮めた時の複勝率（20走以上のみ表示）。AI予想にも <b>sire_rate</b>（父の砂適性）として反映済み。下位も参考: ${sireList.slice(-4).map(([n]) => esc(n)).join('・')} など芝血統は苦戦傾向。</div></div>`;
+      <tr><th class="stickyname">${label}</th><th>出走</th><th>勝率</th><th>複勝率</th><th>良</th><th>重</th><th>延長</th><th>短縮</th><th>距離帯別 複勝率</th></tr>
+      ${list.slice(0, 30).map(pedRow).join('')}
+    </table><div class="legend">${note}</div></div>`;
+  };
+  const sireTable = pedTable('父', sst, `勝率＝1着率／複勝率＝3着内率。良と重で差がある父、距離帯で得意不得意がある父も。<b>延長</b>＝前走より距離を伸ばした時／<b>短縮</b>＝縮めた時の複勝率（20走以上のみ表示）。AI予想にも <b>sire_rate</b>（父の砂適性）として反映済み。`);
+  const bmsTable = pedTable('母父', st.bms_stats, `<b>母父（母の父＝ブルードメアサイアー）</b>別の門別成績。父だけでなく母系の砂適性・距離適性が見えます。名前が短いのは競馬ブック表記の略称（例: Elusive→Elusive Quality）。父と母父の両面で買い材料を掘れます。`);
 
   // 基準タイム（クラス別。'全'はフォールバック用なので非表示）
   const clsOrder = { '2歳': 0, '3歳': 1, '3歳以上': 2 };
@@ -1313,6 +1319,7 @@ function analysisHtml(st) {
   <div class="grid2">${pkTables}</div>
   ${wakuTable}
   ${sireTable}
+  ${bmsTable}
   <h3 class="sec">基準タイム（距離×クラス×馬場・平均±標準偏差 → 偏差値/指数の土台）</h3>
   <div class="card tablewrap"><table>
     <tr><th>距離</th><th>クラス</th><th>馬場</th><th>前半3F</th><th>上り3F</th><th>走破タイム</th><th>N</th></tr>${btRows}
