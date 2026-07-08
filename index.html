@@ -203,6 +203,30 @@ body.dark-mode .progress-bar-wrap{background:#0d1826!important}
 /* モーダル */
 body.dark-mode #admin-login-modal>div{background:#111827!important;color:#e2e8f0!important}
 body.dark-mode .horse-modal-inner,body.dark-mode [class*="modal"]>div{background:#111827!important;color:#e2e8f0!important}
+/* 馬別過去成績モーダルのダーク対応（統計カード・コメント欄・テーブルの薄い箇所を暗色化＋文字明色化） */
+body.dark-mode .horse-modal{background:#0d1826!important}
+body.dark-mode .horse-modal-content{background:#0d1826!important;color:#e2e8f0!important}
+body.dark-mode .hm-stat-card{background:#131c2b!important;border-color:#26344a!important}
+body.dark-mode .hm-stat-card.hm-stat-highlight{background:#0c2438!important;border-color:#1d4ed8!important}
+body.dark-mode .hm-stat-label{color:#8fa3be!important}
+body.dark-mode .hm-stat-value{color:#e6edf6!important}
+body.dark-mode .hm-stat-sub{color:#8fa3be!important}
+body.dark-mode .hm-hint{color:#8fa3be!important}
+body.dark-mode .hm-cmt{background:#0c2a33!important;border-color:#0e5a6b!important;color:#dbe7f0!important}
+body.dark-mode .hm-cmt .hm-cmt-meta,body.dark-mode .hm-cmt .hm-cmt-meta span{color:#7dd3fc!important}
+body.dark-mode .hm-table td{color:#dbe4ee!important;border-color:#22304a!important}
+body.dark-mode .hm-row-win{background:#2a2400!important}
+body.dark-mode .hm-row-win:hover{background:#3a3206!important}
+body.dark-mode .hm-match-cell{background:#3a3206!important;color:#fde68a!important}
+body.dark-mode .hm-nodata{color:#8fa3be!important}
+body.dark-mode .bench-panel{background:#052e16!important;border-color:#166534!important}
+body.dark-mode .bench-title{color:#86efac!important}
+body.dark-mode .bench-item{background:#0d1826!important;border-color:#166534!important}
+body.dark-mode .bench-item-win{background:#04250f!important;border-color:#16a34a!important}
+body.dark-mode .bench-label{color:#8fa3be!important}
+body.dark-mode .bench-val{color:#86efac!important}
+/* モーダル内の極薄ラベル(#9ca3af/#d1d5db等→暗すぎる#4a5e76化)を読める明度に（R:ミドル / N日 等） */
+body.dark-mode .horse-modal [style*="color:#9ca3af"],body.dark-mode .horse-modal [style*="color:#d1d5db"],body.dark-mode .horse-modal [style*="color:#94a3b8"],body.dark-mode .horse-modal [style*="color:#64748b"],body.dark-mode .horse-modal [style*="color:#6b7280"]{color:#93a6c0!important}
 
 /* ===== インラインスタイル上書き ===== */
 /* 白・ほぼ白 */
@@ -871,6 +895,7 @@ const KV_APP_CSS = [
       '.hm-match-cell{background:#fef9c3!important;font-weight:700}',
       '.hm-pace-match{box-shadow:0 0 0 2px #1a56a0!important}',
       '.hm-nodata{text-align:center;padding:32px;color:#6b7280;font-size:14px;line-height:2}',
+      '.hm-cmt{background:#ecfeff;border:1px solid #a5f3fc;border-radius:6px;padding:7px 10px;margin-bottom:6px;font-size:12px;color:#1e293b;line-height:1.6}',
       /* ② クラス×距離 基準値パネル */
       '.class-bench-wrap{margin-top:12px}',
       '.bench-panel{background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:12px 16px}',
@@ -8700,8 +8725,8 @@ function openHorseModal(horseName, raceNo) {
     var sl = (parseInt(cnt) === 99) ? items : items.slice(0, parseInt(cnt)||10);
     if(!sl.length) return '<div style="font-size:12px;color:#9ca3af;padding:8px 4px"><i class="fas fa-comment-dots"></i> 保存済みコメントはありません</div>';
     return sl.map(function(h){
-      return '<div style="background:#ecfeff;border:1px solid #a5f3fc;border-radius:6px;padding:7px 10px;margin-bottom:6px;font-size:12px;color:#1e293b;line-height:1.6">'
-        + '<span style="font-size:10px;color:#0e7490;font-weight:700;white-space:nowrap"><i class="fas fa-comment-dots"></i> '
+      return '<div class="hm-cmt">'
+        + '<span class="hm-cmt-meta" style="font-size:10px;color:#0e7490;font-weight:700;white-space:nowrap"><i class="fas fa-comment-dots"></i> '
         + h.raceDate + (h.raceNo ? ' '+h.raceNo+'R' : '') + (h.raceName ? ' <span style="font-weight:400;color:#64748b">'+h.raceName+'</span>' : '') + '</span>'
         + '　' + h.postComment
         + '</div>';
