@@ -761,11 +761,11 @@ async function initMain(dates) {
       `<button data-id="${r.race_id}" class="${r.race_id === state.raceId ? 'active' : ''}"
         title="${esc(r.klass || '')} ${esc(r.name || '')}">${r.race_no}R<small>${r.distance_m || '?'}m</small></button>`).join('');
   };
-  const loadDate = async (date) => {
+  const loadDate = async (date, targetRid) => {
     try { localStorage.setItem('mb_sim_date', date); } catch (e) { /* プライベートモード等は無視 */ }
     state.races = await state.source.listRaces(date);
     if (state.races.length) {
-      const meta = state.races[0];
+      const meta = state.races.find((r) => r.race_id === targetRid) || state.races[0];
       await loadRace(meta.race_id, meta);
     }
     renderRaceBtns();
@@ -818,16 +818,31 @@ async function initMain(dates) {
     $('speedBtn').textContent = `速度 x${state.speed}`;
   });
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { loadCss(); drawTrack(); drawHorses(); });
-  // 初期日付: 前回選択（タブを閉じても記憶） → 今日 → 最新 の優先順
+  // URL ?race=<race_id> でそのレースを直接読み込む（ビューアからの埋め込み用）。?embed=1 でヘッダ非表示。
+  const params = new URLSearchParams(location.search);
+  const reqRace = params.get('race');
+  if (params.get('embed')) {
+    document.body.classList.add('embed');
+    const hd = document.querySelector('header'); if (hd) hd.style.display = 'none';
+    const ds = $('dateSel').closest('.controls'); if (ds) ds.style.display = 'none';   // 日付選択を隠す
+    const rb = $('raceBtns').closest('.controls'); if (rb) rb.style.display = 'none';   // レースはビューア側タブで切替（重複防止）
+  }
+  // 初期日付: URL指定レース → 前回選択（記憶） → 今日 → 最新 の優先順
   let initDate = null;
-  try { initDate = localStorage.getItem('mb_sim_date'); } catch (e) { /* 無視 */ }
+  if (reqRace && reqRace.length >= 16) {
+    const rd = `${reqRace.slice(0, 4)}-${reqRace.slice(12, 14)}-${reqRace.slice(14, 16)}`;
+    if (dates.includes(rd)) initDate = rd;
+  }
+  if (!initDate) {
+    try { initDate = localStorage.getItem('mb_sim_date'); } catch (e) { /* 無視 */ }
+  }
   if (!initDate || !dates.includes(initDate)) {
     const n = new Date();
     const today = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
     initDate = dates.includes(today) ? today : dates[0];
   }
   $('dateSel').value = initDate;
-  await loadDate(initDate);
+  await loadDate(initDate, reqRace);
 }
 init();
 </script>
