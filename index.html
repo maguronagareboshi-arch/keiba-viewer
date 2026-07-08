@@ -677,7 +677,10 @@ const KV_APP_CSS = [
       '.section-title>i{background:linear-gradient(135deg,#1a56a0,#38bdf8);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}',
       'body.dark-mode .section-title>i{background:linear-gradient(135deg,#7dd3fc,#a78bfa);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}',
       // 乗り替わり分析：騎手タップで乗せ替え元の内訳
-      '.jc-tbl th,.jc-tbl td{padding:6px 8px!important;font-size:11.5px!important;letter-spacing:-.01em}',
+      '.jc-tbl{table-layout:fixed;width:100%}',
+      '.jc-tbl th,.jc-tbl td{padding:6px 6px!important;font-size:11.5px!important;letter-spacing:-.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.jc-tbl th:first-child,.jc-tbl td:first-child{width:30%}',   // 騎手名を固定幅にして数値列を均等配分（変な隙間を解消）
+      '.jc-tbl td.jc-srccell{text-overflow:clip;white-space:normal}',
       '.jc-jkrow{cursor:pointer}',
       '.jc-jkrow:hover td{background:#f1f5f9}',
       '.jc-caret{display:inline-block;transition:transform .15s;color:#94a3b8;margin-right:4px;font-size:10px}',
@@ -7236,7 +7239,7 @@ function renderJockeyChangeAnalysis() {
     const _minDest = yf ? 15 : 30;
     const destRows = Object.entries(byB).filter(([k, v]) => v.n >= _minDest)
       .map(([B, v]) => { const cont = sameB[B] ? pct(sameB[B].f, sameB[B].n) : null; const chg = pct(v.f, v.n); return { B, n: v.n, chg, cont, contN: sameB[B] ? sameB[B].n : 0, diff: cont != null ? +(chg - cont).toFixed(1) : null }; })
-      .sort((a, b) => b.chg - a.chg);
+      .sort((a, b) => b.n - a.n);
     const _minSrcN = yf ? 2 : 3;
     const destTbl = destRows.map((r, i) => {
       // この騎手への乗せ替え元の内訳（○○→この騎手・全厩舎・複勝率順）
@@ -7261,7 +7264,7 @@ function renderJockeyChangeAnalysis() {
       ${summaryBar}
       <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
         <div style="flex:1;min-width:320px">
-          <div style="font-size:13px;font-weight:800;color:#374151;margin-bottom:4px">🏇 乗替先ランキング（この騎手に乗せ替えた時・n≥${_minDest}・乗替複勝率順）</div>
+          <div style="font-size:13px;font-weight:800;color:#374151;margin-bottom:4px">🏇 乗替先ランキング（この騎手に乗せ替えた時・n≥${_minDest}・騎乗数の多い順）</div>
           <div style="font-size:10.5px;color:#0891b2;margin-bottom:4px">▸ 騎手をタップすると「誰からこの騎手に乗り替わった時が良いか」の内訳が開きます</div>
           <div class="table-wrapper" style="max-height:420px;overflow-y:auto">
             <table class="deban-table jc-tbl">
