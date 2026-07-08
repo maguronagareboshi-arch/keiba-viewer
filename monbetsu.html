@@ -482,9 +482,16 @@ function modelScore(e, history, race, cyoZ) {
   const band = d <= 1100 ? 1 : d <= 1200 ? 2 : 3;
   const sameBand = P.filter((p) => p.band === band && p.tz != null).map((p) => p.tz);
   const mean = (a) => a.reduce((s, v) => s + v, 0) / a.length;
+  // time_mean は新しい走りほど重い加重平均（半減期3走・build_model.py recency_meanと厳密一致）。
+  // tz は新しい→古い順なので j=0(最新)の重みが1。
+  const wmean = (a) => {
+    let num = 0, den = 0;
+    for (let j = 0; j < a.length; j++) { const wgt = Math.pow(0.5, j / 3.0); num += wgt * a[j]; den += wgt; }
+    return den ? num / den : 0;
+  };
   const tRank = clsRank(race.klass);
   const f = {
-    time_mean: mean(tz), time_best: Math.max(...tz), time_last: last.tz != null ? last.tz : mean(tz),
+    time_mean: wmean(tz), time_best: Math.max(...tz), time_last: last.tz != null ? last.tz : wmean(tz),
     f3_best: fz.length ? Math.max(...fz) : 0, l3_best: lz.length ? Math.max(...lz) : 0,
     n_runs: Math.min(P.length, 8) / 8,
     days_off: last.date ? Math.min(daysBetween(race.date || race.race_date, last.date), 90) / 90 : 0.3,
