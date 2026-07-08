@@ -752,6 +752,15 @@ function equipBadges(codes, binkFirst) {
 }
 const EQUIP_LEGEND = '装備：<span class="eqp eq-bink">ブ</span>ブリンカー <span class="eqp eq-cheek">チ</span>チーク <span class="eqp eq-shadow">シ</span>シャドーロール　<span class="eqp eq-first">初ブ</span>=ブリンカー初着用（一変注意・データ内で初）。タップで詳細。';
 
+// 当日レースのブリンカー（出馬表のブリンカ列＝entry.marks.blinker='B'）。過去走に無ければ初ブリンカー。
+function todayBlinkerBadge(e, history) {
+  if (!(e.marks && e.marks.blinker === 'B')) return '';
+  const woreBefore = (history[e.horse_id] || []).some((r) => (r.equip || []).includes('ブ'));
+  return woreBefore
+    ? ` <span class="eqp eq-bink" data-tip="当日ブリンカー着用">ブ</span>`
+    : ` <span class="eqp eq-first" data-tip="初ブリンカー（当日）＝この馬が初めてブリンカーを着用。一変（急変）に注意">初ブ</span>`;
+}
+
 function pastRunHtml(run) {
   if (!run) return '';
   const fin = run.fin != null ? `${run.fin}着` : '除/取';
@@ -850,7 +859,7 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku) {
       <td><span class="waku w${e.waku || 1}">${e.waku ?? ''}</span></td>
       <td>${e.umaban ?? ''}</td>
       <td style="font-size:15px">${aiMark.get(e.umaban) || ''}${(e.umaban === aiTopUma && aiConf) ? `<br><span class="badge conf-${aiConf.tier}" title="◎信頼度：予測1位が2位をどれだけ引き離しているか（複勝率の目安 S81%/A73%/B65%/C62%）">${aiConf.label}</span>` : ''}</td>
-      <td class="l stickyname"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a></td>
+      <td class="l stickyname"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a>${todayBlinkerBadge(e, history)}</td>
       <td>${esc(e.sex_age)}</td>
       <td>${esc(e.genryo || '')}</td>
       <td class="l">${esc(e.jockey)}</td>
@@ -964,7 +973,7 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku) {
       <td style="font-size:16px">${r.mark || ''}</td>
       <td><span class="waku w${e.waku || 1}">${e.waku ?? ''}</span></td>
       <td>${e.umaban ?? ''}</td>
-      <td class="l stickyname"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a></td>
+      <td class="l stickyname"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a>${todayBlinkerBadge(e, history)}</td>
       <td class="num ${r.mark === '◎' ? 'best' : ''}">${r.aiDev != null ? r.aiDev.toFixed(1) : '-'}</td>
       <td class="num ${r.mark === '◎' ? 'best' : ''}">${r.winP != null ? (r.winP * 100).toFixed(0) + '%' : '-'}</td>
       <td class="num">${r.score != null ? (50 + r.score * 10).toFixed(1) : '-'}</td>
@@ -1021,7 +1030,7 @@ function cyokyoRaceHtml(raceMeta, entries, cyokyo, history) {
       <td style="font-size:15px">${r.mark}</td>
       <td><span class="waku w${e.waku || 1}">${e.waku ?? ''}</span></td>
       <td>${e.umaban ?? ''}</td>
-      <td class="l"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a></td>
+      <td class="l"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a>${todayBlinkerBadge(e, history)}</td>
       <td class="num ${r.mark === '◎' ? 'best' : ''}">${r.best != null ? r.best.toFixed(1) : '-'}</td>
       <td>${r.w ? mmdd(r.w.date) : ''}</td>
       <td>${r.w ? esc(r.w.course) : '<span class="sub">追切なし</span>'}</td>
