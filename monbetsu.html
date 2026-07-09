@@ -976,12 +976,15 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku) {
         return [nk, past].filter(Boolean).join('<br>') || '-';
       })()}</div></td>
       <td class="small fold"><div class="kv">${(() => {
+        // 今回に向けた追切のみ（前走日以降）。新馬など前走が無い馬は全件が今回分。
+        const lastRaceDate = runs[0] && runs[0].date;
+        const curWorks = lastRaceDate ? works.filter((w) => w.date && w.date > lastRaceDate) : works;
         const head = cyo ? `${arrowHtml(cyo.arrow)} ${esc(cyo.tanpyo || '')}<br>` : '';
-        if (!works.length) return `${head}中間軽め`;
-        const latest = workHtml(works[0]);
-        if (works.length === 1) return head + latest;
-        const rest = works.slice(1).map((w) => workHtml(w, true)).join('<br>');
-        return `${head}${latest}<details class="cyo-more"><summary>他${works.length - 1}件</summary>${rest}</details>`;
+        if (!curWorks.length) return `${head}中間軽め`;
+        const latest = workHtml(curWorks[0]);
+        if (curWorks.length === 1) return head + latest;
+        const rest = curWorks.slice(1).map((w) => workHtml(w, true)).join('<br>');
+        return `${head}${latest}<details class="cyo-more"><summary>他${curWorks.length - 1}件</summary>${rest}</details>`;
       })()}</div></td>
     </tr>`;
   }).join('');

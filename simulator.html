@@ -33,6 +33,7 @@ header { display: flex; align-items: center; gap: 10px; padding: 8px 14px;
   background: var(--panel); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
 header h1 { font-size: 16px; margin: 0; }
 .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: var(--chip-bg); color: var(--sub); }
+.badge.live { background: #d84040; color: #fff; }
 main { max-width: 1200px; margin: 0 auto; padding: 10px 14px 30px; }
 .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
 select, button { padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px;
@@ -103,6 +104,7 @@ td.l { text-align: left; }
   <div class="card">
     <b>🎲 モンテカルロ・シミュレーション</b>
     <button id="mcBtn" style="margin-left:10px">1,000回走らせて勝率・期待値を出す</button>
+    <span id="oddsLive" style="margin-left:8px"></span>
     <div id="mcResult"></div>
   </div>
   <div class="card">
@@ -187,6 +189,31 @@ const sources = {
     async loadStats() { try { return await jget('data/stats.json'); } catch (e) { return null; } },
   },
 };
+
+// ---- ライブ単勝オッズ（当日レースのみ・60秒毎。index.htmlと同じWorkerプロキシ経由） ----
+const ODDS_PROXY = 'https://keiba-proxydeploy.maguronagareboshi.workers.dev/?url=';
+const jstToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+async function fetchLiveOdds(raceDate, raceNo) {
+  if (!raceDate || !raceNo) return null;
+  const url = `https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/OddsTanFuku?k_raceDate=${raceDate.replace(/-/g, '/')}&k_raceNo=${raceNo}&k_babaCode=36`;
+  try {
+    const html = await (await fetch(ODDS_PROXY + encodeURIComponent(url))).text();
+    if (html.indexOf('odd_popular_table_02') < 0) return null;
+    const m = html.match(/odd_popular_table_02[\s\S]*?<tbody>([\s\S]*?)<\/tbody>/);
+    const body = m ? m[1] : '';
+    const odds = {};
+    for (const tr of (body.match(/<tr[^>]*>[\s\S]*?<\/tr>/g) || [])) {
+      const tds = [...tr.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((x) => x[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim());
+      if (tds.length < 4) continue;
+      const uma = parseInt(tds[1]), o = parseFloat(tds[3]);
+      if (uma >= 1 && uma <= 20 && o > 0) odds[uma] = o;
+    }
+    if (!Object.keys(odds).length) return null;
+    const pop = {};
+    Object.entries(odds).sort((a, b) => a[1] - b[1]).forEach(([um], i) => { pop[um] = i + 1; });
+    return { odds, pop };
+  } catch (e) { return null; }
+}
 
 function frontSeg(dist) { return dist >= 1200 ? 600 : dist - 600; }  // 前半3F列の実距離
 
@@ -315,7 +342,8 @@ function posOnTrack(arcPx, lane, inner) {
 }
 
 // ---------------- シミュレーション ----------------
-const state = { horses: [], dist: 1100, inner: false, t: 0, running: false, speed: 6, timer: null, raceId: null };
+const state = { horses: [], dist: 1100, inner: false, t: 0, running: false, speed: 6, timer: null, raceId: null,
+  oddsTimer: null, mcRows: null };
 
 function isInnerCourse(dist) { return dist === 1500 || dist === 1600; }  // 内1500m・内1600m
 
@@ -450,11 +478,61 @@ function monteCarlo(n = 1000) {
     fts.forEach((ft, i) => { res[i].ftSum += ft; });
   }
   state.mcPaceZ = paceSum / n;
+  // evはここでは固定しない（h.oddsがライブ更新されるたびrenderMcTableで再計算するため）
   return state.horses.map((h, i) => ({
     h, winP: res[i].win / n, top3P: res[i].top3 / n,
     avgTime: res[i].ftSum / n, avgF3: res[i].f3Sum / n, avgL3: res[i].l3Sum / n,
-    ev: h.odds != null && h.odds > 0 ? (res[i].win / n) * h.odds : null,
   })).sort((a, b) => b.winP - a.winP);
+}
+
+// モンテカルロ結果テーブルの描画（h.oddsを都度読むのでライブ更新のたび呼べば期待値が最新化される）
+function renderMcTable(rows, ms) {
+  const timing = ms != null ? `1,000回試行（${ms}ms）・` : '';
+  $('mcResult').innerHTML = `<table>
+    <tr><th>#</th><th>馬番</th><th>馬名</th><th>勝率</th><th>複勝率</th><th>平均タイム</th><th>平均前半3F</th><th>平均上がり3F</th><th>単勝オッズ</th><th>期待値</th></tr>` +
+    rows.map((r, i) => {
+      const ev = r.h.odds != null && r.h.odds > 0 ? r.winP * r.h.odds : null;
+      return `<tr>
+        <td>${i + 1}</td>
+        <td><span class="waku w${r.h.waku}">${r.h.umaban}</span></td>
+        <td class="l">${esc(r.h.name)}</td>
+        <td>${(r.winP * 100).toFixed(1)}%</td>
+        <td>${(r.top3P * 100).toFixed(1)}%</td>
+        <td>${fmtTime(r.avgTime)}</td>
+        <td>${r.avgF3.toFixed(1)}</td>
+        <td>${r.avgL3.toFixed(1)}</td>
+        <td>${r.h.odds ?? '-'}</td>
+        <td class="${ev != null && ev >= 1 ? 'best' : ''}">${ev != null ? ev.toFixed(2) : '-'}</td>
+      </tr>`;
+    }).join('') + `</table>
+    <div class="note">${timing}平均ペース <b>${paceLabelOf(state.mcPaceZ ?? 0)}</b>（${(state.mcPaceZ ?? 0) >= 0 ? '+' : ''}${(state.mcPaceZ ?? 0).toFixed(2)}）。各試行でフィールドの先行争い→ペースを算出し、ハイは先行馬のスタミナ消耗・スローは前残りを反映。平均タイム/前半3F/上がり3Fは1,000回試行の平均（ペース・スタミナ・外ロス補正込み）。期待値 = 勝率 × 単勝オッズ。<b>1.00以上（緑）が理論上プラスの買い目</b>。${state.oddsTimer ? 'オッズは60秒毎に自動更新（ライブ）。' : 'オッズは出馬表取得時点のもの。'}</div>`;
+}
+
+function updateOddsLiveBadge() {
+  const el = $('oddsLive');
+  if (!el) return;
+  if (!state.oddsLiveActive) { el.textContent = ''; return; }
+  const n = new Date();
+  el.innerHTML = `<span class="badge live">🔴ライブ ${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}更新（60秒毎）</span>`;
+}
+
+// ライブオッズ: 当日レースのみ60秒毎に取得→h.odds/pop更新→表示中ならテーブル再描画（勝率は再計算しない＝軽い）
+async function startLiveOdds(raceDate, raceNo) {
+  clearInterval(state.oddsTimer); state.oddsTimer = null;
+  state.oddsLiveActive = raceDate === jstToday();
+  if (!state.oddsLiveActive) { if ($('oddsLive')) $('oddsLive').textContent = ''; return; }
+  const rid = state.raceId;
+  const run = async () => {
+    const live = await fetchLiveOdds(raceDate, raceNo);
+    if (!live || state.raceId !== rid) return;
+    for (const h of state.horses) {
+      if (live.odds[h.umaban] != null) { h.odds = live.odds[h.umaban]; h.pop = live.pop[h.umaban]; }
+    }
+    if (state.mcRows) renderMcTable(state.mcRows);
+    updateOddsLiveBadge();
+  };
+  await run();
+  state.oddsTimer = setInterval(run, 60000);
 }
 
 function distanceAt(h, t, D) {
@@ -861,7 +939,9 @@ async function loadRace(raceId, meta) {
   state.horses = buildHorses(entries, state.dist, race.klass || meta.klass, histories);
   applyPaceMean();   // 想定ペースと各馬の実効速度を算出
   state.t = 0; state.running = false; lastTs = null; state.stripDir = null; state.dust = [];
+  state.mcRows = null; $('mcResult').innerHTML = '';   // レース切替で前レースの結果を残さない
   if (state.timer) { clearInterval(state.timer); state.timer = null; }
+  startLiveOdds(race.date || race.race_date || meta.date, race.race_no || meta.race_no);
   $('raceLabel').textContent = `${race.date || ''} 門別${meta.race_no}R ${state.dist}m（${state.inner ? '内回り' : '外回り'}）${state.horses.length}頭`;
   $('startBtn').textContent = '▶ スタート';
   $('clock').textContent = '';
@@ -942,23 +1022,9 @@ async function initMain(dates) {
   });
   $('mcBtn').addEventListener('click', () => {
     const t0 = performance.now();
-    const rows = monteCarlo(1000);
+    state.mcRows = monteCarlo(1000);
     const ms = Math.round(performance.now() - t0);
-    $('mcResult').innerHTML = `<table>
-      <tr><th>#</th><th>馬番</th><th>馬名</th><th>勝率</th><th>複勝率</th><th>平均タイム</th><th>平均前半3F</th><th>平均上がり3F</th><th>単勝オッズ</th><th>期待値</th></tr>` +
-      rows.map((r, i) => `<tr>
-        <td>${i + 1}</td>
-        <td><span class="waku w${r.h.waku}">${r.h.umaban}</span></td>
-        <td class="l">${esc(r.h.name)}</td>
-        <td>${(r.winP * 100).toFixed(1)}%</td>
-        <td>${(r.top3P * 100).toFixed(1)}%</td>
-        <td>${fmtTime(r.avgTime)}</td>
-        <td>${r.avgF3.toFixed(1)}</td>
-        <td>${r.avgL3.toFixed(1)}</td>
-        <td>${r.h.odds ?? '-'}</td>
-        <td class="${r.ev != null && r.ev >= 1 ? 'best' : ''}">${r.ev != null ? r.ev.toFixed(2) : '-'}</td>
-      </tr>`).join('') + `</table>
-      <div class="note">1,000回試行（${ms}ms）・平均ペース <b>${paceLabelOf(state.mcPaceZ ?? 0)}</b>（${(state.mcPaceZ ?? 0) >= 0 ? '+' : ''}${(state.mcPaceZ ?? 0).toFixed(2)}）。各試行でフィールドの先行争い→ペースを算出し、ハイは先行馬のスタミナ消耗・スローは前残りを反映。平均タイム/前半3F/上がり3Fは1,000回試行の平均（ペース・スタミナ・外ロス補正込み）。期待値 = 勝率 × 単勝オッズ。<b>1.00以上（緑）が理論上プラスの買い目</b>。オッズは出馬表取得時点のもの。</div>`;
+    renderMcTable(state.mcRows, ms);
   });
   $('speedBtn').addEventListener('click', () => {
     const SPEEDS = [1, 3, 6, 12];   // x1=実時間（1000mを約63秒かけて観る）
