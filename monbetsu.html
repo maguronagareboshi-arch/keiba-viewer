@@ -196,6 +196,11 @@ td.best { background: var(--hl-best) !important; font-weight: bold; }
 .nk-aftercell { white-space: nowrap; }
 .nk-after { display: inline-block; }
 .nk-badge { background: #7a5cc0; color: #fff; }
+.cyo-more { margin-top: 2px; }
+.cyo-more > summary { cursor: pointer; color: var(--accent); font-size: 11px; list-style: none; }
+.cyo-more > summary::-webkit-details-marker { display: none; }
+.cyo-more > summary::before { content: '▸ '; }
+.cyo-more[open] > summary::before { content: '▾ '; }
 .cyo-yr-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 8px; }
 .cyo-yr-btn { font-size: 12px; padding: 3px 12px; border-radius: 14px; border: 1px solid var(--border); background: var(--chip-bg); color: var(--sub); cursor: pointer; }
 .cyo-yr-btn.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
@@ -852,12 +857,12 @@ function pastRunHtml(run) {
     tripTag(run.date, run.c4) +
     equipBadges(run.equip, run._binkFirst);
 }
-function workHtml(w) {
+function workHtml(w, withTanpyo) {
   if (!w) return '';
   const t = w.times || {};
   const times = [t.t_5f, t.t_half, t.t_3f, t.t_1f].filter((x) => x != null).map((x) => x.toFixed(1)).join('-');
   return `${w.date ? mmdd(w.date) : ''}${w.youbi ? `(${w.youbi})` : ''} ${esc(w.course || '')} ${times}` +
-    (w.ashiiro ? ` ${esc(w.ashiiro)}` : '') + (w.tanpyo ? `<br>${esc(w.tanpyo)}` : '');
+    (w.ashiiro ? ` ${esc(w.ashiiro)}` : '') + (withTanpyo && w.tanpyo ? `<br>${esc(w.tanpyo)}` : '');
 }
 function arrowHtml(a) {
   if (!a) return '';
@@ -963,11 +968,21 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku) {
       <td class="num ${cz != null && cz === topC ? 'a1' : ''}">${cz != null ? cz.toFixed(1) : '-'}</td>
       <td class="small fold"><div class="kv">${(() => {
         const nk = nokenLineHtml(e.horse_id);
+        const nkEntry = (state.nokenByHorse || {})[e.horse_id];
         const past = runs.map(pastRunHtml).join('<br>')
-          || nouRuns(nouByUma, e.umaban, 3).map((r) => nouRunHtml(r) + ' <span class="badge">能力表</span>').join('<br>');
+          || nouRuns(nouByUma, e.umaban, 3)
+              .filter((r) => !nkEntry || r.date !== nkEntry.date)   // 能検と同一走の能力表エントリは重複表示しない
+              .map((r) => nouRunHtml(r) + ' <span class="badge">能力表</span>').join('<br>');
         return [nk, past].filter(Boolean).join('<br>') || '-';
       })()}</div></td>
-      <td class="small fold"><div class="kv">${cyo ? `${arrowHtml(cyo.arrow)} ${esc(cyo.tanpyo || '')}<br>` : ''}${works.length ? workHtml(works[0]) : '-'}</div></td>
+      <td class="small fold"><div class="kv">${(() => {
+        const head = cyo ? `${arrowHtml(cyo.arrow)} ${esc(cyo.tanpyo || '')}<br>` : '';
+        if (!works.length) return `${head}中間軽め`;
+        const latest = workHtml(works[0]);
+        if (works.length === 1) return head + latest;
+        const rest = works.slice(1).map((w) => workHtml(w, true)).join('<br>');
+        return `${head}${latest}<details class="cyo-more"><summary>他${works.length - 1}件</summary>${rest}</details>`;
+      })()}</div></td>
     </tr>`;
   }).join('');
 
