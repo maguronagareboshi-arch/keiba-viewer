@@ -421,6 +421,33 @@ function fieldPace(vF) {
   return { paceZ, eNorm, contenders };
 }
 
+// ---- 想定ペース表示専用の判定（実データ較正・走行シミュレーション本体には使わない） ----
+// 検証: 実際の記録ペース(ハイ/ミドル/スロー)との答え合わせ(walk-forward後半30%・n=993)で
+// 上のpaceZ(先行争い頭数＋lead-mean/sd)は実ペースとの相関がほぼ無く(r=0.06)、正答率46.2%
+// （「常にミドル」と答える素朴基準61.7%にすら劣り、しかも「スロー」を一度も当てられない
+// 構造的欠陥があった）。テン3F偏差(zf)ベースの絶対水準の方が遥かに強い相関(mean_zf r=0.32)
+// だったため、こちらは別建てのzfベース回帰式に置き換え（TEST正答率60.6%・スロー再現率24%）。
+// 係数は全期間データで再フィット。
+function dispPaceScore(horses) {
+  const vF = horses.map((h) => h.vFront);
+  const zfs = horses.map((h) => h.zf);
+  const n = vF.length;
+  const lead = Math.max(...vF);
+  const mean = vF.reduce((a, b) => a + b, 0) / n;
+  const sd = Math.sqrt(vF.reduce((s, v) => s + (v - mean) ** 2, 0) / n) || 0.1;
+  const contenders = vF.filter((v) => v >= lead * PACE.contendRatio).length;
+  const disp = (lead - mean) / sd;
+  const sortedZf = [...zfs].sort((a, b) => b - a);
+  const leadZf = sortedZf[0];
+  const meanZf = zfs.reduce((a, b) => a + b, 0) / n;
+  const top2Zf = (sortedZf[0] + (sortedZf[1] ?? sortedZf[0])) / 2;
+  return 0.1078 * leadZf + 0.1743 * meanZf + 0.1950 * top2Zf + 0.0585 * contenders - 0.0041 * disp - 0.1808;
+}
+function dispPaceLabel(horses) {
+  const s = dispPaceScore(horses);
+  return s < -0.0622 ? 'スロー' : s > 0.3505 ? 'ハイ' : 'ミドル';
+}
+
 // 上がり速度の補正係数（スタミナ＋ペース×脚質）。1.0が基準。
 function lateMod(paceZ, eNorm, D) {
   const front = 1 - eNorm;   // 先行度（1=逃げ）
@@ -505,7 +532,7 @@ function renderMcTable(rows, ms) {
         <td class="${ev != null && ev >= 1 ? 'best' : ''}">${ev != null ? ev.toFixed(2) : '-'}</td>
       </tr>`;
     }).join('') + `</table>
-    <div class="note">${timing}平均ペース <b>${paceLabelOf(state.mcPaceZ ?? 0)}</b>（${(state.mcPaceZ ?? 0) >= 0 ? '+' : ''}${(state.mcPaceZ ?? 0).toFixed(2)}）。各試行でフィールドの先行争い→ペースを算出し、ハイは先行馬のスタミナ消耗・スローは前残りを反映。平均タイム/前半3F/上がり3Fは1,000回試行の平均（ペース・スタミナ・外ロス補正込み）。期待値 = 勝率 × 単勝オッズ。<b>1.00以上（緑）が理論上プラスの買い目</b>。${state.oddsTimer ? 'オッズは60秒毎に自動更新（ライブ）。' : 'オッズは出馬表取得時点のもの。'}</div>`;
+    <div class="note">${timing}想定ペース <b>${dispPaceLabel(state.horses)}</b>（内部シミュレーションのpace値: ${(state.mcPaceZ ?? 0) >= 0 ? '+' : ''}${(state.mcPaceZ ?? 0).toFixed(2)}）。各試行でフィールドの先行争い→ペースを算出し、ハイは先行馬のスタミナ消耗・スローは前残りを反映。平均タイム/前半3F/上がり3Fは1,000回試行の平均（ペース・スタミナ・外ロス補正込み）。期待値 = 勝率 × 単勝オッズ。<b>1.00以上（緑）が理論上プラスの買い目</b>。${state.oddsTimer ? 'オッズは60秒毎に自動更新（ライブ）。' : 'オッズは出馬表取得時点のもの。'}</div>`;
 }
 
 function updateOddsLiveBadge() {
@@ -948,9 +975,10 @@ async function loadRace(raceId, meta) {
   drawTrack(); drawHorses(); drawStrip(); renderOrder();
   const posLabel = (e) => e == null ? '' : e < 0.2 ? '逃げ' : e < 0.45 ? '先行' : e < 0.75 ? '差し' : '追込';
   const pz = state.paceZ ?? 0;
+  const dispPace = dispPaceLabel(state.horses);
   $('params').innerHTML =
-    `<div class="note">想定ペース: <b>${paceLabelOf(pz)}</b>（先行争い${state.contenders ?? 1}頭・pace ${pz >= 0 ? '+' : ''}${pz.toFixed(2)}）—
-      ${pz >= 0.7 ? 'ハイなら差し・先行がやや台頭' : pz <= -0.5 ? 'スローは前残り濃厚' : '標準的な流れ'}。
+    `<div class="note">想定ペース: <b>${dispPace}</b>（先行争い${state.contenders ?? 1}頭・pace ${pz >= 0 ? '+' : ''}${pz.toFixed(2)}）—
+      ${dispPace === 'ハイ' ? 'ハイなら差し・先行がやや台頭' : dispPace === 'スロー' ? 'スローは前残り濃厚' : '標準的な流れ'}。
       隊列は予測テン速度から推定（前有利がベース）。</div>` +
     `<table><tr><th>馬番</th><th>馬名</th><th>隊列</th><th>予測テン3F</th><th>予測上がり3F</th><th>実績</th></tr>` +
     state.horses.map((h) => `<tr><td><span class="waku w${h.waku}">${h.umaban}</span></td><td class="l">${esc(h.name)}</td>` +
