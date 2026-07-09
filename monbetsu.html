@@ -300,16 +300,17 @@ const providers = {
       return dates;
     },
     // 起動を速くするため直近分だけ先に取得（全期間分は裏でlistDatesFullが追って読み込む）
+    // ※このビューアは門別専用。他場(大井等)データが同テーブルに入っても track=門別 で必ず絞る。
     async listDates() {
       const cut = new Date(); cut.setDate(cut.getDate() - 60);
       const cutStr = `${cut.getFullYear()}-${String(cut.getMonth() + 1).padStart(2, '0')}-${String(cut.getDate()).padStart(2, '0')}`;
-      const rows = await sbGet(`chihou_races?select=race_id,race_date,race_no,track,klass,race_name,distance_m,going,weather,hasso_time,pace&race_date=gte.${cutStr}&order=race_date.desc,race_no.asc&limit=3000`);
+      const rows = await sbGet(`chihou_races?select=race_id,race_date,race_no,track,klass,race_name,distance_m,going,weather,hasso_time,pace&track=eq.${encodeURIComponent('門別')}&race_date=gte.${cutStr}&order=race_date.desc,race_no.asc&limit=3000`);
       if (!rows.length) throw new Error('empty');
       return this._rowsToDates(rows);
     },
     // 全期間分（過去の月をさかのぼる用）。バックグラウンドで呼ぶ想定。
     async listDatesFull() {
-      const rows = await sbGet('chihou_races?select=race_id,race_date,race_no,track,klass,race_name,distance_m,going,weather,hasso_time,pace&order=race_date.desc,race_no.asc&limit=10000');
+      const rows = await sbGet(`chihou_races?select=race_id,race_date,race_no,track,klass,race_name,distance_m,going,weather,hasso_time,pace&track=eq.${encodeURIComponent('門別')}&order=race_date.desc,race_no.asc&limit=10000`);
       return rows.length ? this._rowsToDates(rows) : null;
     },
     async loadRace(raceId) {
