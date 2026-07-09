@@ -169,10 +169,18 @@ td.best { background: var(--hl-best) !important; font-weight: bold; }
 .nk-day-head { margin-top: 6px; font-weight: bold; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .nk-pdf { color: var(--accent); text-decoration: none; font-size: 13px; font-weight: normal; }
 .nk-pdf:hover { text-decoration: underline; }
-.nk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-top: 12px; }
-.nk-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
-.nk-cardhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.nk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(440px, 1fr)); gap: 12px; margin-top: 12px; }
+@media (max-width: 520px) { .nk-grid { grid-template-columns: 1fr; } }
+.nk-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px; min-width: 0; }
+.nk-cardhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; gap: 8px; }
+.nk-cardhead .sub { font-weight: normal; color: var(--sub); font-size: 12px; }
 .nk-video { width: 100%; border-radius: 6px; background: #000; display: block; aspect-ratio: 4 / 3; }
+.nk-novid { text-align: center; padding: 10px; background: var(--chip-bg); border-radius: 6px; }
+.nk-table { font-size: 12px; margin-top: 6px; }
+.nk-table th { background: var(--chip-bg); color: var(--sub); font-weight: normal; white-space: nowrap; }
+.nk-table td, .nk-table th { padding: 3px 5px; }
+.nk-ok { color: #2f9c50; font-weight: bold; }
+.nk-ng { color: #d84040; font-weight: bold; }
 .cyo-yr-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 8px; }
 .cyo-yr-btn { font-size: 12px; padding: 3px 12px; border-radius: 14px; border: 1px solid var(--border); background: var(--chip-bg); color: var(--sub); cursor: pointer; }
 .cyo-yr-btn.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
@@ -2005,7 +2013,41 @@ function switchView(v) {
   if (v === 'noken') renderNoken();
 }
 
-// ---- 能検ゾーン（能力検査：2歳馬の資格試験。動画＋公式成績表PDF・ホッカイドウ競馬公式より） ----
+// ---- 能検ゾーン（能力検査：2歳馬の資格試験）。動画=ホッカイドウ公式 / 成績=競馬ブック ----
+function nokenRaceCard(r) {
+  const okCls = (v) => v === '合格' ? 'nk-ok' : v === '不合格' ? 'nk-ng' : '';
+  const rows = (r.rows || []).map((h) => `
+    <tr>
+      <td class="${h.fin >= 1 && h.fin <= 3 ? 'fin' + h.fin : ''}">${esc(h.fin)}</td>
+      <td>${esc(h.umaban)}</td>
+      <td class="l">${h.horse_id
+        ? `<a class="horse-link" data-hid="${esc(h.horse_id)}">${esc(h.name)}</a>`
+        : esc(h.name)}</td>
+      <td>${esc(h.sexage)}</td>
+      <td class="num"><b>${esc(h.time)}</b></td>
+      <td class="num">${esc(h.last3f)}</td>
+      <td class="l">${esc(h.jockey)}</td>
+      <td class="l">${esc(h.comment)}</td>
+      <td class="num">${esc(h.weight)}</td>
+      <td class="${okCls(h.ok)}">${esc(h.ok)}</td>
+    </tr>`).join('');
+  const table = (r.rows || []).length ? `
+    <div class="tablewrap"><table class="nk-table">
+      <tr><th>着</th><th>番</th><th>馬名</th><th>性齢</th><th>タイム</th><th>上3F</th><th>騎手</th><th>寸評</th><th>馬体重</th><th>合否</th></tr>
+      ${rows}
+    </table></div>` : '<div class="note">成績データなし（PDFをご覧ください）</div>';
+  const meta = [r.dist ? `${r.dist}m` : '', r.weather && r.going ? `${r.weather}・${r.going}` : (r.going || '')]
+    .filter(Boolean).join('　');
+  return `
+    <div class="nk-card">
+      <div class="nk-cardhead"><b>${r.no}R${meta ? ` <span class="sub">${esc(meta)}</span>` : ''}</b>
+        ${r.pdf ? `<a href="${esc(r.pdf)}" target="_blank" rel="noopener" class="nk-pdf">📄 成績表PDF</a>` : ''}</div>
+      ${r.mp4 ? `<video class="nk-video" controls preload="none" playsinline src="${esc(r.mp4)}#t=0.1"></video>`
+        : '<div class="note nk-novid">動画なし（2歳馬以外・未配信）</div>'}
+      ${table}
+    </div>`;
+}
+
 async function renderNoken() {
   const root = $('nokenRoot');
   if (!state.noken) {
@@ -2023,29 +2065,17 @@ async function renderNoken() {
   const day = days.find((d) => d.date === state.nokenDate) || days[0];
   const dateBtns = days.map((d) =>
     `<button class="nk-date-btn${d.date === state.nokenDate ? ' active' : ''}" data-nkdate="${d.date}">${mmdd(d.date)}</button>`).join('');
-  const vids = day.races.filter((r) => r.mp4);
-  const noVid = day.races.filter((r) => !r.mp4);
-  const cards = vids.map((r) => `
-    <div class="nk-card">
-      <div class="nk-cardhead"><b>${r.no}R</b>
-        <a href="${esc(r.pdf)}" target="_blank" rel="noopener" class="nk-pdf">📄 成績表</a></div>
-      <video class="nk-video" controls preload="none" playsinline
-        poster="" src="${esc(r.mp4)}#t=0.1"></video>
-    </div>`).join('');
-  const noVidHtml = noVid.length
-    ? `<div class="note" style="margin-top:10px">動画なし（2歳馬以外・未配信）: ${noVid.map((r) =>
-        `<a href="${esc(r.pdf)}" target="_blank" rel="noopener">${r.no}R 成績表</a>`).join(' / ')}</div>`
-    : '';
+  const nvid = day.races.filter((r) => r.mp4).length;
+  const cards = day.races.map(nokenRaceCard).join('');
   root.innerHTML = `
     <div class="card">
       <h2 style="margin:0 0 4px">🎓 能力検査（能検）</h2>
-      <div class="note">2歳馬の競走資格を確認する試験走。動画と公式成績表（タイム掲載）を掲載。出典: ホッカイドウ競馬公式${nk.updated ? `・${esc(nk.updated)}更新` : ''}。</div>
+      <div class="note">2歳馬の競走資格を確認する試験走。合格が新馬・未勝利への出走資格。動画=ホッカイドウ競馬公式／成績（タイム・上り3F・寸評・合否）=競馬ブック。馬名タップで馬の成績・調教へ。${nk.updated ? `${esc(nk.updated)}更新。` : ''}</div>
       <div class="nk-dates">${dateBtns}</div>
-      <div class="nk-day-head">${day.date}（${day.races.length}R・動画${vids.length}）
-        ${day.all_pdf ? `<a href="${esc(day.all_pdf)}" target="_blank" rel="noopener" class="nk-pdf">📄 全レース成績表</a>` : ''}</div>
+      <div class="nk-day-head">${day.date}（${day.races.length}R・動画${nvid}）
+        ${day.all_pdf ? `<a href="${esc(day.all_pdf)}" target="_blank" rel="noopener" class="nk-pdf">📄 全レース成績表PDF</a>` : ''}</div>
     </div>
-    <div class="nk-grid">${cards || '<div class="empty">この開催日に動画はありません</div>'}</div>
-    ${noVidHtml}`;
+    <div class="nk-grid">${cards || '<div class="empty">この開催日のデータがありません</div>'}</div>`;
 }
 
 async function selectRace(raceId, sub) {
@@ -2163,6 +2193,8 @@ async function init() {
     if (d) { cyokyoState.date = d.dataset.cdate; renderCyokyo(); }
   });
   $('nokenRoot').addEventListener('click', (e) => {
+    const hl = e.target.closest('a.horse-link');
+    if (hl && hl.dataset.hid) { e.preventDefault(); openHorseModal(hl.dataset.hid, true, hl.textContent.trim()); return; }
     const b = e.target.closest('button[data-nkdate]');
     if (b) { state.nokenDate = b.dataset.nkdate; renderNoken(); }
   });
