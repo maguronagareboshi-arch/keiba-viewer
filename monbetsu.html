@@ -1271,56 +1271,34 @@ function showOddsFlow(um, anchor) {
   pop.hidden = false;
 }
 
-// ---- レース映像（NAR公式HLSを自前videoで再生・外側の装飾なし） ----
-let _hlsPromise = null;
-function loadHls() {   // hls.jsを遅延ロード（映像タブを開いた時だけ）
-  if (window.Hls) return Promise.resolve(window.Hls);
-  if (!_hlsPromise) {
-    _hlsPromise = new Promise((res, rej) => {
-      const s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/hls.js@1.5/dist/hls.min.js';
-      s.onload = () => res(window.Hls); s.onerror = rej;
-      document.head.appendChild(s);
-    });
-  }
-  return _hlsPromise;
+// ---- レース映像クロップ（公式プレーヤーは固定680px幅。上のロゴ帯と下のコピーライト・背景を隠し映像だけ見せる） ----
+function fitEizoCrop() {
+  const box = document.getElementById('eizoCrop'), fr = document.getElementById('eizoFrame');
+  if (!box || !fr) return;
+  const PW = 680;      // プレーヤー固定幅
+  const TOP = 68;      // 上パディング＋ロゴ帯を隠す
+  const VID_H = 203;   // 映像ボックス（映像＋操作バー）の高さ・コピーライト以下は切る（実測）
+  const scale = box.clientWidth / PW;
+  fr.style.height = (TOP + VID_H + 150) + 'px';   // 描画は十分な高さで（下は box で切る）
+  fr.style.transform = `translateY(-${TOP * scale}px) scale(${scale})`;
+  box.style.height = (VID_H * scale) + 'px';
 }
-async function playRaceVideo(m3u8) {
-  const v = document.getElementById('raceVideo');
-  if (!v) return;
-  const note = () => document.getElementById('videoNote');
-  const fail = () => { const n = note(); if (n) n.textContent = 'このレースの映像はまだ配信されていません（発走前／VOD準備中）。'; };
-  // ① hls.js優先（Chrome/Firefox/Edge。ChromeはcanPlayTypeで"maybe"を返すが実際は再生不可のため）
-  try {
-    const Hls = await loadHls();
-    if (Hls && Hls.isSupported()) {
-      const hls = new Hls({ maxBufferLength: 30 });
-      state.raceVideoHls = hls;
-      hls.on(Hls.Events.ERROR, (e, d) => { if (d && d.fatal) fail(); });
-      hls.loadSource(m3u8); hls.attachMedia(v);
-      return;
-    }
-  } catch (e) { /* CDN読込失敗→②ネイティブへ */ }
-  // ② hls.js非対応（Safari/iOS）はHLSネイティブ再生
-  if (v.canPlayType('application/vnd.apple.mpegurl')) {
-    v.src = m3u8; v.addEventListener('error', fail, { once: true });
-  } else { fail(); }
-}
+window.addEventListener('resize', () => { if (document.getElementById('eizoCrop')) fitEizoCrop(); });
 
 async function renderRaceView() {
   clearInterval(state.oddsTimer); state.oddsTimer = null;
-  if (state.raceVideoHls) { try { state.raceVideoHls.destroy(); } catch (e) { /* noop */ } state.raceVideoHls = null; }  // 前の映像を停止
   $('raceView').innerHTML = '<div class="empty">読み込み中…</div>';
   const raceId = state.raceId;
-  if (state.sub === 'eizo') {   // NAR公式レース映像を自前videoで表示（外側の装飾なし・映像のみ）
+  if (state.sub === 'eizo') {   // NAR公式レース映像。固定680px幅の公式プレーヤーの外側(ロゴ帯/コピーライト/背景)をクロップして映像のみ表示
     const raceNo = parseInt((raceId || '').slice(-6, -4), 10);
-    const ymd = (state.date || '').replace(/-/g, '');            // 20260708
-    const id = `${ymd}36${String(raceNo).padStart(3, '0')}`;     // 2026070836006
-    const m3u8 = `https://moviem6gstuz2-hlsvod.keiba-racing.jp/ex-apcvod/${ymd.slice(0, 6)}/nar/monbetsu/${id}_https.m3u8`;
-    $('raceView').innerHTML = `<div class="card" style="padding:0;overflow:hidden;border-radius:8px;background:#000">
-      <video id="raceVideo" controls playsinline style="width:100%;aspect-ratio:16/9;display:block;background:#000"></video></div>
-      <div class="note" id="videoNote">${state.date} ${raceNo}R のレース映像（NAR公式・映像のみ）。発走前・未配信のレースは再生できません。</div>`;
-    playRaceVideo(m3u8);
+    const ymd = (state.date || '').replace(/-/g, '');
+    const url = `https://keiba-lv-st.jp/movie/player?date=${ymd}&race=${raceNo}&track=monbetsu`;
+    $('raceView').innerHTML = `<div class="card" style="padding:0;border-radius:8px;background:#000;overflow:hidden">
+      <div id="eizoCrop" style="position:relative;width:100%;overflow:hidden;background:#000">
+        <iframe id="eizoFrame" src="${url}" title="レース映像" loading="lazy" allowfullscreen style="position:absolute;top:0;left:0;border:0;width:680px;transform-origin:top left"></iframe>
+      </div></div>
+      <div class="note">${state.date} ${raceNo}R のレース映像（NAR公式・外枠を非表示）。発走前・未配信のレースは再生できません。</div>`;
+    setTimeout(fitEizoCrop, 60);
     return;
   }
   if (state.sub === 'sim') {   // このレースの展開シミュレータを埋め込み表示
