@@ -372,7 +372,7 @@ const PACE = {
   contendRatio: 0.985, // 先頭前速のこの比率以上＝先行争いに加わる（頭数でペースを判定）
   frontFatigue: 0.045, // ハイペースで先行馬が上がりを失速する強さ
   closerSwing: 0.022,  // ペース×脚質スイング（ハイ→差し／スロー→前残り、前有利ゆえ控えめ）
-  distFatigue: 0.012,  // 100m延長ごとの上がり消耗（先行ほど大きい＝スタミナ）
+  distFatigue: 0.004,  // 100m延長ごとの上がり消耗（先行ほど大きい＝スタミナ）。基準タイム自体が距離別なので、ここは「同距離クラス平均に対し先行馬がさらに相対消耗する分」のみの小さい残差（旧0.012は距離別基準タイムと二重計上になり1700m級が実タイムより5秒前後遅く出る不具合の原因だった）
   widePenalty: 0.45,   // 後方馬が外を回るロスの最大（秒・上がり600mに加算）
 };
 const paceLabelOf = (z) => z >= 0.7 ? 'ハイ' : z <= -0.5 ? 'スロー' : 'ミドル';
@@ -409,7 +409,7 @@ function paceAdjust(vFront, vLast, D, paceZ, eNorm) {
   const vLastBase = vLast * lateMod(paceZ, eNorm, D);
   const wide = PACE.widePenalty * eNorm * (D / 1600);      // 後方は外を回るロス（秒）
   const vLastEff = 600 / (600 / vLastBase + wide);          // ロスを上がり速度に反映
-  const v2 = (vFront + vLastEff) / 2 * (0.96 + 0.02 * Math.max(0, paceZ));  // ハイなら道中も速い
+  const v2 = (vFront + vLastEff) / 2 * (1.0 + 0.02 * paceZ);  // ハイなら道中も速い・スローはやや遅い（旧0.96固定は全馬一律で約4%遅く出る不具合の原因だった）
   return { vLastEff, v2 };
 }
 
