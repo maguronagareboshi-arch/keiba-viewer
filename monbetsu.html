@@ -159,6 +159,7 @@ td.best { background: var(--hl-best) !important; font-weight: bold; }
 .backbtn { margin: 0 0 4px; }
 .hometitle { cursor: pointer; }
 .hometitle:hover { opacity: 0.8; text-decoration: underline; }
+.countdown { color: var(--accent); font-weight: bold; }
 .cyo-yr-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 8px; }
 .cyo-yr-btn { font-size: 12px; padding: 3px 12px; border-radius: 14px; border: 1px solid var(--border); background: var(--chip-bg); color: var(--sub); cursor: pointer; }
 .cyo-yr-btn.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
@@ -245,13 +246,14 @@ const providers = {
   supabase: {
     label: 'Supabase',
     async listDates() {
-      const rows = await sbGet('chihou_races?select=race_id,race_date,race_no,track,klass,race_name,distance_m,going,pace&order=race_date.desc,race_no.asc&limit=10000');
+      const rows = await sbGet('chihou_races?select=race_id,race_date,race_no,track,klass,race_name,distance_m,going,weather,hasso_time,pace&order=race_date.desc,race_no.asc&limit=10000');
       if (!rows.length) throw new Error('empty');
       const dates = {};
       for (const r of rows) {
         (dates[r.race_date] = dates[r.race_date] || []).push({
           race_id: r.race_id, race_no: r.race_no, track: r.track, klass: r.klass,
-          name: r.race_name, distance_m: r.distance_m, going: r.going, pace: r.pace,
+          name: r.race_name, distance_m: r.distance_m, going: r.going, weather: r.weather,
+          hasso_time: r.hasso_time, pace: r.pace,
         });
       }
       return dates;
@@ -633,6 +635,17 @@ function renderSubTabs() {
 
 function raceHeaderHtml(race, extraBits) {
   const extra = race.extra || {};
+  const rdate = race.date || race.race_date;
+  // 未発走で天候/馬場が未確定な時は、同日の直近既知レースの値を暫定表示（発走まで大きく変わらない前提）
+  let weather = race.weather, going = race.going, wgNote = '';
+  if ((!weather || !going) && race.race_no != null) {
+    const todays = state.dates[rdate] || [];
+    const prior = todays.filter((r) => r.weather && r.going && r.race_no < race.race_no)
+      .sort((a, b) => b.race_no - a.race_no)[0];
+    if (prior) { weather = weather || prior.weather; going = going || prior.going; wgNote = `（${prior.race_no}R時点）`; }
+  }
+  const hassoIso = (rdate && race.hasso_time && /^\d{1,2}:\d{2}/.test(race.hasso_time))
+    ? `${rdate}T${race.hasso_time.length === 4 ? '0' + race.hasso_time : race.hasso_time}:00` : '';
   const infoBits = [
     ['ペース', race.pace], ['平均ハロン', race.avg_furlong],
     ['決め手', extra['決め手']], ['発走', extra['発走状況他']],
@@ -646,8 +659,8 @@ function raceHeaderHtml(race, extraBits) {
     <h2>${esc(race.date || race.race_date)} ${esc(race.track)} ${race.race_no ?? ''}R ${esc(race.klass)} ${esc(race.name || race.race_name || '')}</h2>
     <div class="meta">
       <span>${race.distance_m ?? '?'}m${race.surface ? `（${esc(race.surface)}・${esc(race.direction)}）` : ''}</span>
-      ${race.weather ? `<span>${esc(race.weather)}・${esc(race.going)}</span>` : ''}
-      <span>発走 ${esc(race.hasso_time || '')}</span>
+      ${weather ? `<span>${esc(weather)}・${esc(going)}${wgNote}</span>` : ''}
+      <span>発走 ${esc(race.hasso_time || '')}${hassoIso ? ` <span class="countdown" data-hasso="${hassoIso}"></span>` : ''}</span>
     </div>
     <div class="pacebar">${infoBits}</div>
   </div>`;
@@ -1073,6 +1086,20 @@ function cyokyoRaceHtml(raceMeta, entries, cyokyo, history) {
 // ---- リアルタイムオッズ（keiba.go.jp・門別=馬場コード36、Workerプロキシ経由でCORS回避）----
 const ODDS_PROXY = 'https://keiba-proxydeploy.maguronagareboshi.workers.dev/?url=';
 const jstToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+// 発走までのカウントダウン（画面上の全.countdown要素を1秒ごとに更新・発走を過ぎたら消す）
+function tickCountdowns() {
+  const now = new Date();
+  for (const el of document.querySelectorAll('.countdown[data-hasso]')) {
+    const diff = new Date(el.dataset.hasso) - now;
+    if (!(diff > 0)) { el.textContent = ''; continue; }
+    const totalSec = Math.floor(diff / 1000);
+    const h = Math.floor(totalSec / 3600), m = Math.floor((totalSec % 3600) / 60), s = totalSec % 60;
+    el.textContent = h > 0 ? `（発走まで${h}時間${String(m).padStart(2, '0')}分）`
+      : `（発走まで${m}分${String(s).padStart(2, '0')}秒）`;
+  }
+}
+setInterval(tickCountdowns, 1000);
 
 async function fetchLiveOdds(raceDate, raceNo) {
   if (!raceDate || !raceNo) return null;
