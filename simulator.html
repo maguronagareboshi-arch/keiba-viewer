@@ -59,6 +59,7 @@ canvas { width: 100%; height: auto; display: block; border-radius: 6px; }
 .w7 { background: var(--waku7-bg); color: var(--waku7-tx); }
 .w8 { background: var(--waku8-bg); color: var(--waku8-tx); }
 .phase { font-weight: bold; color: var(--accent); }
+.mtime { font-variant-numeric: tabular-nums; color: var(--sub); font-size: 12px; }
 .note { font-size: 11px; color: var(--sub); margin-top: 6px; }
 table { border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 12px; }
 th, td { border: 1px solid var(--border); padding: 3px 6px; text-align: center; }
@@ -431,7 +432,7 @@ function applyPaceMean() {
 // モンテカルロ: n回走らせて勝率・複勝率を集計（各試行でフィールドのペースを算出＝馬群相互作用）
 function monteCarlo(n = 1000) {
   const D = state.dist, tb = state.tb;
-  const res = state.horses.map(() => ({ win: 0, top3: 0, ftSum: 0 }));
+  const res = state.horses.map(() => ({ win: 0, top3: 0, ftSum: 0, f3Sum: 0, l3Sum: 0 }));
   let paceSum = 0;
   for (let t = 0; t < n; t++) {
     const sp = state.horses.map((h) => sampleSpeeds(h, D, tb));
@@ -439,6 +440,8 @@ function monteCarlo(n = 1000) {
     paceSum += fp.paceZ;
     const fts = sp.map((s, i) => {
       const a = paceAdjust(s.vFront, s.vLast, D, fp.paceZ, fp.eNorm[i]);
+      res[i].f3Sum += frontSeg(D) / s.vFront;   // この試行の予測前半3F（実効速度＝ペース補正後）
+      res[i].l3Sum += 600 / a.vLastEff;         // この試行の予測上がり3F（スタミナ・外ロス込み）
       return segTime(s.vFront, a.v2, a.vLastEff, D);
     });
     const order = fts.map((ft, i) => [ft, i]).sort((a, b) => a[0] - b[0]);
@@ -449,6 +452,7 @@ function monteCarlo(n = 1000) {
   state.mcPaceZ = paceSum / n;
   return state.horses.map((h, i) => ({
     h, winP: res[i].win / n, top3P: res[i].top3 / n,
+    avgTime: res[i].ftSum / n, avgF3: res[i].f3Sum / n, avgL3: res[i].l3Sum / n,
     ev: h.odds != null && h.odds > 0 ? (res[i].win / n) * h.odds : null,
   })).sort((a, b) => b.winP - a.winP);
 }
@@ -688,15 +692,36 @@ function gapBashin(prev, h) {
   return (prev.s - h.s) / BASHIN;
 }
 
+// 秒 → "1.03.7" 表記（ビューアの成績タイム表記に統一）
+function fmtTime(sec) {
+  if (sec == null) return '';
+  const m = Math.floor(sec / 60);
+  const s = sec - m * 60;
+  return `${m}.${s < 10 ? '0' : ''}${s.toFixed(1)}`;
+}
+
+// 着差（馬身）→ 競馬の慣用表記（ハナ/クビ/1馬身…）
+function marginLabel(b) {
+  if (b == null) return '';
+  const bins = [
+    [0.05, 'ハナ'], [0.12, 'アタマ'], [0.25, 'クビ'], [0.65, '1/2'], [0.9, '3/4'],
+    [1.15, '1'], [1.4, '1.1/4'], [1.65, '1.1/2'], [1.9, '1.3/4'], [2.3, '2'],
+    [2.8, '2.1/2'], [3.3, '3'], [3.8, '3.1/2'], [4.5, '4'], [5.5, '5'],
+    [6.5, '6'], [7.5, '7'], [8.5, '8'], [11, '10'],
+  ];
+  for (const [th, label] of bins) if (b < th) return label;
+  return '大差';
+}
+
 function renderOrder() {
   const ranked = [...state.horses].sort((a, b) => (a.finTime ?? 99) - (b.finTime ?? 99) || b.s - a.s);
   $('order').innerHTML = ranked.map((h, i) => {
     const g = gapBashin(ranked[i - 1], h);
-    const gtxt = g == null ? '' : g < 0.15 ? '<span class="badge">ハナ</span>'
-      : `<span class="badge">+${g.toFixed(1)}馬身</span>`;
+    const gtxt = g == null ? '' : `<span class="badge">${marginLabel(g)}</span>`;
+    const ttxt = h.finTime != null ? `<span class="mtime">${fmtTime(h.finTime)}</span>` : '';
     return `
     <div class="row"><span class="pos">${h.finTime != null ? i + 1 + '着' : i + 1}</span>
-    <span class="waku w${h.waku}">${h.umaban}</span> ${esc(h.name)} ${gtxt}${h.noData ? ' <span class="badge">実績なし</span>' : ''}</div>`;
+    <span class="waku w${h.waku}">${h.umaban}</span> ${esc(h.name)} ${ttxt} ${gtxt}${h.noData ? ' <span class="badge">実績なし</span>' : ''}</div>`;
   }).join('');
 }
 
@@ -920,17 +945,20 @@ async function initMain(dates) {
     const rows = monteCarlo(1000);
     const ms = Math.round(performance.now() - t0);
     $('mcResult').innerHTML = `<table>
-      <tr><th>#</th><th>馬番</th><th>馬名</th><th>勝率</th><th>複勝率</th><th>単勝オッズ</th><th>期待値</th></tr>` +
+      <tr><th>#</th><th>馬番</th><th>馬名</th><th>勝率</th><th>複勝率</th><th>平均タイム</th><th>平均前半3F</th><th>平均上がり3F</th><th>単勝オッズ</th><th>期待値</th></tr>` +
       rows.map((r, i) => `<tr>
         <td>${i + 1}</td>
         <td><span class="waku w${r.h.waku}">${r.h.umaban}</span></td>
         <td class="l">${esc(r.h.name)}</td>
         <td>${(r.winP * 100).toFixed(1)}%</td>
         <td>${(r.top3P * 100).toFixed(1)}%</td>
+        <td>${fmtTime(r.avgTime)}</td>
+        <td>${r.avgF3.toFixed(1)}</td>
+        <td>${r.avgL3.toFixed(1)}</td>
         <td>${r.h.odds ?? '-'}</td>
         <td class="${r.ev != null && r.ev >= 1 ? 'best' : ''}">${r.ev != null ? r.ev.toFixed(2) : '-'}</td>
       </tr>`).join('') + `</table>
-      <div class="note">1,000回試行（${ms}ms）・平均ペース <b>${paceLabelOf(state.mcPaceZ ?? 0)}</b>（${(state.mcPaceZ ?? 0) >= 0 ? '+' : ''}${(state.mcPaceZ ?? 0).toFixed(2)}）。各試行でフィールドの先行争い→ペースを算出し、ハイは先行馬のスタミナ消耗・スローは前残りを反映。期待値 = 勝率 × 単勝オッズ。<b>1.00以上（緑）が理論上プラスの買い目</b>。オッズは出馬表取得時点のもの。</div>`;
+      <div class="note">1,000回試行（${ms}ms）・平均ペース <b>${paceLabelOf(state.mcPaceZ ?? 0)}</b>（${(state.mcPaceZ ?? 0) >= 0 ? '+' : ''}${(state.mcPaceZ ?? 0).toFixed(2)}）。各試行でフィールドの先行争い→ペースを算出し、ハイは先行馬のスタミナ消耗・スローは前残りを反映。平均タイム/前半3F/上がり3Fは1,000回試行の平均（ペース・スタミナ・外ロス補正込み）。期待値 = 勝率 × 単勝オッズ。<b>1.00以上（緑）が理論上プラスの買い目</b>。オッズは出馬表取得時点のもの。</div>`;
   });
   $('speedBtn').addEventListener('click', () => {
     const SPEEDS = [1, 3, 6, 12];   // x1=実時間（1000mを約63秒かけて観る）
