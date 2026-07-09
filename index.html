@@ -319,6 +319,7 @@ body.dark-mode .danger-fav-bar{background:#2d0000!important;border-color:#b91c1c
 body.dark-mode .leg-warn-bar{background:#2a1400!important;border-color:#c2410c!important;color:#fdba74!important}
 body.dark-mode .market-back-bar{background:#071a30!important;border-color:#1d4ed8!important;color:#93c5fd!important}
 body.dark-mode .ana-run-bar{background:#2a0630!important;border-color:#a21caf!important;color:#f0abfc!important}
+body.dark-mode .cond-fit-bar{background:#062b30!important;border-color:#0e7490!important;color:#67e8f9!important}
 body.dark-mode .ev-monitor-bar{background:#052e16!important;border-color:#16a34a!important;color:#bbf7d0!important}
 body.dark-mode .ev-monitor-bar.skip{background:#1e293b!important;border-color:#475569!important;color:#cbd5e1!important}
 body.dark-mode .ev-monitor-bar.caution{background:#2a1a00!important;border-color:#b45309!important;color:#fcd34d!important}
@@ -1395,6 +1396,9 @@ const KV_APP_CSS = [
       // ⚡穴馬激走バッジ（指数下位の2-3着ライン候補）
       '.ana-run-bar{margin-bottom:10px;background:#fdf4ff;border:1.5px solid #c026d3;border-radius:8px;padding:7px 12px;font-size:12px;color:#86198f;font-weight:600}',
       '.ana-run-bar .arb-sub{font-size:11px;opacity:.85;font-weight:500}',
+      // 🔍距離/馬場実績ありバッジ（近走不振でも条件一致の好走歴・参考情報のみ）
+      '.cond-fit-bar{margin-bottom:10px;background:#ecfeff;border:1.5px solid #0891b2;border-radius:8px;padding:7px 12px;font-size:12px;color:#155e75;font-weight:600}',
+      '.cond-fit-bar .cfb-sub{font-size:11px;opacity:.85;font-weight:500}',
       // 💹 EVモニター（中穴×傾斜・単勝）
       '.ev-monitor-bar{margin-bottom:10px;background:#f0fdf4;border:2px solid #16a34a;border-radius:10px;padding:9px 13px;font-size:12px;color:#14532d}',
       '.ev-monitor-bar.skip{background:#f8fafc;border:1.5px solid #cbd5e1;color:#475569}',
@@ -15446,6 +15450,37 @@ function renderPredictionPanel(raceNo) {
     }
   }
 
+  // ── 🔍距離/馬場実績ありバッジ（近走不振でも条件一致の好走歴・参考情報のみ）──
+  //    検証（2026-07-09・高知全体3,007R規模）：直近3走(高知)平均6着以下の馬のうち、それより前の
+  //    走で距離±100m・同馬場状態が一致し3着以内があった馬は複勝25.6%（実績なしの馬22.7%）。
+  //    split-halfで方向は再現するが、単勝/複勝/3連単いずれも実配当ROIでは市場がほぼ織り込み済みで
+  //    妙味は無し（ファイナル限定の現象でもない）。指数には反映しない・当てやすさの参考情報のみ。
+  let condFitBadge = '';
+  {
+    const _cfRdist = parseInt(raceDist) || 0;
+    const _cfHits = [];
+    scored.forEach((s, idx) => {
+      const hName = s.horse?.horseName || '';
+      if (!hName) return;
+      const hist = getHorseHistoryBefore(hName, raceInfo.raceDate, raceNo).filter(h => h.babaCode === '31');
+      if (hist.length < 3) return;
+      const recent3 = hist.slice(0, 3).map(h => parseInt(h.chakujun)).filter(f => !isNaN(f));
+      if (recent3.length < 2) return;
+      const recentAvg = recent3.reduce((a, b) => a + b, 0) / recent3.length;
+      if (recentAvg < 6) return; // 近走不振の馬のみ対象
+      const older = hist.slice(3);
+      const matched = older.some(h => {
+        const d = getDistNum(h.distance);
+        return d && _cfRdist && Math.abs(d - _cfRdist) <= 100 && h.trackCond === selCond && parseInt(h.chakujun) <= 3;
+      });
+      if (matched) _cfHits.push({ s, idx });
+    });
+    if (_cfHits.length) {
+      const _items = _cfHits.slice(0, 3).map(x => `<b>${x.s.horse.horseName}</b>（${x.idx + 1}番手）`).join('　');
+      condFitBadge = `<div class="cond-fit-bar">🔍 <b>距離/馬場実績あり</b>：${_items}<span class="cfb-sub">｜近走は不振だがこの距離・馬場状態では過去に馬券圏内あり。複勝率は実績なし馬より高め（実測25.6% vs 22.7%）だが、単勝/複勝/3連単とも実配当ROIでは市場がほぼ織り込み済み＝妙味ではなく参考情報</span></div>`;
+    }
+  }
+
   // 🧠 学習重み適用中の表示（表示のみ・重みが未保存なら何も出さない＝従来式）
   const _mlWNote = getMlLiveWeights();
   const mlNote = _mlWNote
@@ -15504,6 +15539,7 @@ function renderPredictionPanel(raceNo) {
     ${legWarnBadge}
     ${marketBackBadge}
     ${anaBadge}
+    ${condFitBadge}
     ${paceBiasBadge}
     ${buildPaceFormationHtml(raceNo)}
     ${buildJockeyChangeDiag(raceNo)}
