@@ -1271,17 +1271,53 @@ function showOddsFlow(um, anchor) {
   pop.hidden = false;
 }
 
+// ---- レース映像（NAR公式HLSを自前videoで再生・外側の装飾なし） ----
+let _hlsPromise = null;
+function loadHls() {   // hls.jsを遅延ロード（映像タブを開いた時だけ）
+  if (window.Hls) return Promise.resolve(window.Hls);
+  if (!_hlsPromise) {
+    _hlsPromise = new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/hls.js@1.5/dist/hls.min.js';
+      s.onload = () => res(window.Hls); s.onerror = rej;
+      document.head.appendChild(s);
+    });
+  }
+  return _hlsPromise;
+}
+async function playRaceVideo(m3u8) {
+  const v = document.getElementById('raceVideo');
+  if (!v) return;
+  const note = () => document.getElementById('videoNote');
+  const fail = () => { const n = note(); if (n) n.textContent = 'このレースの映像はまだ配信されていません（発走前／VOD準備中）。'; };
+  if (v.canPlayType('application/vnd.apple.mpegurl')) {   // Safari/iOSはHLSネイティブ対応
+    v.src = m3u8; v.addEventListener('error', fail, { once: true }); return;
+  }
+  try {
+    const Hls = await loadHls();
+    if (Hls && Hls.isSupported()) {
+      const hls = new Hls({ maxBufferLength: 30 });
+      state.raceVideoHls = hls;
+      hls.on(Hls.Events.ERROR, (e, d) => { if (d && d.fatal) fail(); });
+      hls.loadSource(m3u8); hls.attachMedia(v);
+    } else { v.src = m3u8; v.addEventListener('error', fail, { once: true }); }
+  } catch (e) { const n = note(); if (n) n.textContent = 'プレーヤーの読み込みに失敗しました。'; }
+}
+
 async function renderRaceView() {
   clearInterval(state.oddsTimer); state.oddsTimer = null;
+  if (state.raceVideoHls) { try { state.raceVideoHls.destroy(); } catch (e) { /* noop */ } state.raceVideoHls = null; }  // 前の映像を停止
   $('raceView').innerHTML = '<div class="empty">読み込み中…</div>';
   const raceId = state.raceId;
-  if (state.sub === 'eizo') {   // NAR公式レース映像を埋め込み表示（race_idの末尾6-4桁目=レース番号）
+  if (state.sub === 'eizo') {   // NAR公式レース映像を自前videoで表示（外側の装飾なし・映像のみ）
     const raceNo = parseInt((raceId || '').slice(-6, -4), 10);
-    const ymd = (state.date || '').replace(/-/g, '');
-    const url = `https://keiba-lv-st.jp/movie/player?date=${ymd}&race=${raceNo}&track=monbetsu`;
+    const ymd = (state.date || '').replace(/-/g, '');            // 20260708
+    const id = `${ymd}36${String(raceNo).padStart(3, '0')}`;     // 2026070836006
+    const m3u8 = `https://moviem6gstuz2-hlsvod.keiba-racing.jp/ex-apcvod/${ymd.slice(0, 6)}/nar/monbetsu/${id}_https.m3u8`;
     $('raceView').innerHTML = `<div class="card" style="padding:0;overflow:hidden;border-radius:8px;background:#000">
-      <iframe src="${url}" style="width:100%;aspect-ratio:16/9;border:0;display:block" title="レース映像" loading="lazy" allowfullscreen></iframe></div>
-      <div class="note">地方競馬情報サイト（NAR公式）のレース映像。発走前・配信準備中は再生できません。</div>`;
+      <video id="raceVideo" controls playsinline style="width:100%;aspect-ratio:16/9;display:block;background:#000"></video></div>
+      <div class="note" id="videoNote">${state.date} ${raceNo}R のレース映像（NAR公式・映像のみ）。発走前・未配信のレースは再生できません。</div>`;
+    playRaceVideo(m3u8);
     return;
   }
   if (state.sub === 'sim') {   // このレースの展開シミュレータを埋め込み表示
