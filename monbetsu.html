@@ -288,9 +288,7 @@ async function jsonGet(path) {
 const providers = {
   supabase: {
     label: 'Supabase',
-    async listDates() {
-      const rows = await sbGet('chihou_races?select=race_id,race_date,race_no,track,klass,race_name,distance_m,going,weather,hasso_time,pace&order=race_date.desc,race_no.asc&limit=10000');
-      if (!rows.length) throw new Error('empty');
+    _rowsToDates(rows) {
       const dates = {};
       for (const r of rows) {
         (dates[r.race_date] = dates[r.race_date] || []).push({
@@ -300,6 +298,19 @@ const providers = {
         });
       }
       return dates;
+    },
+    // 起動を速くするため直近分だけ先に取得（全期間分は裏でlistDatesFullが追って読み込む）
+    async listDates() {
+      const cut = new Date(); cut.setDate(cut.getDate() - 60);
+      const cutStr = `${cut.getFullYear()}-${String(cut.getMonth() + 1).padStart(2, '0')}-${String(cut.getDate()).padStart(2, '0')}`;
+      const rows = await sbGet(`chihou_races?select=race_id,race_date,race_no,track,klass,race_name,distance_m,going,weather,hasso_time,pace&race_date=gte.${cutStr}&order=race_date.desc,race_no.asc&limit=3000`);
+      if (!rows.length) throw new Error('empty');
+      return this._rowsToDates(rows);
+    },
+    // 全期間分（過去の月をさかのぼる用）。バックグラウンドで呼ぶ想定。
+    async listDatesFull() {
+      const rows = await sbGet('chihou_races?select=race_id,race_date,race_no,track,klass,race_name,distance_m,going,weather,hasso_time,pace&order=race_date.desc,race_no.asc&limit=10000');
+      return rows.length ? this._rowsToDates(rows) : null;
     },
     async loadRace(raceId) {
       const [races, results] = await Promise.all([
@@ -2311,6 +2322,14 @@ async function init() {
   if (!state.provider) {
     $('raceView').innerHTML = '<div class="empty">データがありません</div>';
     return;
+  }
+  // 起動は直近分だけで即表示→全期間分は裏で追って取得し月/日セレクトへ反映（表示中のレースは邪魔しない）
+  if (state.provider === providers.supabase) {
+    providers.supabase.listDatesFull().then((full) => {
+      if (!full) return;
+      state.dates = full;
+      renderMonths(); renderDates();
+    }).catch(() => { /* 直近分のみで継続 */ });
   }
   // 統計は裏で読み込み（指数・テン偏差値に使う）
   state.statsPromise = Promise.all([
