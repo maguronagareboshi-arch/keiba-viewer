@@ -1572,6 +1572,11 @@ const KV_APP_CSS = [
       <button id="sim-mode-btn" onclick="toggleSimMode()" title="スマホ表示プレビュー">
         📱 <span>スマホ表示</span>
       </button>
+      <!-- ===== 【一時】前半3F出力ボタン（デバッグ用・すぐ削除可） ===== -->
+      <button id="temp-f3-out-btn" class="admin-only" onclick="tempOutputFirst3F()" title="【一時】その日の出走馬の前半3Fをコンソール出力＋クリップボードにコピー（完成後は削除予定）">
+        ⏱ <span>前半3F出力</span>
+      </button>
+      <!-- ===== 【一時】ここまで ===== -->
       <button id="minimal-mode-btn" onclick="toggleMinimalMode()" title="ミニマルモード切替">
         <span id="minimal-mode-icon">▣</span> <span id="minimal-mode-label">ミニマル</span>
       </button>
@@ -2440,6 +2445,24 @@ function toggleKbnMore(force) {
     }, 0);
   }
 }
+
+// ===== 【一時】前半3F出力ボタン（デバッグ用・すぐ削除可・ボタン本体はheaderのtemp-f3-out-btn） =====
+function tempOutputFirst3F() {
+  const rows = [];
+  for (const raceNo of Object.keys(allRacesData).map(Number).sort((a, b) => a - b)) {
+    const data = allRacesData[raceNo];
+    if (!data || !data.horses) continue;
+    for (const h of data.horses) {
+      rows.push({ raceNo, umaBan: h.umaBan, horseName: h.horseName || '', first3f: h.first3f || '' });
+    }
+  }
+  if (!rows.length) { alert('表示中のレースデータがありません'); return; }
+  console.table(rows);
+  const tsv = 'レース\t馬番\t馬名\t前半3F\n' + rows.map(r => `${r.raceNo}\t${r.umaBan}\t${r.horseName}\t${r.first3f}`).join('\n');
+  if (navigator.clipboard) navigator.clipboard.writeText(tsv).catch(() => {});
+  alert(`前半3Fを${rows.length}件出力しました（コンソール表示＋クリップボードにコピー済み）`);
+}
+// ===== 【一時】ここまで =====
 
 // スマホ表示プレビュー：?sim=1 付きの自アプリを390px幅iframeで開く。
 // iframe内ではメディアクエリが実際のスマホ幅で発火するため、CSSを複製せず正確に確認できる。
