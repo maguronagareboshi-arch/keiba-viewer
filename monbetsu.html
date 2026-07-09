@@ -1281,8 +1281,8 @@ async function renderRaceView() {
     const url = `https://keiba-lv-st.jp/movie/player?date=${ymd}&race=${raceNo}&track=monbetsu`;
     // 固定680px幅の公式プレーヤーをmax-width680で原寸表示（拡大しない＝歪まない）。
     // 上のロゴ帯(60px)をmargin-topで隠し、下のコピーライトはcardのheight+overflowで切る（操作バーは残す）。
-    $('raceView').innerHTML = `<div class="card" style="padding:0;border-radius:8px;background:#000;overflow:hidden;max-width:680px;margin:0 auto;height:470px">
-      <iframe src="${url}" title="レース映像" loading="lazy" allowfullscreen style="width:100%;height:540px;border:0;display:block;margin-top:-60px"></iframe></div>
+    $('raceView').innerHTML = `<div class="card" style="padding:0;border-radius:8px;background:#000;overflow:hidden;max-width:680px;margin:0 auto;height:460px">
+      <iframe src="${url}" title="レース映像" loading="lazy" allowfullscreen style="width:100%;height:540px;border:0;display:block;margin-top:-70px"></iframe></div>
       <div class="note">${state.date} ${raceNo}R のレース映像（NAR公式）。再生ボタンで再生。発走前・未配信のレースは再生できません。</div>`;
     return;
   }
