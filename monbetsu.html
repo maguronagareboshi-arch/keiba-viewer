@@ -151,6 +151,11 @@ td.best { background: var(--hl-best) !important; font-weight: bold; }
 .eq-cheek { background: rgba(120,170,90,0.16); color: #6a9f4a; }
 .eq-shadow { background: rgba(150,120,200,0.16); color: #8a6ac0; }
 .eq-first { background: #d84040; color: #fff; }
+.vlink { cursor: pointer; color: var(--accent); white-space: nowrap; }
+.vlink:hover { text-decoration: underline; }
+.cyo-yr-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 8px; }
+.cyo-yr-btn { font-size: 12px; padding: 3px 12px; border-radius: 14px; border: 1px solid var(--border); background: var(--chip-bg); color: var(--sub); cursor: pointer; }
+.cyo-yr-btn.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 h3.sec { font-size: 14px; margin: 16px 0 6px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
@@ -1271,6 +1276,37 @@ function showOddsFlow(um, anchor) {
   pop.hidden = false;
 }
 
+// 調教履歴の年別フィルタ（ボタンクリック）
+function filterCyoYear(yr) {
+  document.querySelectorAll('#horseModal .cyo-yr-btn').forEach((b) => b.classList.toggle('active', b.dataset.yr === yr));
+  document.querySelectorAll('#horseModal .cyo-row').forEach((r) => { r.hidden = !(yr === 'all' || r.dataset.yr === yr); });
+}
+
+// NAR公式映像プレーヤーの場名スラッグ（成績のレースクリック→映像用）
+const TRACK_SLUG = { '門別': 'monbetsu', '盛岡': 'morioka', '水沢': 'mizusawa', '浦和': 'urawa',
+  '船橋': 'funabashi', '大井': 'ooi', '川崎': 'kawasaki', '金沢': 'kanazawa', '笠松': 'kasamatsu',
+  '名古屋': 'nagoya', '園田': 'sonoda', '姫路': 'himeji', '高知': 'kochi', '佐賀': 'saga' };
+// 過去レースの映像をモーダルで表示（成績表の日付クリック）。映像タブと同じクロップ。
+function openRaceVideoModal(date, raceNo, track) {
+  const slug = TRACK_SLUG[track] || 'monbetsu';
+  const ymd = (date || '').replace(/-/g, '');
+  const url = `https://keiba-lv-st.jp/movie/player?date=${ymd}&race=${raceNo}&track=${slug}`;
+  let m = document.getElementById('raceVideoModal');
+  if (!m) {
+    m = document.createElement('div'); m.id = 'raceVideoModal'; m.className = 'modal';
+    m.style.zIndex = '60';
+    m.addEventListener('click', (e) => { if (e.target.id === 'raceVideoModal' || e.target.dataset.close) m.hidden = true; });
+    document.body.appendChild(m);
+  }
+  m.innerHTML = `<div class="modal-box" style="max-width:720px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <b>${esc(track || '')}${raceNo}R（${date}）の映像</b><button data-close="1">× 閉じる</button></div>
+    <div style="max-width:680px;margin:0 auto;overflow:hidden;height:460px;border-radius:8px;background:#000">
+      <iframe src="${url}" title="レース映像" loading="lazy" allowfullscreen style="width:100%;height:540px;border:0;display:block;margin-top:-70px"></iframe></div>
+    <div class="note">NAR公式レース映像。再生ボタンで再生。未配信・古いレースは再生できないことがあります。</div></div>`;
+  m.hidden = false;
+}
+
 async function renderRaceView() {
   clearInterval(state.oddsTimer); state.oddsTimer = null;
   $('raceView').innerHTML = '<div class="empty">読み込み中…</div>';
@@ -1758,7 +1794,7 @@ function renderHorseModal(results, cyokyo) {
     const ra = r.chihou_races || {};
     const finCls = r.finish >= 1 && r.finish <= 3 ? `fin${r.finish}` : '';
     return `<tr class="${rest ? 'res-rest' : ''}"${rest ? ' hidden' : ''}>
-      <td>${ymd(ra.race_date)}</td><td>${esc(ra.track)}${ra.race_no ?? ''}R</td>
+      <td class="vlink" data-vd="${ra.race_date || ''}" data-vr="${ra.race_no ?? ''}" data-vt="${esc(ra.track || '')}" title="クリックで映像">▶${ymd(ra.race_date)}</td><td class="vlink" data-vd="${ra.race_date || ''}" data-vr="${ra.race_no ?? ''}" data-vt="${esc(ra.track || '')}">${esc(ra.track)}${ra.race_no ?? ''}R</td>
       <td>${esc(r.sex_age || '')}</td><td class="l">${classLabel(ra)}</td>
       <td class="l">${equipBadges(equipOfRun(ra.soubi, r.umaban), r._binkFirst) || '<span class="sub">-</span>'}</td>
       <td>${ra.distance_m ?? ''}m</td><td>${esc(ra.going || '')}</td>
@@ -1831,11 +1867,17 @@ function renderHorseModal(results, cyokyo) {
       (finalDates[last] = finalDates[last] || []).push(rd);
     }
   }
-  const cyoRows = works.slice(0, 20).map((w) => {
+  const cyoYears = [...new Set(works.map((w) => (w.date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
+  const cyoDefYr = cyoYears[0] || '';
+  const cyoYrBtns = cyoYears.length > 1
+    ? `<div class="cyo-yr-tabs">${cyoYears.map((y) => `<button class="cyo-yr-btn${y === cyoDefYr ? ' active' : ''}" data-yr="${y}">${y}年</button>`).join('')}<button class="cyo-yr-btn" data-yr="all">全て</button></div>`
+    : '';
+  const cyoRows = works.map((w) => {
     const t = w.times || {};
     const fd = finalDates[w.date];
     const finalBadge = fd ? ` <span class="badge arrow-up">最終追い→${mmdd(fd[fd.length - 1])}</span>` : '';
-    return `<tr><td>${mmdd(w.date)}${w.youbi ? `(${w.youbi})` : ''}${finalBadge}</td><td>${esc(w.course || '')}</td>
+    const yr = (w.date || '').slice(0, 4);
+    return `<tr class="cyo-row" data-yr="${yr}"${(cyoDefYr && yr !== cyoDefYr) ? ' hidden' : ''}><td>${mmdd(w.date)}${w.youbi ? `(${w.youbi})` : ''}${finalBadge}</td><td>${esc(w.course || '')}</td>
       <td>${esc(w.baba || '')}</td>
       <td class="num">${t.t_5f != null ? t.t_5f.toFixed(1) : ''}</td>
       <td class="num">${t.t_half != null ? t.t_half.toFixed(1) : ''}</td>
@@ -1855,6 +1897,7 @@ function renderHorseModal(results, cyokyo) {
     ${bdHtml}
     <h3 class="sec">調教履歴（新しい順）</h3>
     <div class="note">${bestLine}</div>
+    ${cyoYrBtns}
     <div class="tablewrap"><table>
       <tr><th>日付</th><th>コース</th><th>馬場</th><th>坂4F/本5F</th><th>坂3F/本4F</th><th>坂2F/本3F</th><th>1F</th><th>脚色</th><th>短評</th></tr>
       ${cyoRows || '<tr><td colspan="9">調教データなし</td></tr>'}
@@ -1971,6 +2014,10 @@ async function init() {
   });
   $('horseModalClose').addEventListener('click', () => { $('horseModal').hidden = true; });
   $('horseModal').addEventListener('click', (e) => {
+    const vl = e.target.closest('.vlink');   // 成績の日付/場Rクリック→そのレース映像
+    if (vl && vl.dataset.vd && vl.dataset.vr) { openRaceVideoModal(vl.dataset.vd, vl.dataset.vr, vl.dataset.vt); return; }
+    const yb = e.target.closest('.cyo-yr-btn');   // 調教履歴の年切替
+    if (yb) { filterCyoYear(yb.dataset.yr); return; }
     const hl = e.target.closest('a.horse-link');   // 産駒一覧などモーダル内の馬名タップ→その馬詳細へ
     if (hl) { e.preventDefault(); const nm = hl.textContent.trim();
       hl.dataset.hid ? openHorseModal(hl.dataset.hid, true, nm) : openHorseModal(hl.dataset.horse, false, nm); return; }
