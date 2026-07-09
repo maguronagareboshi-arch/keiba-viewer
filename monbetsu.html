@@ -155,6 +155,8 @@ td.best { background: var(--hl-best) !important; font-weight: bold; }
 .vlink:hover { text-decoration: underline; }
 .racelink { cursor: pointer; white-space: nowrap; }
 .racelink:hover { text-decoration: underline; }
+.backbtn-row { text-align: right; }
+.backbtn { margin: 0 0 4px; }
 .cyo-yr-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 8px; }
 .cyo-yr-btn { font-size: 12px; padding: 3px 12px; border-radius: 14px; border: 1px solid var(--border); background: var(--chip-bg); color: var(--sub); cursor: pointer; }
 .cyo-yr-btn.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
@@ -357,7 +359,7 @@ const providers = {
 };
 
 const state = { provider: null, dates: {}, month: null, date: null, raceId: null,
-  sub: 'seiseki', stats: null, model: null, view: 'race' };
+  sub: 'seiseki', stats: null, model: null, view: 'race', prevRace: null };
 
 // ============================================================
 // ユーティリティ
@@ -635,8 +637,10 @@ function raceHeaderHtml(race, extraBits) {
     ['馬装具', extra['馬装具']], ['3角', extra['３ 角']], ['4角', extra['４ 角']],
     ...(extraBits || []),
   ].filter(([, v]) => v != null && v !== '').map(([k, v]) => `<span>${esc(k)}: <b>${esc(v)}</b></span>`).join('');
+  const backBtn = state.prevRace ? `<div class="backbtn-row"><button class="foldbtn backbtn" onclick="goBackRace()">← 戻る（元のレースへ）</button></div>` : '';
   return `
   <div class="card raceinfo">
+    ${backBtn}
     <h2>${esc(race.date || race.race_date)} ${esc(race.track)} ${race.race_no ?? ''}R ${esc(race.klass)} ${esc(race.name || race.race_name || '')}</h2>
     <div class="meta">
       <span>${race.distance_m ?? '?'}m${race.surface ? `（${esc(race.surface)}・${esc(race.direction)}）` : ''}</span>
@@ -1933,6 +1937,9 @@ async function selectRace(raceId, sub) {
 
 async function openHistoricalRace(raceId, date) {
   // 馬モーダルの成績「場R」タップ→そのレースの出馬表・成績ページへ移動
+  if (state.raceId && state.raceId !== raceId) {
+    state.prevRace = { date: state.date, raceId: state.raceId, sub: state.sub, view: state.view };
+  }
   $('horseModal').hidden = true;
   switchView('race');
   if (date && state.date !== date) {
@@ -1943,6 +1950,22 @@ async function openHistoricalRace(raceId, date) {
     renderDates();
   }
   await selectRace(raceId);
+}
+
+async function goBackRace() {
+  // 「← 戻る」ボタン: openHistoricalRaceで飛ぶ直前の状態へ一段階だけ戻す
+  const p = state.prevRace;
+  if (!p) return;
+  state.prevRace = null;
+  if (p.date && p.date !== state.date) {
+    state.date = p.date;
+    state.month = p.date.slice(0, 7);
+    try { localStorage.setItem('mb_last_date', p.date); } catch (e) { /* プライベートモード等は無視 */ }
+    renderMonths();
+    renderDates();
+  }
+  if (p.view && p.view !== 'race') { switchView(p.view); return; }
+  if (p.raceId) await selectRace(p.raceId, p.sub);
 }
 
 function selectDate(d) {
@@ -2054,21 +2077,33 @@ async function init() {
   });
 
   const dates = Object.keys(state.dates);
-  const [hd, hr] = location.hash.slice(1).split('/');
-  if (hd && state.dates[hd]) {
-    state.date = hd;
-    state.month = hd.slice(0, 7);
-    renderMonths();
-    renderDates();
-    if (hr && state.dates[hd].some((r) => r.race_id === hr)) { renderTabs(); await selectRace(hr); return; }
-    selectDate(hd);
-  } else {
+  if (!(await applyHash())) {
     // 初期日付: 前回選択（タブを閉じても記憶） → 今日 → 最新 の優先順
     let saved = null;
     try { saved = localStorage.getItem('mb_last_date'); } catch (e) { /* 無視 */ }
     const today = jstToday();
     selectDate((saved && state.dates[saved]) ? saved : (state.dates[today] ? today : dates[0]));
   }
+  // ブラウザの戻る/進むボタンでレース間を移動できるように
+  window.addEventListener('hashchange', () => {
+    if (state.view !== 'race') switchView('race');
+    applyHash();
+  });
+}
+
+// URLハッシュ(#日付/race_id)から表示状態を復元。ブラウザの戻る/進むボタン対応の共通処理
+async function applyHash() {
+  const [hd, hr] = location.hash.slice(1).split('/');
+  if (!hd || !state.dates[hd]) return false;
+  if (state.date === hd && state.raceId === hr) return true;   // 自分で書き換えたhashは無視（無限ループ防止）
+  state.prevRace = null;   // ブラウザの戻る/進むで移動した時点で「戻る」ボタンの行き先は無効化
+  state.date = hd;
+  state.month = hd.slice(0, 7);
+  renderMonths();
+  renderDates();
+  if (hr && state.dates[hd].some((r) => r.race_id === hr)) { renderTabs(); await selectRace(hr); return true; }
+  selectDate(hd);
+  return true;
 }
 init();
 </script>
