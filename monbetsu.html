@@ -162,6 +162,17 @@ td.best { background: var(--hl-best) !important; font-weight: bold; }
 .countdown { color: var(--accent); font-weight: bold; }
 .vidwrap { max-width: 680px; margin: 0 auto; overflow: hidden; }
 .vidcard { transform-origin: top left; }
+.nk-dates { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 4px; }
+.nk-date-btn { border: 1px solid var(--border); background: var(--chip-bg); color: var(--text);
+  border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 13px; }
+.nk-date-btn.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: bold; }
+.nk-day-head { margin-top: 6px; font-weight: bold; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.nk-pdf { color: var(--accent); text-decoration: none; font-size: 13px; font-weight: normal; }
+.nk-pdf:hover { text-decoration: underline; }
+.nk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-top: 12px; }
+.nk-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
+.nk-cardhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.nk-video { width: 100%; border-radius: 6px; background: #000; display: block; aspect-ratio: 4 / 3; }
 .cyo-yr-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 8px; }
 .cyo-yr-btn { font-size: 12px; padding: 3px 12px; border-radius: 14px; border: 1px solid var(--border); background: var(--chip-bg); color: var(--sub); cursor: pointer; }
 .cyo-yr-btn.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
@@ -190,6 +201,7 @@ tr.clickable:hover td { background: var(--chip-bg); }
     <button data-view="race" class="active">レース</button>
     <button data-view="analysis">分析</button>
     <button data-view="cyokyo">調教</button>
+    <button data-view="noken">🎓 能検</button>
     <button onclick="location.href='simulator.html'">🎲 シミュレータ</button>
   </div>
 </header>
@@ -212,6 +224,7 @@ tr.clickable:hover td { background: var(--chip-bg); }
   </div>
   <div id="analysisRoot" hidden><div class="empty">読み込み中…</div></div>
   <div id="cyokyoRoot" hidden><div class="empty">読み込み中…</div></div>
+  <div id="nokenRoot" hidden><div class="empty">読み込み中…</div></div>
 </main>
 <div id="horseModal" class="modal" hidden onclick="if(event.target.id==='horseModal')this.hidden=true">
   <div class="modal-box">
@@ -321,6 +334,13 @@ const providers = {
       } catch (e) { /* 次へ */ }
       return providers.local.loadModel();
     },
+    async loadNoken() {
+      try {
+        const rows = await sbGet('chihou_meta?key=eq.monbetsu_noken&select=value');
+        if (rows.length) return rows[0].value;
+      } catch (e) { /* ローカルへ */ }
+      return providers.local.loadNoken();
+    },
   },
   local: {
     label: 'ローカルJSON',
@@ -361,11 +381,15 @@ const providers = {
     async loadModel() {
       try { return await jsonGet('data/model.json'); } catch (e) { return null; }
     },
+    async loadNoken() {
+      try { return await jsonGet('data/noken.json'); } catch (e) { return null; }
+    },
   },
 };
 
 const state = { provider: null, dates: {}, month: null, date: null, raceId: null,
-  sub: 'seiseki', stats: null, model: null, view: 'race', prevRace: null };
+  sub: 'seiseki', stats: null, model: null, view: 'race', prevRace: null,
+  noken: null, nokenDate: null };
 
 // ============================================================
 // ユーティリティ
@@ -1973,10 +1997,55 @@ function switchView(v) {
   $('raceRoot').hidden = v !== 'race';
   $('analysisRoot').hidden = v !== 'analysis';
   $('cyokyoRoot').hidden = v !== 'cyokyo';
+  $('nokenRoot').hidden = v !== 'noken';
   for (const b of $('viewTabs').querySelectorAll('button'))
     b.classList.toggle('active', b.dataset.view === v);
   if (v === 'analysis') renderAnalysis();
   if (v === 'cyokyo') renderCyokyo();
+  if (v === 'noken') renderNoken();
+}
+
+// ---- 能検ゾーン（能力検査：2歳馬の資格試験。動画＋公式成績表PDF・ホッカイドウ競馬公式より） ----
+async function renderNoken() {
+  const root = $('nokenRoot');
+  if (!state.noken) {
+    root.innerHTML = '<div class="empty">読み込み中…</div>';
+    try { state.noken = await state.provider.loadNoken(); }
+    catch (e) { state.noken = null; }
+  }
+  const nk = state.noken;
+  if (!nk || !(nk.days || []).length) {
+    root.innerHTML = '<div class="empty">能検データがありません</div>';
+    return;
+  }
+  const days = nk.days;
+  if (!state.nokenDate || !days.some((d) => d.date === state.nokenDate)) state.nokenDate = days[0].date;
+  const day = days.find((d) => d.date === state.nokenDate) || days[0];
+  const dateBtns = days.map((d) =>
+    `<button class="nk-date-btn${d.date === state.nokenDate ? ' active' : ''}" data-nkdate="${d.date}">${mmdd(d.date)}</button>`).join('');
+  const vids = day.races.filter((r) => r.mp4);
+  const noVid = day.races.filter((r) => !r.mp4);
+  const cards = vids.map((r) => `
+    <div class="nk-card">
+      <div class="nk-cardhead"><b>${r.no}R</b>
+        <a href="${esc(r.pdf)}" target="_blank" rel="noopener" class="nk-pdf">📄 成績表</a></div>
+      <video class="nk-video" controls preload="none" playsinline
+        poster="" src="${esc(r.mp4)}#t=0.1"></video>
+    </div>`).join('');
+  const noVidHtml = noVid.length
+    ? `<div class="note" style="margin-top:10px">動画なし（2歳馬以外・未配信）: ${noVid.map((r) =>
+        `<a href="${esc(r.pdf)}" target="_blank" rel="noopener">${r.no}R 成績表</a>`).join(' / ')}</div>`
+    : '';
+  root.innerHTML = `
+    <div class="card">
+      <h2 style="margin:0 0 4px">🎓 能力検査（能検）</h2>
+      <div class="note">2歳馬の競走資格を確認する試験走。動画と公式成績表（タイム掲載）を掲載。出典: ホッカイドウ競馬公式${nk.updated ? `・${esc(nk.updated)}更新` : ''}。</div>
+      <div class="nk-dates">${dateBtns}</div>
+      <div class="nk-day-head">${day.date}（${day.races.length}R・動画${vids.length}）
+        ${day.all_pdf ? `<a href="${esc(day.all_pdf)}" target="_blank" rel="noopener" class="nk-pdf">📄 全レース成績表</a>` : ''}</div>
+    </div>
+    <div class="nk-grid">${cards || '<div class="empty">この開催日に動画はありません</div>'}</div>
+    ${noVidHtml}`;
 }
 
 async function selectRace(raceId, sub) {
@@ -2092,6 +2161,10 @@ async function init() {
     if (so) { cyokyoState.sort = so.dataset.cyoSort; renderCyokyo(); return; }
     const d = e.target.closest('button[data-cdate]');
     if (d) { cyokyoState.date = d.dataset.cdate; renderCyokyo(); }
+  });
+  $('nokenRoot').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-nkdate]');
+    if (b) { state.nokenDate = b.dataset.nkdate; renderNoken(); }
   });
   // 馬名リンク（レース各ビュー）と モーダルを閉じる
   $('raceView').addEventListener('click', (e) => {
