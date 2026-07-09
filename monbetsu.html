@@ -153,6 +153,8 @@ td.best { background: var(--hl-best) !important; font-weight: bold; }
 .eq-first { background: #d84040; color: #fff; }
 .vlink { cursor: pointer; color: var(--accent); white-space: nowrap; }
 .vlink:hover { text-decoration: underline; }
+.racelink { cursor: pointer; white-space: nowrap; }
+.racelink:hover { text-decoration: underline; }
 .cyo-yr-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 8px; }
 .cyo-yr-btn { font-size: 12px; padding: 3px 12px; border-radius: 14px; border: 1px solid var(--border); background: var(--chip-bg); color: var(--sub); cursor: pointer; }
 .cyo-yr-btn.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
@@ -1794,7 +1796,7 @@ function renderHorseModal(results, cyokyo) {
     const ra = r.chihou_races || {};
     const finCls = r.finish >= 1 && r.finish <= 3 ? `fin${r.finish}` : '';
     return `<tr class="${rest ? 'res-rest' : ''}"${rest ? ' hidden' : ''}>
-      <td class="vlink" data-vd="${ra.race_date || ''}" data-vr="${ra.race_no ?? ''}" data-vt="${esc(ra.track || '')}" title="クリックで映像">▶${ymd(ra.race_date)}</td><td class="vlink" data-vd="${ra.race_date || ''}" data-vr="${ra.race_no ?? ''}" data-vt="${esc(ra.track || '')}">${esc(ra.track)}${ra.race_no ?? ''}R</td>
+      <td class="vlink" data-vd="${ra.race_date || ''}" data-vr="${ra.race_no ?? ''}" data-vt="${esc(ra.track || '')}" title="クリックで映像">▶${ymd(ra.race_date)}</td><td class="racelink" data-rid="${esc(r.race_id || '')}" data-rd="${ra.race_date || ''}" title="クリックでそのレースの出馬表・成績へ">${esc(ra.track)}${ra.race_no ?? ''}R</td>
       <td>${esc(r.sex_age || '')}</td><td class="l">${classLabel(ra)}</td>
       <td class="l">${equipBadges(equipOfRun(ra.soubi, r.umaban), r._binkFirst) || '<span class="sub">-</span>'}</td>
       <td>${ra.distance_m ?? ''}m</td><td>${esc(ra.going || '')}</td>
@@ -1853,7 +1855,7 @@ function renderHorseModal(results, cyokyo) {
   let bestW = null;
   for (const w of hanroWorks) if (!bestW || w.times.t_half < bestW.times.t_half) bestW = w;
   const bestLine = bestW
-    ? `坂路3F 自己ベスト <b>${bestW.times.t_half.toFixed(1)}秒</b>（${mmdd(bestW.date)}${bestW.youbi ? `(${bestW.youbi})` : ''} ${esc(bestW.course)}）`
+    ? `坂路3F 自己ベスト <b>${bestW.times.t_half.toFixed(1)}秒</b>（${bestW.date.slice(0, 4)}/${mmdd(bestW.date)}${bestW.youbi ? `(${bestW.youbi})` : ''} ${esc(bestW.course)}）`
     : '坂路の追切データなし';
   // 各レースの最終追い（そのレース直前で最も新しい追切日）を特定
   const finalDates = {};   // 追切日 → その追切が最終追いだったレース日リスト
@@ -1927,6 +1929,20 @@ async function selectRace(raceId, sub) {
   renderSubTabs();
   location.hash = `${state.date}/${raceId}`;
   await renderRaceView();
+}
+
+async function openHistoricalRace(raceId, date) {
+  // 馬モーダルの成績「場R」タップ→そのレースの出馬表・成績ページへ移動
+  $('horseModal').hidden = true;
+  switchView('race');
+  if (date && state.date !== date) {
+    state.date = date;
+    state.month = date.slice(0, 7);
+    try { localStorage.setItem('mb_last_date', date); } catch (e) { /* プライベートモード等は無視 */ }
+    renderMonths();
+    renderDates();
+  }
+  await selectRace(raceId);
 }
 
 function selectDate(d) {
@@ -2014,8 +2030,10 @@ async function init() {
   });
   $('horseModalClose').addEventListener('click', () => { $('horseModal').hidden = true; });
   $('horseModal').addEventListener('click', (e) => {
-    const vl = e.target.closest('.vlink');   // 成績の日付/場Rクリック→そのレース映像
+    const vl = e.target.closest('.vlink');   // 成績の日付クリック→そのレース映像
     if (vl && vl.dataset.vd && vl.dataset.vr) { openRaceVideoModal(vl.dataset.vd, vl.dataset.vr, vl.dataset.vt); return; }
+    const rl = e.target.closest('.racelink');   // 成績の場Rクリック→そのレースの出馬表・成績ページへ
+    if (rl && rl.dataset.rid) { openHistoricalRace(rl.dataset.rid, rl.dataset.rd); return; }
     const yb = e.target.closest('.cyo-yr-btn');   // 調教履歴の年切替
     if (yb) { filterCyoYear(yb.dataset.yr); return; }
     const hl = e.target.closest('a.horse-link');   // 産駒一覧などモーダル内の馬名タップ→その馬詳細へ
