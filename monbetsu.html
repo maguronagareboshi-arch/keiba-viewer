@@ -1290,9 +1290,7 @@ async function playRaceVideo(m3u8) {
   if (!v) return;
   const note = () => document.getElementById('videoNote');
   const fail = () => { const n = note(); if (n) n.textContent = 'このレースの映像はまだ配信されていません（発走前／VOD準備中）。'; };
-  if (v.canPlayType('application/vnd.apple.mpegurl')) {   // Safari/iOSはHLSネイティブ対応
-    v.src = m3u8; v.addEventListener('error', fail, { once: true }); return;
-  }
+  // ① hls.js優先（Chrome/Firefox/Edge。ChromeはcanPlayTypeで"maybe"を返すが実際は再生不可のため）
   try {
     const Hls = await loadHls();
     if (Hls && Hls.isSupported()) {
@@ -1300,8 +1298,13 @@ async function playRaceVideo(m3u8) {
       state.raceVideoHls = hls;
       hls.on(Hls.Events.ERROR, (e, d) => { if (d && d.fatal) fail(); });
       hls.loadSource(m3u8); hls.attachMedia(v);
-    } else { v.src = m3u8; v.addEventListener('error', fail, { once: true }); }
-  } catch (e) { const n = note(); if (n) n.textContent = 'プレーヤーの読み込みに失敗しました。'; }
+      return;
+    }
+  } catch (e) { /* CDN読込失敗→②ネイティブへ */ }
+  // ② hls.js非対応（Safari/iOS）はHLSネイティブ再生
+  if (v.canPlayType('application/vnd.apple.mpegurl')) {
+    v.src = m3u8; v.addEventListener('error', fail, { once: true });
+  } else { fail(); }
 }
 
 async function renderRaceView() {
