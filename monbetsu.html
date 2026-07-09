@@ -157,6 +157,8 @@ td.best { background: var(--hl-best) !important; font-weight: bold; }
 .racelink:hover { text-decoration: underline; }
 .backbtn-row { text-align: right; }
 .backbtn { margin: 0 0 4px; }
+.hometitle { cursor: pointer; }
+.hometitle:hover { opacity: 0.8; text-decoration: underline; }
 .cyo-yr-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 8px; }
 .cyo-yr-btn { font-size: 12px; padding: 3px 12px; border-radius: 14px; border: 1px solid var(--border); background: var(--chip-bg); color: var(--sub); cursor: pointer; }
 .cyo-yr-btn.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
@@ -180,7 +182,7 @@ tr.clickable:hover td { background: var(--chip-bg); }
 </head>
 <body>
 <header>
-  <h1>門別ビューア</h1>
+  <h1 class="hometitle" onclick="goHome()" title="トップページへ">門別ビューア</h1>
   <div class="viewtabs" id="viewTabs">
     <button data-view="race" class="active">レース</button>
     <button data-view="analysis">分析</button>
@@ -1933,6 +1935,18 @@ async function selectRace(raceId, sub) {
   renderSubTabs();
   location.hash = `${state.date}/${raceId}`;
   await renderRaceView();
+}
+
+function goHome() {
+  // ヘッダー「門別ビューア」タップ→トップ（今日の開催、無ければ最新開催日）へ
+  $('horseModal').hidden = true;
+  state.prevRace = null;
+  const dates = Object.keys(state.dates);
+  const today = jstToday();
+  const target = state.dates[today] ? today : [...dates].sort().reverse()[0];
+  if (!target) return;
+  switchView('race');
+  selectDate(target);
 }
 
 async function openHistoricalRace(raceId, date) {
