@@ -149,6 +149,7 @@ td.best { background: var(--hl-best) !important; font-weight: bold; }
 .triptag { display: inline-block; font-size: 10px; font-weight: 700; padding: 0 4px; border-radius: 3px; margin-left: 2px; line-height: 1.6; cursor: pointer; }
 .tg-gyaku { background: rgba(204,138,46,0.16); color: #cc8a2e; }
 .tg-megumi { background: rgba(106,143,208,0.15); color: #6a8fd0; }
+.tg-kaku { background: rgba(216,120,64,0.18); color: #d87840; }
 .tippop { position: absolute; z-index: 1000; max-width: 240px; background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.5; box-shadow: 0 4px 16px rgba(0,0,0,0.28); }
 .eqp { display: inline-block; font-size: 9px; font-weight: 700; padding: 0 3px; border-radius: 3px; margin-left: 2px; line-height: 1.5; cursor: pointer; }
 .eq-bink { background: rgba(220,80,80,0.16); color: #d05050; }
@@ -387,6 +388,13 @@ const providers = {
       } catch (e) { /* ローカルへ */ }
       return providers.local.loadNoken();
     },
+    async loadPoints() {   // 南関の格付ポイント(馬名→{p,k,asof})。無い場はnull
+      try {
+        const rows = await sbGet(`chihou_meta?key=eq.${trackCfg().prefix}_points&select=value`);
+        if (rows.length) return rows[0].value;
+      } catch (e) { /* 無しでOK */ }
+      return null;
+    },
   },
   local: {
     label: 'ローカルJSON',
@@ -430,6 +438,7 @@ const providers = {
     async loadNoken() {
       try { return await jsonGet('data/noken.json'); } catch (e) { return null; }
     },
+    async loadPoints() { return null; },
   },
 };
 
@@ -818,6 +827,34 @@ function tripTag(date, c4) {
 // 逆/恵バッジの凡例（常時表示・スマホ対応）
 const TRIP_LEGEND = '<span class="triptag tg-gyaku">逆</span> その日の馬場と逆のレーンで不利＝過小評価かも（次走見直し）　<span class="triptag tg-megumi">恵</span> 有利なレーンで恵まれ＝次走は割引。バッジをタップで詳細。';
 
+// ---- 南関: 降級圏バッジ（格付ポイント制・表示専用） ----
+// 検証(test_yariyarazu.py): 次半期の現クラス残留基準まで0〜200pt不足の馬は市場より約0.5〜0.8着分
+// 走れていない(半期末t=-3.45/期央t=-2.27)＝時期を問わず割引が有効。下半期(7-12月)基準・馬齢3〜8歳+。
+const KAKU_TH_KAMI = { A1: [2800, 3400, 4300, 5000, 5500, 5900], A2: [2000, 2200, 2500, 3200, 3700, 4100],
+  B1: [1500, 1700, 1900, 2200, 2700, 3000], B2: [1100, 1200, 1400, 1700, 2000, 2200],
+  B3: [700, 800, 1000, 1300, 1600, 1800], C1: [0, 500, 700, 1000, 1300, 1500],
+  C2: [0, 200, 400, 700, 1000, 1200] };
+const KAKU_TH_SHIMO = { A1: [3000, 3600, 4400, 5200, 5700, 5900], A2: [2200, 2300, 2600, 3400, 3900, 4100],
+  B1: [1700, 1800, 2000, 2500, 2900, 3000], B2: [1200, 1300, 1500, 1800, 2100, 2200],
+  B3: [800, 900, 1100, 1400, 1700, 1800], C1: [500, 600, 800, 1100, 1400, 1500],
+  C2: [200, 300, 500, 800, 1100, 1200] };
+function kakuBadge(e) {
+  const db = state.kakuPoints && state.kakuPoints.horses;
+  const v = db && db[e.horse_name];
+  if (!v) return '';
+  const am = /(\d+)/.exec(e.sex_age || '');
+  if (!am) return '';
+  // 「次の半期切替」時点の基準と比較: 1-6月なら同年下半期(馬齢同じ)/7-12月なら翌年上半期(馬齢+1)
+  const mon = new Date().getMonth() + 1;
+  const th = mon <= 6 ? KAKU_TH_SHIMO : KAKU_TH_KAMI;
+  const ageAtSwitch = +am[1] + (mon <= 6 ? 0 : 1);
+  const row = th[v.k];
+  if (!row) return '';
+  const gap = row[Math.min(Math.max(ageAtSwitch - 3, 0), 5)] - v.p;
+  if (gap <= 0 || gap > 200) return '';
+  return ` <span class="triptag tg-kaku" data-tip="降級圏: 格${v.k}・格付ポイント${v.p}（${state.kakuPoints.asof || ''}時点）。次の半期切替で${v.k}残留に必要な基準まであと${gap}pt＝このまま着内が無ければ降級見込み。検証では同条件の馬は市場評価より約0.5着分走れていない（割引材料）">降</span>`;
+}
+
 // バッジをタップ→説明ポップアップ（title はスマホで出ないため）
 function showTripPop(el) {
   let pop = document.getElementById('tripPop');
@@ -984,7 +1021,7 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku) {
       <td><span class="waku w${e.waku || 1}">${e.waku ?? ''}</span></td>
       <td>${e.umaban ?? ''}</td>
       <td style="font-size:15px">${aiMark.get(e.umaban) || ''}${(e.umaban === aiTopUma && aiConf) ? `<br><span class="badge conf-${aiConf.tier}" title="◎信頼度：予測1位が2位をどれだけ引き離しているか（複勝率の目安 S81%/A73%/B65%/C62%）">${aiConf.label}</span>` : ''}</td>
-      <td class="l stickyname"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a>${todayBlinkerBadge(e, history)}</td>
+      <td class="l stickyname"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a>${todayBlinkerBadge(e, history)}${kakuBadge(e)}</td>
       <td>${esc(e.sex_age)}</td>
       <td>${esc(e.genryo || '')}</td>
       <td class="l">${esc(e.jockey)}</td>
@@ -1114,7 +1151,7 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku) {
       <td style="font-size:16px">${r.mark || ''}</td>
       <td><span class="waku w${e.waku || 1}">${e.waku ?? ''}</span></td>
       <td>${e.umaban ?? ''}</td>
-      <td class="l stickyname"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a>${todayBlinkerBadge(e, history)}</td>
+      <td class="l stickyname"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a>${todayBlinkerBadge(e, history)}${kakuBadge(e)}</td>
       <td class="num ${r.mark === '◎' ? 'best' : ''}">${r.aiDev != null ? r.aiDev.toFixed(1) : '-'}</td>
       <td class="num ${r.mark === '◎' ? 'best' : ''}">${r.winP != null ? (r.winP * 100).toFixed(0) + '%' : '-'}</td>
       <td class="num">${r.score != null ? (50 + r.score * 10).toFixed(1) : '-'}</td>
@@ -1171,7 +1208,7 @@ function cyokyoRaceHtml(raceMeta, entries, cyokyo, history) {
       <td style="font-size:15px">${r.mark}</td>
       <td><span class="waku w${e.waku || 1}">${e.waku ?? ''}</span></td>
       <td>${e.umaban ?? ''}</td>
-      <td class="l"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a>${todayBlinkerBadge(e, history)}</td>
+      <td class="l"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a>${todayBlinkerBadge(e, history)}${kakuBadge(e)}</td>
       <td class="num ${r.mark === '◎' ? 'best' : ''}">${r.best != null ? r.best.toFixed(1) : '-'}</td>
       <td>${r.w ? mmdd(r.w.date) : ''}</td>
       <td>${r.w ? esc(r.w.course) : '<span class="sub">追切なし</span>'}</td>
@@ -2345,9 +2382,11 @@ async function selectTrack(track) {
   renderViewTabs();
   $('raceView').innerHTML = '<div class="empty">読み込み中…</div>';
   try { state.dates = await state.provider.listDates(); } catch (e) { state.dates = {}; }
+  state.kakuPoints = null;
   state.statsPromise = Promise.all([
     state.provider.loadStats().then((s) => { state.stats = s; }),
     state.provider.loadModel().then((mo) => { state.model = mo; }),
+    state.provider.loadPoints().then((p) => { state.kakuPoints = p; }),
   ]);
   const ds = Object.keys(state.dates).sort().reverse();
   if (ds.length) { switchView('race'); selectDate(ds[0]); }
@@ -2391,6 +2430,7 @@ async function init() {
   }
   // 統計は裏で読み込み（指数・テン偏差値に使う）
   state.statsPromise = Promise.all([
+    state.provider.loadPoints().then((p) => { state.kakuPoints = p; }),
     state.provider.loadStats().then((s) => { state.stats = s; }),
     state.provider.loadModel().then((mo) => { state.model = mo; }),
   ]);
