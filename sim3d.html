@@ -43,7 +43,7 @@ button.on { background:var(--accent); color:#10151c; border-color:var(--accent);
 </div>
 <div class="hud" id="order"></div>
 <div class="hud" id="msg"></div>
-<div class="hud" id="note">3D概略コース（発走位置は本コース上に簡略化）。展開・タイムは2Dシミュレータと同一の検証済みエンジン。</div>
+<div class="hud" id="note">公式コース図準拠（大井=外1600m/内1400m・1400mは斜めポケット発走・1500/1600mは内コース）。展開・タイムは2Dと同一の検証済みエンジン。</div>
 
 <script type="module">
 import * as THREE from './vendor/three.module.min.js';
@@ -52,9 +52,12 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 // ---------------- 場設定・データ（simulator.htmlと同一） ----------------
+// 実コース幾何: 右回り・右ターンシフト型（外周と内周の差=右ターンのshift×2）
+// 大井=公式図: 外1600m/内1400m・外直線386m/内直線286m・1400m=左奥斜めポケット・2000m=ホーム右小ポケット
+// 門別=外1600m/内1376m・直線330m/218m・1200m系=向正面左延長・2000m系=ホーム右延長
 const SIM_TRACKS = {
-  '門別': { prefix: 'monbetsu', straight: 330, label: 'MOMBETSU' },
-  '大井': { prefix: 'ooi', straight: 386, label: 'OI RACECOURSE' },
+  '門別': { prefix: 'monbetsu', straight: 330, R: 136, shift: 112, chuteBackMax: 160, chuteTopMax: 200, topDiag: false, label: 'MOMBETSU' },
+  '大井': { prefix: 'ooi', straight: 386, R: 100, shift: 100, chuteBackMax: 40, chuteTopMax: 260, topDiag: true, label: 'OI RACECOURSE' },
 };
 const params = new URLSearchParams(location.search);
 const TRACK = SIM_TRACKS[params.get('track')] ? params.get('track') : '大井';
@@ -191,15 +194,17 @@ function distanceAt(h, t, D) {
 }
 function finishTime(h, D) { return segTime(h.vFront, h.v2, h.vLastEff, D); }
 
-// ---------------- 3Dコース（実寸m・右回り） ----------------
+// ---------------- 3Dコース（実寸m・右回り・内外＋ポケット対応） ----------------
 const LAP = 1600;
-const R = 136;                                   // カーブ半径(m)
-const L = (LAP - 2 * Math.PI * R) / 2;           // 直線長(m)
+const R = tcfg.R;                                // カーブ半径(m)
+const L = (LAP - 2 * Math.PI * R) / 2;           // 外の直線長(m)
+const SHIFT = tcfg.shift;                        // 内コース=右ターンを左へシフト
 const CXL = -L / 2, CXR = L / 2;
 const bottomZ = R, topZ = -R;
-const GOAL_X = CXR - tcfg.straight;              // ゴール(ホームストレッチ上)
-function posOnTrack(arcM, lane) {
-  const P = LAP;
+const GOAL_X = CXR - tcfg.straight;              // ゴール(ホームストレッチ上・内外共通)
+const lapM = (inner) => inner ? LAP - 2 * SHIFT : LAP;
+function posOnTrack(arcM, lane, inner) {
+  const shift = inner ? SHIFT : 0, cxr = CXR - shift, P = lapM(inner);
   let a = ((arcM % P) + P) % P;
   const off = lane;
   const segA = GOAL_X - CXL;
@@ -207,13 +212,40 @@ function posOnTrack(arcM, lane) {
   a -= segA;
   if (a < Math.PI * R) { const t = a / R; return { x: CXL - Math.sin(t) * (R + off), z: Math.cos(t) * (R + off) }; }
   a -= Math.PI * R;
-  if (a < L) return { x: CXL + a, z: topZ - off };
-  a -= L;
-  if (a < Math.PI * R) { const t = a / R; return { x: CXR + Math.sin(t) * (R + off), z: -Math.cos(t) * (R + off) }; }
+  const segC = cxr - CXL;
+  if (a < segC) return { x: CXL + a, z: topZ - off };
+  a -= segC;
+  if (a < Math.PI * R) { const t = a / R; return { x: cxr + Math.sin(t) * (R + off), z: -Math.cos(t) * (R + off) }; }
   a -= Math.PI * R;
-  return { x: CXR - a, z: bottomZ + off };
+  return { x: cxr - a, z: bottomZ + off };
 }
-function racePos(D, s, lane) { return posOnTrack(LAP - (D % LAP) + s, lane); }
+// ポケット（引き込み線）: back=ホーム右延長(大井2000/門別2000系) top=向正面左延長(門別1200系) topDiag=斜め(大井1400)
+function chuteInfo(D, inner) {
+  if (inner) return { len: 0, type: null };
+  const back = D % LAP;
+  const b1 = tcfg.straight, b3 = b1 + Math.PI * R + L;
+  if (back > b1 && back <= b1 + tcfg.chuteBackMax) return { len: back - b1, type: 'back' };
+  if (back > b3 && back <= b3 + tcfg.chuteTopMax) return { len: back - b3, type: 'top' };
+  return { len: 0, type: null };
+}
+const DIAG = { c: Math.cos(0.5), s: Math.sin(0.5) };   // 大井1400ポケットの斜度≈30°
+function racePos(D, inner, s, lane) {
+  const ch = chuteInfo(D, inner);
+  if (s < ch.len) {
+    const rem = ch.len - s;
+    if (ch.type === 'top') {
+      if (tcfg.topDiag) return { x: CXL - rem * DIAG.c, z: topZ - lane + rem * DIAG.s };
+      return { x: CXL - rem, z: topZ - lane };
+    }
+    return { x: CXR + rem, z: bottomZ + lane };
+  }
+  const segA = GOAL_X - CXL;
+  let startArc;
+  if (ch.type === 'top') startArc = segA + Math.PI * R;
+  else if (ch.type === 'back') startArc = segA + Math.PI * R + (CXR - (inner ? SHIFT : 0) - CXL) + Math.PI * R;
+  else startArc = lapM(inner) - (D % lapM(inner));
+  return posOnTrack(startArc + (s - ch.len), lane, inner);
+}
 
 // ---------------- three.js シーン ----------------
 const renderer = new THREE.WebGLRenderer({ canvas: $('c3d'), antialias: true });
@@ -232,27 +264,78 @@ scene.add(sun);
   const g = new THREE.Mesh(new THREE.PlaneGeometry(3600, 3600), new THREE.MeshLambertMaterial({ color: 0x5a8f4a }));
   g.rotation.x = -Math.PI / 2; g.position.y = -0.05; scene.add(g);
 }
-// 走路リング（外周点列−内周点列のShape）
-function loopPoints(lane, n = 220) {
+// 走路リング（外周点列−内周点列のShape・外コース＋内コースの2枚）
+function loopPoints(lane, inner, n = 240) {
   const pts = [];
-  for (let i = 0; i < n; i++) { const p = posOnTrack(LAP * i / n, lane); pts.push(new THREE.Vector2(p.x, p.z)); }
+  for (let i = 0; i < n; i++) { const p = posOnTrack(lapM(inner) * i / n, lane, inner); pts.push(new THREE.Vector2(p.x, p.z)); }
   return pts;
 }
-{
-  const shape = new THREE.Shape(loopPoints(16));
-  shape.holes.push(new THREE.Path(loopPoints(-13).reverse()));
-  const m = new THREE.Mesh(new THREE.ShapeGeometry(shape, 4), new THREE.MeshLambertMaterial({ color: 0xb99a6b }));
-  m.rotation.x = Math.PI / 2; m.position.y = 0.02; scene.add(m);
+function band(inner, color, y) {
+  const shape = new THREE.Shape(loopPoints(16, inner));
+  shape.holes.push(new THREE.Path(loopPoints(-13, inner).reverse()));
+  const m = new THREE.Mesh(new THREE.ShapeGeometry(shape, 4), new THREE.MeshLambertMaterial({ color }));
+  m.rotation.x = Math.PI / 2; m.position.y = y; scene.add(m);
+  return m;
 }
-// ラチ（内外・白チューブ）
-function rail(lane, colorY) {
-  const pts3 = [];
-  for (let i = 0; i < 200; i++) { const p = posOnTrack(LAP * i / 200, lane); pts3.push(new THREE.Vector3(p.x, colorY, p.z)); }
-  const curve = new THREE.CatmullRomCurve3(pts3, true);
-  const t = new THREE.Mesh(new THREE.TubeGeometry(curve, 300, 0.18, 6, true), new THREE.MeshLambertMaterial({ color: 0xf2f2f2 }));
-  scene.add(t);
+band(true, 0xa08557, 0.015);            // 内コース(1400m)・やや暗め
+band(false, 0xb99a6b, 0.02);            // 外コース(1600m)
+// ポケット（引き込み線）の砂帯
+function chutePad(type) {
+  const w = 30;
+  if (type === 'back' && tcfg.chuteBackMax > 20) {
+    const len = tcfg.chuteBackMax + 6;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(len, w), new THREE.MeshLambertMaterial({ color: 0xb99a6b }));
+    m.rotation.x = -Math.PI / 2; m.position.set(CXR + len / 2 - 3, 0.02, bottomZ + 1.5); scene.add(m);
+  }
+  if (type === 'top') {
+    const len = tcfg.chuteTopMax + 6;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(len, w), new THREE.MeshLambertMaterial({ color: 0xb99a6b }));
+    m.rotation.x = -Math.PI / 2;
+    if (tcfg.topDiag) {
+      m.position.set(CXL - (len / 2) * DIAG.c, 0.02, topZ + 1.5 + (len / 2) * DIAG.s);
+      m.rotation.z = 0.5;
+    } else {
+      m.position.set(CXL - len / 2 + 3, 0.02, topZ - 1.5);
+    }
+    scene.add(m);
+  }
 }
-rail(-13, 1.0); rail(16, 1.0);
+chutePad('back'); chutePad('top');
+// ラチ（走るコースに合わせてinit時に張り替え）
+let railMeshes = [];
+function setRails(inner) {
+  for (const t of railMeshes) scene.remove(t);
+  railMeshes = [];
+  for (const lane of [-13, 16]) {
+    const pts3 = [];
+    for (let i = 0; i < 220; i++) { const p = posOnTrack(lapM(inner) * i / 220, lane, inner); pts3.push(new THREE.Vector3(p.x, 1.0, p.z)); }
+    const t = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts3, true), 320, 0.18, 6, true),
+      new THREE.MeshLambertMaterial({ color: 0xf2f2f2 }));
+    scene.add(t); railMeshes.push(t);
+  }
+}
+setRails(false);
+// 発走地点ラベル（実コース図の配置）
+function makeLabel(text) {
+  const cv = document.createElement('canvas'); cv.width = 192; cv.height = 48;
+  const g = cv.getContext('2d');
+  g.font = 'bold 30px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineWidth = 6; g.strokeStyle = '#14181f'; g.strokeText(text, 96, 26);
+  g.fillStyle = '#fff'; g.fillText(text, 96, 26);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false }));
+  sp.scale.set(26, 6.5, 1); return sp;
+}
+const GATES = TRACK === '大井'
+  ? [[1200, 0], [1000, 0], [2600, 0], [800, 0], [2400, 0], [1400, 0], [2000, 0], [1700, 0], [1800, 0], [1500, 1], [1600, 1]]
+  : [[1000, 0], [1100, 0], [1200, 0], [1700, 0], [1800, 0], [2000, 0], [2600, 0], [1500, 1], [1600, 1]];
+GATES.forEach(([d, inn], i) => {
+  const p = racePos(d, !!inn, 0, 1.5);
+  const sp = makeLabel(`${d}m${inn ? '(内)' : ''}`);
+  sp.position.set(p.x, 8 + (i % 3) * 5, p.z);
+  scene.add(sp);
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 4, 6), new THREE.MeshLambertMaterial({ color: 0xffffff }));
+  pole.position.set(p.x, 2, p.z); scene.add(pole);
+});
 // ゴール（白柱2本＋赤ライン）
 {
   const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
@@ -329,8 +412,8 @@ function updateMeshes() {
   ranked.forEach((h, i) => { h.targetLane = i * 0.85; });
   state.horses.forEach((h, i) => {
     h.lane += ((h.targetLane ?? h.lane) - h.lane) * 0.04;
-    const p = racePos(D, h.s, -10.5 + h.lane * 1.35);
-    const p2 = racePos(D, Math.min(h.s + 4, D + 40), -10.5 + h.lane * 1.35);
+    const p = racePos(D, state.inner, h.s, -10.5 + h.lane * 1.35);
+    const p2 = racePos(D, state.inner, Math.min(h.s + 4, D + 40), -10.5 + h.lane * 1.35);
     const m = meshes[i];
     m.position.set(p.x, 0, p.z);
     m.lookAt(p2.x, 0, p2.z);
@@ -353,14 +436,14 @@ function updateCamera() {
   const lead = Math.max(...state.horses.map((h) => h.s), 0);
   const mid = state.horses.length ? state.horses.reduce((a, h) => a + h.s, 0) / state.horses.length : 0;
   if (state.cam === 'chase') {
-    const back = racePos(D, Math.max(mid - 26, -30), 26);
-    const tgt = racePos(D, lead + 4, 0);
+    const back = racePos(D, state.inner, Math.max(mid - 26, -30), 26);
+    const tgt = racePos(D, state.inner, lead + 4, 0);
     camera.position.set(back.x, 9, back.z);
     camera.lookAt(tgt.x, 1.5, tgt.z);
   } else if (state.cam === 'goal') {
-    const gp = posOnTrack(0, 30);
+    const gp = posOnTrack(0, 30, false);
     camera.position.set(GOAL_X + 14, 5, gp.z + 14);
-    const tgt = racePos(D, Math.min(lead + 8, D), 0);
+    const tgt = racePos(D, state.inner, Math.min(lead + 8, D), 0);
     camera.lookAt(tgt.x, 1.5, tgt.z);
   } else {
     camera.position.set(0, 330, 235);
@@ -412,6 +495,8 @@ async function init() {
     const ent = entries.filter((e) => e.umaban != null);
     if (!ent.length) { $('msg').textContent = '出馬表データがありません'; startLoop(); return; }
     state.dist = race.distance_m || 1200;
+    state.inner = state.dist === 1500 || state.dist === 1600;   // 内コース(大井/門別とも1500・1600)
+    setRails(state.inner);
     const ids = ent.map((e) => e.horse_id).filter(Boolean);
     let histories = {};
     if (ids.length) {
@@ -449,6 +534,7 @@ for (const b of document.querySelectorAll('[data-cam]')) {
     document.querySelectorAll('[data-cam]').forEach((x) => x.classList.toggle('on', x === b)); };
 }
 init();
+window.__sim = { state, racePos, posOnTrack, chuteInfo };   // デバッグ用
 </script>
 </body>
 </html>
