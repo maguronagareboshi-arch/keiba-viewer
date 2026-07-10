@@ -73,6 +73,7 @@ td.l { text-align: left; }
   <h1 id="simTitle">展開シミュレータ</h1>
   <span class="badge" id="raceLabel">-</span>
   <!-- ローカルは index.html＝門別ビューア / 公開サイトは monbetsu.html（index.htmlは高知ビューア） -->
+  <button id="to3d">🎥 3D版で観る</button>
   <button id="backToViewer" style="margin-left:auto">📋 ビューアへ戻る</button>
 </header>
 <main>
@@ -1026,6 +1027,7 @@ async function init() {
   $('simTitle').textContent = `${TRACK} 展開シミュレータ`;
   document.title = `${TRACK} 展開シミュレータ`;
   $('backToViewer').onclick = () => { location.href = `keiba.html?track=${encodeURIComponent(TRACK)}`; };
+  $('to3d').onclick = () => { location.href = `sim3d.html?track=${encodeURIComponent(TRACK)}&race=${encodeURIComponent(state.raceId || '')}`; };
   loadCss();
   drawTrack();
   try {
