@@ -6987,6 +6987,8 @@ function idbPut(key, val) {
       window._horseBiasCache = {};
       window._f3BenchCache = null;
       window._evMapsCache = null;
+      window._asOfComboCache = null;
+      window._asOfF3BenchCache = null;
     }, 150);
   }
   openIDB().then(db => {
@@ -7006,6 +7008,8 @@ function idbDelete(key) {
   }
   _savedGroupsDirty = true;
   window._comboStatsCache = null;
+  window._asOfComboCache = null;
+  window._asOfF3BenchCache = null;
   openIDB().then(db => {
     const tx = db.transaction(IDB_STORE, 'readwrite');
     tx.objectStore(IDB_STORE).delete(key);
@@ -7138,6 +7142,8 @@ async function _idbBulkPut(obj) {
   window._horseBiasCache = {};
   window._f3BenchCache = null;
   window._evMapsCache = null;
+  window._asOfComboCache = null;
+  window._asOfF3BenchCache = null;
 }
 
 // ============================================================
@@ -7882,7 +7888,7 @@ async function _bulkFetchRun(monthsList, label) {
     }
     // first3f・ペース自動補完（今回保存分に効く）＋基準タイム系のキャッシュ無効化（データ増を反映）
     try { backfillFirst3fFrom1400m(); backfillPaceLabels(); backfillPaceType(); } catch(e) {}
-    window._f3BenchCache = null; window._leadFrontBench = null; window._frontBaseCache = null; window._comboStatsCache = null; window._jcMapsCache = null; window._evMapsCache = null;
+    window._f3BenchCache = null; window._leadFrontBench = null; window._frontBaseCache = null; window._comboStatsCache = null; window._jcMapsCache = null; window._evMapsCache = null; window._asOfComboCache = null; window._asOfF3BenchCache = null;
     loadSavedData();
     if (typeof initAnalysisDateSelect === 'function') initAnalysisDateSelect();
     _bulkLog(`${_bulkCancel ? '⏹ 中止しました。' : '✅ 完了！'} ${label}：<b>${savedR}レース・${savedH}頭</b>を保存${withComments?`（コメント${cmt}件）`:''}${err?`／エラー${err}`:''}`);
@@ -8677,6 +8683,53 @@ function getF3BenchTable() {
   return t;
 }
 
+// ── 時系列インデックス：前半3F基準表の未来情報混入対策（2026-07-10・コンボと同じ設計）──
+// paceCtxN（展開文脈補正）は馬の過去走を「その過去走の時点で分かっていたペース基準」と比べる
+// べきだが、getF3BenchTable()は全期間集計のため、3ヶ月前のレースを今日時点の基準(直近レース込み)
+// で判定しており未来情報混入。distance×class×trackCond をキーに日付順の累積平均索引を構築する。
+function _buildAsOfF3BenchIndex() {
+  if (window._asOfF3BenchCache) return window._asOfF3BenchCache;
+  const ls = lsRead();
+  const CONDS = ['良', '稍重', '重', '不良'];
+  const entries = [];
+  for (const [k, v] of Object.entries(ls)) {
+    if (v.type !== 'race' || v.baba_code !== '31' || !v.first3f) continue;
+    const d = String(v.distance || '').replace(/[^\d]/g, '');
+    if (!['1300', '1400', '1600'].includes(d)) continue;
+    const cond = v.track_cond || ''; if (!CONDS.includes(cond)) continue;
+    const f = parseFloat(v.first3f); if (!isFinite(f) || f < 33 || f > 46) continue;
+    const cls = getEffectiveClass(v.race_class || ''); if (!cls) continue;
+    const p = k.split('_');
+    if (p.length < 4) continue;
+    entries.push({ d: p[2], n: parseInt(p[3]), key: `${d}|${cls}|${cond}`, f });
+  }
+  entries.sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : a.n - b.n);
+  const perKey = new Map();
+  const running = new Map();
+  for (const e of entries) {
+    const cur = running.get(e.key) || { sum: 0, n: 0 };
+    const next = { sum: cur.sum + e.f, n: cur.n + 1 };
+    running.set(e.key, next);
+    let arr = perKey.get(e.key);
+    if (!arr) { arr = []; perKey.set(e.key, arr); }
+    arr.push({ d: e.d, n: e.n, sum: next.sum, cnt: next.n });
+  }
+  return (window._asOfF3BenchCache = { perKey });
+}
+/** 指定レースより厳密に前のdist×class×cond基準値（3件未満はnull・旧getF3BenchTableと同じ閾値）。 */
+function getF3BenchAsOf(dist, cls, cond, raceDate, raceNo) {
+  const arr = _buildAsOfF3BenchIndex().perKey.get(`${dist}|${cls}|${cond}`);
+  if (!arr || !arr.length) return null;
+  let lo = 0, hi = arr.length - 1, ans = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1, e = arr[mid];
+    if (e.d < raceDate || (e.d === raceDate && e.n < raceNo)) { ans = mid; lo = mid + 1; } else hi = mid - 1;
+  }
+  if (ans < 0) return null;
+  const e = arr[ans];
+  return e.cnt >= 3 ? e.sum / e.cnt : null;
+}
+
 /**
  * レースの前半3F基準比（dev）と自動ペースラベルを返す。
  * 閾値は1,212レースの結果統計から導出（2026-07-02）：
@@ -8689,6 +8742,18 @@ function getPaceDevLabel(distance, raceClass, trackCond, first3f) {
   if (!isFinite(f) || f < 33 || f > 46) return null;
   const cls = getEffectiveClass(raceClass || '');
   const b = getF3BenchTable()[`${d}|${cls}|${trackCond || ''}`];
+  if (b == null) return null;
+  const dev = +(f - b).toFixed(2);
+  return { dev, label: dev <= -1.0 ? 'ハイ' : dev >= 0.3 ? 'スロー' : 'ミドル' };
+}
+/** getPaceDevLabelの未来情報を排除した版。raceDate/raceNoより厳密に前のデータだけで基準値を作る。
+ *  paceCtxN（展開文脈補正）など「過去走を、その時点の情報だけで評価したい」用途で使う。 */
+function getPaceDevLabelAsOf(distance, raceClass, trackCond, first3f, raceDate, raceNo) {
+  const d = String(distance || '').replace(/[^\d]/g, '');
+  const f = parseFloat(first3f);
+  if (!isFinite(f) || f < 33 || f > 46) return null;
+  const cls = getEffectiveClass(raceClass || '');
+  const b = getF3BenchAsOf(d, cls, trackCond || '', raceDate, raceNo);
   if (b == null) return null;
   const dev = +(f - b).toFixed(2);
   return { dev, label: dev <= -1.0 ? 'ハイ' : dev >= 0.3 ? 'スロー' : 'ミドル' };
@@ -14608,9 +14673,55 @@ function dateDiffDays(d1str, d2str) {
   return Math.round((p(n1) - p(n2)) / 86400000);
 }
 
-// ── 騎手×厩舎コンボ統計（高知のみ）──
+// ══════════════ 時系列インデックス：コンボ統計の未来情報混入対策（2026-07-10）══════════════
+// 【問題】getComboStats()等は全期間のplace/totalを合算しており、過去レースを評価するとき
+// そのレースより後の結果まで特徴量に混ざる（コード監査②）。対象レースの日付+レース番号より
+// 「厳密に前」のデータだけを引けるよう、日付順にソートしコンボキーごとに「そのレース終了直後の
+// 累積place/total」を記録した索引を1回だけ構築し、二分探索でO(log m)で引く。
+// ライブは常に「今日」を評価するため実害は小さいが、過去レース閲覧時・バックテストでは必須。
+function _buildAsOfComboIndex() {
+  if (window._asOfComboCache) return window._asOfComboCache;
+  const ls = lsRead();
+  const entries = [];
+  for (const [k, v] of Object.entries(ls)) {
+    if (v.type !== 'horse' || (v.baba_code||v.babaCode) !== '31' || !v.jockey || !v.trainer) continue;
+    const chaku = parseInt(v.chakujun);
+    if (isNaN(chaku)) continue;
+    const p = k.split('_');
+    if (p.length < 4) continue;
+    entries.push({ d: p[1], n: parseInt(p[2]), key: `${v.jockey.trim()}_${v.trainer.trim()}`, place: chaku <= 3 ? 1 : 0 });
+  }
+  entries.sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : a.n - b.n);
+  const perKey = new Map(); // key -> [{d,n,place(累積),total(累積)}]（そのレース終了直後の値）
+  const running = new Map();
+  for (const e of entries) {
+    const cur = running.get(e.key) || { place: 0, total: 0 };
+    const next = { place: cur.place + e.place, total: cur.total + 1 };
+    running.set(e.key, next);
+    let arr = perKey.get(e.key);
+    if (!arr) { arr = []; perKey.set(e.key, arr); }
+    arr.push({ d: e.d, n: e.n, place: next.place, total: next.total });
+  }
+  return (window._asOfComboCache = { perKey });
+}
+/** 指定レース(raceDate,raceNo)より厳密に前のコンボ統計を返す（{place,total}|null）。 */
+function getComboStatsAsOf(jockey, trainer, raceDate, raceNo) {
+  if (!jockey || !trainer || !raceDate) return null;
+  const arr = _buildAsOfComboIndex().perKey.get(`${String(jockey).trim()}_${String(trainer).trim()}`);
+  if (!arr || !arr.length) return null;
+  let lo = 0, hi = arr.length - 1, ans = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1, e = arr[mid];
+    if (e.d < raceDate || (e.d === raceDate && e.n < raceNo)) { ans = mid; lo = mid + 1; } else hi = mid - 1;
+  }
+  return ans >= 0 ? { place: arr[ans].place, total: arr[ans].total } : null;
+}
+
+// ── 騎手×厩舎コンボ統計（高知のみ・全期間）──
 // 全IDBエントリのスキャンはデータ増加に比例して遅くなるため、
 // 結果をキャッシュしデータ書き込み/削除時（idbPut/idbDelete/_idbBulkPut）に無効化する。
+// 【注意】全期間集計＝過去レースを評価する用途（バックテスト・過去閲覧）には使わないこと。
+// その用途は必ずgetComboStatsAsOf(jockey,trainer,raceDate,raceNo)を使う。
 function getComboStats() {
   if (window._comboStatsCache) return window._comboStatsCache;
   const stats = {};
@@ -15148,7 +15259,11 @@ function computeYosoScored(raceNo, selCondOverride) {
 
     // ── ⑥ 騎手×厩舎コンボ ──
     const trainer = (horse.trainer || '').trim();
-    const comboMod = (jockey && trainer) ? Yoso.comboMod(_comboStats[`${jockey}_${trainer}`], horses.length) : 0;
+    // 【2026-07-10】未来情報混入対策：全期間集計(_comboStats)ではなく、このレースより前だけの
+    // コンボ統計(getComboStatsAsOf)を使う。ライブで今日のレースを見る限り差はほぼ無いが、
+    // 過去レースを閲覧する場合はそのレースより後の結果が混ざらないようにする。
+    const _comboStatAsOf = (jockey && trainer) ? getComboStatsAsOf(jockey, trainer, thisRaceDate, thisRaceNo) : null;
+    const comboMod = (jockey && trainer) ? Yoso.comboMod(_comboStatAsOf, horses.length) : 0;
 
     // ── ⑦ ローテーション補正（連闘・長期休養明け） ──
     const _prevRace = histEx[0];
@@ -15230,13 +15345,16 @@ function computeYosoScored(raceNo, selCondOverride) {
     //    位置×ペースという文脈軸で捉える（時間軸での是正は高知の前有利と衝突し逆効果と検証済み）。
     //    3000R backtestで重みスイープ(0〜5.0)し1.5が◎/○/▲全てで現状同等以上の唯一の点
     //    （◎勝率39.3→39.5・◎回収89.7→89.8・悪化なし）。
+    // 【2026-07-10】未来情報混入対策：各過去走はその過去走「自身の日付」より前のペース基準表で
+    // 判定する（getPaceDevLabelAsOf）。旧実装は全期間集計＝半年前の過去走を、その後3ヶ月分の
+    // レースまで含んだ「今日時点の基準」で判定しており、未来のデータで過去を評価していた。
     const paceCtxMod = (() => {
       let tough = false, gifted = false, excused = false;
       const _ld = lsRead();
       for (const h of kochiHist.slice(0, 3)) {
         const rrec = _ld[`race_31_${h.raceDate}_${h.raceNo}`];
         if (!rrec || !rrec.first3f) continue;
-        const pd = getPaceDevLabel(rrec.distance, rrec.race_class, rrec.track_cond, rrec.first3f);
+        const pd = getPaceDevLabelAsOf(rrec.distance, rrec.race_class, rrec.track_cond, rrec.first3f, h.raceDate, parseInt(h.raceNo));
         if (!pd) continue;
         const c1 = parseInt(String(h.corner || '').split('-')[0]);
         const ch = parseInt(h.chakujun);
@@ -16024,8 +16142,7 @@ function renderPredictionPanel(raceNo) {
       const siNote = s.isEstimatedScore ? '<br><span style="font-size:9px;color:#7c3aed">クラス推定</span>'
         : s.isTransfer ? '<br><span style="font-size:9px;color:#d97706">他場参考</span>'
         : (s.kochiSICount > 0 && s.kochiSICount < 2 ? '<br><span style="font-size:9px;color:#9ca3af">高知1走</span>' : '');
-      const ck = `${s.jockey}_${s.trainer}`;
-      const cs = _comboStats[ck];
+      const cs = getComboStatsAsOf(s.jockey, s.trainer, raceInfo.raceDate, parseInt(raceNo));
       const comboNote = cs && cs.total >= 3 ? `<br><span style="font-size:9px;color:#9ca3af">${cs.total}戦${Math.round(cs.place/cs.total*100)}%</span>` : '<br><span style="font-size:9px;color:#cbd5e1">実績少</span>';
       const col = v => parseFloat(v) >= 0 ? '#15803d' : '#dc2626';
       return `<tr style="border-bottom:1px solid #e2e8f0;${noData?'opacity:.55':''}">
@@ -16597,7 +16714,9 @@ function runYosoBacktest(raceNo) {
           const agariN = Yoso.agariMod(_getAgRefBT(rdistNum), Yoso.agariAvg(preHist, rdistNum));
 
           // 新: comboN（検証版は全馬場集計・ライブは高知のみ＝仕様差）
-          const comboN = Yoso.comboMod(_btComboStats[`${(entry.jockey||'').trim()}_${(entry.trainer||'').trim()}`], _fieldSizeBT);
+          // 【2026-07-10】未来情報混入対策：_btComboStats(全期間集計)ではなくこのレースより前だけの
+          // コンボ統計を使う。これがコード監査②の核心（過去レースを未来の結果込みで評価していた）。
+          const comboN = Yoso.comboMod(getComboStatsAsOf((entry.jockey||'').trim(), (entry.trainer||'').trim(), raceDate, rNo), _fieldSizeBT);
 
           // 新: marginN（前走着差補正・直近2走）
           const marginN = Yoso.marginMod(Yoso.marginAvgGap(preHist));
@@ -16640,6 +16759,8 @@ function runYosoBacktest(raceNo) {
           // paceCtxN（展開文脈補正・実験v2）：過去3走のペース基準比×位置取りで
           // 「逆境で先行して好走＝地力」「ハイ限定の差し好走＝展開ギフト」
           // 「ハイで潰れた先行＝免罪（次走複勝35.4% vs スロー潰れ27.7%・EDA由来）」を識別
+          // 【2026-07-10】未来情報混入対策：各過去走をその過去走自身の日付より前の基準表で判定
+          // （getPaceDevLabelAsOf）。ライブ側と同じ修正。
           let paceCtxN = 0;
           {
             let _tough = false, _gifted = false, _excused = false;
@@ -16647,7 +16768,7 @@ function runYosoBacktest(raceNo) {
               if (h.babaCode !== '31') continue;
               const rrec = lsData[`race_31_${h.raceDate}_${h.raceNo}`];
               if (!rrec || !rrec.first3f) continue;
-              const pd = getPaceDevLabel(rrec.distance, rrec.race_class, rrec.track_cond, rrec.first3f);
+              const pd = getPaceDevLabelAsOf(rrec.distance, rrec.race_class, rrec.track_cond, rrec.first3f, h.raceDate, parseInt(h.raceNo));
               if (!pd) continue;
               const c1 = parseInt(String(h.corner || '').split('-')[0]);
               const ch = parseInt(h.chakujun);
