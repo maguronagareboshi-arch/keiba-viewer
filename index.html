@@ -1053,6 +1053,14 @@ const KV_APP_CSS = [
       '.deban-table th.sort-desc::after{content:"▼";opacity:1;font-size:9px}',
       /* ── 保存進捗モーダル ── */
       '.save-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center}',
+      /* ── 3F一括取込モーダル(計測アプリのTSV/CSV貼り付け) — 色はCSS変数のみ(ダーク対応) ── */
+      '.f3imp-modal{background:var(--card-bg);border-radius:14px;box-shadow:0 8px 40px rgba(0,0,0,.25);padding:22px 26px;width:540px;max-width:92vw;color:var(--text)}',
+      '.f3imp-modal h3{font-size:15px;font-weight:700;margin:0 0 10px}',
+      '.f3imp-modal textarea{width:100%;height:220px;font-family:ui-monospace,Consolas,monospace;font-size:12px;border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--bg);color:var(--text);box-sizing:border-box;resize:vertical}',
+      '.f3imp-note{font-size:11.5px;color:var(--text-muted);margin:8px 0 0;line-height:1.5}',
+      '.f3imp-btns{display:flex;gap:10px;justify-content:flex-end;margin-top:12px}',
+      '.f3imp-btns button{padding:8px 18px;border-radius:8px;border:1px solid var(--border);background:var(--card-bg);color:var(--text);cursor:pointer;font-size:13px}',
+      '.f3imp-btns button.pri{background:var(--primary);border-color:var(--primary);color:#fff}',
       '.save-modal{background:#fff;border-radius:14px;box-shadow:0 8px 40px rgba(0,0,0,.25);padding:28px 32px;min-width:340px;max-width:90vw;width:400px}',
       '.save-modal-title{font-size:16px;font-weight:700;color:#1a1a2e;margin-bottom:18px;display:flex;align-items:center;gap:8px}',
       '.save-modal-title i{color:#1a56a0;font-size:18px}',
@@ -1756,6 +1764,9 @@ const KV_APP_CSS = [
         ⏱ <span>前半3F出力</span>
       </button>
       <!-- ===== 【一時】ここまで ===== -->
+      <button id="f3-import-btn" class="admin-only" onclick="import3FBulk()" title="計測アプリが出力した前半3F(TSV/CSV: レース,馬番,[馬名],前半3F)を貼り付けて一括入力">
+        📥 <span>3F取込</span>
+      </button>
       <button id="minimal-mode-btn" onclick="toggleMinimalMode()" title="ミニマルモード切替">
         <span id="minimal-mode-icon">▣</span> <span id="minimal-mode-label">ミニマル</span>
       </button>
@@ -2655,6 +2666,59 @@ function tempOutputFirst3F() {
   alert(`前半3Fを${rows.length}件出力しました（コンソール表示＋クリップボードにコピー済み）`);
 }
 // ===== 【一時】ここまで =====
+
+// ===== 3F一括取込: 計測アプリのTSV/CSVを貼り付けて各馬のfirst3fへ反映(保存ボタンで確定) =====
+function import3FBulk() {
+  if (document.getElementById('f3imp-overlay')) return;
+  const ov = document.createElement('div');
+  ov.className = 'save-modal-overlay';
+  ov.id = 'f3imp-overlay';
+  ov.innerHTML = `<div class="f3imp-modal">
+    <h3>📥 前半3F 一括取込</h3>
+    <textarea id="f3imp-text" placeholder="レース\t馬番\t馬名\t前半3F\n1\t7\t(馬名省略可)\t38.9\n1\t9\t\t39.1\n…\n※タブ・カンマ区切りどちらも可。ヘッダ行や空の値は自動スキップ"></textarea>
+    <div class="f3imp-note">計測アプリの出力(kochi_3f_tsv_日付.txt)や「前半3F出力」形式をそのまま貼り付けできます。<br>反映後、<b>保存ボタンを押すまで確定されません</b>。既に手入力済みの値は上書きされます(空の値では上書きしません)。</div>
+    <div class="f3imp-btns">
+      <button onclick="document.getElementById('f3imp-overlay').remove()">キャンセル</button>
+      <button class="pri" onclick="applyImport3F()">反映する</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  document.getElementById('f3imp-text').focus();
+}
+function applyImport3F() {
+  const txt = (document.getElementById('f3imp-text')?.value || '').trim();
+  if (!txt) { alert('テキストが空です'); return; }
+  let applied = 0, noRace = new Set(), noHorse = 0, skipped = 0;
+  for (const line of txt.split(/\r?\n/)) {
+    const s = line.trim();
+    if (!s || /レース|馬番|race/i.test(s)) continue;   // ヘッダ行
+    const cols = s.split(/\t|,/).map(c => c.trim());
+    if (cols.length < 2) { skipped++; continue; }
+    const raceNo = parseInt(cols[0]), umaBan = parseInt(cols[1]);
+    const val = parseFloat(cols[cols.length - 1]);      // 最終列=前半3F(3列・4列どちらも対応)
+    if (!raceNo || !umaBan || !isFinite(val) || val < 25 || val > 60) { skipped++; continue; }
+    const data = allRacesData[raceNo];
+    if (!data || !data.horses) { noRace.add(raceNo); continue; }
+    const horse = data.horses.find(h => parseInt(h.umaBan) === umaBan);
+    if (!horse) { noHorse++; continue; }
+    const v = (Math.round(val * 10) / 10).toFixed(1);
+    horse.first3f = v;
+    const inp = document.querySelector(`input.threef-input[oninput="onHorse3FInput(this,${raceNo},${umaBan})"]`);
+    if (inp) {
+      inp.value = v;
+      const vw = inp.closest('td')?.querySelector('.vw-val');
+      if (vw) vw.textContent = v + '秒';
+    }
+    applied++;
+  }
+  document.getElementById('f3imp-overlay')?.remove();
+  let msg = `前半3Fを ${applied}件 反映しました。\n※「保存」ボタンを押すと確定されます。`;
+  if (noRace.size) msg += `\n未読込のレース(スキップ): R${[...noRace].join(', R')} — 対象日の出馬表を読み込んでから取込してください`;
+  if (noHorse) msg += `\n馬番不一致スキップ: ${noHorse}件`;
+  if (skipped) msg += `\n書式スキップ: ${skipped}行`;
+  alert(msg);
+}
+// ===== 3F一括取込 ここまで =====
 
 // スマホ表示プレビュー：?sim=1 付きの自アプリを390px幅iframeで開く。
 // iframe内ではメディアクエリが実際のスマホ幅で発火するため、CSSを複製せず正確に確認できる。
