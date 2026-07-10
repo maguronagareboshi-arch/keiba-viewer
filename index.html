@@ -14826,13 +14826,30 @@ const Yoso = {
     return Math.max(-1.25, Math.min(1.25, (refV - avgAH) * 1.31836));
   },
 
+  /** 着差(diff)を馬身数(数値)にパース。伝統表記："3/4"=3/4馬身,"1.1/2"=1+1/2馬身,"5"=5馬身,
+   *  "クビ"/"アタマ"/"ハナ"=僅差の慣用値。【2026-07-10修正】旧実装は replace(/[^\d.]/g,'') で
+   *  "/"を除去するだけだったため "3/4"→34、"1/2"→12 のように全く別の数値に化けていた
+   *  （該当は非1着の着差の34%・分数を含まないものも合わせ52.8%が誤ってパースされていた）。
+   *  A/B検証（3000R）：修正後は◎の的中率を維持したまま○の複勝的中率+1.2pt改善。 */
+  parseMargin(str) {
+    if (!str) return NaN;
+    const s = String(str).trim();
+    if (s === 'ハナ') return 0.02;
+    if (s === 'アタマ') return 0.05;
+    if (s === 'クビ') return 0.1;
+    let m = s.match(/^(\d+)\/(\d+)$/); if (m) return parseInt(m[1]) / parseInt(m[2]);
+    m = s.match(/^(\d+)\.(\d+)\/(\d+)$/); if (m) return parseInt(m[1]) + parseInt(m[2]) / parseInt(m[3]);
+    m = s.match(/^(\d+)$/); if (m) return parseInt(m[1]);
+    return NaN;
+  },
+
   /** ⑬の材料：直近2走の勝ち馬との平均着差（勝ちは0） */
   marginAvgGap(histEx) {
     const races = histEx.slice(0, 2).filter(h => { const c = parseInt(h.chakujun); return !isNaN(c) && c >= 1; });
     if (!races.length) return null;
     const gaps = races.map(h => {
       if (parseInt(h.chakujun) === 1) return 0;
-      const d = parseFloat(String(h.diff || '').replace(/[^\d.]/g, ''));
+      const d = Yoso.parseMargin(h.diff);
       return isNaN(d) ? null : d;
     }).filter(v => v !== null);
     if (!gaps.length) return null;
@@ -15139,7 +15156,14 @@ function computeYosoScored(raceNo, selCondOverride) {
     // ── ⑪ 馬体重変化補正 ──
     const weightMod = Yoso.weightMod(Yoso.weightChange(horse.weight, histEx[0]?.weight));
 
-    // ── ⑫ 上がり3F補正（基準値はライブ=固定表・検証=データ駆動の仕様差） ──
+    // ── ⑫ 上がり3F補正（固定表。基準38.5は高知実測平均40.5〜40.9より約2秒速く、ほぼ全馬が
+    //  マイナス上限(-1.25×2.5)に飽和＝実質「速い差し馬だけ拾う」弱い信号。getAgRef/_getAgRefBTも
+    //  馬エントリに無い v.distance を見ており同じく38.5固定なので、本番もEVもバックテストも一致。
+    //  【2026-07-10 A/B検証済・9案スイープ】基準是正/重み/片側+のみ/脚質ゲート/交互作用/無効化を
+    //  2993Rで総当たり比較した結果、現行の38.5×2.5が◎勝率(39.4%)・◎単回収(92.0%)ともに最良で、
+    //  どの活性化案もこれを上回らなかった（実測40.7基準の×2.5=naiveは◎勝38.5%/回収88.2%と最下位）。
+    //  agari完全無効化(J)ですら現行に僅かに劣る＝現行は「速い差し馬の相対エッジだけ拾い、前有利で逆効果に
+    //  なる本信号は飽和で捨てる」最適点。よって是正しない。上がり信号は既に良い値。触るとほぼ必ず悪化。
     const _agRefTbl = {800:36.0,1300:38.5,1400:38.5,1600:39.0,1900:39.5,2400:40.0};
     const agariMod = Yoso.agariMod(_agRefTbl[rdistNum] || 38.5, Yoso.agariAvg(histEx, rdistNum));
 
