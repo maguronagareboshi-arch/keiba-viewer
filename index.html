@@ -15902,8 +15902,9 @@ function buildLongshotHtml(scored) {
     .filter(s => s.totalScore != null && s.aiProb != null && s.marketProb != null && s.marketProb > 0)
     .map(s => ({ s, odds: parseFloat(s.horse.odds), ratio: s.aiProb / s.marketProb }))
     .filter(c => !isNaN(c.odds));
-  const mid = cands.filter(c => c.odds >= 8 && c.odds < 30 && c.ratio >= 1.25).sort((a, b) => b.ratio - a.ratio);
-  const big = cands.filter(c => c.odds >= 30 && c.ratio >= 1.5).sort((a, b) => b.ratio - a.ratio);
+  // 1レース最大1頭（ratio最大のみ）：候補を絞るほど規律が保てるため。検証時(n=231)も大半が1R1頭だった。
+  const mid = cands.filter(c => c.odds >= 8 && c.odds < 30 && c.ratio >= 1.25).sort((a, b) => b.ratio - a.ratio).slice(0, 1);
+  const big = cands.filter(c => c.odds >= 30 && c.ratio >= 1.5).sort((a, b) => b.ratio - a.ratio).slice(0, 1);
   if (!mid.length && !big.length) return '';
   const midRows = mid.map(c => `
       <div class="evb-row">
