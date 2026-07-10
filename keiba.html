@@ -268,7 +268,7 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 // ============================================================
 const TRACKS = {
   '門別': { prefix: 'monbetsu', baba: '36', slug: 'monbetsu', noken: true, sim: true },
-  '大井': { prefix: 'ooi', baba: '44', slug: 'ooi' },
+  '大井': { prefix: 'ooi', baba: '44', slug: 'ooi', sim: true },
   '船橋': { prefix: 'funabashi', baba: '43', slug: 'funabashi' },
   '川崎': { prefix: 'kawasaki', baba: '45', slug: 'kawasaki' },
   '浦和': { prefix: 'urawa', baba: '42', slug: 'urawa' },
@@ -705,7 +705,7 @@ function renderViewTabs() {
   const tabs = [['race', 'レース'], ['analysis', '分析'], ['cyokyo', '調教']];
   if (cfg.noken) tabs.push(['noken', '🎓 能検']);
   let html = tabs.map(([v, l]) => `<button data-view="${v}" class="${state.view === v ? 'active' : ''}">${l}</button>`).join('');
-  if (cfg.sim) html += `<button onclick="location.href='simulator.html'">🎲 シミュレータ</button>`;
+  if (cfg.sim) html += `<button onclick="location.href='simulator.html?track=${encodeURIComponent(state.track)}'">🎲 シミュレータ</button>`;
   $('viewTabs').innerHTML = html;
 }
 function renderSubTabs() {
@@ -1491,7 +1491,7 @@ async function renderRaceView() {
   }
   if (state.sub === 'sim') {   // このレースの展開シミュレータを埋め込み表示
     $('raceView').innerHTML = `<div class="card" style="padding:0;overflow:hidden;border-radius:8px">
-      <iframe src="simulator.html?race=${encodeURIComponent(raceId)}&embed=1" style="width:100%;height:920px;border:0;display:block" title="展開シミュレータ" loading="lazy"></iframe></div>
+      <iframe src="simulator.html?race=${encodeURIComponent(raceId)}&track=${encodeURIComponent(state.track)}&embed=1" style="width:100%;height:920px;border:0;display:block" title="展開シミュレータ" loading="lazy"></iframe></div>
       <div class="note">このレースの展開シミュレータ（テン3F/上がり実績で隊列・伸びを再現・1000回モンテカルロで勝率/複勝率/EV）。全画面は上部の🎲シミュレータから。</div>`;
     return;
   }

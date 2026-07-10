@@ -70,10 +70,10 @@ td.l { text-align: left; }
 </head>
 <body>
 <header>
-  <h1>門別 展開シミュレータ</h1>
+  <h1 id="simTitle">展開シミュレータ</h1>
   <span class="badge" id="raceLabel">-</span>
   <!-- ローカルは index.html＝門別ビューア / 公開サイトは monbetsu.html（index.htmlは高知ビューア） -->
-  <button onclick="location.href=(location.hostname==='localhost'||location.hostname==='127.0.0.1')?'index.html':'monbetsu.html'" style="margin-left:auto">📋 ビューアへ戻る</button>
+  <button id="backToViewer" style="margin-left:auto">📋 ビューアへ戻る</button>
 </header>
 <main>
   <div class="controls">
@@ -133,17 +133,26 @@ async function sbGet(pathq) {
   return res.json();
 }
 
+// ---- 場設定（?track= で切替・既定は門別）----
+// straight=最終直線m / hasInner=内回りコース有 / hasChutes=門別の引き込み線描画
+const SIM_TRACKS = {
+  '門別': { prefix: 'monbetsu', baba: '36', label: 'MOMBETSU RACECOURSE', straight: 330, hasInner: true, hasChutes: true },
+  '大井': { prefix: 'ooi', baba: '44', label: 'OI RACECOURSE', straight: 386, hasInner: false, hasChutes: false },
+};
+const TRACK = (() => { const t = new URLSearchParams(location.search).get('track'); return SIM_TRACKS[t] ? t : '門別'; })();
+const tcfg = SIM_TRACKS[TRACK];
+
 // データ源（Supabase優先 → ローカルJSON）
 const sources = {
   supabase: {
     label: 'Supabase',
     async listDates() {
-      const rows = await sbGet('chihou_races?select=race_date&order=race_date.desc&limit=5000');
+      const rows = await sbGet(`chihou_races?select=race_date&track=eq.${encodeURIComponent(TRACK)}&order=race_date.desc&limit=5000`);
       if (!rows.length) throw new Error('empty');
       return [...new Set(rows.map((r) => r.race_date))];
     },
     async listRaces(date) {
-      const races = await sbGet(`chihou_races?race_date=eq.${date}&select=race_id,race_no,klass,race_name,distance_m&order=race_no.asc`);
+      const races = await sbGet(`chihou_races?race_date=eq.${date}&track=eq.${encodeURIComponent(TRACK)}&select=race_id,race_no,klass,race_name,distance_m&order=race_no.asc`);
       return races.map((r) => ({ race_id: r.race_id, race_no: r.race_no, klass: r.klass, name: r.race_name, distance_m: r.distance_m }));
     },
     async loadEntries(raceId) {
@@ -169,7 +178,7 @@ const sources = {
       return map;
     },
     async loadStats() {
-      const rows = await sbGet('chihou_meta?key=eq.monbetsu_stats&select=value');
+      const rows = await sbGet(`chihou_meta?key=eq.${tcfg.prefix}_stats&select=value`);
       return rows.length ? rows[0].value : null;
     },
   },
@@ -195,7 +204,7 @@ const ODDS_PROXY = 'https://keiba-proxydeploy.maguronagareboshi.workers.dev/?url
 const jstToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 async function fetchLiveOdds(raceDate, raceNo) {
   if (!raceDate || !raceNo) return null;
-  const url = `https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/OddsTanFuku?k_raceDate=${raceDate.replace(/-/g, '/')}&k_raceNo=${raceNo}&k_babaCode=36`;
+  const url = `https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/OddsTanFuku?k_raceDate=${raceDate.replace(/-/g, '/')}&k_raceNo=${raceNo}&k_babaCode=${tcfg.baba}`;
   try {
     const html = await (await fetch(ODDS_PROXY + encodeURIComponent(url))).text();
     if (html.indexOf('odd_popular_table_02') < 0) return null;
@@ -272,7 +281,7 @@ const L = 432;                       // 直線長(px)
 const CXL = 234, CXR = CXL + L;      // 左右カーブの中心x（外回り）
 const PXPM = (2 * L + 2 * Math.PI * R) / 1600;   // px/m（外回り基準）
 const SHIFT = 112 * PXPM;            // 内回りの右ターン前倒し量
-const GOAL_X = CXR - 330 * PXPM;     // ゴール位置: 最終コーナー出口から330m（実測仕様）
+const GOAL_X = CXR - tcfg.straight * PXPM;   // ゴール位置: 最終コーナー出口から直線m（門別330/大井386）
                                      // → 内回りは自動的に直線218m相当になる（幾何学的に整合）
 const bottomY = CY + R, topY = CY - R;
 
@@ -282,11 +291,11 @@ function lapPx(inner) { return 2 * (L - (inner ? SHIFT : 0)) + 2 * Math.PI * R; 
 // 引き込み線（ポケット）: 1200m(外)=向正面の左延長 / 2000m(外)=ホームストレッチの右延長
 // 該当レースはオーバルを回らず、ポケット直線からコースに合流する
 function chuteInfo(D, inner) {
-  if (inner) return { len: 0, type: null };
+  if (inner || !tcfg.hasChutes) return { len: 0, type: null };   // 引き込み線は門別のみ（大井はv1概略＝オーバル上に発走）
   const back = D % 1600;
   const curveM = Math.PI * R / PXPM;
   const topM = L / PXPM;
-  const b1 = 330;               // ゴール→(逆走)右カーブ入口
+  const b1 = tcfg.straight;     // ゴール→(逆走)右カーブ入口
   const b2 = b1 + curveM;       // 右カーブ
   const b3 = b2 + topM;         // 向正面
   if (back > b1 && back <= b1 + 160) return { len: back - b1, type: 'bottom' };  // 2000m系
@@ -345,7 +354,7 @@ function posOnTrack(arcPx, lane, inner) {
 const state = { horses: [], dist: 1100, inner: false, t: 0, running: false, speed: 6, timer: null, raceId: null,
   oddsTimer: null, mcRows: null };
 
-function isInnerCourse(dist) { return dist === 1500 || dist === 1600; }  // 内1500m・内1600m
+function isInnerCourse(dist) { return tcfg.hasInner && (dist === 1500 || dist === 1600); }  // 門別の内1500m/1600mのみ
 
 function buildHorses(entries, D, klass, histories) {
   const tb = baseOf(D, '良', classGroup(klass));   // 目標レースの基準タイム（発走前は良想定）
@@ -460,11 +469,30 @@ function lateMod(paceZ, eNorm, D) {
 }
 
 // ペース補正後の 中間速度v2 と 実効上がり速度vLastEff（外回りロスを速度へ織り込む）
+// 中間区間の速度比を距離別の実測ラップ平均から較正（stats.lap_profile・南関のみ存在・無ければ1.0）
+// = 前後600mの平均速度に対する道中の実測速度比。門別の「仮定の中間速度」を実測形状に置き換える。
+const _midRatioCache = {};
+function midRatio(D) {
+  if (D in _midRatioCache) return _midRatioCache[D];
+  let r = 1.0;
+  const prof = statsDb && statsDb.lap_profile && statsDb.lap_profile[String(D)];
+  const laps = prof && prof.laps;
+  if (laps && laps.length >= 7) {   // 前3+中1以上+後3が要る（1200m=6本は中間なし→1.0）
+    const front = laps.slice(0, 3), back = laps.slice(-3), mid = laps.slice(3, -3);
+    const vF = 600 / front.reduce((a, b) => a + b, 0);
+    const vB = 600 / back.reduce((a, b) => a + b, 0);
+    const vM = (200 * mid.length) / mid.reduce((a, b) => a + b, 0);
+    r = Math.max(0.9, Math.min(1.1, vM / ((vF + vB) / 2)));
+  }
+  _midRatioCache[D] = r;
+  return r;
+}
+
 function paceAdjust(vFront, vLast, D, paceZ, eNorm) {
   const vLastBase = vLast * lateMod(paceZ, eNorm, D);
   const wide = PACE.widePenalty * eNorm * (D / 1600);      // 後方は外を回るロス（秒）
   const vLastEff = 600 / (600 / vLastBase + wide);          // ロスを上がり速度に反映
-  const v2 = (vFront + vLastEff) / 2 * (1.0 + 0.02 * paceZ);  // ハイなら道中も速い・スローはやや遅い（旧0.96固定は全馬一律で約4%遅く出る不具合の原因だった）
+  const v2 = (vFront + vLastEff) / 2 * (1.0 + 0.02 * paceZ) * midRatio(D);  // ハイなら道中も速い（旧0.96固定は約4%遅く出るバグだった）。midRatio=実測ラップ較正（南関のみ・門別1.0）
   return { vLastEff, v2 };
 }
 
@@ -628,15 +656,16 @@ function drawTrack() {
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = css['--turf'];
   ctx.fillRect(0, 0, W, H);
-  // 走路の帯（外回り・内回り。使っていない方は薄く）
+  // 走路の帯（外回り・内回り。使っていない方は薄く。内回り/引き込み線は門別のみ）
   strokeLoop(false, 4, state.inner ? css['--track-dirt-dim'] : css['--track-dirt'], 30);
-  strokeLoop(true, 4, state.inner ? css['--track-dirt'] : css['--track-dirt-dim'], 30);
-  // 引き込み線（1200m=向正面左延長 / 2000m=ホームストレッチ右延長）
-  const outerColor = state.inner ? css['--track-dirt-dim'] : css['--track-dirt'];
-  ctx.strokeStyle = outerColor; ctx.lineWidth = 30; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(CXL - 105 * PXPM, topY - 4); ctx.lineTo(CXL + 8, topY - 4); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(CXR - 8, bottomY + 4); ctx.lineTo(CXR + 105 * PXPM, bottomY + 4); ctx.stroke();
-  ctx.lineCap = 'butt';
+  if (tcfg.hasInner) strokeLoop(true, 4, state.inner ? css['--track-dirt'] : css['--track-dirt-dim'], 30);
+  if (tcfg.hasChutes) {
+    const outerColor = state.inner ? css['--track-dirt-dim'] : css['--track-dirt'];
+    ctx.strokeStyle = outerColor; ctx.lineWidth = 30; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(CXL - 105 * PXPM, topY - 4); ctx.lineTo(CXL + 8, topY - 4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(CXR - 8, bottomY + 4); ctx.lineTo(CXR + 105 * PXPM, bottomY + 4); ctx.stroke();
+    ctx.lineCap = 'butt';
+  }
   // 内ラチ
   strokeLoop(state.inner, -12, css['--rail'], 1.5);
   // ゴール線・スタンド
@@ -654,19 +683,24 @@ function drawTrack() {
   // 場名（インフィールド）
   ctx.fillStyle = css['--track-dirt-dim'];
   ctx.font = 'bold 22px sans-serif';
-  ctx.fillText('MOMBETSU RACECOURSE', CXL + L / 2, CY + 6);
-  // 発走地点（公式コース図と同じ配置）
-  gateMarker(1200, false, '1200m(外)');
-  gateMarker(1100, false, '1100m(外)');
-  gateMarker(1000, false, '1000m(外)');
-  gateMarker(2600, false, '2600m(外)', -13);   // 1000m地点+1周（同地点・ラベルを上段に）
-  gateMarker(1700, false, '1700m(外)');
-  gateMarker(1800, false, '1800m(外)');
-  gateMarker(2000, false, '2000m(外)');
-  gateMarker(1500, true, '1500m(内)', 13);
-  gateMarker(1600, true, '1600m(内)', 13);
-  if (![1000, 1100, 1200, 1500, 1600, 1700, 1800, 2000, 2600].includes(state.dist))
-    gateMarker(state.dist, state.inner, `${state.dist}m`);
+  ctx.fillText(tcfg.label, CXL + L / 2, CY + 6);
+  if (tcfg.hasChutes) {
+    // 門別: 発走地点（公式コース図と同じ配置・引き込み線含む）
+    gateMarker(1200, false, '1200m(外)');
+    gateMarker(1100, false, '1100m(外)');
+    gateMarker(1000, false, '1000m(外)');
+    gateMarker(2600, false, '2600m(外)', -13);   // 1000m地点+1周（同地点・ラベルを上段に）
+    gateMarker(1700, false, '1700m(外)');
+    gateMarker(1800, false, '1800m(外)');
+    gateMarker(2000, false, '2000m(外)');
+    gateMarker(1500, true, '1500m(内)', 13);
+    gateMarker(1600, true, '1600m(内)', 13);
+    if (![1000, 1100, 1200, 1500, 1600, 1700, 1800, 2000, 2600].includes(state.dist))
+      gateMarker(state.dist, state.inner, `${state.dist}m`);
+  } else {
+    // 大井等: 概略図＝選択レースの発走地点だけをオーバル上に表示
+    gateMarker(state.dist, false, `${state.dist}m発走`);
+  }
 }
 
 // ---------------- ギャロップ馬の描画（PILプロトタイプから移植） ----------------
@@ -969,7 +1003,7 @@ async function loadRace(raceId, meta) {
   state.mcRows = null; $('mcResult').innerHTML = '';   // レース切替で前レースの結果を残さない
   if (state.timer) { clearInterval(state.timer); state.timer = null; }
   startLiveOdds(race.date || race.race_date || meta.date, race.race_no || meta.race_no);
-  $('raceLabel').textContent = `${race.date || ''} 門別${meta.race_no}R ${state.dist}m（${state.inner ? '内回り' : '外回り'}）${state.horses.length}頭`;
+  $('raceLabel').textContent = `${race.date || ''} ${TRACK}${meta.race_no}R ${state.dist}m（${state.inner ? '内回り' : '外回り'}）${state.horses.length}頭`;
   $('startBtn').textContent = '▶ スタート';
   $('clock').textContent = '';
   drawTrack(); drawHorses(); drawStrip(); renderOrder();
@@ -989,6 +1023,9 @@ async function loadRace(raceId, meta) {
 }
 
 async function init() {
+  $('simTitle').textContent = `${TRACK} 展開シミュレータ`;
+  document.title = `${TRACK} 展開シミュレータ`;
+  $('backToViewer').onclick = () => { location.href = `keiba.html?track=${encodeURIComponent(TRACK)}`; };
   loadCss();
   drawTrack();
   try {
@@ -1014,7 +1051,7 @@ async function initMain(dates) {
         title="${esc(r.klass || '')} ${esc(r.name || '')}">${r.race_no}R<small>${r.distance_m || '?'}m</small></button>`).join('');
   };
   const loadDate = async (date, targetRid) => {
-    try { localStorage.setItem('mb_sim_date', date); } catch (e) { /* プライベートモード等は無視 */ }
+    try { localStorage.setItem(`mb_sim_date_${tcfg.prefix}`, date); } catch (e) { /* プライベートモード等は無視 */ }
     state.races = await state.source.listRaces(date);
     if (state.races.length) {
       const meta = state.races.find((r) => r.race_id === targetRid) || state.races[0];
@@ -1076,7 +1113,7 @@ async function initMain(dates) {
     if (dates.includes(rd)) initDate = rd;
   }
   if (!initDate) {
-    try { initDate = localStorage.getItem('mb_sim_date'); } catch (e) { /* 無視 */ }
+    try { initDate = localStorage.getItem(`mb_sim_date_${tcfg.prefix}`); } catch (e) { /* 無視 */ }
   }
   if (!initDate || !dates.includes(initDate)) {
     const n = new Date();
