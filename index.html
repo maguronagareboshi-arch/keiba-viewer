@@ -1601,16 +1601,18 @@ const KV_APP_CSS = [
       'body.dark-mode .race-hasso-badge{background:#2a1800!important;color:#fdba74!important;border-color:#7c2d12!important}',
       // ⑦ マイ印・注目馬メモ
       '.kv-mymark-wrap{display:inline-flex;align-items:center;gap:2px;white-space:nowrap}',
-      '.kv-mymark{width:28px;height:28px;border-radius:8px;border:1.5px dashed #cbd5e1;background:transparent;color:#94a3b8;font-size:15px;font-weight:900;line-height:1;cursor:pointer;font-family:inherit;padding:0;transition:all .12s}',
+      '.kv-mymark{width:40px;height:28px;border-radius:8px;border:1.5px dashed #cbd5e1;background:#fff;color:#94a3b8;font-size:15px;font-weight:900;line-height:1;cursor:pointer;font-family:inherit;padding:0 2px;transition:all .12s;text-align:center;text-align-last:center;-webkit-appearance:none;appearance:none}',
       '.kv-mymark:hover{border-color:#1a56a0;color:#1a56a0}',
       '.kv-mymark.set{border-style:solid;background:#eef4fc;border-color:#1a56a0}',
+      '.kv-mymark option{color:#1a1a2e;font-weight:800}',
       '.kv-mymark--1{color:#dc2626!important}.kv-mymark--2{color:#2563eb!important}.kv-mymark--3{color:#16a34a!important}.kv-mymark--4{color:#d97706!important}.kv-mymark--5{color:#7c3aed!important}.kv-mymark--6{color:#6b7280!important}',
       '.kv-mymemo{background:none;border:none;color:#cbd5e1;font-size:13px;cursor:pointer;padding:2px 3px;line-height:1}',
       '.kv-mymemo:hover{color:#1a56a0}',
       '.kv-mymemo.has-memo{color:#d97706;font-size:14px}',
-      'body.dark-mode .kv-mymark{border-color:#334155;color:#64748b}',
+      'body.dark-mode .kv-mymark{background:#0d1826;border-color:#334155;color:#64748b}',
       'body.dark-mode .kv-mymark:hover{border-color:#38bdf8;color:#7dd3fc}',
       'body.dark-mode .kv-mymark.set{background:#0e2440;border-color:#38bdf8}',
+      'body.dark-mode .kv-mymark option{background:#0d1826;color:#e2e8f0}',
       'body.dark-mode .kv-mymark--1{color:#f87171!important}body.dark-mode .kv-mymark--2{color:#60a5fa!important}body.dark-mode .kv-mymark--3{color:#4ade80!important}body.dark-mode .kv-mymark--4{color:#fbbf24!important}body.dark-mode .kv-mymark--5{color:#c4b5fd!important}body.dark-mode .kv-mymark--6{color:#94a3b8!important}',
       'body.dark-mode .kv-mymemo{color:#475569}body.dark-mode .kv-mymemo:hover{color:#7dd3fc}body.dark-mode .kv-mymemo.has-memo{color:#fbbf24}',
       // ⑧ 馬名・騎手 横断検索
@@ -1670,6 +1672,46 @@ const KV_APP_CSS = [
       'body.dark-mode .yoso-explain summary{color:#7dd3fc}',
       'body.dark-mode .yoso-explain[open] summary{border-color:#22344e}',
       'body.dark-mode .yoso-explain b{color:#e2e8f0}',
+      // ⑫ 結果タブ（着順・位置取り・払戻金）
+      '.kr-section-title{font-size:13px;font-weight:800;color:#1a56a0;margin:16px 0 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
+      '.kr-table{width:100%;border-collapse:collapse;font-size:12.5px;white-space:nowrap}',
+      '.kr-table th{background:#1a2740;color:#fff;font-size:11px;font-weight:700;padding:6px 8px;text-align:center;position:sticky;top:0}',
+      '.kr-table td{padding:6px 8px;border-bottom:1px solid #eef2f7;text-align:center;color:#1a1a2e}',
+      '.kr-table tbody tr:hover{background:#f4f8fd}',
+      '.kr-chaku .chakujun-badge{min-width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:12px}',
+      '.kr-name{text-align:left!important;font-weight:700}',
+      '.kr-name .horse-name-link{cursor:pointer;color:#1a56a0;border-bottom:1px dotted #93c5fd}',
+      '.kr-jockey{text-align:left!important;color:#374151}',
+      '.kr-time{font-family:monospace;font-weight:700}',
+      '.kr-diff,.kr-pass{color:#64748b;font-size:11px}',
+      '.kr-uma{font-weight:700}',
+      '.kr-legend{font-size:10.5px;color:#94a3b8;margin-top:5px;display:flex;align-items:center;gap:4px;flex-wrap:wrap}',
+      '.kr-leg-dot{display:inline-block;width:11px;height:11px;border-radius:50%;vertical-align:middle}',
+      '.kr-replay-btn{margin-left:auto;background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#fff;border:none;border-radius:7px;padding:5px 12px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px}',
+      '.kr-payout-btn{background:linear-gradient(135deg,#dc2626,#b91c1c);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px}',
+      '.kr-hint{font-size:11px;color:#94a3b8;margin:6px 0 0}',
+      '.kr-pay-grid{display:flex;flex-direction:column;gap:2px;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden}',
+      '.kr-pay-row{display:grid;grid-template-columns:64px 1fr auto 64px;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #f1f5f9;font-size:13px}',
+      '.kr-pay-row:last-child{border-bottom:none}',
+      '.kr-pay-type{font-weight:800;color:#1a56a0;font-size:12px}',
+      '.kr-pay-combo{font-family:monospace;font-weight:700;color:#1a1a2e}',
+      '.kr-pay-yen{font-weight:800;color:#dc2626;font-family:monospace;text-align:right}',
+      '.kr-pay-nin{font-size:10px;color:#94a3b8;text-align:right}',
+      'body.dark-mode .kr-section-title{color:#7dd3fc}',
+      'body.dark-mode .kr-table th{background:#0b1524}',
+      'body.dark-mode .kr-table td{border-color:#1e2e44;color:#e2e8f0}',
+      'body.dark-mode .kr-table tbody tr:hover{background:#132c4a}',
+      'body.dark-mode .kr-name .horse-name-link{color:#7dd3fc;border-color:#38516f}',
+      'body.dark-mode .kr-jockey{color:#cbd5e1}',
+      'body.dark-mode .kr-pay-grid{border-color:#22344e}',
+      'body.dark-mode .kr-pay-row{border-color:#1e2e44}',
+      'body.dark-mode .kr-pay-type{color:#7dd3fc}',
+      'body.dark-mode .kr-pay-combo{color:#e2e8f0}',
+      'body.dark-mode .kr-pay-yen{color:#f87171}',
+      // 位置取りセルのダーク配色は hsl 生成のため明色固定（読める）→ダークでも視認可
+      'body.dark-mode .kr-pos-table td[style*="hsl"]{filter:brightness(.92)}',
+      // スマホ：結果テーブルはフォント微縮小＋馬名幅制限
+      '@media(max-width:640px){.kr-table{font-size:11.5px}.kr-table th,.kr-table td{padding:5px 5px}.kr-name{max-width:96px;overflow:hidden;text-overflow:ellipsis}.kr-pay-row{grid-template-columns:52px 1fr auto 44px;font-size:12px}}',
 ];
 (function kvInjectStyles(){
   if (document.getElementById('kv-styles')) return;
@@ -4288,6 +4330,11 @@ function renderRaceContent(raceNo) {
           <i class="fas fa-table"></i>
           <span>出馬表</span>
         </button>
+        <button id="tab-btn-kekka-${raceNo}" class="kv-vtab" data-view="kekka" style="display:none"
+                onclick="switchViewTab(${raceNo},'kekka')">
+          <i class="fas fa-flag-checkered"></i>
+          <span>結果</span>
+        </button>
         <button id="tab-btn-ability-${raceNo}" class="kv-vtab" data-view="ability"
                 onclick="switchViewTab(${raceNo},'ability')">
           <i class="fas fa-chart-bar"></i>
@@ -4367,6 +4414,13 @@ function renderRaceContent(raceNo) {
           <h4><i class="fas fa-trophy" style="font-size:10px;margin-right:3px;"></i>指数ランキング</h4>
           <div id="split-panel-body-${raceNo}"><div style="text-align:center;padding:16px;color:#c4c8d0;font-size:11px;">読込中...</div></div>
         </div>
+      </div>
+    </div>
+
+    <!-- 結果ビュー（着順・位置取り・払戻金） -->
+    <div id="view-kekka-${raceNo}" style="display:none;padding:10px 12px 12px;">
+      <div id="kekka-panel-${raceNo}">
+        <div style="text-align:center;padding:24px;color:#9ca3af;font-size:13px;"><i class="fas fa-spinner fa-spin"></i> 読み込み中...</div>
       </div>
     </div>
 
@@ -4508,9 +4562,9 @@ function toggleDebanMode(raceNo) {
 
 // ══════════════ マイ印・注目馬メモ（2026-07-10）══════════════
 // 自分の印（◎○▲△☆✕）とメモをレース×馬番ごとに端末保存（localStorage）。
-// AI印とは独立した「自分の予想」列。タップで印を巡回、✎でメモ編集。
+// AI印とは独立した「自分の予想」列。プルダウンで印を選択、✎でメモ編集。閲覧者も操作可。
 const KV_MYMARKS_KEY = 'kv_myMarks_v1';
-const KV_MARK_CYCLE = ['', '◎', '○', '▲', '△', '☆', '✕'];
+const KV_MARK_OPTS = ['', '◎', '○', '▲', '△', '☆', '✕'];
 function _kvMarksRead() { try { return JSON.parse(localStorage.getItem(KV_MYMARKS_KEY) || '{}'); } catch (e) { return {}; } }
 function _kvMarksWrite(all) { try { localStorage.setItem(KV_MYMARKS_KEY, JSON.stringify(all)); } catch (e) {} }
 function kvGetMyMark(raceDate, raceNo, umaBan) {
@@ -4527,15 +4581,17 @@ function _kvSetMyMark(raceDate, raceNo, umaBan, patch) {
   return cur;
 }
 function _kvMarkEsc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
-/** マイ印セルのHTML（PC行・スマホカード共用） */
+/** マイ印セルのHTML（PC行・スマホカード共用）。プルダウンで印を選択・✎でメモ。 */
 function kvMyMarkHtml(raceDate, raceNo, umaBan, compact) {
   const v = kvGetMyMark(raceDate, raceNo, umaBan);
   const markCls = v.m ? ` kv-mymark--${'◎○▲△☆✕'.indexOf(v.m)}` : '';
+  const opts = KV_MARK_OPTS.map(o => `<option value="${o}" ${o === v.m ? 'selected' : ''}>${o || '－'}</option>`).join('');
+  const sel = `<select class="kv-mymark${markCls}${v.m ? ' set' : ''}" data-rn="${raceNo}" data-uma="${umaBan}"
+    title="自分の印を選ぶ（◎○▲△☆✕）" onchange="kvSetMyMarkSel(${raceNo},${umaBan},this.value)">${opts}</select>`;
   const memoBtn = compact && !v.memo ? '' :
     `<button type="button" class="kv-mymemo${v.memo ? ' has-memo' : ''}" data-rn="${raceNo}" data-uma="${umaBan}"
        title="${v.memo ? _kvMarkEsc(v.memo) : 'この馬にメモを残す'}" onclick="kvEditMyMemo(event,${raceNo},${umaBan})">${v.memo ? '📝' : '✎'}</button>`;
-  return `<span class="kv-mymark-wrap"><button type="button" class="kv-mymark${markCls}${v.m ? ' set' : ''}" data-rn="${raceNo}" data-uma="${umaBan}"
-    title="タップで自分の印を切替（◎○▲△☆✕）" onclick="kvCycleMyMark(event,${raceNo},${umaBan})">${v.m || '－'}</button>${memoBtn}</span>`;
+  return `<span class="kv-mymark-wrap">${sel}${memoBtn}</span>`;
 }
 function _kvRefreshMarkCells(raceNo, umaBan) {
   const d = allRacesData[raceNo]; if (!d) return;
@@ -4547,13 +4603,10 @@ function _kvRefreshMarkCells(raceNo, umaBan) {
     wrap.outerHTML = kvMyMarkHtml(raceDate, raceNo, umaBan, compact);
   });
 }
-function kvCycleMyMark(ev, raceNo, umaBan) {
-  ev.stopPropagation();
+function kvSetMyMarkSel(raceNo, umaBan, val) {
   const d = allRacesData[raceNo]; if (!d) return;
   const raceDate = d.raceInfo?.raceDate || '';
-  const cur = kvGetMyMark(raceDate, raceNo, umaBan);
-  const next = KV_MARK_CYCLE[(KV_MARK_CYCLE.indexOf(cur.m) + 1) % KV_MARK_CYCLE.length];
-  _kvSetMyMark(raceDate, raceNo, umaBan, { m: next });
+  _kvSetMyMark(raceDate, raceNo, umaBan, { m: val });
   _kvRefreshMarkCells(raceNo, umaBan);
 }
 function kvEditMyMemo(ev, raceNo, umaBan) {
@@ -4616,6 +4669,7 @@ function kvToggleHist(ev, raceNo, umaBan, horseName) {
 
 function renderHorseRows(raceNo, horses) {
   const tbody=document.getElementById(`tbody-${raceNo}`); if(!tbody)return;
+  const _isAdminView = (typeof isAdminMode === 'function' && isAdminMode());
   // AI印・スコア（予想AIパネルと同じ共通コアで算出）
   const _cy = (typeof computeYosoScored === 'function') ? computeYosoScored(raceNo, null) : null;
   const _AI_MARKS = ['◎', '○', '▲', '△', '×', '×'];
@@ -4678,7 +4732,7 @@ function renderHorseRows(raceNo, horses) {
     <tr class="kv-sp-row">
       <td colspan="22">
         <div class="spr-l1">
-          ${_raced?`<span class="chakujun-badge ${chakujunClass(horse.chakujun)}">${horse.chakujun}</span>`:`<span class="waku-badge ${wCls}">${horse.wakuBan}</span>`}
+          ${(_raced && _isAdminView)?`<span class="chakujun-badge ${chakujunClass(horse.chakujun)}">${horse.chakujun}</span>`:`<span class="waku-badge ${wCls}">${horse.wakuBan}</span>`}
           <span class="umano-badge">${horse.umaBan}</span>
           ${_ai.mark?`<span class="ai-mark ${_aiCls}">${_ai.mark}</span>`:''}${_psfGem}
           ${kvMyMarkHtml(allRacesData[raceNo]?.raceInfo?.raceDate||'',raceNo,horse.umaBan,true)}
@@ -4691,7 +4745,7 @@ function renderHorseRows(raceNo, horses) {
           <span>${horse.sexAge||''}${horse.weight?` ${horse.weight}`:''}</span>
           ${!_raced&&_ai.score!=null?`<span class="spr-score">AI ${_ai.rank}位 ${_ai.score.toFixed(1)}</span>`:''}
         </div>
-        ${_raced?`<div class="spr-l3 spr-result">
+        ${(_raced && _isAdminView)?`<div class="spr-l3 spr-result">
           ${horse.time?`<span>タイム <b>${horse.time}</b></span>`:''}
           ${horse.agari3f?`<span>上がり ${horse.agari3f}</span>`:''}
           ${horse.corner?`<span>通過 ${horse.corner}</span>`:''}
@@ -4701,9 +4755,15 @@ function renderHorseRows(raceNo, horses) {
       </td>
     </tr>`;
   }).join('');
-  // 初期モード：結果が無いレースはレース前ビュー、結果ありは記録ビュー（手動切替は記憶される）
-  const _preDefault = allRacesData[raceNo]?._debanPre ?? !horses.some(h => /^\d+$/.test(String(h.chakujun)));
+  // 初期モード：閲覧者は常にレース前ビュー（近5走・AI印が見える簡易表示）。
+  //   結果は独立した「結果」タブへ移したので、閲覧者の出馬表は結果ありでも記録列を出さない。
+  //   管理者は従来どおり結果ありレースは記録ビュー（入力用）で開く。手動切替は記憶される。
+  const _isAdmin = (typeof isAdminMode === 'function' && isAdminMode());
+  const _hasResults = horses.some(h => /^\d+$/.test(String(h.chakujun)));
+  const _preDefault = allRacesData[raceNo]?._debanPre ?? (_isAdmin ? !_hasResults : true);
   setDebanMode(raceNo, _preDefault);
+  // 結果タブの表示可否（結果ありレースのみ）
+  try { _kvSyncKekkaTab(raceNo, _hasResults); } catch (e) {}
 }
 
 // ── ソート状態管理 ──────────────────────────────────────────
@@ -5190,24 +5250,30 @@ function toggleCollapse(type, raceNo) {
 // ============================================================
 function switchViewTab(raceNo, view) {
   const debanView   = document.getElementById(`view-deban-${raceNo}`);
+  const kekkaView   = document.getElementById(`view-kekka-${raceNo}`);
   const abilityView = document.getElementById(`view-ability-${raceNo}`);
   const yosoView    = document.getElementById(`view-yoso-${raceNo}`);
   const rankingView = document.getElementById(`view-ranking-${raceNo}`);
   const debanBtn    = document.getElementById(`tab-btn-deban-${raceNo}`);
+  const kekkaBtn    = document.getElementById(`tab-btn-kekka-${raceNo}`);
   const abilityBtn  = document.getElementById(`tab-btn-ability-${raceNo}`);
   const yosoBtn     = document.getElementById(`tab-btn-yoso-${raceNo}`);
   const rankingBtn  = document.getElementById(`tab-btn-ranking-${raceNo}`);
   const debanCtrl   = document.getElementById(`deban-controls-${raceNo}`);
   if (!debanView || !abilityView) return;
 
-  [debanView, abilityView, yosoView, rankingView].forEach(v => { if (v) v.style.display = 'none'; });
-  [debanBtn, abilityBtn, yosoBtn, rankingBtn].forEach(b => { if (b) b.classList.remove('on'); });
+  [debanView, kekkaView, abilityView, yosoView, rankingView].forEach(v => { if (v) v.style.display = 'none'; });
+  [debanBtn, kekkaBtn, abilityBtn, yosoBtn, rankingBtn].forEach(b => { if (b) b.classList.remove('on'); });
   if (debanCtrl) debanCtrl.style.display = 'none';
 
   if (view === 'deban') {
     debanView.style.display = '';
     if (debanBtn) debanBtn.classList.add('on');
     if (debanCtrl) debanCtrl.style.display = 'flex';
+  } else if (view === 'kekka') {
+    if (kekkaView) kekkaView.style.display = '';
+    if (kekkaBtn) kekkaBtn.classList.add('on');
+    renderResultView(raceNo);
   } else if (view === 'ability') {
     abilityView.style.display = '';
     if (abilityBtn) abilityBtn.classList.add('on');
@@ -5221,6 +5287,150 @@ function switchViewTab(raceNo, view) {
     if (rankingBtn) rankingBtn.classList.add('on');
     renderRankingPanel(raceNo);
   }
+}
+
+/** 結果タブの表示可否を同期（結果ありレースのみタブを出す） */
+function _kvSyncKekkaTab(raceNo, hasResults) {
+  const btn = document.getElementById(`tab-btn-kekka-${raceNo}`);
+  if (btn) btn.style.display = hasResults ? '' : 'none';
+}
+
+// ══════════════ 結果ビュー（着順・位置取り・払戻金）2026-07-10 ══════════════
+// 出馬表から記録列を分離し、閲覧者にも見やすい「結果」タブへ集約。
+// 着順表＋コーナー位置取り表＋楽天払戻金（オンデマンド取得・読み取り専用＝閲覧者可）。
+const _kvDayPayouts = {}; // 日付→{raceNo:[entries]} キャッシュ（1日1回の取得を共有）
+
+function _kvWakuCls(h) { return `waku-${Math.min(Math.max(parseInt(h.wakuBan) || Math.ceil((parseInt(h.umaBan) || 1) / 2), 1), 8)}`; }
+
+function renderResultView(raceNo) {
+  const container = document.getElementById(`kekka-panel-${raceNo}`);
+  const d = allRacesData[raceNo];
+  if (!container || !d) return;
+  const { raceInfo, horses } = d;
+  const finished = horses.filter(h => /^\d+$/.test(String(h.chakujun)));
+  if (finished.length < 2) {
+    container.innerHTML = '<p style="text-align:center;padding:24px;color:#9ca3af;font-size:13px">まだ結果が確定していません。</p>';
+    return;
+  }
+  const sorted = [...finished].sort((a, b) => parseInt(a.chakujun) - parseInt(b.chakujun));
+  const scratched = horses.filter(h => !/^\d+$/.test(String(h.chakujun)) && h.horseName);
+  const _esc = s => String(s || '').replace(/'/g, "\\'");
+  const _hasReplay = finished.some(h => String(h.corner || '').indexOf('-') >= 0);
+
+  // ── ① 着順テーブル ──
+  const resultRows = sorted.map(h => `<tr>
+      <td class="kr-chaku"><span class="chakujun-badge ${chakujunClass(h.chakujun)}">${parseInt(h.chakujun)}</span></td>
+      <td><span class="waku-badge ${_kvWakuCls(h)}">${h.wakuBan || ''}</span></td>
+      <td class="kr-uma">${h.umaBan || '—'}</td>
+      <td class="kr-name"><span class="horse-name-link" onclick="openHorseModal('${_esc(h.horseName)}',${raceNo})">${h.horseName || '—'}</span></td>
+      <td class="kr-jockey">${h.jockey || '—'}</td>
+      <td class="kr-time">${h.time || '—'}</td>
+      <td class="kr-diff">${h.diff || ''}</td>
+      <td>${h.agari3f || '—'}</td>
+      <td>${h.first3f || '—'}</td>
+      <td class="kr-pass">${h.corner || '—'}</td>
+    </tr>`).join('') + scratched.map(h => `<tr style="opacity:.5">
+      <td class="kr-chaku" style="font-size:10px">${h.chakujun || '除外'}</td>
+      <td><span class="waku-badge ${_kvWakuCls(h)}">${h.wakuBan || ''}</span></td>
+      <td class="kr-uma">${h.umaBan || '—'}</td>
+      <td class="kr-name">${h.horseName || '—'}</td>
+      <td colspan="6"></td>
+    </tr>`).join('');
+  const resultTable = `<div class="table-wrapper" style="overflow-x:auto">
+    <table class="kr-table">
+      <thead><tr>
+        <th>着</th><th>枠</th><th>馬番</th><th style="text-align:left">馬名</th><th style="text-align:left">騎手</th>
+        <th>タイム</th><th>着差</th><th>上3F</th><th>前3F</th><th>通過</th>
+      </tr></thead>
+      <tbody>${resultRows}</tbody>
+    </table>
+  </div>`;
+
+  // ── ② 位置取り表（コーナー通過順位）──
+  const maxC = Math.max(0, ...sorted.map(h => String(h.corner || '').split('-').filter(Boolean).length));
+  let posTable = '';
+  if (maxC >= 1) {
+    const cLabels = maxC >= 4 ? ['1角', '2角', '3角', '4角'] : maxC === 3 ? ['1角', '2角', '3角'] : maxC === 2 ? ['3角', '4角'] : ['4角'];
+    const field = horses.length;
+    const posColor = p => { if (!p) return ''; const r = (p - 1) / Math.max(field - 1, 1); const hue = 140 - r * 140; return `background:hsl(${hue},70%,92%);color:hsl(${hue},60%,28%);font-weight:800`; };
+    const posRows = sorted.map(h => {
+      const parts = String(h.corner || '').split('-').filter(Boolean);
+      const cells = [];
+      for (let i = 0; i < maxC; i++) {
+        const p = parseInt(parts[i]);
+        cells.push(`<td style="${!isNaN(p) ? posColor(p) : ''}">${!isNaN(p) ? p : '—'}</td>`);
+      }
+      return `<tr>
+        <td><span class="waku-badge ${_kvWakuCls(h)}">${h.wakuBan || ''}</span></td>
+        <td class="kr-uma">${h.umaBan || ''}</td>
+        <td class="kr-name" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.horseName || '—'}</td>
+        ${cells.join('')}
+        <td class="kr-chaku"><span class="chakujun-badge ${chakujunClass(h.chakujun)}" style="min-width:18px;height:18px;font-size:10px">${parseInt(h.chakujun)}</span></td>
+      </tr>`;
+    }).join('');
+    posTable = `<div class="kr-section-title">🏇 位置取り（コーナー通過順）
+        ${_hasReplay ? `<button type="button" class="kr-replay-btn" onclick="openRaceReplay(${raceNo})"><i class="fas fa-play"></i> 展開を再生</button>` : ''}
+      </div>
+      <div class="table-wrapper" style="overflow-x:auto">
+        <table class="kr-table kr-pos-table">
+          <thead><tr><th>枠</th><th>馬番</th><th style="text-align:left">馬名</th>${cLabels.map(l => `<th>${l}</th>`).join('')}<th>着</th></tr></thead>
+          <tbody>${posRows}</tbody>
+        </table>
+      </div>
+      <div class="kr-legend"><span class="kr-leg-dot" style="background:hsl(140,70%,60%)"></span>前　<span class="kr-leg-dot" style="background:hsl(0,70%,60%)"></span>後 ＝ 各コーナーでの位置（数字は前からの通過順位）</div>`;
+  }
+
+  // ── ③ 払戻金 ──
+  const payoutHtml = `<div class="kr-section-title">💰 払戻金</div><div id="kr-payout-${raceNo}">${_kvPayoutInner(raceNo)}</div>`;
+
+  container.innerHTML = resultTable + posTable + payoutHtml;
+}
+
+/** 払戻金の内側HTML（キャッシュがあれば表示・なければ取得ボタン） */
+function _kvPayoutInner(raceNo) {
+  const d = allRacesData[raceNo]; if (!d) return '';
+  const date = d.raceInfo?.raceDate || '';
+  const dayCache = _kvDayPayouts[date];
+  if (dayCache === 'loading') return '<p class="kr-hint"><i class="fas fa-spinner fa-spin"></i> 取得中…</p>';
+  if (dayCache && dayCache[raceNo]) return _kvPayoutTable(dayCache[raceNo]);
+  if (dayCache && !dayCache[raceNo]) return '<p class="kr-hint">この日の払戻データは見つかりませんでした（未確定の可能性）。</p>';
+  return `<button type="button" class="kr-payout-btn viewer-ok" onclick="kvFetchPayouts(${raceNo})"><i class="fas fa-yen-sign"></i> 払戻金を取得（楽天）</button>
+    <p class="kr-hint">単勝・複勝・馬連・馬単・ワイド・3連複・3連単などの払戻金を表示します。</p>`;
+}
+
+/** 払戻エントリ配列→テーブルHTML */
+function _kvPayoutTable(entries) {
+  if (!entries || !entries.length) return '<p class="kr-hint">払戻データがありません。</p>';
+  const order = ['単勝', '複勝', '枠複', '枠単', '馬複', '馬連', '馬単', 'ワイド', '三連複', '3連複', '三連単', '3連単'];
+  const disp = { '馬複': '馬連' };
+  const sorted = [...entries].sort((a, b) => {
+    const ia = order.indexOf(a.type), ib = order.indexOf(b.type);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+  });
+  const rows = sorted.map(e => `<div class="kr-pay-row">
+      <span class="kr-pay-type">${disp[e.type] || e.type}</span>
+      <span class="kr-pay-combo">${e.combo || ''}</span>
+      <span class="kr-pay-yen">¥${(e.yen || 0).toLocaleString('en-US')}</span>
+      <span class="kr-pay-nin">${e.ninki || ''}</span>
+    </div>`).join('');
+  return `<div class="kr-pay-grid">${rows}</div>`;
+}
+
+/** 楽天から払戻金を取得（読み取り専用＝閲覧者も可）。当日分を一括取得して全レースで共有。 */
+async function kvFetchPayouts(raceNo) {
+  const d = allRacesData[raceNo]; if (!d) return;
+  const date = d.raceInfo?.raceDate || '';
+  const box = document.getElementById(`kr-payout-${raceNo}`);
+  _kvDayPayouts[date] = 'loading';
+  if (box) box.innerHTML = _kvPayoutInner(raceNo);
+  let res = {};
+  try { res = await fetchRakutenDividendsForDay(date); } catch (e) { console.warn('[payout]', e); }
+  _kvDayPayouts[date] = res || {};
+  // 表示中の全レースの払戻ブロックを更新（同じ日なので使い回せる）
+  Object.keys(allRacesData).forEach(rn => {
+    const b = document.getElementById(`kr-payout-${rn}`);
+    if (b) b.innerHTML = _kvPayoutInner(rn);
+  });
 }
 
 // ============================================================
@@ -5974,7 +6184,7 @@ function renderAbilityTable(raceNo) {
             <div class="horse-tag-badges" data-horse="${horse.horseName}" style="display:flex;flex-wrap:wrap;gap:2px;margin-top:3px;">
               ${horseTagBadgesHtml(horse.horseName)}
             </div>
-            <button onclick="event.stopPropagation();showHorseNoteEditor('${horse.horseName.replace(/'/g,"\\'")}',this)" style="margin-top:2px;font-size:8px;padding:1px 5px;border-radius:3px;border:1px solid ${isDark?'#1e3048':'#cbd5e1'};background:${isDark?'#0d1520':'#f8fafc'};color:${isDark?'#8fa3be':'#64748b'};cursor:pointer;width:100%;">+特徴</button>
+            <button class="admin-only" onclick="event.stopPropagation();showHorseNoteEditor('${horse.horseName.replace(/'/g,"\\'")}',this)" style="margin-top:2px;font-size:8px;padding:1px 5px;border-radius:3px;border:1px solid ${isDark?'#1e3048':'#cbd5e1'};background:${isDark?'#0d1520':'#f8fafc'};color:${isDark?'#8fa3be':'#64748b'};cursor:pointer;width:100%;">+特徴</button>
           </div>`;
         })()}
 
@@ -9780,7 +9990,7 @@ function openHorseModal(horseName, raceNo) {
     <div class="horse-tag-badges" data-horse="${horseName.replace(/"/g,'&quot;')}" style="display:flex;flex-wrap:wrap;gap:3px;flex:1;">
       ${horseTagBadgesHtml(horseName)}
     </div>
-    <button onclick="showHorseNoteEditor('${horseName.replace(/'/g,"\\'")}',this)" style="font-size:10px;padding:2px 8px;border-radius:4px;border:1px solid #cbd5e1;background:#fff;color:#64748b;cursor:pointer;white-space:nowrap;">+特徴</button>
+    <button class="admin-only" onclick="showHorseNoteEditor('${horseName.replace(/'/g,"\\'")}',this)" style="font-size:10px;padding:2px 8px;border-radius:4px;border:1px solid #cbd5e1;background:#fff;color:#64748b;cursor:pointer;white-space:nowrap;">+特徴</button>
   `;
 
   // lineageLoginCodeを取得（現在または過去のレースデータから探す）
@@ -9915,6 +10125,44 @@ function openHorseModal(horseName, raceNo) {
     </div>`;
   })();
 
+  // 馬場状態スコア（良/稍重/重/不良ごとの3着内率。今日の馬場状態をハイライト）
+  const trackScoreHtml = (()=>{
+    const ORDER = ['良','稍重','重','不良'];
+    const tmap = {};
+    history.forEach(h=>{
+      const t = (h.trackCond||'').trim(); if(!ORDER.includes(t)) return;
+      if(!tmap[t]) tmap[t]={places:0,runs:0};
+      tmap[t].runs++;
+      if((parseInt(h.chakujun)||999)<=3) tmap[t].places++;
+    });
+    const entries = ORDER.filter(t=>tmap[t]);
+    if(!entries.length) return '';
+    const scoreLabel = r => {
+      if(r>=0.6) return{label:'S',bg:'#7c3aed'};
+      if(r>=0.4) return{label:'A',bg:'#1d4ed8'};
+      if(r>=0.2) return{label:'B',bg:'#15803d'};
+      return{label:'C',bg:'#6b7280'};
+    };
+    const curCond = (allRacesData[raceNo||currentRaceNo]?.raceInfo?.trackCond||'').trim();
+    const rowsT = entries.map(t=>{
+      const s = tmap[t];
+      const r = s.runs>0?s.places/s.runs:0;
+      const sc = scoreLabel(r);
+      const isCur = curCond && t===curCond;
+      return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;${isCur?'font-weight:700;background:#fef9c3;margin:0 -4px;padding:3px 4px;border-radius:4px':''}">
+        <span style="background:${sc.bg};color:#fff;font-weight:800;font-size:12px;padding:1px 7px;border-radius:10px;min-width:24px;text-align:center">${sc.label}</span>
+        <span style="font-size:12px;min-width:40px">${t}${isCur?'<span style="font-size:9px;color:#b45309">（本日）</span>':''}</span>
+        <span style="font-size:11px;color:#374151">${s.places}/${s.runs}走</span>
+        <div style="flex:1;height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round(r*100)}%;background:${sc.bg};border-radius:3px"></div></div>
+        <span style="font-size:11px;color:#6b7280;min-width:28px;text-align:right">${Math.round(r*100)}%</span>
+      </div>`;
+    }).join('');
+    return `<div class="hm-stat-card" style="min-width:200px;flex:2">
+      <div class="hm-stat-label">🌧 馬場状態スコア（高知・3着内率）</div>
+      <div style="margin-top:4px">${rowsT}</div>
+    </div>`;
+  })();
+
   // 好走時馬体重（高知のみ = ローカル保存成績から）
   const _parseWeight = s => { const m=(s||'').match(/^(\d+)/); return m?parseInt(m[1]):NaN; };
   const weightDataLocal = history.map(h=>({w:_parseWeight(h.weight),c:parseInt(h.chakujun)||999,d:h.raceDate})).filter(e=>!isNaN(e.w)&&e.w>300&&e.w<700);
@@ -9980,7 +10228,6 @@ function openHorseModal(horseName, raceNo) {
       <td class="col-front" style="font-family:monospace;font-size:10px;font-weight:700" title="この馬自身の前半区間タイム（走破−上がり3F）。下段は基準比：−=速い(ハイ)/＋=遅い(スロー)">${_frontCell}</td>
       <td class="col-time" style="font-family:monospace;font-size:10px">${h.time||'—'}</td>
       <td class="col-idx" style="text-align:center;">${_siHtml}</td>
-      <td class="col-agari-idx" style="text-align:center;">${_agariHtml}</td>
       <td class="col-weight" style="font-size:10px">${fmtWeightDiff(h.weight)}</td>
       <td class="col-pace" style="line-height:1.4;padding:2px 3px;">
         <span class="pace-label pace-label-${pKey(horseOwnPace||racePace2)} ${samePace?'hm-pace-match':''}" style="font-size:9px;padding:1px 4px;display:inline-block;">${horseOwnPace||'—'}</span>
@@ -10006,7 +10253,6 @@ function openHorseModal(horseName, raceNo) {
           <th class="col-front" style="line-height:1.3" title="走破タイム−上がり3F＝残り600m地点までの通過タイム">前半<br><span style="font-size:8px;font-weight:400;opacity:.75;">基準比</span></th>
           <th class="col-time">タイム</th>
           <th class="col-idx" style="text-align:center;min-width:40px;">指数</th>
-          <th class="col-agari-idx" style="text-align:center;min-width:36px;">末指</th>
           <th class="col-weight">馬体重</th><th class="col-pace" style="line-height:1.3;">馬P<br><span style="font-size:8px;font-weight:400;opacity:.75;">R:レース</span></th>
           <th class="col-mid">向正面</th><th class="col-str">直線</th>
           <th class="col-jockey">騎手</th><th class="col-interval">間隔</th>
@@ -10017,11 +10263,12 @@ function openHorseModal(horseName, raceNo) {
     </div>
   </div>`;
 
-  // 統計カード（好走時馬体重・ローテーション・距離適性） ← 過去成績テーブルの下に表示
+  // 統計カード（好走時馬体重・ローテーション・距離適性・馬場状態） ← 過去成績テーブルの下に表示
   const statCardsHtml = `<div class="hm-summary" style="margin-top:16px">
     ${winWeightsLocal.length?`<div class="hm-stat-card" style="border-color:#f59e0b"><div class="hm-stat-label">⚖️ 好走時平均馬体重</div><div class="hm-stat-value" style="color:#92400e">${avgWinWeight}kg</div><div class="hm-stat-sub">${winWeightsLocal.length}回の3着内平均（高知）</div></div>`:''}
     ${rotationHtml}
     ${distScoreHtml}
+    ${trackScoreHtml}
   </div>`;
 
   // ── コメント全件一覧（件数切り替え付き） ──
