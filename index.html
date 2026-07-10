@@ -15026,7 +15026,7 @@ function computePsfScores(raceNo) {
 // V3リスケール（2026-07-04採用）：補正項ごとの実効倍率。CV検証で印全体の質(ペア整合率5/5fold)が
 // 現行を上回り◎も平均改善したため、上がり3F/騎手×厩舎/馬体重/勝ち馬強さを増、乗替/叩きを減。
 // 未記載の項目（馬場適性・距離・トレンド・脚質・着差・ローテ・昇降級・C一貫性）は等倍のまま。
-const YOSO_FACTOR_SCALE = { agariN: 2.5, comboN: 3.0, weightN: 2.5, winStrN: 2.5, jockeyChgN: 0.5, takiN: 0.5 };
+const YOSO_FACTOR_SCALE = { agariN: 2.5, comboN: 3.0, weightN: 2.5, winStrN: 2.5, jockeyChgN: 0.5, takiN: 0.5, paceCtxN: 1.5 };
 
 /**
  * 予想AIスコア計算（共通コア）
@@ -15210,6 +15210,31 @@ function computeYosoScored(raceNo, selCondOverride) {
     //    楽勝(1.0秒+)+5／快勝(0.5-1.0秒)+2.5。SIが「余裕を残した勝ち」を過小評価するのを補正。
     const rakuMod = rakuShoBonus(kochiHist[0]);
 
+    // ㉑ 展開文脈補正（2026-07-10採用）：直近3走(高知)のペース基準比×位置取りで
+    //    「逆境(ハイペース)で先行して好走＝地力」+0.5／「ハイペース限定の差し好走＝展開ギフト」−0.4／
+    //    「ハイペースで先行して潰れた＝免罪」+0.4 を識別。「楽な競馬をした逃げ馬は割引き、
+    //    強い競馬をした逃げ馬は評価したい」という意図を、上がり3Fという時間軸ではなく
+    //    位置×ペースという文脈軸で捉える（時間軸での是正は高知の前有利と衝突し逆効果と検証済み）。
+    //    3000R backtestで重みスイープ(0〜5.0)し1.5が◎/○/▲全てで現状同等以上の唯一の点
+    //    （◎勝率39.3→39.5・◎回収89.7→89.8・悪化なし）。
+    const paceCtxMod = (() => {
+      let tough = false, gifted = false, excused = false;
+      const _ld = lsRead();
+      for (const h of kochiHist.slice(0, 3)) {
+        const rrec = _ld[`race_31_${h.raceDate}_${h.raceNo}`];
+        if (!rrec || !rrec.first3f) continue;
+        const pd = getPaceDevLabel(rrec.distance, rrec.race_class, rrec.track_cond, rrec.first3f);
+        if (!pd) continue;
+        const c1 = parseInt(String(h.corner || '').split('-')[0]);
+        const ch = parseInt(h.chakujun);
+        if (isNaN(c1) || c1 <= 0 || isNaN(ch)) continue;
+        if (pd.dev <= -0.6 && c1 <= 3 && ch <= 3) tough = true;
+        if (pd.dev <= -1.0 && c1 >= 6 && ch <= 3) gifted = true;
+        if (pd.dev <= -1.0 && c1 <= 3 && ch >= 4) excused = true;
+      }
+      return (tough ? 0.5 : 0) + (gifted ? -0.4 : 0) + (excused ? 0.4 : 0);
+    })();
+
     // ⑱ 枠順バイアスは検証で◎精度を下げたため不採用（外枠有利は集計上は実在するが、
     //    能力より弱い信号を◎選択に乗せるとノイズが勝つ。CVで訓練・検証とも悪化・2026-06-30）
 
@@ -15223,10 +15248,10 @@ function computeYosoScored(raceNo, selCondOverride) {
     const _mlW = getMlLiveWeights();
     const _eff = k => (_mlW && _mlW.eff[k] != null) ? _mlW.eff[k] : (YOSO_FACTOR_SCALE[k] != null ? YOSO_FACTOR_SCALE[k] : 1);
     const totalScore = baseScore != null
-      ? +(baseScore + condMod*_eff('condNew') + distMod*_eff('distNew') + trendMod*_eff('trendN') + comboMod*_eff('comboN') + rotMod*_eff('rotN') + classMod*_eff('clsN') + cornMod*_eff('cornN') + weightMod*_eff('weightN') + agariMod*_eff('agariN') + marginMod*_eff('marginN') + winStrMod*_eff('winStrN') + jockeyChgMod*_eff('jockeyChgN') + takiMod*_eff('takiN') + cornConsistMod*_eff('cornConsistN') + rakuMod*_eff('rakuN')).toFixed(2)
+      ? +(baseScore + condMod*_eff('condNew') + distMod*_eff('distNew') + trendMod*_eff('trendN') + comboMod*_eff('comboN') + rotMod*_eff('rotN') + classMod*_eff('clsN') + cornMod*_eff('cornN') + weightMod*_eff('weightN') + agariMod*_eff('agariN') + marginMod*_eff('marginN') + winStrMod*_eff('winStrN') + jockeyChgMod*_eff('jockeyChgN') + takiMod*_eff('takiN') + cornConsistMod*_eff('cornConsistN') + rakuMod*_eff('rakuN') + paceCtxMod*_eff('paceCtxN')).toFixed(2)
       : null;
 
-    return { horse, jockey, trainer, baseScore, jockeyMod, condMod, distMod, trendMod, comboMod, rotMod, classMod, cornMod, weightMod, agariMod, marginMod, winStrMod, jockeyChgMod, takiMod, cornConsistMod, rakuMod, avg4C, totalScore, siCount: recentSI.length, kochiSICount, isTransfer, isEstimatedScore, jockeyWR };
+    return { horse, jockey, trainer, baseScore, jockeyMod, condMod, distMod, trendMod, comboMod, rotMod, classMod, cornMod, weightMod, agariMod, marginMod, winStrMod, jockeyChgMod, takiMod, cornConsistMod, rakuMod, paceCtxMod, avg4C, totalScore, siCount: recentSI.length, kochiSICount, isTransfer, isEstimatedScore, jockeyWR };
   });
 
   // ── ⑯-b ペース×馬場バイアスで脚質補正(cornMod)を伸縮 ──
