@@ -93,9 +93,7 @@ td.l { text-align: left; }
       <canvas id="track" width="900" height="480"></canvas>
       <canvas id="strip" width="900" height="210"></canvas>
       <div class="note">↑ 拡大ビュー: 1馬身（2.4m）単位の正確な差で表示（表示幅は最小10馬身まで拡大・馬群が広がると自動フィット・馬体の大きさも実寸1馬身に連動）。先頭の位置は走行方向に連動 — 向正面では右端、正面（ゴール前）では左端に自動反転。ゴールが近づくと赤線が現れます。</div>
-      <div class="note">門別競馬場実寸比: 1周1,600m(外)/1,376m(内)・直線330m(外)/218m(内)・右回り・1200m/2000mは引き込み線から発走。
-      過去5走のテン3F・上がり3Fを<b>距離×馬場×クラスの基準タイムに対する偏差値</b>に換算し、この距離の標準タイム±能力差で走らせる（距離延長で生スピードを持ち込まない）。
-      <b>展開モデル</b>: 出走各馬のテン速度から先行争い→<b>ペース</b>（ハイ/ミドル/スロー）を推定し、ハイでは先行馬が上がりで失速・スローは前残り、距離延長で先行馬ほど<b>スタミナ</b>消耗、後方馬は外を回るロス、を反映（門別＝前有利がベース）。</div>
+      <div class="note" id="courseNote"></div>
     </div>
     <div class="card">
       <b>隊列（リアルタイム）</b>
@@ -135,10 +133,14 @@ async function sbGet(pathq) {
 }
 
 // ---- 場設定（?track= で切替・既定は門別）----
-// straight=最終直線m / hasInner=内回りコース有 / hasChutes=門別の引き込み線描画
+// straight=最終直線m / R=外カーブ半径m / shift=内回りの右ターン前倒しm / hasInner=内回りコース有
+// hasChutes=引き込み線を描画 / chuteBackMax・chuteTopMax=各ポケットの最大長m / topDiag=向正面ポケットが斜め(大井1400)
+// 値はsim3d.html（立体シミュレーター）と同一（大井=公式図: 外1600m/内1400m・1400mは斜めポケット・2000mは小ポケット）
 const SIM_TRACKS = {
-  '門別': { prefix: 'monbetsu', baba: '36', label: 'MOMBETSU RACECOURSE', straight: 330, hasInner: true, hasChutes: true },
-  '大井': { prefix: 'ooi', baba: '44', label: 'OI RACECOURSE', straight: 386, hasInner: false, hasChutes: false },
+  '門別': { prefix: 'monbetsu', baba: '36', label: 'MOMBETSU RACECOURSE', straight: 330, R: 136, shift: 112,
+    hasInner: true, hasChutes: true, chuteBackMax: 160, chuteTopMax: 200, topDiag: false },
+  '大井': { prefix: 'ooi', baba: '44', label: 'OI RACECOURSE', straight: 386, R: 100, shift: 100,
+    hasInner: true, hasChutes: true, chuteBackMax: 40, chuteTopMax: 260, topDiag: true },
 };
 const TRACK = (() => { const t = new URLSearchParams(location.search).get('track'); return SIM_TRACKS[t] ? t : '門別'; })();
 const tcfg = SIM_TRACKS[TRACK];
@@ -273,34 +275,46 @@ function randn() {
 }
 const clampSd = (sd) => sd == null ? 0.7 : Math.max(0.35, Math.min(1.2, sd));
 
-// ---------------- コース形状（門別実寸比・右回り） ----------------
-// 外回り: 1周1600m・直線330m / 内回り: 1周1376m（右側ターンを112m内側へ）・直線218m
-// 縦横比は公式コース図に合わせ約2.35（平たいオーバル）
-const W = 900, H = 480, CY = 225;
-const R = 160;                       // 両端カーブ半径(px)
-const L = 432;                       // 直線長(px)
-const CXL = 234, CXR = CXL + L;      // 左右カーブの中心x（外回り）
-const PXPM = (2 * L + 2 * Math.PI * R) / 1600;   // px/m（外回り基準）
-const SHIFT = 112 * PXPM;            // 内回りの右ターン前倒し量
-const GOAL_X = CXR - tcfg.straight * PXPM;   // ゴール位置: 最終コーナー出口から直線m（門別330/大井386）
-                                     // → 内回りは自動的に直線218m相当になる（幾何学的に整合）
+// ---------------- コース形状（場ごとの実寸比・右回り・sim3d.htmlと同じ導出） ----------------
+// 1周1600mを基準に、外カーブ半径R_M(実m)から直線長L_M=(1600-2πR_M)/2を求める（門別R=136m/大井R=100m）。
+// 門別は従来の見た目(R=160px/L=432px)をそのまま維持、大井はこの実寸比を同じ描画幅に収めて描く。
+const H = 480, CY = 225;
+const GEOM = {
+  '門別': { R: 160, L: 432 },
+  '大井': (() => {
+    const R_M = tcfg.R, L_M = (1600 - 2 * Math.PI * R_M) / 2;
+    const span = 432 + 2 * 160;                      // 門別と同じ描画幅（直線+両カーブ）に収める
+    const scale = span / (L_M + 2 * R_M);
+    return { R: R_M * scale, L: L_M * scale };
+  })(),
+};
+const { R, L } = GEOM[TRACK] || GEOM['門別'];         // 両端カーブ半径(px) / 直線長(px)
+const PXPM = (2 * L + 2 * Math.PI * R) / 1600;        // px/m（外回り基準）
+const SHIFT = tcfg.shift * PXPM;                      // 内回りの右ターン前倒し量（実mから換算）
+const DIAG = { c: Math.cos(0.5), s: Math.sin(0.5) };  // 大井1400ポケットの斜度≈30°（sim3d.htmlと同一）
+// 左右の余白＝カーブの張り出し(R)とポケットの到達幅の大きい方＋見た目の隙間24px
+// （斜めポケットは水平成分のみ・門別のような水平ポケットはchuteTopMax/chuteBackMaxそのもの）
+const leftReach = tcfg.topDiag ? tcfg.chuteTopMax * PXPM * DIAG.c : Math.max(R, tcfg.chuteTopMax * PXPM);
+const rightReach = Math.max(R, tcfg.chuteBackMax * PXPM);
+const CXL = leftReach + 24, CXR = CXL + L;            // 左右カーブの中心x（外回り）
+const W = Math.round(CXR + rightReach + 24);
+const GOAL_X = CXR - tcfg.straight * PXPM;            // ゴール位置: 最終コーナー出口から直線m（門別330/大井386）
+                                     // → 内回りは自動的に短縮直線相当になる（幾何学的に整合）
 const bottomY = CY + R, topY = CY - R;
 
-function lapMeters(inner) { return inner ? 1376 : 1600; }
+function lapMeters(inner) { return inner ? 1600 - 2 * tcfg.shift : 1600; }
 function lapPx(inner) { return 2 * (L - (inner ? SHIFT : 0)) + 2 * Math.PI * R; }
 
-// 引き込み線（ポケット）: 1200m(外)=向正面の左延長 / 2000m(外)=ホームストレッチの右延長
+// 引き込み線（ポケット）: 向正面延長＝1200m/1400m系（大井1400は斜めポケット） / ホームストレッチ延長＝2000m系
 // 該当レースはオーバルを回らず、ポケット直線からコースに合流する
 function chuteInfo(D, inner) {
-  if (inner || !tcfg.hasChutes) return { len: 0, type: null };   // 引き込み線は門別のみ（大井はv1概略＝オーバル上に発走）
+  if (inner || !tcfg.hasChutes) return { len: 0, type: null };
   const back = D % 1600;
-  const curveM = Math.PI * R / PXPM;
-  const topM = L / PXPM;
-  const b1 = tcfg.straight;     // ゴール→(逆走)右カーブ入口
-  const b2 = b1 + curveM;       // 右カーブ
-  const b3 = b2 + topM;         // 向正面
-  if (back > b1 && back <= b1 + 160) return { len: back - b1, type: 'bottom' };  // 2000m系
-  if (back > b3 && back <= b3 + 200) return { len: back - b3, type: 'top' };     // 1200m系
+  const R_M = tcfg.R, L_M = (1600 - 2 * Math.PI * R_M) / 2;   // 実mでの半径・直線（しきい値の判定は実mで行う）
+  const b1 = tcfg.straight;                 // ゴール→(逆走)右カーブ入口
+  const b3 = b1 + Math.PI * R_M + L_M;      // 向正面の起点
+  if (back > b1 && back <= b1 + tcfg.chuteBackMax) return { len: back - b1, type: 'bottom' };
+  if (back > b3 && back <= b3 + tcfg.chuteTopMax) return { len: back - b3, type: 'top' };
   return { len: 0, type: null };
 }
 
@@ -309,7 +323,10 @@ function racePos(D, inner, s, lane) {
   const ch = chuteInfo(D, inner);
   if (s < ch.len) {  // ポケット内（直線）
     const remain = (ch.len - s) * PXPM;
-    if (ch.type === 'top') return { x: CXL - remain, y: topY - lane };
+    if (ch.type === 'top') {
+      if (tcfg.topDiag) return { x: CXL - remain * DIAG.c, y: topY - lane + remain * DIAG.s };  // 大井1400=斜めポケット
+      return { x: CXL - remain, y: topY - lane };
+    }
     return { x: CXR + remain, y: bottomY + lane };
   }
   const segA = GOAL_X - CXL;
@@ -355,7 +372,7 @@ function posOnTrack(arcPx, lane, inner) {
 const state = { horses: [], dist: 1100, inner: false, t: 0, running: false, speed: 6, timer: null, raceId: null,
   oddsTimer: null, mcRows: null };
 
-function isInnerCourse(dist) { return tcfg.hasInner && (dist === 1500 || dist === 1600); }  // 門別の内1500m/1600mのみ
+function isInnerCourse(dist) { return tcfg.hasInner && (dist === 1500 || dist === 1600); }  // 門別/大井とも内回りは1500m・1600m
 
 function buildHorses(entries, D, klass, histories) {
   const tb = baseOf(D, '良', classGroup(klass));   // 目標レースの基準タイム（発走前は良想定）
@@ -609,6 +626,7 @@ function finishTime(h, D) {
 
 // ---------------- 描画 ----------------
 const cv = $('track'), ctx = cv.getContext('2d');
+cv.width = W; cv.height = H;   // 場によってポケットのはみ出し幅が違うため実寸幅を動的に設定
 const css = {};
 function loadCss() {
   for (const n of ['--turf','--track-dirt','--track-dirt-dim','--rail','--goal','--label','--stand','--border','--sub',
@@ -663,8 +681,14 @@ function drawTrack() {
   if (tcfg.hasChutes) {
     const outerColor = state.inner ? css['--track-dirt-dim'] : css['--track-dirt'];
     ctx.strokeStyle = outerColor; ctx.lineWidth = 30; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(CXL - 105 * PXPM, topY - 4); ctx.lineTo(CXL + 8, topY - 4); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(CXR - 8, bottomY + 4); ctx.lineTo(CXR + 105 * PXPM, bottomY + 4); ctx.stroke();
+    // 向正面(上)延長ポケット（大井1400は斜め・門別は水平）
+    const topLen = tcfg.chuteTopMax * PXPM;
+    ctx.beginPath();
+    if (tcfg.topDiag) { ctx.moveTo(CXL + 8, topY - 4); ctx.lineTo(CXL - topLen * DIAG.c, topY - 4 + topLen * DIAG.s); }
+    else { ctx.moveTo(CXL - topLen, topY - 4); ctx.lineTo(CXL + 8, topY - 4); }
+    ctx.stroke();
+    // ホーム(下)延長ポケット
+    ctx.beginPath(); ctx.moveTo(CXR - 8, bottomY + 4); ctx.lineTo(CXR + tcfg.chuteBackMax * PXPM, bottomY + 4); ctx.stroke();
     ctx.lineCap = 'butt';
   }
   // 内ラチ
@@ -685,7 +709,7 @@ function drawTrack() {
   ctx.fillStyle = css['--track-dirt-dim'];
   ctx.font = 'bold 22px sans-serif';
   ctx.fillText(tcfg.label, CXL + L / 2, CY + 6);
-  if (tcfg.hasChutes) {
+  if (TRACK === '門別') {
     // 門別: 発走地点（公式コース図と同じ配置・引き込み線含む）
     gateMarker(1200, false, '1200m(外)');
     gateMarker(1100, false, '1100m(外)');
@@ -698,8 +722,18 @@ function drawTrack() {
     gateMarker(1600, true, '1600m(内)', 13);
     if (![1000, 1100, 1200, 1500, 1600, 1700, 1800, 2000, 2600].includes(state.dist))
       gateMarker(state.dist, state.inner, `${state.dist}m`);
+  } else if (TRACK === '大井') {
+    // 大井: 公式図の発走地点（1400m=向正面斜めポケット・2000m=ホーム小ポケット・1600m=内回り）
+    gateMarker(1200, false, '1200m');
+    gateMarker(1400, false, '1400m');
+    gateMarker(1650, false, '1650m');
+    gateMarker(1800, false, '1800m');
+    gateMarker(2000, false, '2000m');
+    gateMarker(1600, true, '1600m(内)', 13);
+    if (![1200, 1400, 1600, 1650, 1800, 2000].includes(state.dist))
+      gateMarker(state.dist, state.inner, `${state.dist}m`);
   } else {
-    // 大井等: 概略図＝選択レースの発走地点だけをオーバル上に表示
+    // その他の場: 概略図＝選択レースの発走地点だけをオーバル上に表示
     gateMarker(state.dist, false, `${state.dist}m発走`);
   }
 }
@@ -1028,6 +1062,12 @@ async function init() {
   document.title = `${TRACK} 展開シミュレータ`;
   $('backToViewer').onclick = () => { location.href = `keiba.html?track=${encodeURIComponent(TRACK)}`; };
   $('to3d').onclick = () => { location.href = `sim3d.html?track=${encodeURIComponent(TRACK)}&race=${encodeURIComponent(state.raceId || '')}`; };
+  const innerLap = lapMeters(true);
+  const pocketNote = tcfg.hasChutes
+    ? `・${TRACK === '大井' ? '1200m/1400m(斜め)/2000m' : '1200m/2000m'}は引き込み線から発走` : '';
+  $('courseNote').innerHTML = `${TRACK}競馬場実寸比: 1周1,600m(外)/${innerLap}m(内)・直線${tcfg.straight}m(外)・右回り${pocketNote}。
+    過去5走のテン3F・上がり3Fを<b>距離×馬場×クラスの基準タイムに対する偏差値</b>に換算し、この距離の標準タイム±能力差で走らせる（距離延長で生スピードを持ち込まない）。
+    <b>展開モデル</b>: 出走各馬のテン速度から先行争い→<b>ペース</b>（ハイ/ミドル/スロー）を推定し、ハイでは先行馬が上がりで失速・スローは前残り、距離延長で先行馬ほど<b>スタミナ</b>消耗、後方馬は外を回るロス、を反映。`;
   loadCss();
   drawTrack();
   try {
