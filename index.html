@@ -8957,11 +8957,15 @@ function renderTrackTrend() {
  * 前半3F＝1着タイム−上がり4F（backfill済み）、上がり3F＝レース上がり(1着馬基準)。
  */
 /**
- * _collect1400PaceRaces(babaFilter)
- * 1400m戦を抽出し、馬場状態・前後半差・前残り指標を返す（馬名インデックスで高速化）。
+ * _collectPaceRaces(babaFilter, distNum)
+ * 指定距離の戦を抽出し、馬場状態・前後半差・前残り指標を返す（馬名インデックスで高速化）。
  * renderPaceBias1400 と buildPaceBiasMatrix の共通基盤。
+ * 【2026-07-10】旧名_collect1400PaceRacesは1400m固定だったため、総合スコア側のcornMod伸縮に
+ * 1400m専用の行列を1300m/1600mへも誤って適用していた（buildPaceBiasMatrixに距離不問で1400mしか
+ * 渡していなかった）。距離を引数化し、スコア側は現在レースの距離で行列を構築するよう修正。
  */
-function _collect1400PaceRaces(babaFilter) {
+function _collectPaceRaces(babaFilter, distNum) {
+  const distStr = String(distNum || 1400);
   const all = lsRead();
   // 馬エントリを raceKey でグルーピング（1パス）
   const byRace = new Map();
@@ -8979,7 +8983,7 @@ function _collect1400PaceRaces(babaFilter) {
   for (const [k, v] of Object.entries(all)) {
     if (!k.startsWith('race_')) continue;
     if (babaFilter && v.baba_code !== babaFilter) continue;
-    if (String(v.distance || '').replace(/[^\d]/g, '') !== '1400') continue;
+    if (String(v.distance || '').replace(/[^\d]/g, '') !== distStr) continue;
     const f3 = parseFloat(v.first3f), a3 = parseFloat(v.agari3f_race);
     if (isNaN(f3) || isNaN(a3)) continue;
     const horses = byRace.get(`${v.baba_code}_${v.race_date}_${String(v.race_no)}`);
@@ -9003,14 +9007,16 @@ function _collect1400PaceRaces(babaFilter) {
 function _paceOfDiff(diff) { return diff <= -0.5 ? 'ハイ' : diff <= 0.5 ? '平均' : 'スロー'; }
 
 /**
- * buildPaceBiasMatrix(babaFilter)
- * 1400m戦から「馬場状態 × ペース」別の逃げ馬複勝率を集計。
+ * buildPaceBiasMatrix(babaFilter, distNum)
+ * 指定距離の戦から「馬場状態 × ペース」別の逃げ馬複勝率を集計。
  * getPaceBiasFactor 用。各区分で {N, fuku, rate} を保持。
+ * 【2026-07-10】distNum省略時は1400固定（従来互換）。総合スコア側は必ず現在レースの距離を渡すこと。
+ * サンプルが薄い距離はgetPaceBiasFactor側のN<20ガードでfactor=1に自動フォールバックする。
  * ※メモ化しない：backfillで first3f が後から増えても件数(キー数)は変わらず
  *   古い行列を返してしまうため。スキャンは軽量なので毎回構築する。
  */
-function buildPaceBiasMatrix(babaFilter) {
-  const races = _collect1400PaceRaces(babaFilter);
+function buildPaceBiasMatrix(babaFilter, distNum) {
+  const races = _collectPaceRaces(babaFilter, distNum || 1400);
   const stat = rs => {
     const leaders = rs.filter(r => r.leaderTop3 != null);
     const fuku = leaders.filter(r => r.leaderTop3).length;
@@ -9064,8 +9070,8 @@ function renderPaceBias1400(babaFilter) {
   const wrap = document.getElementById('pace-bias-1400');
   if (!wrap) return;
 
-  // ── 1400m戦を抽出して指標化（共通基盤） ──
-  const races = _collect1400PaceRaces(babaFilter);
+  // ── 1400m戦を抽出して指標化（共通基盤・本ページは1400m専用のまま） ──
+  const races = _collectPaceRaces(babaFilter, 1400);
 
   if (!races.length) {
     wrap.innerHTML = '<p class="no-data">1400m戦のデータがありません（上がり4Fが入力された1400m戦が必要です）</p>';
@@ -14707,16 +14713,20 @@ const Yoso = {
     return Math.max(-5, Math.min(8, (wr - 12) * 0.22));
   },
 
-  /** ③ 馬場適性：当該馬場状態SI平均 − 全体SI平均（2走以上） */
+  /** ③ 馬場適性：当該馬場状態SI平均 − 全体SI平均。sampleNは「同条件の走数」であること
+   *  （全履歴数を渡すと1走の異常値が母数10走分の信頼度で満額適用されるバグになる）。
+   *  母数依存の縮約（n/(n+3)）：1走=25%・2走=40%・3走=50%・5走=63%・10走=77%で徐々に信頼。 */
   condMod(condAvg, globalAvg, sampleN) {
-    if (globalAvg == null || condAvg == null || sampleN < 2) return 0;
-    return Math.max(-2, Math.min(2, (condAvg - globalAvg) * 0.5));
+    if (globalAvg == null || condAvg == null || !sampleN) return 0;
+    const shrink = sampleN / (sampleN + 3);
+    return Math.max(-2, Math.min(2, (condAvg - globalAvg) * 0.5 * shrink));
   },
 
-  /** ④-a 距離適性：近距離(±100m)SI平均 − 全体SI平均 */
-  distMod(nearAvg, globalAvg) {
-    if (globalAvg == null || nearAvg == null) return 0;
-    return Math.max(-2, Math.min(2, (nearAvg - globalAvg) * 0.5));
+  /** ④-a 距離適性：近距離(±100m)SI平均 − 全体SI平均。sampleNは対象距離帯の走数（母数依存の縮約、condModと同式）。 */
+  distMod(nearAvg, globalAvg, sampleN) {
+    if (globalAvg == null || nearAvg == null || !sampleN) return 0;
+    const shrink = sampleN / (sampleN + 3);
+    return Math.max(-2, Math.min(2, (nearAvg - globalAvg) * 0.5 * shrink));
   },
 
   /** ④-b 距離延長/短縮ペナルティ（前走比±200m以上） */
@@ -14738,11 +14748,14 @@ const Yoso = {
     return den > 0 ? Math.max(-1.5, Math.min(1.5, (num / den) * 0.625)) : 0;
   },
 
-  /** ⑥ 騎手×厩舎コンボ：shrinkage推定（サンプル少ないほど平均33%へ引き寄せ） */
-  comboMod(cs) {
+  /** ⑥ 騎手×厩舎コンボ：shrinkage推定（サンプル少ないほど「そのレースの頭数における複勝の
+   *  自然基準」へ引き寄せ）。事前平均を一律33%固定にすると、4頭立て(自然に75%)を大幅過大評価、
+   *  12頭立て(自然に25%)を過小評価するバグになるため、fieldSizeからmin(3,頭数)/頭数で都度算出する。 */
+  comboMod(cs, fieldSize) {
     if (!cs || cs.total < 1) return 0;
-    const shrunk = (cs.place + 0.33 * 20) / (cs.total + 20);
-    return Math.max(-2, Math.min(2, (shrunk - 0.33) * 4));
+    const prior = fieldSize ? Math.min(3, fieldSize) / fieldSize : 0.33;
+    const shrunk = (cs.place + prior * 20) / (cs.total + 20);
+    return Math.max(-2, Math.min(2, (shrunk - prior) * 4));
   },
 
   /** ⑦ ローテーション：連闘(≦7日)-1.0／長期休養明け(≧57日)-0.8 */
@@ -15118,7 +15131,7 @@ function computeYosoScored(raceNo, selCondOverride) {
     const _globalSIAvg = _allSIWithCond.length ? _allSIWithCond.reduce((s,x)=>s+x.si,0)/_allSIWithCond.length : null;
     const _condSIs = _allSIWithCond.filter(x => x.cond === selCond).map(x => x.si);
     const _condSIAvg = _condSIs.length ? _condSIs.reduce((a,b)=>a+b,0)/_condSIs.length : null;
-    const condMod = Yoso.condMod(_condSIAvg, _globalSIAvg, _allSIWithCond.length);
+    const condMod = Yoso.condMod(_condSIAvg, _globalSIAvg, _condSIs.length);
 
     // ── ④ 距離適性（SI差分ベース + 延長/短縮補正） ──
     const _nearDistSIs = _allSIWithCond
@@ -15127,7 +15140,7 @@ function computeYosoScored(raceNo, selCondOverride) {
     const _nearDistSIAvg = _nearDistSIs.length
       ? _nearDistSIs.reduce((a, b) => a + b, 0) / _nearDistSIs.length : null;
     const distMod = Yoso.distExtAdj(
-      Yoso.distMod(_nearDistSIAvg, _globalSIAvg),
+      Yoso.distMod(_nearDistSIAvg, _globalSIAvg, _nearDistSIs.length),
       histEx[0] ? getDistNum(histEx[0].distance) : null, rdistNum);
 
     // ── ⑤ 近況トレンド ──
@@ -15135,7 +15148,7 @@ function computeYosoScored(raceNo, selCondOverride) {
 
     // ── ⑥ 騎手×厩舎コンボ ──
     const trainer = (horse.trainer || '').trim();
-    const comboMod = (jockey && trainer) ? Yoso.comboMod(_comboStats[`${jockey}_${trainer}`]) : 0;
+    const comboMod = (jockey && trainer) ? Yoso.comboMod(_comboStats[`${jockey}_${trainer}`], horses.length) : 0;
 
     // ── ⑦ ローテーション補正（連闘・長期休養明け） ──
     const _prevRace = histEx[0];
@@ -15257,7 +15270,9 @@ function computeYosoScored(raceNo, selCondOverride) {
   // ── ⑯-b ペース×馬場バイアスで脚質補正(cornMod)を伸縮 ──
   // 出走馬の脚質構成からペースを予測し、(馬場×ペース)の前残り傾向で cornMod をスケール。
   // 前つぶれ想定日は前の加点を抑え差しの減点を緩和、前残り想定日は前を増す（対称）。
-  const _pbMatrix = buildPaceBiasMatrix(currentBaba || '31');
+  // 【2026-07-10】行列は必ず現在レースの距離(rdistNum)で構築。旧実装は距離を渡さず常に1400m専用
+  // 行列を全距離に適用していた。サンプル不足の距離はgetPaceBiasFactor内のN<20ガードでfactor=1になる。
+  const _pbMatrix = buildPaceBiasMatrix(currentBaba || '31', rdistNum);
   const _pbPace   = predictRacePaceFromA4C(scored.map(s => s.avg4C), scored.length);
   const _pbFactor = getPaceBiasFactor(_pbMatrix, raceCond, _pbPace);
   if (_pbFactor !== 1) {
@@ -15466,11 +15481,11 @@ function _evHorseFeatures(hName, entry, ctx, maps) {
   const gAvg = allSIcd.length ? allSIcd.reduce((s, x) => s + x.si, 0) / allSIcd.length : null;
   const cSIs = allSIcd.filter(x => x.cond === selCond).map(x => x.si);
   const cAvg = cSIs.length ? cSIs.reduce((a, b) => a + b, 0) / cSIs.length : null;
-  const condNew = Yoso.condMod(cAvg, gAvg, allSIcd.length);
+  const condNew = Yoso.condMod(cAvg, gAvg, cSIs.length);
 
   const ndSIs = allSIcd.filter(x => x.dist && rdistNum && Math.abs(x.dist - rdistNum) <= 100).map(x => x.si);
   const ndAvg = ndSIs.length ? ndSIs.reduce((a, b) => a + b, 0) / ndSIs.length : null;
-  const distNew = Yoso.distExtAdj(Yoso.distMod(ndAvg, gAvg), preHist[0] ? getDistNum(preHist[0].distance) : null, rdistNum);
+  const distNew = Yoso.distExtAdj(Yoso.distMod(ndAvg, gAvg, ndSIs.length), preHist[0] ? getDistNum(preHist[0].distance) : null, rdistNum);
 
   const rotN = preHist[0] ? Yoso.rotMod(raceDate, preHist[0].raceDate) : 0;
   const clsN = preHist[0] ? Yoso.classMod(curCR, preHist[0].raceClass) : 0;
@@ -15479,7 +15494,7 @@ function _evHorseFeatures(hName, entry, ctx, maps) {
   const trendN = Yoso.trendMod(siList);
   const weightN = Yoso.weightMod(Yoso.weightChange(entry.weight, preHist[0]?.weight));
   const agariN = Yoso.agariMod(maps.getAgRef(rdistNum), Yoso.agariAvg(preHist, rdistNum));
-  const comboN = Yoso.comboMod(getComboStatsAll()[`${(entry.jockey || '').trim()}_${(entry.trainer || '').trim()}`]);
+  const comboN = Yoso.comboMod(getComboStatsAll()[`${(entry.jockey || '').trim()}_${(entry.trainer || '').trim()}`], ctx.fieldSize);
   const marginN = Yoso.marginMod(Yoso.marginAvgGap(preHist));
 
   let winStrN = 0;
@@ -15532,6 +15547,7 @@ function computeEvBets(raceNo, selCond) {
   };
   ctx.rdistNum = parseInt(ctx.raceDist) || 0;
   ctx.curCR = YOSO_CLASS_RANK[getEffectiveClass(ctx.raceCls)] || 0;
+  ctx.fieldSize = data.horses.length;
   const maps = _evGetMaps();
 
   // オッズが有効な出走馬でレースを構成
@@ -15966,6 +15982,12 @@ function renderPredictionPanel(raceNo) {
     </table>`;
   } else {
     // ── レース前予想モード（詳細表示） ──
+    // 【2026-07-10】表示は必ず「実際に総合スコアへ適用されている倍率」で計算する。
+    // 旧実装は馬場/距離/トレンド/脚質を生値のまま表示し、コンボだけV3手動倍率(×3固定)で
+    // 補正して見せていたため、実際に効いている学習重み(例：コンボ×5.269等)と表示が食い違い、
+    // その差が全部「その他」に吸収されて実態と違う内訳になっていた。
+    const _mlWDisp = getMlLiveWeights();
+    const _effDisp = k => (_mlWDisp && _mlWDisp.eff[k] != null) ? _mlWDisp.eff[k] : (typeof YOSO_FACTOR_SCALE!=='undefined' && YOSO_FACTOR_SCALE[k]!=null ? YOSO_FACTOR_SCALE[k] : 1);
     const rows = scored.map((s, idx) => {
       const mark  = MARKS[idx] || '';
       const mCol  = markColors[mark] || '#6b7280';
@@ -15975,18 +15997,22 @@ function renderPredictionPanel(raceNo) {
       const umaBan = s.horse.umaBan || '—';
       const fmt = (v, decimals=1) => v >= 0 ? `+${v.toFixed(decimals)}` : v.toFixed(decimals);
       const jMod  = fmt(s.jockeyMod);
-      const cMod  = fmt(s.condMod);
-      const dMod  = fmt(s.distMod);
-      const tMod  = fmt(s.trendMod);
-      const _kComboEff = s.comboMod * (typeof YOSO_FACTOR_SCALE!=='undefined' && YOSO_FACTOR_SCALE.comboN!=null ? YOSO_FACTOR_SCALE.comboN : 1);  // コンボはV3で×3効くので実効値で表示
-      const kMod  = fmt(_kComboEff);
-      const cnMod = fmt(s.cornMod);   // 脚質補正の実数値（従来はラベルのみで非表示だった）
+      const cModEff  = s.condMod  * _effDisp('condNew');
+      const dModEff  = s.distMod  * _effDisp('distNew');
+      const tModEff  = s.trendMod * _effDisp('trendN');
+      const kModEff  = s.comboMod * _effDisp('comboN');
+      const cnModEff = s.cornMod  * _effDisp('cornN');   // s.cornModはペース×馬場伸縮後の値
+      const cMod  = fmt(cModEff);
+      const dMod  = fmt(dModEff);
+      const tMod  = fmt(tModEff);
+      const kMod  = fmt(kModEff);
+      const cnMod = fmt(cnModEff);
       // その他＝総合に効くが列に出ていない補正の合計（ローテ・昇降級・馬体重・上がり・着差・
       // 勝ち馬強さ・乗替・叩き・コーナー一貫性・相対SI）。画面の丸め値でぴったり合うよう、
-      // 各列の表示値（小数1桁）を引いた残りとして算出＝ SI＋各表示列＋その他＝総合 が目で合う。
+      // 各列の表示値（小数1桁・実効倍率適用後）を引いた残りとして算出＝ SI＋各表示列＋その他＝総合 が目で合う。
       const _r1 = v => parseFloat(v.toFixed(1));   // 表示と同じ丸め（.05境界のズレ防止）
       const otherMod = (s.totalScore != null && s.baseScore != null)
-        ? +(_r1(s.totalScore) - _r1(s.baseScore) - _r1(s.condMod) - _r1(s.distMod) - _r1(s.trendMod) - _r1(_kComboEff) - _r1(s.cornMod)).toFixed(1) : null;
+        ? +(_r1(s.totalScore) - _r1(s.baseScore) - _r1(cModEff) - _r1(dModEff) - _r1(tModEff) - _r1(kModEff) - _r1(cnModEff)).toFixed(1) : null;
       const oMod = otherMod != null ? fmt(otherMod) : '—';
       const noData = s.siCount === 0;
       const jStatsKnown = !!lookupJockeyStats(s.jockey);
@@ -16236,7 +16262,7 @@ function renderPredictionPanel(raceNo) {
     scored.forEach((s, idx) => {
       if (idx < 5 || s.totalScore == null) return;   // 指数6番手以下のみ
       const why = [];
-      const cm = Yoso.comboMod(_allCombo[`${s.jockey}_${s.trainer}`]);
+      const cm = Yoso.comboMod(_allCombo[`${s.jockey}_${s.trainer}`], scored.length);
       if (cm >= 0.5) why.push('厩舎コンボ好調');
       if (s.cornMod >= 1) why.push('逃げ先行型');
       let pcv = 0;
@@ -16453,8 +16479,10 @@ function runYosoBacktest(raceNo) {
       // 乗り替わり診断カウンター
       const _jcDiag = { noJockey:0, sameJockey:0, smallDiff:0, fired:0 };
 
-      // ペース×馬場バイアス行列（脚質補正の伸縮係数用）
-      const _btPaceMatrix = buildPaceBiasMatrix('31');
+      // ペース×馬場バイアス行列（脚質補正の伸縮係数用）。
+      // 【2026-07-10】距離別にキャッシュしながら構築（旧実装は1400m専用行列を全距離に適用していた）。
+      const _btPaceMatrices = {};
+      const _getBtPaceMatrix = d => _btPaceMatrices[d] || (_btPaceMatrices[d] = buildPaceBiasMatrix('31', d));
 
       // 馬基準差SI実験用アクセサ：SIの水準補正を馬アンカー方式に置き換える
       // （データ不足でnullの日は基準時計方式へフォールバック）
@@ -16482,7 +16510,8 @@ function runYosoBacktest(raceNo) {
 
       for (const [raceKey, entries] of Object.entries(raceGroups)) {
         // 取消除いたランナーが4頭以上必要
-        if (entries.filter(e => !e._scratched).length < 4) continue;
+        const _fieldSizeBT = entries.filter(e => !e._scratched).length;
+        if (_fieldSizeBT < 4) continue;
         const hasWinner = entries.some(e => parseInt(e.chakujun) === 1);
         if (!hasWinner) continue;
         const { babaCode, raceDate, raceNo: rNo } = entries[0];
@@ -16537,12 +16566,12 @@ function runYosoBacktest(raceNo) {
           const gAvg = allSIcd.length ? allSIcd.reduce((s,x)=>s+x.si,0)/allSIcd.length : null;
           const cSIs = allSIcd.filter(x=>x.cond===selCond).map(x=>x.si);
           const cAvg = cSIs.length ? cSIs.reduce((a,b)=>a+b,0)/cSIs.length : null;
-          const condNew = Yoso.condMod(cAvg, gAvg, allSIcd.length);
+          const condNew = Yoso.condMod(cAvg, gAvg, cSIs.length);
 
           // 新: distMod（SI差分ベース + 延長/短縮補正）
           const ndSIs = allSIcd.filter(x=>x.dist&&rdistNum&&Math.abs(x.dist-rdistNum)<=100).map(x=>x.si);
           const ndAvg = ndSIs.length ? ndSIs.reduce((a,b)=>a+b,0)/ndSIs.length : null;
-          const distNew = Yoso.distExtAdj(Yoso.distMod(ndAvg, gAvg), preHist[0] ? getDistNum(preHist[0].distance) : null, rdistNum);
+          const distNew = Yoso.distExtAdj(Yoso.distMod(ndAvg, gAvg, ndSIs.length), preHist[0] ? getDistNum(preHist[0].distance) : null, rdistNum);
 
           // 新: rotMod
           const rotN = preHist[0] ? Yoso.rotMod(raceDate, preHist[0].raceDate) : 0;
@@ -16568,7 +16597,7 @@ function runYosoBacktest(raceNo) {
           const agariN = Yoso.agariMod(_getAgRefBT(rdistNum), Yoso.agariAvg(preHist, rdistNum));
 
           // 新: comboN（検証版は全馬場集計・ライブは高知のみ＝仕様差）
-          const comboN = Yoso.comboMod(_btComboStats[`${(entry.jockey||'').trim()}_${(entry.trainer||'').trim()}`]);
+          const comboN = Yoso.comboMod(_btComboStats[`${(entry.jockey||'').trim()}_${(entry.trainer||'').trim()}`], _fieldSizeBT);
 
           // 新: marginN（前走着差補正・直近2走）
           const marginN = Yoso.marginMod(Yoso.marginAvgGap(preHist));
@@ -16761,7 +16790,7 @@ function runYosoBacktest(raceNo) {
         // ── 新＋ペース補正（cornMod を ペース×馬場係数でスケールした場合の◎） ──
         const _btCond = raceVal.track_cond || raceVal.trackCond || '';
         const _btPace = predictRacePaceFromA4C(runnersNew.map(s => s._a4c), runnersNew.length);
-        const _btFactor = getPaceBiasFactor(_btPaceMatrix, _btCond, _btPace);
+        const _btFactor = getPaceBiasFactor(_getBtPaceMatrix(rdistNum), _btCond, _btPace);
         const runnersB = runnersNew
           .map(s => ({ chaku: s.chaku, _scratched: s._scratched, score: s.score + (s._cornN || 0) * (_btFactor - 1) }))
           .sort((a, b) => b.score - a.score);
@@ -17324,9 +17353,13 @@ function runYosoBacktest(raceNo) {
           tierRR, ml, value, anch, paceCtx, rank, psf,
         };
 
-        // ── 🧠 ライブ用フル学習＆保存（二段基準を両方クリアした場合のみ・管理者の検証実行で自動更新）──
-        // 全データで1回学習し、base係数=1に正規化した実効倍率としてSupabase(daySettingsセンチネル行)へ配布。
-        // 基準未達の実行では上書きしない（既存の重みが残る）。
+        // ── 🧠 ライブ用フル学習（自動保存は2026-07-10 一時停止中）──
+        // 【停止理由】このCV自体に②コンボ/上がり集計の未来情報混入・①テスト期間より後のレースを
+        // 学習に含む(walk-forward違反)・④同一データを繰り返し見て倍率を選ぶ多重検定、という
+        // 複数の未解決の検証バグがあり、「二段基準クリア」の判定自体が信頼できない。
+        // 検証基盤を修正するまで、ここで合格しても自動保存はしない（診断ログのみ・console確認用）。
+        // 既存のKV_ML_WEIGHTS_DEFAULT／保存済みml_weights_31はそのまま維持（本番挙動は変えない）。
+        // 再開する場合はsaveMlLiveWeights(...)のコメントアウトを解除する。
         try {
           if (ml.fullAdopt && typeof isAdminMode === 'function' && isAdminMode()) {
             const _mFull = _mlTrain(_cvSorted);
@@ -17352,9 +17385,9 @@ function runYosoBacktest(raceNo) {
               const _c2t = +_gSorted[Math.floor((1 - _pStrong) * _gSorted.length)].toFixed(2);
               const _fkT = pred => { const s = _mlGapRows.filter(pred); return s.length ? +(100 * s.filter(r => r.h3).length / s.length).toFixed(1) : null; };
               const tiers = { c1: _c1t, c2: _c2t, fukuTight: _fkT(r => r.gap < _c1t), fukuMid: _fkT(r => r.gap >= _c1t && r.gap < _c2t), fukuStrong: _fkT(r => r.gap >= _c2t), n: _mlGapRows.length };
-              saveMlLiveWeights({ eff: _effF, tiers, fullAdopt: true, races: _cvSorted.length, trainedAt: new Date().toISOString(),
-                cv: { mlWin: ml.winAvg, mlFuku: ml.fukuAvg, curWin: _avg('curWin'), curFuku: _avg('curFuku'), concordWins: rank.mlWins.concord } });
-              console.log('[mlWeights] 二段基準クリア → 学習重みを保存', _effF, tiers);
+              // 【一時停止中】saveMlLiveWeights({ eff: _effF, tiers, fullAdopt: true, races: _cvSorted.length, trainedAt: new Date().toISOString(),
+              //   cv: { mlWin: ml.winAvg, mlFuku: ml.fukuAvg, curWin: _avg('curWin'), curFuku: _avg('curFuku'), concordWins: rank.mlWins.concord } });
+              console.log('[mlWeights] 二段基準クリア（診断のみ・自動保存は停止中）', _effF, tiers);
             }
           }
         } catch(e) { console.warn('[mlWeights]', e); }
