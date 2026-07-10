@@ -271,14 +271,15 @@ function loopPoints(lane, inner, n = 240) {
   return pts;
 }
 function band(inner, color, y) {
-  const shape = new THREE.Shape(loopPoints(16, inner));
-  shape.holes.push(new THREE.Path(loopPoints(-13, inner).reverse()));
-  const m = new THREE.Mesh(new THREE.ShapeGeometry(shape, 4), new THREE.MeshLambertMaterial({ color }));
+  const shape = new THREE.Shape(loopPoints(17, inner));
+  shape.holes.push(new THREE.Path(loopPoints(-14, inner).reverse()));
+  // DoubleSide必須（回転後の法線が下向きになり片面だと非表示＝コースが緑に見えるバグの原因）
+  const m = new THREE.Mesh(new THREE.ShapeGeometry(shape, 4), new THREE.MeshLambertMaterial({ color, side: THREE.DoubleSide }));
   m.rotation.x = Math.PI / 2; m.position.y = y; scene.add(m);
   return m;
 }
-band(true, 0xa08557, 0.015);            // 内コース(1400m)・やや暗め
-band(false, 0xb99a6b, 0.02);            // 外コース(1600m)
+band(true, 0xa8895c, 0.015);            // 内コース(1400m)・やや暗いダート
+band(false, 0xc2a273, 0.02);            // 外コース(1600m)・ダート（大井は全面ダート）
 // ポケット（引き込み線）の砂帯
 function chutePad(type) {
   const w = 30;
@@ -325,17 +326,15 @@ function makeLabel(text) {
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false }));
   sp.scale.set(26, 6.5, 1); return sp;
 }
-const GATES = TRACK === '大井'
-  ? [[1200, 0], [1000, 0], [2600, 0], [800, 0], [2400, 0], [1400, 0], [2000, 0], [1700, 0], [1800, 0], [1500, 1], [1600, 1]]
-  : [[1000, 0], [1100, 0], [1200, 0], [1700, 0], [1800, 0], [2000, 0], [2600, 0], [1500, 1], [1600, 1]];
-GATES.forEach(([d, inn], i) => {
-  const p = racePos(d, !!inn, 0, 1.5);
-  const sp = makeLabel(`${d}m${inn ? '(内)' : ''}`);
-  sp.position.set(p.x, 8 + (i % 3) * 5, p.z);
+// 発走地点表示は「そのレースの距離」だけ（init時に設置）
+function setGate(D, inner) {
+  const p = racePos(D, inner, 0, 1.5);
+  const sp = makeLabel(`${D}m${inner ? '(内)' : ''} 発走`);
+  sp.position.set(p.x, 9, p.z);
   scene.add(sp);
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 4, 6), new THREE.MeshLambertMaterial({ color: 0xffffff }));
-  pole.position.set(p.x, 2, p.z); scene.add(pole);
-});
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 5, 6), new THREE.MeshLambertMaterial({ color: 0xffffff }));
+  pole.position.set(p.x, 2.5, p.z); scene.add(pole);
+}
 // ゴール（白柱2本＋赤ライン）
 {
   const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
@@ -446,8 +445,8 @@ function updateCamera() {
     const tgt = racePos(D, state.inner, Math.min(lead + 8, D), 0);
     camera.lookAt(tgt.x, 1.5, tgt.z);
   } else {
-    camera.position.set(0, 330, 235);
-    camera.lookAt(0, 0, -20);
+    camera.position.set(0, 560, 330);   // コース全幅(約760m+ポケット)が収まる高さ
+    camera.lookAt(0, 0, 0);
   }
 }
 let lastTs = null;
@@ -464,9 +463,16 @@ function tick() {
       if (h.s >= state.dist && h.finTime == null) h.finTime = finishTime(h, state.dist);
       if (h.s < state.dist) allDone = false;
     }
-    $('clock').textContent = `${state.t.toFixed(1)}秒`;
+    const lead = Math.max(...state.horses.map((h) => h.s), 0);
+    const remain = Math.max(0, Math.round(state.dist - lead));
+    $('clock').textContent = remain > 0 ? `タイム ${state.t.toFixed(1)}秒 ｜ 残り ${remain}m` : `タイム ${state.t.toFixed(1)}秒 ｜ ゴール！`;
     renderOrder();
-    if (allDone) { state.running = false; $('startBtn').textContent = '↺ もう一度'; }
+    if (allDone) {
+      state.running = false; $('startBtn').textContent = '↺ もう一度';
+      const win = Math.min(...state.horses.map((h) => h.finTime ?? 9999));
+      const m = Math.floor(win / 60), s = win - m * 60;
+      $('clock').textContent = `確定 勝ちタイム ${m ? m + '.' : ''}${m && s < 10 ? '0' : ''}${s.toFixed(1)}`;
+    }
   }
   updateMeshes();
   updateCamera();
@@ -497,6 +503,7 @@ async function init() {
     state.dist = race.distance_m || 1200;
     state.inner = state.dist === 1500 || state.dist === 1600;   // 内コース(大井/門別とも1500・1600)
     setRails(state.inner);
+    setGate(state.dist, state.inner);
     const ids = ent.map((e) => e.horse_id).filter(Boolean);
     let histories = {};
     if (ids.length) {
