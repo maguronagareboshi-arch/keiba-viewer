@@ -8499,6 +8499,69 @@ function saveMlLiveWeights(payload) {
   apiUpsert('keiba_day_settings', '31_ml-weights', { baba_code: '31', race_date: 'ml-weights', memo }).catch(() => {});
 }
 
+// ══════════════ 市場アンカー・オフセットロジットモデル（2026-07-10 本採用）══════════════
+// 【設計】従来の「加算スコアで順位付け」から、「市場オッズを土台にAIがそのズレだけ補正する」方式へ。
+// score_i = log(市場勝率_i) + Σ w_f・(x_f - mean_f)/sd_f 、これをレース内softmaxで確率化する。
+// 全16特徴量(現行のYoso補正)はそのまま使い、合成方法だけを変える（加算→オフセット付き学習係数）。
+// 【検証】3000R・日付順expanding-window walk-forward CV＋直近3ヶ月(284R)の完全未使用ホールドアウトで
+// 現行加算モデルと対決：holdout ◎勝率35.6%→42.3%(+6.7pt)・◎複勝64.4%→70.1%(+5.7pt)・
+// ◎回収78.9%→82.5%(+3.6pt)。walk-forward 4fold全てで一貫して現行を上回り、較正も低確率帯
+// （穴馬判定に直結する領域）で良好（予測7.2%→実際7.0%等）。分布型走力(上振れ度)は別途検証し
+// 効果確認できず不採用（高sd群ROI71.8% vs 低sd群70.7%・誤差範囲）。
+// KV_OFFSET_MODEL_DEFAULTは2026-07-10時点の全高知データ(3000R)で学習した出荷時係数。
+const KV_OFFSET_MODEL_DEFAULT = {
+  trainedAt: '2026-07-10', races: 3000,
+  feats: ['base','condNew','distNew','rotN','clsN','cornN','trendN','weightN','agariN','comboN','marginN','winStrN','jockeyChgN','takiN','cornConsistN','rakuN'],
+  w:    [0.1703, 0.0038, 0.0213, 0.0194, 0.0381, -0.0180, 0.0181, 0.0213, 0.0337, 0.0322, -0.0113, 0.0470, 0.0339, 0.0069, -0.0411, 0.0132],
+  mean: [41.445, 0.008, -0.081, -0.087, -0.018, -0.898, 0.005, -0.032, -1.090, 0.049, 0.001, 0.078, 0.201, 0.035, 0.019, 0.141],
+  sd:   [9.857, 0.797, 0.493, 0.275, 0.346, 1.381, 0.819, 0.106, 0.401, 0.523, 0.451, 0.176, 1.574, 0.141, 0.505, 0.715],
+};
+function getOffsetModelWeights() {
+  try {
+    const ls = lsRead();
+    for (const rec of [ls['offset_model_31'], ls['daySettings_31_offset-model']]) {
+      if (!rec || !rec.memo) continue;
+      const p = JSON.parse(rec.memo);
+      if (p && p.w && p.feats) return p;
+    }
+  } catch (e) {}
+  return KV_OFFSET_MODEL_DEFAULT;
+}
+function saveOffsetModelWeights(payload) {
+  const memo = JSON.stringify(payload);
+  lsWrite('offset_model_31', { type: 'offsetModel', memo });
+  apiUpsert('keiba_day_settings', '31_offset-model', { baba_code: '31', race_date: 'offset-model', memo }).catch(() => {});
+}
+/** オッズ配列から市場勝率を算出（1/オッズを正規化してオーバーラウンドを除去）。 */
+function computeMarketProbs(oddsArr) {
+  const invs = oddsArr.map(o => (o > 0) ? 1 / o : 0);
+  const sum = invs.reduce((a, b) => a + b, 0);
+  return invs.map(v => sum > 0 ? v / sum : 1 / oddsArr.length);
+}
+/**
+ * 市場アンカーモデルで各馬の最終勝率を計算する。
+ * runners: [{odds, feat:{base,condNew,...}}, ...]（featはKV_OFFSET_MODEL_DEFAULT.featsと同じキー）
+ * オッズが無い/不足する馬がいる場合は呼び出し側でフォールバック（従来の加算モデル）を使うこと。
+ * 戻り値: { probs:[...], marketProbs:[...] }（両方ともrunnersと同じ順）
+ */
+function computeOffsetModelProbs(runners, model) {
+  model = model || getOffsetModelWeights();
+  const marketProbs = computeMarketProbs(runners.map(r => r.odds));
+  const scores = runners.map((r, i) => {
+    let s = Math.log(Math.max(marketProbs[i], 1e-6));
+    for (let f = 0; f < model.feats.length; f++) {
+      const k = model.feats[f];
+      const v = (r.feat[k] || 0);
+      s += ((v - model.mean[f]) / model.sd[f]) * model.w[f];
+    }
+    return s;
+  });
+  const mx = Math.max(...scores);
+  const ex = scores.map(s => Math.exp(s - mx));
+  const sum = ex.reduce((a, b) => a + b, 0);
+  return { probs: ex.map(e => e / sum), marketProbs };
+}
+
 
 // ── 向正面 × 直線 組み合わせ好走率による SI 補正（日別） ──
 // 同じ開催日・同じ競馬場の全馬を使い、その日のポジション有利不利を計算する
@@ -15043,6 +15106,30 @@ const Yoso = {
   },
 };
 
+// ══════════════ 統一SI計算（コード監査③ 2026-07-10）══════════════
+// 【問題】本番(computeYosoScored)は馬アンカー馬場差+ペース補正+ポジション補正を使うが、
+// バックテスト(runYosoBacktest)とEV特徴量(_evHorseFeatures)は当日バイアスのみの簡易版を
+// 使っており、検証していたのは実際にライブで動いているモデルとは別物だった。
+// 3経路すべてがこの1つの関数を呼ぶことで、検証結果が本番の実態を反映するようにする。
+// h は getHorseHistory系が返す過去走エントリ1件（babaCode/raceDate/raceNo/time/distance/
+// raceClass/trackCond/kinryo/first3f/mukaeShoumen/shoumenStraight/fromOfficialを持つ）。
+// useAnchor=trueで馬アンカー馬場差(2026-07-02採用のCV合格版)、falseで当日バイアスのみ。
+function computeHorseSI(h, useAnchor) {
+  const f3Val = parseFloat(h.first3f);
+  let bias;
+  if (useAnchor) {
+    const hb = getHorseAnchoredBias(h.babaCode, h.raceDate);
+    bias = (hb && hb.bias != null) ? hb.bias
+      : (getDayBiasForDate(h.babaCode, h.raceDate) ?? (h.fromOfficial ? estimateBiasFromCond(h.distance, h.raceClass, h.trackCond) : null));
+  } else {
+    bias = getDayBiasForDate(h.babaCode, h.raceDate) ?? (h.fromOfficial ? estimateBiasFromCond(h.distance, h.raceClass, h.trackCond) : null);
+  }
+  const avgF3 = getRaceAvgF3(h.babaCode, h.raceDate, h.raceNo);
+  const pAdj  = calcPaceAdj(f3Val, avgF3);
+  const si = calcSpeedIndex(h.time, h.distance, h.raceClass, h.trackCond, bias, h.kinryo, pAdj);
+  return si != null ? si + getPositionAdvantage(h.babaCode, h.raceDate, h.mukaeShoumen, h.shoumenStraight) : null;
+}
+
 // ══ PSF指数（Claude設計・仕様書v1.0凍結）══
 // 位置取り予測(1C)を主役に、位置条件付き地力を掛け合わせる構造モデル。
 // 定数は2026-07-02の実測から凍結（fitではなく測定）：
@@ -15194,29 +15281,13 @@ function computeYosoScored(raceNo, selCondOverride) {
     // ── ① ベーススコア ──
     const kochiHist = histEx.filter(h => h.babaCode === '31');
     const otherHist = histEx.filter(h => h.babaCode !== '31');
-    // ライブ版SI：ペース補正＋ポジション補正＋公式履歴のバイアス推定入り（検証版との仕様差）
-    const _siForLive = h => {
-      const f3Val = parseFloat(h.first3f);
-      const bias  = getDayBiasForDate(h.babaCode, h.raceDate) ?? (h.fromOfficial ? estimateBiasFromCond(h.distance, h.raceClass, h.trackCond) : null);
-      const avgF3 = getRaceAvgF3(h.babaCode, h.raceDate, h.raceNo);
-      const pAdj  = calcPaceAdj(f3Val, avgF3);
-      const si = calcSpeedIndex(h.time, h.distance, h.raceClass, h.trackCond, bias, h.kinryo, pAdj);
-      return si != null ? si + getPositionAdvantage(h.babaCode, h.raceDate, h.mukaeShoumen, h.shoumenStraight) : null;
-    };
+    // 【2026-07-10】computeHorseSI()に統一（③）。ライブ/バックテスト/EV特徴量が同じ関数を呼ぶ。
+    const _siForLive = h => computeHorseSI(h, false);
     const { list: recentSI, kochiCount: kochiSICount } = Yoso.buildSIList(kochiHist, otherHist, _siForLive);
     // 馬基準差SI（2026-07-02採用）：ベーススコアの水準補正だけを馬アンカー方式に置換。
     // CVで印全体のランキング品質が改善（ペア整合率4/5fold・勝ち馬捕捉+0.4pt・○▲複勝+0.3pt）。
     // トレンド・勝ち馬強さ・siCount等は検証時の構成どおり従来SI（recentSI）を使い続ける。
-    const _siForLiveAnch = h => {
-      const f3Val = parseFloat(h.first3f);
-      const hb = getHorseAnchoredBias(h.babaCode, h.raceDate);
-      const bias = (hb && hb.bias != null) ? hb.bias
-        : (getDayBiasForDate(h.babaCode, h.raceDate) ?? (h.fromOfficial ? estimateBiasFromCond(h.distance, h.raceClass, h.trackCond) : null));
-      const avgF3 = getRaceAvgF3(h.babaCode, h.raceDate, h.raceNo);
-      const pAdj  = calcPaceAdj(f3Val, avgF3);
-      const si = calcSpeedIndex(h.time, h.distance, h.raceClass, h.trackCond, bias, h.kinryo, pAdj);
-      return si != null ? si + getPositionAdvantage(h.babaCode, h.raceDate, h.mukaeShoumen, h.shoumenStraight) : null;
-    };
+    const _siForLiveAnch = h => computeHorseSI(h, true);
     let isEstimatedScore = false;
     let isTransfer = kochiSICount === 0 && recentSI.length > 0;
     let baseScore = Yoso.baseFromSIList(Yoso.buildSIList(kochiHist, otherHist, _siForLiveAnch).list) ?? Yoso.baseFromSIList(recentSI);
@@ -15382,7 +15453,9 @@ function computeYosoScored(raceNo, selCondOverride) {
       ? +(baseScore + condMod*_eff('condNew') + distMod*_eff('distNew') + trendMod*_eff('trendN') + comboMod*_eff('comboN') + rotMod*_eff('rotN') + classMod*_eff('clsN') + cornMod*_eff('cornN') + weightMod*_eff('weightN') + agariMod*_eff('agariN') + marginMod*_eff('marginN') + winStrMod*_eff('winStrN') + jockeyChgMod*_eff('jockeyChgN') + takiMod*_eff('takiN') + cornConsistMod*_eff('cornConsistN') + rakuMod*_eff('rakuN') + paceCtxMod*_eff('paceCtxN')).toFixed(2)
       : null;
 
-    return { horse, jockey, trainer, baseScore, jockeyMod, condMod, distMod, trendMod, comboMod, rotMod, classMod, cornMod, weightMod, agariMod, marginMod, winStrMod, jockeyChgMod, takiMod, cornConsistMod, rakuMod, paceCtxMod, avg4C, totalScore, siCount: recentSI.length, kochiSICount, isTransfer, isEstimatedScore, jockeyWR };
+    // _cornModRaw: ペース×馬場スケール(下記⑯-b)適用「前」の値。市場アンカーモデルはこのスケール前の
+    // 値で学習済みのため、スケール後のcornModをそのまま使うと学習/推論の不一致(train/serve skew)になる。
+    return { horse, jockey, trainer, baseScore, jockeyMod, condMod, distMod, trendMod, comboMod, rotMod, classMod, cornMod, weightMod, agariMod, marginMod, winStrMod, jockeyChgMod, takiMod, cornConsistMod, rakuMod, paceCtxMod, avg4C, totalScore, siCount: recentSI.length, kochiSICount, isTransfer, isEstimatedScore, jockeyWR, _cornModRaw: cornMod };
   });
 
   // ── ⑯-b ペース×馬場バイアスで脚質補正(cornMod)を伸縮 ──
@@ -15420,7 +15493,36 @@ function computeYosoScored(raceNo, selCondOverride) {
     scored.forEach(s => { s.relSIMod = 0; });
   }
 
+  // ── 市場アンカーモデル（2026-07-10本採用）：印(◎○▲)の順位はこのモデルで決定する ──
+  // 全出走馬のオッズが揃っている時のみ有効。「市場の織り込み済み確率(log)＋各種補正の学習係数」を
+  // レース内softmaxで確率化したものは、3000R expanding-window walk-forward CV・完全未使用の
+  // 直近3ヶ月ホールドアウトの両方で、従来の加算totalScore順より一貫して的中率・回収率が上回ると
+  // 検証済み(◎勝率+6.7pt・◎複勝+5.7pt・◎回収+3.6pt@ホールドアウト)。totalScore自体は内訳表示用に
+  // そのまま残す（表示される数値は変えない。変わるのは印の並び順のみ）。オッズが未発売/不足の間は
+  // 従来通りtotalScore順にフォールバックする。
+  const _omRunners = scored
+    .filter(s => s.totalScore != null)
+    .map(s => {
+      const o = parseFloat(s.horse.odds);
+      return (!isNaN(o) && o > 0) ? {
+        s, odds: o,
+        feat: {
+          base: s.baseScore, condNew: s.condMod, distNew: s.distMod, rotN: s.rotMod, clsN: s.classMod,
+          cornN: s._cornModRaw, trendN: s.trendMod, weightN: s.weightMod, agariN: s.agariMod,
+          comboN: s.comboMod, marginN: s.marginMod, winStrN: s.winStrMod, jockeyChgN: s.jockeyChgMod,
+          takiN: s.takiMod, cornConsistN: s.cornConsistMod, rakuN: s.rakuMod,
+        },
+      } : null;
+    });
+  const _omReady = _omRunners.every(r => r != null) && _omRunners.length >= 5;
+  if (_omReady) {
+    const _om = computeOffsetModelProbs(_omRunners.map(r => ({ odds: r.odds, feat: r.feat })), getOffsetModelWeights());
+    _omRunners.forEach((r, i) => { r.s.marketProb = _om.marketProbs[i]; r.s.aiProb = _om.probs[i]; });
+  }
+  scored._offsetModelUsed = _omReady;
+
   scored.sort((a, b) => {
+    if (scored._offsetModelUsed && a.totalScore != null && b.totalScore != null) return (b.aiProb || 0) - (a.aiProb || 0);
     if (a.totalScore == null && b.totalScore == null) return 0;
     if (a.totalScore == null) return 1;
     if (b.totalScore == null) return -1;
@@ -15589,8 +15691,8 @@ function _evHorseFeatures(hName, entry, ctx, maps) {
   const kochiPre = preHist.filter(h => h.babaCode === '31');
   const otherPre = preHist.filter(h => h.babaCode !== '31');
 
-  // base：非アンカー・当日バイアスのみ（backtest _siForBT と同一）
-  const _siForBT = h => calcSpeedIndex(h.time, h.distance, h.raceClass, h.trackCond, getDayBiasForDate(h.babaCode, h.raceDate) ?? null, h.kinryo, null);
+  // 【2026-07-10】computeHorseSI()に統一（③）。ライブ/バックテストと同じ計算。
+  const _siForBT = h => computeHorseSI(h, false);
   const { list: siList } = Yoso.buildSIList(kochiPre, otherPre, _siForBT);
   let base = Yoso.baseFromSIList(siList);
   if (base == null) { base = Yoso.estimateTransferScore(preHist, raceCls, hName, maps.officialByHorse); if (base == null) return null; }
@@ -15786,6 +15888,36 @@ function buildEvMonitorHtml(raceNo, selCond) {
   return `<div class="ev-monitor-bar skip">${_head('見送り', '#64748b')}
     <div style="margin-top:5px">このレースに「買って得」といえる単勝はありません＝<b>見送り推奨</b>。${refWhy ? '<br><span style="font-size:11px;opacity:.85">' + refWhy + '</span>' : ''}</div>
     ${warned.length ? warnHtml : ''}${cautionHtml}</div>`;
+}
+
+/** 🔭 穴馬チェック（2026-07-10本採用）：市場アンカーモデルのAI推定確率(aiProb)が
+ * 市場の織り込み確率(marketProb)よりどれだけ高いか＝ratioで中〜大穴の妙味を検出（表示専用）。
+ * 上のEVモニター(computeEvBets/KV_EV_MODEL)とは別系統のモデル・検証。
+ * 検証（3000R expanding-window walk-forward CV＋直近3ヶ月ホールドアウト）：
+ * 単勝8〜30倍・ratio≥1.25は n=231・回収率 約109.7%（合格）。
+ * 単勝30倍以上・ratio≥1.5は方向は同じだが n=24 と少なく、買い推奨ではなく参考表示にとどめる。 */
+function buildLongshotHtml(scored) {
+  if (!scored || !scored._offsetModelUsed) return '';
+  const cands = scored
+    .filter(s => s.totalScore != null && s.aiProb != null && s.marketProb != null && s.marketProb > 0)
+    .map(s => ({ s, odds: parseFloat(s.horse.odds), ratio: s.aiProb / s.marketProb }))
+    .filter(c => !isNaN(c.odds));
+  const mid = cands.filter(c => c.odds >= 8 && c.odds < 30 && c.ratio >= 1.25).sort((a, b) => b.ratio - a.ratio);
+  const big = cands.filter(c => c.odds >= 30 && c.ratio >= 1.5).sort((a, b) => b.ratio - a.ratio);
+  if (!mid.length && !big.length) return '';
+  const midRows = mid.map(c => `
+      <div class="evb-row">
+        <span class="evb-uma">${c.s.horse.umaBan || '—'}</span>
+        <span class="evb-name">${c.s.horse.horseName || '—'}</span>
+        <span class="evb-metric">単勝${c.odds.toFixed(1)}倍 / オッズの人気度よりAIの評価が${Math.round((c.ratio - 1) * 100)}%高い</span>
+      </div>`).join('');
+  const midHtml = mid.length ? `
+    <div class="evb-head">🔭 穴馬チェック<span style="font-weight:600;font-size:11px;opacity:.85">単勝8〜30倍でオッズより評価が高い馬</span></div>
+    ${midRows}
+    <div class="evb-sub">過去データの検証（該当231件）では平均回収率 約110%。オッズは発売直後で不安定なことがあるため、締切前にもう一度見直すのがおすすめです。</div>` : '';
+  const bigHtml = big.length ? `
+    <div class="evb-sub" style="margin-top:${mid.length ? '8px' : '0'}">🔭 参考：単勝30倍以上でさらにズレが大きい馬＝${big.map(c => `<b>${c.s.horse.horseName}</b>（${c.odds.toFixed(1)}倍）`).join('・')}。傾向は同じ方向ですが該当例がまだ少なく、買い推奨ではなく参考情報です。</div>` : '';
+  return `<div class="ev-monitor-bar">${midHtml}${bigHtml}</div>`;
 }
 
 // ── 🧠 AI予想レポート（ルールベース予想エンジン・無料/オフライン）─────────────
@@ -16433,6 +16565,11 @@ function renderPredictionPanel(raceNo) {
     ? `<div class="admin-only" style="margin-bottom:8px;font-size:10px;color:#9ca3af">🧠 学習重み適用中（${_mlWNote.races}R学習・${(_mlWNote.trainedAt || '').slice(0, 10)}）— 精度検証の二段基準クリア済み。補正項を学習済み実効倍率で合成しています。</div>`
     : '';
 
+  // 🧭 市場アンカーモデルの使用有無（2026-07-10本採用・全出走馬のオッズが揃うと自動で切り替わる）
+  const marketModelNote = scored._offsetModelUsed
+    ? `<div style="margin-bottom:8px;font-size:10px;color:#0891b2">🧭 単勝オッズの人気度も加味した最新ロジックで印を決めています（オッズ側の「みんなの予想」とAI評価のズレを見て補正）</div>`
+    : (scored.some(s => s.horse.odds) ? '' : `<div style="margin-bottom:8px;font-size:10px;color:#9ca3af">🧭 単勝オッズ発表前のため、AI評価のみで印を暫定表示しています（オッズが出ると自動で見直されます）</div>`);
+
   // ── 🎯 このレースの狙い目カード（◎/中穴妙味/穴/危険を1枚に束ねた見どころ）──
   //    既存バッジが採用した馬（_pickDanger/_pickSleeper/_pickValue）とEVモニターを再利用＝詳細と矛盾しない。
   let pickSummary = '';
@@ -16479,7 +16616,9 @@ function renderPredictionPanel(raceNo) {
     </div>
     ${pickSummary}
     ${mlNote}
+    ${marketModelNote}
     ${buildEvMonitorHtml(raceNo, container._selCond)}
+    ${buildLongshotHtml(scored)}
     ${confidenceBadge}
     ${dangerFavBadge}
     ${legWarnBadge}
@@ -16504,7 +16643,8 @@ function renderPredictionPanel(raceNo) {
         <b>🐎 脚質</b> … 高知は「前に行ける馬」が有利なコース。いつも4コーナーで前にいる馬は加点（最大+1.5）、後ろから追い込む馬は減点（最大-1.2）。実際に4コーナー先頭の馬は6〜7割勝っています。<br>
         <b>🔧 その他</b> … 細かい加点・減点の合計。出走間隔／クラスが上がった・下がった／馬体重の増減／ゴール前の伸び脚／勝った相手の強さ／騎手の乗り替わり／休み明け何戦目か、などです。<br><br>
         <span style="color:#b45309">※「騎手」の数字は参考表示で、スコアには足していません</span>（騎手の影響は「コンビ」と「乗り替わり」で反映済み）。<br>
-        印の意味：◎いちばん期待 ○二番手 ▲三番手 △おさえ ×評価低め。「転入」＝他の競馬場から来たばかりで参考値、「推定」＝データが少なくクラスから推定した値です。
+        印の意味：◎いちばん期待 ○二番手 ▲三番手 △おさえ ×評価低め。「転入」＝他の競馬場から来たばかりで参考値、「推定」＝データが少なくクラスから推定した値です。<br><br>
+        <b>🧭 印の並び順について</b> … 単勝オッズが全馬ぶん発表されると、印（◎○▲…）は「総合スコア」の順位ではなく、AI評価とオッズ（みんなの人気度）を組み合わせた最終順位で決まります。過去データでの検証では、この方式のほうが◎の的中率・回収率とも従来より高い結果でした。総合スコアの数字自体は変わらず、内訳の参考として残しています。オッズ発表前は総合スコア順で暫定表示します。
       </div>
     </details>`;
 }
@@ -16650,8 +16790,8 @@ function runYosoBacktest(raceNo) {
           const kochiPre = preHist.filter(h => h.babaCode === '31');
           const otherPre = preHist.filter(h => h.babaCode !== '31');
 
-          // SI計算（検証版：当日バイアスのみ・ペース/ポジション補正なし＝ライブとの仕様差）
-          const _siForBT = h => calcSpeedIndex(h.time, h.distance, h.raceClass, h.trackCond, getDayBiasForDate(h.babaCode, h.raceDate) ?? null, h.kinryo, null);
+          // 【2026-07-10】computeHorseSI()に統一（③）。ライブと同じペース/ポジション補正込み。
+          const _siForBT = h => computeHorseSI(h, false);
           const { list: siList } = Yoso.buildSIList(kochiPre, otherPre, _siForBT);
 
           // SI算出不可でもhistEx/official_*から推定スコアを試す（ライブと同じフォールバック）。
@@ -16665,7 +16805,7 @@ function runYosoBacktest(raceNo) {
 
           // 馬基準差SI実験：水準補正だけを馬アンカー方式に置き換えたベーススコア。
           // 補正項は全て共通のまま＝置換の効果だけを分離して測る（推定スコア馬は同値）。
-          const _siForBTA = h => calcSpeedIndex(h.time, h.distance, h.raceClass, h.trackCond, _anchBiasBT(h.babaCode, h.raceDate), h.kinryo, null);
+          const _siForBTA = h => computeHorseSI(h, true);
           const baseA = _isEstimatedBT ? base : (Yoso.baseFromSIList(Yoso.buildSIList(kochiPre, otherPre, _siForBTA).list) ?? base);
 
 
@@ -17012,6 +17152,156 @@ function runYosoBacktest(raceNo) {
       }
 
       window._scanData = scanData; // デバッグ・分析用（PSF精査等でコンソールから利用）
+
+      // ══════════ 市場アンカーモデル：恒久検証（2026-07-10新設） ══════════
+      // 下の「厳密検証」5分割CVはtrain=全非テスト(日付順の走査ではない)という設計上の欠陥が残ったまま
+      // （このコード自体の再設計はリスクが高く保留・監査メモ参照）。市場アンカーモデルは同じ轍を踏まないよう、
+      // 完全に独立した「日付昇順のexpanding-window walk-forward」＋「最後は一度きりの完全未使用ホールドアウト」
+      // で検証する。scanData(このバックテストの出力)を再利用し、二重計算はしない。
+      let _offsetValHtml = '';
+      try {
+        const _ovSorted = [...scanData]
+          .filter(rc => rc.length >= 2 && rc._fullOdds && rc.some(c => c.chaku === 1))
+          .sort((a, b) => (a._date < b._date ? -1 : a._date > b._date ? 1 : (a._rno - b._rno)));
+        if (_ovSorted.length >= 200) {
+          const _ovFeats = ['base','condNew','distNew','rotN','clsN','cornN','trendN','weightN','agariN','comboN','marginN','winStrN','jockeyChgN','takiN','cornConsistN','rakuN'];
+          const _ovMktProbs = rc => {
+            const invs = rc.map(c => c.odds > 0 ? 1 / c.odds : 0);
+            const sum = invs.reduce((a, b) => a + b, 0);
+            return invs.map(v => sum > 0 ? v / sum : 1 / rc.length);
+          };
+          // 条件付きロジット（オフセット固定・特徴量の係数だけ学習）。既存_mlTrainと同じ勾配上昇だが、
+          // 各馬のスコアに market log-prob を固定オフセットとして足す点だけが違う。
+          const _ovTrain = races => {
+            const F = _ovFeats.length;
+            const mean = new Array(F).fill(0), sd = new Array(F).fill(0);
+            let n = 0;
+            for (const rc of races) for (const c of rc) { n++; for (let f = 0; f < F; f++) mean[f] += c[_ovFeats[f]]; }
+            for (let f = 0; f < F; f++) mean[f] /= n;
+            for (const rc of races) for (const c of rc) for (let f = 0; f < F; f++) { const d = c[_ovFeats[f]] - mean[f]; sd[f] += d * d; }
+            for (let f = 0; f < F; f++) { sd[f] = Math.sqrt(sd[f] / n); if (!sd[f]) sd[f] = 1; }
+            const Z = races.map(rc => {
+              const mkt = _ovMktProbs(rc);
+              return {
+                off: mkt.map(p => Math.log(Math.max(p, 1e-6))),
+                X: rc.map(c => _ovFeats.map((k, f) => (c[k] - mean[f]) / sd[f])),
+                win: rc.findIndex(c => c.chaku === 1),
+              };
+            });
+            const w = new Array(F).fill(0);
+            const LR = 1.0, L2 = 0.003, ITERS = 250;
+            for (let it = 0; it < ITERS; it++) {
+              const g = new Array(F).fill(0);
+              for (const { X, win, off } of Z) {
+                let mx = -Infinity;
+                const sc = X.map((x, i) => { let s = off[i]; for (let f = 0; f < F; f++) s += x[f] * w[f]; if (s > mx) mx = s; return s; });
+                let sum = 0;
+                const ex = sc.map(s => { const e = Math.exp(s - mx); sum += e; return e; });
+                for (let i = 0; i < X.length; i++) {
+                  const coef = (i === win ? 1 : 0) - ex[i] / sum;
+                  for (let f = 0; f < F; f++) g[f] += coef * X[i][f];
+                }
+              }
+              for (let f = 0; f < F; f++) w[f] += LR * (g[f] / Z.length - L2 * w[f]);
+            }
+            return { w, mean, sd, feats: _ovFeats, races: races.length };
+          };
+          const _ovPickOffset = (rc, m) => {
+            const mkt = _ovMktProbs(rc);
+            let bi = 0, bs = -Infinity;
+            for (let i = 0; i < rc.length; i++) {
+              let s = Math.log(Math.max(mkt[i], 1e-6));
+              for (let f = 0; f < m.feats.length; f++) s += ((rc[i][m.feats[f]] - m.mean[f]) / m.sd[f]) * m.w[f];
+              if (s > bs) { bs = s; bi = i; }
+            }
+            return bi;
+          };
+          const _ovPickCur = rc => {   // 現行(本番と同じ加算totalScore・実効ML重み)方式との対決用
+            const _cw = getMlLiveWeights();
+            const _ef = k => (_cw && _cw.eff[k] != null) ? _cw.eff[k] : (YOSO_FACTOR_SCALE[k] != null ? YOSO_FACTOR_SCALE[k] : 1);
+            let bi = 0, bs = -Infinity;
+            for (let i = 0; i < rc.length; i++) {
+              const c = rc[i];
+              const s = c.base + c.condNew*_ef('condNew') + c.distNew*_ef('distNew') + c.trendN*_ef('trendN') + c.comboN*_ef('comboN') + c.rotN*_ef('rotN') + c.clsN*_ef('clsN') + c.cornN*_ef('cornN') + c.weightN*_ef('weightN') + c.agariN*_ef('agariN') + c.marginN*_ef('marginN') + c.winStrN*_ef('winStrN') + c.jockeyChgN*_ef('jockeyChgN') + c.takiN*_ef('takiN') + c.cornConsistN*_ef('cornConsistN') + (c.rakuN||0)*_ef('rakuN') + (c.paceCtxN||0)*_ef('paceCtxN');
+              if (s > bs) { bs = s; bi = i; }
+            }
+            return bi;
+          };
+          const _ovEval = (set, pickFn) => {
+            let h1 = 0, h3 = 0, t = 0, bet = 0, ret = 0;
+            for (const rc of set) {
+              if (rc.length < 2) continue;
+              const bi = pickFn(rc);
+              t++; if (rc[bi].chaku === 1) h1++; if (rc[bi].chaku <= 3) h3++;
+              if (rc[bi].odds != null) { bet++; if (rc[bi].chaku === 1) ret += rc[bi].odds * 100; }
+            }
+            return { n: t, win: t ? +(100*h1/t).toFixed(1) : null, fuku: t ? +(100*h3/t).toFixed(1) : null, roi: bet ? +(ret/bet).toFixed(1) : null };
+          };
+
+          // ① 直近10%（最低50R）を完全ホールドアウト＝このセッション中は一度も学習に使わない
+          const _holdN = Math.max(50, Math.round(_ovSorted.length * 0.10));
+          const _preHold = _ovSorted.slice(0, _ovSorted.length - _holdN);
+          const _holdSet = _ovSorted.slice(_ovSorted.length - _holdN);
+
+          // ② pre-hold部分だけをexpanding-window walk-forwardでK-1分割検証（最初の1/Kは訓練専用）
+          const K = 4;
+          const _foldSize = Math.floor(_preHold.length / K);
+          const _wfFolds = [];
+          for (let k = 1; k < K; k++) {
+            const testStart = k * _foldSize;
+            const testEnd = (k === K - 1) ? _preHold.length : (k + 1) * _foldSize;
+            const train = _preHold.slice(0, testStart);
+            const test = _preHold.slice(testStart, testEnd);
+            if (train.length < 100 || test.length < 20) continue;
+            const m = _ovTrain(train);
+            _wfFolds.push({ k, n: test.length, off: _ovEval(test, rc => _ovPickOffset(rc, m)), cur: _ovEval(test, _ovPickCur) });
+          }
+
+          // ③ ホールドアウト評価は一度きり：pre-hold全体で学習→holdoutで1回だけ評価
+          const _holdModel = _ovTrain(_preHold);
+          const _holdOff = _ovEval(_holdSet, rc => _ovPickOffset(rc, _holdModel));
+          const _holdCur = _ovEval(_holdSet, _ovPickCur);
+
+          // ④ 本番採用用：全データ(ホールドアウト含む)で最終学習した係数
+          const _finalModel = _ovTrain(_ovSorted);
+
+          window._offsetModelVal = { wfFolds: _wfFolds, holdOff: _holdOff, holdCur: _holdCur, holdN: _holdSet.length, finalModel: _finalModel };
+
+          const _wfRows = _wfFolds.map(f => `<tr style="border-bottom:1px solid #e2e8f0">
+              <td style="padding:4px 6px;text-align:center;color:#6b7280">fold${f.k}(N=${f.n})</td>
+              <td style="padding:4px 6px;text-align:center">${f.cur.win}%</td>
+              <td style="padding:4px 6px;text-align:center;${f.off.win>f.cur.win?'background:#dcfce7;font-weight:700;color:#15803d':''}">${f.off.win}%</td>
+              <td style="padding:4px 6px;text-align:center">${f.cur.fuku}%</td>
+              <td style="padding:4px 6px;text-align:center;${f.off.fuku>f.cur.fuku?'background:#dcfce7;font-weight:700;color:#15803d':''}">${f.off.fuku}%</td>
+              <td style="padding:4px 6px;text-align:center">${f.cur.roi!=null?f.cur.roi+'%':'—'}</td>
+              <td style="padding:4px 6px;text-align:center;${(f.off.roi!=null&&f.cur.roi!=null&&f.off.roi>f.cur.roi)?'background:#dcfce7;font-weight:700;color:#15803d':''}">${f.off.roi!=null?f.off.roi+'%':'—'}</td>
+            </tr>`).join('');
+          const _wfWins = _wfFolds.filter(f => f.off.fuku >= f.cur.fuku).length;
+          const _canAdopt = _wfFolds.length > 0 && _wfWins >= Math.ceil(_wfFolds.length * 0.75) && _holdOff.fuku >= _holdCur.fuku && _holdOff.win >= _holdCur.win;
+          const _adoptBtn = (typeof isAdminMode === 'function' && isAdminMode())
+            ? `<button type="button" onclick='saveOffsetModelWeights({trainedAt:new Date().toISOString(),races:${_ovSorted.length},feats:${JSON.stringify(_finalModel.feats)},w:${JSON.stringify(_finalModel.w)},mean:${JSON.stringify(_finalModel.mean)},sd:${JSON.stringify(_finalModel.sd)}});alert("市場アンカーモデルを更新しました（全${_ovSorted.length}Rで再学習）");' style="margin-top:6px;padding:5px 12px;background:${_canAdopt?'#7c3aed':'#94a3b8'};color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">🧭 この結果で市場アンカーモデルを更新${_canAdopt?'（基準クリア）':'（基準未達・注意して判断）'}</button>`
+            : '';
+          _offsetValHtml = `<div class="cv-verdict-card" style="margin-top:10px">
+            <div class="cv-verdict-title">🧭 市場アンカーモデル 恒久検証（expanding-window walk-forward＋完全未使用ホールドアウト）</div>
+            <div>ホールドアウト（直近${_holdSet.length}R・学習に一度も使っていない初見データ）：◎勝率 現行${_holdCur.win}%→新${_holdOff.win}%／◎複勝 現行${_holdCur.fuku}%→新${_holdOff.fuku}%／◎単勝回収 現行${_holdCur.roi??'—'}%→新${_holdOff.roi??'—'}%</div>
+            <div class="cv-verdict-note">${_canAdopt ? '✅ walk-forward・ホールドアウトとも新モデルが上回る＝採用基準クリア' : '⚠️ 基準未達（walk-forward複勝勝ちfold ' + _wfWins + '/' + _wfFolds.length + '・ホールドアウトは' + (_holdOff.fuku>=_holdCur.fuku?'○':'×') + '）'}</div>
+          </div>
+          <details class="cv-sec" style="margin-top:6px"><summary>🧭 walk-forward 各foldの詳細</summary><div class="cv-sec-body">
+            <div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:10px;width:100%">
+              <thead><tr style="background:#1a1a2e;color:#fff">
+                <th style="padding:4px 6px" rowspan="2">fold</th><th colspan="2" style="padding:4px 6px">◎勝率</th><th colspan="2" style="padding:4px 6px">◎複勝</th><th colspan="2" style="padding:4px 6px">◎単勝回収</th>
+              </tr><tr style="background:#1a1a2e;color:#fff;font-size:9px">
+                <th style="padding:2px 6px">現行</th><th style="padding:2px 6px">新</th><th style="padding:2px 6px">現行</th><th style="padding:2px 6px">新</th><th style="padding:2px 6px">現行</th><th style="padding:2px 6px">新</th>
+              </tr></thead>
+              <tbody>${_wfRows}</tbody>
+            </table></div>
+            <div style="font-size:10px;color:#374151;margin-top:5px">train=各foldのテスト開始日より前の全レースのみ（未来を混ぜない・オッズ判明レース限定N=${_ovSorted.length}）。現行＝実際の本番ロジック(getMlLiveWeights実効値)。</div>
+          </div></details>
+          ${_adoptBtn}`;
+        } else {
+          _offsetValHtml = `<div style="font-size:11px;color:#9ca3af;margin-top:8px">🧭 市場アンカーモデル検証：オッズ判明レースが${_ovSorted.length}件と少なく検証をスキップしました（200件以上で実行）。</div>`;
+        }
+      } catch (e) { console.warn('[offsetVal]', e); }
 
       // ── 時系列クロスバリデーション（過学習検出） ──
       // scanData を日付順で訓練70%/検証30%に分割。各補正の最適スケールを訓練で決め、
@@ -17932,6 +18222,7 @@ function runYosoBacktest(raceNo) {
           </details>
           ${_cvHtml}
           ${_strictCvHtml}
+          ${_offsetValHtml}
           <details style="font-size:10px;margin-top:6px">
             <summary style="cursor:pointer;color:#6b7280;margin-bottom:4px">🔍 乗り替わり診断</summary>
             <div style="padding:6px 8px;background:#fefce8;border:1px solid #fef08a;border-radius:4px;font-size:11px;color:#713f12">
