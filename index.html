@@ -1686,7 +1686,19 @@ const KV_APP_CSS = [
       '.kr-diff,.kr-pass{color:#64748b;font-size:11px}',
       '.kr-uma{font-weight:700}',
       '.kr-legend{font-size:10.5px;color:#94a3b8;margin-top:5px;display:flex;align-items:center;gap:4px;flex-wrap:wrap}',
-      '.kr-leg-dot{display:inline-block;width:11px;height:11px;border-radius:50%;vertical-align:middle}',
+      // 位置取り：1着赤/2着青/3着黄で通過順の数字を色分け（クラス化＝ダーク対応）
+      '.kr-pos-table .kr-pos-1{color:#dc2626;font-weight:800}',
+      '.kr-pos-table .kr-pos-2{color:#2563eb;font-weight:800}',
+      '.kr-pos-table .kr-pos-3{color:#ca8a04;font-weight:800}',
+      '.kr-legend .kr-pos-1{color:#dc2626}.kr-legend .kr-pos-2{color:#2563eb}.kr-legend .kr-pos-3{color:#ca8a04}',
+      'body.dark-mode .kr-pos-table .kr-pos-1,body.dark-mode .kr-legend .kr-pos-1{color:#f87171!important}',
+      'body.dark-mode .kr-pos-table .kr-pos-2,body.dark-mode .kr-legend .kr-pos-2{color:#60a5fa!important}',
+      'body.dark-mode .kr-pos-table .kr-pos-3,body.dark-mode .kr-legend .kr-pos-3{color:#fbbf24!important}',
+      // 結果テーブル：6着以下の折りたたみボタン
+      '.kr-more-btn{width:100%;margin-top:6px;background:#f4f6fa;border:1px solid #e2e8f0;border-radius:8px;padding:8px;font-size:12px;font-weight:700;color:#475569;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;gap:6px}',
+      '.kr-more-btn:hover{background:#eef2f7}',
+      'body.dark-mode .kr-more-btn{background:#0d1826;border-color:#22344e;color:#94a3b8}',
+      'body.dark-mode .kr-more-btn:hover{background:#132c4a}',
       '.kr-replay-btn{margin-left:auto;background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#fff;border:none;border-radius:7px;padding:5px 12px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px}',
       '.kr-payout-btn{background:linear-gradient(135deg,#dc2626,#b91c1c);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px}',
       '.kr-hint{font-size:11px;color:#94a3b8;margin:6px 0 0}',
@@ -1708,8 +1720,6 @@ const KV_APP_CSS = [
       'body.dark-mode .kr-pay-type{color:#7dd3fc}',
       'body.dark-mode .kr-pay-combo{color:#e2e8f0}',
       'body.dark-mode .kr-pay-yen{color:#f87171}',
-      // 位置取りセルのダーク配色は hsl 生成のため明色固定（読める）→ダークでも視認可
-      'body.dark-mode .kr-pos-table td[style*="hsl"]{filter:brightness(.92)}',
       // スマホ：結果テーブルはフォント微縮小＋馬名幅制限
       '@media(max-width:640px){.kr-table{font-size:11.5px}.kr-table th,.kr-table td{padding:5px 5px}.kr-name{max-width:96px;overflow:hidden;text-overflow:ellipsis}.kr-pay-row{grid-template-columns:52px 1fr auto 44px;font-size:12px}}',
 ];
@@ -5317,8 +5327,8 @@ function renderResultView(raceNo) {
   const _esc = s => String(s || '').replace(/'/g, "\\'");
   const _hasReplay = finished.some(h => String(h.corner || '').indexOf('-') >= 0);
 
-  // ── ① 着順テーブル ──
-  const resultRows = sorted.map(h => `<tr>
+  // ── ① 着順テーブル（最大5着まで表示・残りは折りたたみ）──
+  const _resRow = h => `<tr>
       <td class="kr-chaku"><span class="chakujun-badge ${chakujunClass(h.chakujun)}">${parseInt(h.chakujun)}</span></td>
       <td><span class="waku-badge ${_kvWakuCls(h)}">${h.wakuBan || ''}</span></td>
       <td class="kr-uma">${h.umaBan || '—'}</td>
@@ -5329,36 +5339,42 @@ function renderResultView(raceNo) {
       <td>${h.agari3f || '—'}</td>
       <td>${h.first3f || '—'}</td>
       <td class="kr-pass">${h.corner || '—'}</td>
-    </tr>`).join('') + scratched.map(h => `<tr style="opacity:.5">
+    </tr>`;
+  const _scrRow = h => `<tr style="opacity:.5">
       <td class="kr-chaku" style="font-size:10px">${h.chakujun || '除外'}</td>
       <td><span class="waku-badge ${_kvWakuCls(h)}">${h.wakuBan || ''}</span></td>
       <td class="kr-uma">${h.umaBan || '—'}</td>
       <td class="kr-name">${h.horseName || '—'}</td>
       <td colspan="6"></td>
-    </tr>`).join('');
+    </tr>`;
+  const top5Rows = sorted.slice(0, 5).map(_resRow).join('');
+  const restRows = sorted.slice(5).map(_resRow).join('') + scratched.map(_scrRow).join('');
+  const restCount = sorted.slice(5).length + scratched.length;
   const resultTable = `<div class="table-wrapper" style="overflow-x:auto">
     <table class="kr-table">
       <thead><tr>
         <th>着</th><th>枠</th><th>馬番</th><th style="text-align:left">馬名</th><th style="text-align:left">騎手</th>
         <th>タイム</th><th>着差</th><th>上3F</th><th>前3F</th><th>通過</th>
       </tr></thead>
-      <tbody>${resultRows}</tbody>
+      <tbody>${top5Rows}</tbody>
+      ${restRows ? `<tbody id="kr-rest-${raceNo}" style="display:none">${restRows}</tbody>` : ''}
     </table>
-  </div>`;
+  </div>
+  ${restCount ? `<button type="button" class="kr-more-btn" data-label="残り${restCount}頭を表示（6着以下）" onclick="_kvToggleResultRest(${raceNo},this)"><i class="fas fa-chevron-down"></i> 残り${restCount}頭を表示（6着以下）</button>` : ''}`;
 
-  // ── ② 位置取り表（コーナー通過順位）──
+  // ── ② 位置取り表（コーナー通過順位・1着赤/2着青/3着黄で数字を色分け）──
   const maxC = Math.max(0, ...sorted.map(h => String(h.corner || '').split('-').filter(Boolean).length));
   let posTable = '';
   if (maxC >= 1) {
     const cLabels = maxC >= 4 ? ['1角', '2角', '3角', '4角'] : maxC === 3 ? ['1角', '2角', '3角'] : maxC === 2 ? ['3角', '4角'] : ['4角'];
-    const field = horses.length;
-    const posColor = p => { if (!p) return ''; const r = (p - 1) / Math.max(field - 1, 1); const hue = 140 - r * 140; return `background:hsl(${hue},70%,92%);color:hsl(${hue},60%,28%);font-weight:800`; };
+    const posCls = ch => ch === 1 ? 'kr-pos-1' : ch === 2 ? 'kr-pos-2' : ch === 3 ? 'kr-pos-3' : '';
     const posRows = sorted.map(h => {
       const parts = String(h.corner || '').split('-').filter(Boolean);
+      const cls = posCls(parseInt(h.chakujun));
       const cells = [];
       for (let i = 0; i < maxC; i++) {
         const p = parseInt(parts[i]);
-        cells.push(`<td style="${!isNaN(p) ? posColor(p) : ''}">${!isNaN(p) ? p : '—'}</td>`);
+        cells.push(`<td class="${cls}">${!isNaN(p) ? p : '—'}</td>`);
       }
       return `<tr>
         <td><span class="waku-badge ${_kvWakuCls(h)}">${h.wakuBan || ''}</span></td>
@@ -5377,13 +5393,24 @@ function renderResultView(raceNo) {
           <tbody>${posRows}</tbody>
         </table>
       </div>
-      <div class="kr-legend"><span class="kr-leg-dot" style="background:hsl(140,70%,60%)"></span>前　<span class="kr-leg-dot" style="background:hsl(0,70%,60%)"></span>後 ＝ 各コーナーでの位置（数字は前からの通過順位）</div>`;
+      <div class="kr-legend">数字＝各コーナーでの前からの通過順位。<b class="kr-pos-1">1着</b>・<b class="kr-pos-2">2着</b>・<b class="kr-pos-3">3着</b>馬の数字を色分け。</div>`;
   }
 
   // ── ③ 払戻金 ──
   const payoutHtml = `<div class="kr-section-title">💰 払戻金</div><div id="kr-payout-${raceNo}">${_kvPayoutInner(raceNo)}</div>`;
 
   container.innerHTML = resultTable + posTable + payoutHtml;
+}
+
+/** 結果テーブルの6着以下を開閉 */
+function _kvToggleResultRest(raceNo, btn) {
+  const tb = document.getElementById(`kr-rest-${raceNo}`);
+  if (!tb) return;
+  const hidden = tb.style.display === 'none';
+  tb.style.display = hidden ? '' : 'none';
+  btn.innerHTML = hidden
+    ? '<i class="fas fa-chevron-up"></i> 折りたたむ'
+    : `<i class="fas fa-chevron-down"></i> ${btn.dataset.label}`;
 }
 
 /** 払戻金の内側HTML（キャッシュがあれば表示・なければ取得ボタン） */
@@ -10263,8 +10290,8 @@ function openHorseModal(horseName, raceNo) {
     </div>
   </div>`;
 
-  // 統計カード（好走時馬体重・ローテーション・距離適性・馬場状態） ← 過去成績テーブルの下に表示
-  const statCardsHtml = `<div class="hm-summary" style="margin-top:16px">
+  // 統計カード（好走時馬体重・ローテーション・距離適性・馬場状態） ← モーダル最上部に表示
+  const statCardsHtml = `<div class="hm-summary" style="margin-top:2px">
     ${winWeightsLocal.length?`<div class="hm-stat-card" style="border-color:#f59e0b"><div class="hm-stat-label">⚖️ 好走時平均馬体重</div><div class="hm-stat-value" style="color:#92400e">${avgWinWeight}kg</div><div class="hm-stat-sub">${winWeightsLocal.length}回の3着内平均（高知）</div></div>`:''}
     ${rotationHtml}
     ${distScoreHtml}
@@ -10297,7 +10324,7 @@ function openHorseModal(horseName, raceNo) {
 
   const commentCountOptions = [5, 10, 15, 30, 99];
   const _commentCountKey = '_hmCommentCount_' + horseName.replace(/[\s\u3000]/g,'_');
-  const _initCount = parseInt(sessionStorage.getItem(_commentCountKey)||'10');
+  const _initCount = parseInt(sessionStorage.getItem(_commentCountKey)||'5');
   const commentListId = 'hm-comment-list-' + horseName.replace(/[\s\u3000]/g,'_');
 
   const commentSectionHtml = `
@@ -10318,14 +10345,14 @@ function openHorseModal(horseName, raceNo) {
     ${!allComments.length ? `<div style="font-size:11px;color:#9ca3af;border-top:1px solid #f3f4f6;padding-top:6px;margin-top:4px"><i class="fas fa-info-circle"></i> 出馬表の「レース後コメント取得」ボタンを押すとここに蓄積されます</div>` : ''}
   </div>`;
 
-  // 順序: レース後コメント → 過去成績テーブル → 統計カード（好走時馬体重等）
+  // 順序: 統計カード（好走時馬体重・距離/馬場適性等）→ レース後コメント → 過去成績テーブル
   content.innerHTML = `
     <div id="hm-top-anchor"></div>
+    ${statCardsHtml}
     ${commentSectionHtml}
     <div id="horse-history-capture-area" style="background:#fff;border-radius:8px;padding:4px 0">
       ${histTableHtml}
     </div>
-    ${statCardsHtml}
   `;
   modal.classList.remove('hidden');
 
