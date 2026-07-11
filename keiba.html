@@ -348,7 +348,7 @@ const providers = {
     async loadHistory(horseIds) {
       if (!horseIds.length) return {};
       const idlist = horseIds.map(encodeURIComponent).join(',');
-      const rows = await sbGet(`chihou_results?horse_id=in.(${idlist})&select=horse_id,umaban,finish,pop,first3f,last3f,time_sec,kinryo,sex_age,passing,corner4_pos,comment,time_str,body_weight,jockey,race_id,chihou_races(race_date,distance_m,going,pace,klass,soubi:extra->>馬装具)&order=race_id.desc&limit=2000`);
+      const rows = await sbGet(`chihou_results?horse_id=in.(${idlist})&select=horse_id,umaban,finish,pop,first3f,last3f,time_sec,kinryo,sex_age,passing,corner4_pos,comment,time_str,body_weight,jockey,race_id,chihou_races(race_date,distance_m,going,pace,klass,soubi:extra->>馬装具,laps:extra->laps)&order=race_id.desc&limit=2000`);
       const map = {};
       for (const r of rows) {
         const ra = r.chihou_races || {};
@@ -358,7 +358,7 @@ const providers = {
           f3: r.first3f, l3: r.last3f, tsec: r.time_sec, kin: r.kinryo,
           kyaku: kyakuFromPassing(r.passing), passing: r.passing, c4: r.corner4_pos,
           comment: r.comment, time: r.time_str, weight: r.body_weight, jockey: r.jockey,
-          equip: equipOfRun(ra.soubi, r.umaban),
+          equip: equipOfRun(ra.soubi, r.umaban), laps: ra.laps,
         });
       }
       for (const k in map) {
@@ -786,8 +786,84 @@ function raceHeaderHtml(race, extraBits) {
   </div>`;
 }
 
+// ---- ラップタイム折れ線（南関等・区間ラップのあるレースのみ）。実測 vs 距離平均。上＝速い(反転軸)。 ----
+function lapChartSvg(raceLaps, avgLaps, dist) {
+  const n = raceLaps.length;
+  const useAvg = avgLaps && avgLaps.length === n ? avgLaps : null;
+  const W = 700, H = 260, padL = 44, padR = 16, padT = 14, padB = 34;
+  const allVals = [...raceLaps, ...(useAvg || [])].filter((v) => v != null);
+  const vMin = Math.min(...allVals), vMax = Math.max(...allVals);
+  const pad = (vMax - vMin) * 0.18 || 0.5;
+  const yMin = vMin - pad, yMax = vMax + pad;
+  const x = (i) => padL + (n <= 1 ? 0 : (i / (n - 1)) * (W - padL - padR));
+  const y = (v) => padT + (1 - (v - yMin) / (yMax - yMin)) * (H - padT - padB);   // 反転: 速い(小さい)ほど上
+  const line = (arr, color, dash) => {
+    const pts = arr.map((v, i) => (v != null ? `${x(i)},${y(v).toFixed(1)}` : null)).filter(Boolean).join(' ');
+    const dots = arr.map((v, i) => (v != null ? `<circle cx="${x(i)}" cy="${y(v).toFixed(1)}" r="3.5" fill="${color}"/>` : '')).join('');
+    return `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2.5" ${dash ? 'stroke-dasharray="5,4"' : ''}/>${dots}`;
+  };
+  const ticks = 5;
+  const yAxis = Array.from({ length: ticks + 1 }, (_, k) => {
+    const v = yMax - (k / ticks) * (yMax - yMin);
+    const yy = y(v).toFixed(1);
+    return `<text x="${padL - 8}" y="${+yy + 4}" text-anchor="end" font-size="11" fill="var(--sub)">${v.toFixed(1)}</text>
+      <line x1="${padL}" y1="${yy}" x2="${W - padR}" y2="${yy}" stroke="var(--border)" stroke-width="1" opacity=".35"/>`;
+  }).join('');
+  const xLabels = raceLaps.map((_, i) => `<text x="${x(i).toFixed(1)}" y="${H - padB + 18}" text-anchor="middle" font-size="10" fill="var(--sub)">${(i + 1) * 200}m</text>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:700px;height:auto;display:block">
+    ${yAxis}${xLabels}
+    ${useAvg ? line(useAvg, 'var(--sub)', true) : ''}
+    ${line(raceLaps, 'var(--accent)', false)}
+  </svg>`;
+}
+function lapChartCard(race) {
+  const laps = race.extra && race.extra.laps;
+  if (!laps || laps.length < 2) return '';
+  const avg = state.stats && state.stats.lap_profile && state.stats.lap_profile[String(race.distance_m)];
+  const chart = lapChartSvg(laps, avg && avg.laps, race.distance_m);
+  return `<div class="card">
+    <h3 class="sec" style="margin-top:0">ラップタイム（区間200m毎・実測）</h3>
+    ${chart}
+    <div class="legend"><span style="color:var(--accent)">━</span> このレース　${avg ? `<span style="color:var(--sub)">┅</span> ${state.track}平均(距離${race.distance_m}m・n${avg.n})` : ''}　※縦軸は上ほど速い（時間が短い）。</div>
+  </div>`;
+}
+// 区間ラップ配列を距離のちょうど半分で前半/後半に分割（本数が奇数＝中央の区間は前後に按分）
+function splitHalf(laps) {
+  if (!laps || laps.length < 2) return null;
+  const n = laps.length;
+  const mid = Math.floor(n / 2);
+  let front = laps.slice(0, mid).reduce((a, b) => a + b, 0);
+  let back = laps.slice(n % 2 === 0 ? mid : mid + 1).reduce((a, b) => a + b, 0);
+  if (n % 2 === 1) { const half = laps[mid] / 2; front += half; back += half; }
+  return { front, back };
+}
+// 前後半タイム（各馬・直近5走／区間ラップのあるレースのみ＝主に南関）
+function zenkouhanCard(data, hist) {
+  if (!hist) return '';
+  const rows = (data.results || []).filter((r) => r.horse_id).map((r) => {
+    const hs = (hist[r.horse_id] || []).filter((h) => h.laps && h.laps.length >= 2).slice(0, 5);
+    if (!hs.length) return '';
+    const cells = hs.map((h) => {
+      const sp = splitHalf(h.laps);
+      if (!sp) return '<td class="num">-</td>';
+      const diff = sp.back - sp.front;
+      const style = diff <= -0.3 ? ' style="color:var(--accent)"' : diff >= 0.3 ? ' style="color:var(--sub)"' : '';
+      return `<td class="num"${style}>${sp.front.toFixed(1)}-${sp.back.toFixed(1)}</td>`;
+    }).join('') + '<td></td>'.repeat(5 - hs.length);
+    return `<tr><td class="l stickyname">${esc(r.horse_name || '')}</td>${cells}</tr>`;
+  }).filter(Boolean).join('');
+  if (!rows) return '';
+  return `<div class="card"><h3 class="sec" style="margin-top:0">前後半タイム（各馬・直近5走）</h3>
+  <div class="tablewrap"><table>
+    <tr><th class="stickyname">馬名</th><th>前走</th><th>2走前</th><th>3走前</th><th>4走前</th><th>5走前</th></tr>
+    ${rows}
+  </table></div>
+  <div class="legend">前半タイム-後半タイム（距離をちょうど半分に分割・区間ラップのあるレースのみ集計）。<span style="color:var(--accent)">水色</span>=後半が0.3秒以上速い(後傾)　<span style="color:var(--sub)">グレー</span>=前半が0.3秒以上速い(前傾)。</div>
+  </div>`;
+}
+
 // ---- 成績サブビュー ----
-function seisekiHtml(data, aiMark) {
+function seisekiHtml(data, aiMark, hist) {
   const race = data.race || {};
   const results = (data.results || []).slice();
   if (!results.length) return raceHeaderHtml(race) + '<div class="empty">成績はまだありません（未発走）</div>';
@@ -828,6 +904,7 @@ function seisekiHtml(data, aiMark) {
     </tr>`;
   }).join('');
   return raceHeaderHtml(race) + `
+  ${lapChartCard(race)}
   ${isShort ? '<div class="note">※1200m未満のため「前半3F」列は 距離−600m の前半タイム（1000mならテン2F相当）</div>' : ''}
   <div class="card"><div class="tablewrap">
     <table>
@@ -836,7 +913,8 @@ function seisekiHtml(data, aiMark) {
       ${rows}
     </table>
   </div>
-  <div class="legend"><span class="sw f"></span> 前半3F上位3頭　<span class="sw a"></span> 上り3F上位3頭<br>${TRIP_LEGEND}</div></div>`;
+  <div class="legend"><span class="sw f"></span> 前半3F上位3頭　<span class="sw a"></span> 上り3F上位3頭<br>${TRIP_LEGEND}</div></div>
+  ${zenkouhanCard(data, hist)}`;
 }
 
 // ---- 出馬表サブビュー（keibabook風＋能力表＋調教） ----
@@ -1588,7 +1666,7 @@ async function renderRaceView() {
         .sort((a, b) => b[1] - a[1]);
       const aiMark = new Map();
       scored.forEach(([um], i) => { if (i < MARKS.length) aiMark.set(um, MARKS[i]); });
-      $('raceView').innerHTML = seisekiHtml(data, aiMark);
+      $('raceView').innerHTML = seisekiHtml(data, aiMark, hist);
     } else {
       const meta = (state.dates[state.date] || []).find((r) => r.race_id === raceId) || {};
       const [raceData, entries, cyokyo, nouryoku] = await Promise.all([
