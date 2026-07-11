@@ -1380,17 +1380,13 @@ const KV_APP_CSS = [
       '@media(max-width:1399px){.split-right-panel{display:none;}}',
       // ── 出馬表レース前モード（2026-07-02）：記録列（着順/タイム/上がり/コーナー/前半3F/ペース/位置取り/所属）を隠し、
       //    AI印・オッズ・AIスコア列を表示するnetkeiba風ビュー。deban-preクラスで切替 ──
-      '.deban-table .col-ai,.deban-table .col-ai-solo,.deban-table .col-aiscore,.deban-table .col-odds,.deban-table .col-recent{display:none}',
-      '.deban-table.deban-pre .col-ai,.deban-table.deban-pre .col-ai-solo,.deban-table.deban-pre .col-aiscore,.deban-table.deban-pre .col-odds,.deban-table.deban-pre .col-recent{display:table-cell}',
+      '.deban-table .col-ai,.deban-table .col-aiscore,.deban-table .col-odds,.deban-table .col-recent{display:none}',
+      '.deban-table.deban-pre .col-ai,.deban-table.deban-pre .col-aiscore,.deban-table.deban-pre .col-odds,.deban-table.deban-pre .col-recent{display:table-cell}',
       '.deban-table.deban-pre .col-chakujun,.deban-table.deban-pre .col-belong,.deban-table.deban-pre .col-time,.deban-table.deban-pre .col-agari3f,.deban-table.deban-pre .col-corner,.deban-table.deban-pre .col-3f,.deban-table.deban-pre .col-pace,.deban-table.deban-pre .col-mukae,.deban-table.deban-pre .col-straight{display:none}',
       '.deban-table.deban-pre td{padding:9px 8px}',
       '.deban-table.deban-pre .horse-name{font-size:14px;font-weight:800}',
       '.ai-mark{font-size:17px;font-weight:900;line-height:1}',
       '.ai-r1{color:#dc2626}.ai-r2{color:#2563eb}.ai-r3,.ai-r4{color:#d97706}.ai-rx{color:#6b7280}',
-      // 事前AI印（col-ai-soloセル）：直前印より控えめに・市場込みと食い違う時だけオレンジで強調
-      '.ai-mark-solo{color:#9ca3af;opacity:.85;font-size:15px}',
-      '.ai-mark-solo.ai-mark-diff{color:#ea580c;opacity:1}',
-      '.col-ai-solo{border-right:1px dashed var(--kv-line,#e2e8f0)}',
       '.col-odds{font-family:monospace;font-weight:800;color:#dc2626}',
       '.col-aiscore{font-family:monospace;font-weight:700;color:#7c3aed;white-space:nowrap}',
       '.ai-rank-chip{display:inline-block;background:#ede9fe;color:#7c3aed;border-radius:8px;font-size:9px;font-weight:800;padding:1px 5px;vertical-align:middle;font-family:\'Noto Sans JP\',sans-serif}',
@@ -4620,8 +4616,7 @@ function renderRaceContent(raceNo) {
                 <th class="col-waku sortable"     onclick="sortTable(${raceNo},'waku')"     title="枠番でソート">枠</th>
                 <th class="col-ninki sortable"    onclick="sortTable(${raceNo},'ninki')"    title="人気でソート">人気</th>
                 <th class="col-umano sortable"    onclick="sortTable(${raceNo},'umaBan')"   title="馬番でソート">馬番</th>
-                <th class="col-ai-solo" title="オッズを使わない、AI単独の評価だけの印（発表前に相当・常に不変）">事前印</th>
-                <th class="col-ai" title="単勝オッズが揃うと市場の情報を反映した最新の印に切り替わる（予想AIタブと同一）">直前印</th>
+                <th class="col-ai" title="AI独自の評価による印（予想AIタブと同一）">AI印</th>
                 <th class="col-mymark" title="自分の印（タップで◎○▲△☆✕を切替・✎でメモ・この端末に保存）">マイ印</th>
                 <th class="col-umaname">馬名</th>
                 <th class="col-recent" title="直近5走の着順（左が最新）。クリックで能力表タブへ">近5走</th>
@@ -5031,18 +5026,10 @@ function renderHorseRows(raceNo, horses) {
   const _cy = (typeof computeYosoScored === 'function') ? computeYosoScored(raceNo, null) : null;
   const _AI_MARKS = ['◎', '○', '▲', '△', '×', '×'];
   const _aiMap = {};
-  const _aiSoloMap = {};   // 事前AI印（オッズを使わない・totalScoreのみの順位。2026-07-11）
   if (_cy) {
     _cy.scored.forEach((s, i) => {
       _aiMap[s.horse.horseName] = { mark: _AI_MARKS[i] || '', rank: s.totalScore != null ? i + 1 : null, score: s.totalScore };
     });
-    const _soloSorted = [..._cy.scored].sort((a, b) => {
-      if (a.totalScore == null && b.totalScore == null) return 0;
-      if (a.totalScore == null) return 1;
-      if (b.totalScore == null) return -1;
-      return b.totalScore - a.totalScore;
-    });
-    _soloSorted.forEach((s, i) => { _aiSoloMap[s.horse.horseName] = _AI_MARKS[i] || ''; });
   }
   // 💎PSF妙味：位置構造モデル(PSF)の1位が現行AI◎と不一致なら表示（検証：意見割れ635RでROI112.9%）
   const _psfTop = (typeof computePsfScores === 'function') ? (computePsfScores(raceNo)?.top ?? null) : null;
@@ -5056,8 +5043,6 @@ function renderHorseRows(raceNo, horses) {
     const strCls=horse.shoumenStraight?` pos-val-${posClass(horse.shoumenStraight,'shoumenStraight')}`:'';
     const _ai=_aiMap[horse.horseName]||{mark:'',rank:null,score:null};
     const _aiCls=_ai.rank==null?'ai-rx':_ai.rank<=4?`ai-r${_ai.rank}`:'ai-rx';
-    const _aiSolo=_aiSoloMap[horse.horseName]||'';
-    const _aiSoloDiffers=_cy&&_cy.scored._offsetModelUsed&&_aiSolo&&_ai.mark&&_aiSolo!==_ai.mark;
     const _oddsV=parseFloat(horse.odds);
     // 近5走チップ（PC表の列とスマホカード行の両方で使用）
     const _rfHtml=(()=>{
@@ -5078,7 +5063,6 @@ function renderHorseRows(raceNo, horses) {
       <td class="col-waku"><span class="waku-badge ${wCls}">${horse.wakuBan}</span></td>
       <td class="col-ninki">${horse.ninki?ninkiBadge(horse.ninki):'－'}</td>
       <td class="col-umano"><span class="umano-badge">${horse.umaBan}</span></td>
-      <td class="col-ai-solo">${_aiSolo?`<span class="ai-mark ai-mark-solo${_aiSoloDiffers?' ai-mark-diff':''}">${_aiSolo}</span>`:'<span class="data-empty">—</span>'}</td>
       <td class="col-ai">${_ai.mark?`<span class="ai-mark ${_aiCls}">${_ai.mark}</span>`:'<span class="data-empty">—</span>'}${_psfGem}</td>
       <td class="col-mymark">${kvMyMarkHtml(allRacesData[raceNo]?.raceInfo?.raceDate||'',raceNo,horse.umaBan,false)}</td>
       <td class="col-umaname"><span class="horse-name horse-name-link" onclick="openHorseModal('${_nameEsc}',${raceNo})"><i class="fas fa-history horse-hist-icon"></i>${horse.horseName}</span></td>
@@ -5104,7 +5088,6 @@ function renderHorseRows(raceNo, horses) {
         <div class="spr-l1">
           ${(_raced && _isAdminView)?`<span class="chakujun-badge ${chakujunClass(horse.chakujun)}">${horse.chakujun}</span>`:`<span class="waku-badge ${wCls}">${horse.wakuBan}</span>`}
           <span class="umano-badge">${horse.umaBan}</span>
-          ${_aiSoloDiffers?`<span class="ai-mark ai-mark-solo ai-mark-diff" style="font-size:12px" title="事前AI印（オッズ反映前）">${_aiSolo}→</span>`:''}
           ${_ai.mark?`<span class="ai-mark ${_aiCls}">${_ai.mark}</span>`:''}${_psfGem}
           ${kvMyMarkHtml(allRacesData[raceNo]?.raceInfo?.raceDate||'',raceNo,horse.umaBan,true)}
           <span class="spr-name" onclick="openHorseModal('${_nameEsc}',${raceNo})">${horse.horseName}</span>
@@ -16243,8 +16226,14 @@ function computeYosoScored(raceNo, selCondOverride) {
   }
   scored._offsetModelUsed = _omReady;
 
+  // 【2026-07-13】印の並び順は常にtotalScore（オッズ非依存のAI単独評価）で決定する。
+  // 市場アンカーモデル(aiProb)による並び替えは2026-07-10〜07-12に試験採用していたが、
+  // ホールドアウト検証で「◎的中率はやや上がるが人気馬と同義に近づき、穴馬(単勝10倍+)の
+  // 捕捉率が事前印33%→市場アンカー版25%に低下」「市場との乖離が大きい馬を昇格させる
+  // ハイブリッド案も改善せず」と判明したため、印の並びからは撤去（ユーザー承認2026-07-13）。
+  // aiProb/marketProb自体はcomputeOffsetModelProbsで引き続き算出し、🔭穴馬チェック
+  // (buildLongshotHtml)等の独立したバッジ機能でのみ使用する。
   scored.sort((a, b) => {
-    if (scored._offsetModelUsed && a.totalScore != null && b.totalScore != null) return (b.aiProb || 0) - (a.aiProb || 0);
     if (a.totalScore == null && b.totalScore == null) return 0;
     if (a.totalScore == null) return 1;
     if (b.totalScore == null) return -1;
@@ -16874,33 +16863,6 @@ function renderPredictionPanel(raceNo) {
   const horseScoreMap = {};
   scored.forEach(s => { horseScoreMap[s.horse.horseName] = s.totalScore; });
 
-  // ── AI単独印（2026-07-11）──────────────────────────────────────────
-  // scoredの並び順は、全馬オッズが揃うとtotalScore順からaiProb順（市場アンカー込み）へ切り替わる
-  // （computeYosoScored内・_offsetModelUsed判定）。つまりオッズ発表前後で印が変わりうる。
-  // 「発表前はどうだったか」を常に見えるよう、totalScoreだけの順位（オッズの有無に関わらず不変）
-  // を別途算出し、市場込みの現在印と並べて表示する。
-  const soloMarkMap = {};
-  const soloSorted = [...scored].sort((a, b) => {
-    if (a.totalScore == null && b.totalScore == null) return 0;
-    if (a.totalScore == null) return 1;
-    if (b.totalScore == null) return -1;
-    return b.totalScore - a.totalScore;
-  });
-  soloSorted.forEach((s, idx) => { soloMarkMap[s.horse.horseName] = MARKS[idx] || ''; });
-  const _marksDiffer = scored._offsetModelUsed && scored.some(s => (soloMarkMap[s.horse.horseName]||'') !== (horseMarkMap[s.horse.horseName]||''));
-  let honmeiShiftBadge = '';
-  if (scored._offsetModelUsed) {
-    const soloHonmei = soloSorted.find(s => s.totalScore != null);
-    const curHonmei = scored.find(s => s.totalScore != null);
-    if (soloHonmei && curHonmei && soloHonmei.horse.horseName !== curHonmei.horse.horseName) {
-      honmeiShiftBadge = `<div style="margin-bottom:10px;background:#fff7ed;border:1.5px solid #ea580c;border-radius:8px;padding:7px 12px;font-size:12px;color:#9a3412;font-weight:600">
-        🔀 <b>オッズ反映で本命(◎)が変わりました</b>：事前AI印では<strong>${soloHonmei.horse.horseName}</strong> → 直前AI印では<strong>${curHonmei.horse.horseName}</strong>
-        <button type="button" class="kvi-info" onclick="this.parentElement.classList.toggle('kvi-open')" title="説明を表示">?</button>
-        <span class="kvi-hidden" style="color:#9a3412;opacity:.8;font-size:11px">単勝オッズを市場の情報として取り込むと評価が変わる馬がいます。下表の「事前AI印」列と「直前AI印」列で見比べられます</span>
-      </div>`;
-    }
-  }
-
   let tableHtml = '';
 
   if (_viewMode === 'after' && raceHasResult) {
@@ -16950,9 +16912,6 @@ function renderPredictionPanel(raceNo) {
     const simpleRows = scored.map((s, idx) => {
       const mark = MARKS[idx] || '';
       const mCol = markColors[mark] || '#6b7280';
-      const soloMark = soloMarkMap[s.horse.horseName] || '';
-      const soloMCol = markColors[soloMark] || '#6b7280';
-      const marksDiffer = scored._offsetModelUsed && soloMark !== mark;
       const ts   = s.totalScore != null ? s.totalScore.toFixed(1) : '—';
       const bs   = s.baseScore != null ? s.baseScore.toFixed(1) : '—';
       const noData = s.siCount === 0;
@@ -16963,9 +16922,8 @@ function renderPredictionPanel(raceNo) {
           : '';
       const siNote = s.isEstimatedScore ? '<br><span style="font-size:9px;color:#7c3aed">クラス推定</span>'
         : s.isTransfer ? '<br><span style="font-size:9px;color:#d97706">他場参考</span>' : '';
-      return `<tr style="border-bottom:1px solid #e2e8f0;${noData?'opacity:.55':''}${marksDiffer?'background:#fffbeb;':''}">
-        <td style="padding:9px 4px;text-align:center;font-size:19px;font-weight:900;color:${soloMCol};line-height:1;opacity:.75">${soloMark}</td>
-        <td style="padding:9px 8px;text-align:center;font-size:26px;font-weight:900;color:${mCol};line-height:1">${mark}${marksDiffer?'<div style="font-size:9px;font-weight:700;color:#ea580c">変化</div>':''}</td>
+      return `<tr style="border-bottom:1px solid #e2e8f0;${noData?'opacity:.55':''}">
+        <td style="padding:9px 8px;text-align:center;font-size:26px;font-weight:900;color:${mCol};line-height:1">${mark}</td>
         <td style="padding:9px 6px;text-align:center;font-size:13px;color:#6b7280">${s.horse.umaBan||'—'}</td>
         <td style="padding:9px 8px;font-size:15px;font-weight:700;color:#1a1a2e;white-space:nowrap">${s.horse.horseName||'—'}${transferBadge}</td>
         <td style="padding:9px 8px;font-size:13px;color:#374151;white-space:nowrap">${s.jockey}</td>
@@ -16975,8 +16933,7 @@ function renderPredictionPanel(raceNo) {
     }).join('');
     tableHtml = `<table style="width:100%;border-collapse:collapse;font-size:12px;">
       <thead><tr style="background:#1a1a2e;color:#fff;font-size:11px;">
-        <th style="padding:7px 4px;text-align:center" title="オッズを使わない、AI単独の評価だけで並べた場合の印（発表前に相当・常に不変）">事前<br><span style="font-weight:400;font-size:9px">AI印</span></th>
-        <th style="padding:7px 8px;text-align:center" title="${scored._offsetModelUsed?'単勝オッズ（市場の情報）を反映した最新の印':'オッズ未発表のため事前AI印と同じ'}">直前<br><span style="font-weight:400;font-size:9px">AI印</span></th>
+        <th style="padding:7px 8px;text-align:center" title="オッズを使わない、AI独自の評価で並べた印（発表前後で変わりません）">AI印</th>
         <th style="padding:7px 6px;text-align:center">馬番</th>
         <th style="padding:7px 8px;text-align:left">馬名</th>
         <th style="padding:7px 8px;text-align:left">騎手</th>
@@ -16996,9 +16953,6 @@ function renderPredictionPanel(raceNo) {
     const rows = scored.map((s, idx) => {
       const mark  = MARKS[idx] || '';
       const mCol  = markColors[mark] || '#6b7280';
-      const soloMark = soloMarkMap[s.horse.horseName] || '';
-      const soloMCol = markColors[soloMark] || '#6b7280';
-      const marksDiffer = scored._offsetModelUsed && soloMark !== mark;
       const bs    = s.baseScore != null ? s.baseScore.toFixed(1) : '—';
       const ts    = s.totalScore != null ? s.totalScore.toFixed(1) : '—';
       const jwr   = s.jockeyWR.toFixed(1);
@@ -17035,9 +16989,8 @@ function renderPredictionPanel(raceNo) {
       const cs = getComboStatsAsOf(s.jockey, s.trainer, raceInfo.raceDate, parseInt(raceNo));
       const comboNote = cs && cs.total >= 3 ? `<br><span style="font-size:9px;color:#9ca3af">${cs.total}戦${Math.round(cs.place/cs.total*100)}%</span>` : '<br><span style="font-size:9px;color:#cbd5e1">実績少</span>';
       const col = v => parseFloat(v) >= 0 ? '#15803d' : '#dc2626';
-      return `<tr style="border-bottom:1px solid #e2e8f0;${noData?'opacity:.55':''}${marksDiffer?'background:#fffbeb;':''}">
-        <td style="padding:7px 3px;text-align:center;font-size:16px;font-weight:900;color:${soloMCol};line-height:1;opacity:.75">${soloMark}</td>
-        <td style="padding:7px 8px;text-align:center;font-size:22px;font-weight:900;color:${mCol};line-height:1">${mark}${marksDiffer?'<div style="font-size:8px;font-weight:700;color:#ea580c">変化</div>':''}</td>
+      return `<tr style="border-bottom:1px solid #e2e8f0;${noData?'opacity:.55':''}">
+        <td style="padding:7px 8px;text-align:center;font-size:22px;font-weight:900;color:${mCol};line-height:1">${mark}</td>
         <td style="padding:7px 6px;text-align:center;font-size:12px;color:#6b7280">${umaBan}</td>
         <td style="padding:7px 8px;font-size:13px;font-weight:700;color:#1a1a2e;white-space:nowrap">${s.horse.horseName||'—'}${transferBadge}</td>
         <td style="padding:7px 6px;font-size:12px;color:#374151;white-space:nowrap">${s.jockey}${jStatsKnown?'':' <span style="font-size:9px;color:#ef4444">*</span>'}</td>
@@ -17054,8 +17007,7 @@ function renderPredictionPanel(raceNo) {
     }).join('');
     tableHtml = `<table style="width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap;">
       <thead><tr style="background:#1a1a2e;color:#fff;font-size:11px;">
-        <th style="padding:6px 3px;text-align:center" title="オッズを使わない、AI単独の評価だけで並べた場合の印（発表前に相当・常に不変）">事前<br><span style="font-weight:400;font-size:9px">AI印</span></th>
-        <th style="padding:6px 8px;text-align:center;min-width:32px" title="${scored._offsetModelUsed?'単勝オッズ（市場の情報）を反映した最新の印':'オッズ未発表のため事前AI印と同じ'}">直前<br><span style="font-weight:400;font-size:9px">AI印</span></th>
+        <th style="padding:6px 8px;text-align:center;min-width:32px" title="オッズを使わない、AI独自の評価で並べた印（発表前後で変わりません）">AI印</th>
         <th style="padding:6px 4px;text-align:center">馬番</th>
         <th style="padding:6px 8px;text-align:left">馬名</th>
         <th style="padding:6px 8px;text-align:left">騎手</th>
@@ -17360,11 +17312,6 @@ function renderPredictionPanel(raceNo) {
     ? `<div class="admin-only" style="margin-bottom:8px;font-size:10px;color:#9ca3af">🧠 学習重み適用中（${_mlWNote.races}R学習・${(_mlWNote.trainedAt || '').slice(0, 10)}）— 精度検証の二段基準クリア済み。補正項を学習済み実効倍率で合成しています。</div>`
     : '';
 
-  // 🧭 市場アンカーモデルの使用有無（2026-07-10本採用・全出走馬のオッズが揃うと自動で切り替わる）
-  const marketModelNote = scored._offsetModelUsed
-    ? `<div style="margin-bottom:8px;font-size:10px;color:#0891b2">🧭 単勝オッズの人気度も加味した最新ロジックで印を決めています（オッズ側の「みんなの予想」とAI評価のズレを見て補正）</div>`
-    : (scored.some(s => s.horse.odds) ? '' : `<div style="margin-bottom:8px;font-size:10px;color:#9ca3af">🧭 単勝オッズ発表前のため、AI評価のみで印を暫定表示しています（オッズが出ると自動で見直されます）</div>`);
-
   // ── 🎯 このレースの狙い目カード（◎/中穴妙味/穴/危険を1枚に束ねた見どころ）──
   //    既存バッジが採用した馬（_pickDanger/_pickSleeper/_pickValue）とEVモニターを再利用＝詳細と矛盾しない。
   let pickSummary = '';
@@ -17411,8 +17358,6 @@ function renderPredictionPanel(raceNo) {
     </div>
     ${pickSummary}
     ${mlNote}
-    ${marketModelNote}
-    ${honmeiShiftBadge}
     ${buildEvMonitorHtml(raceNo, container._selCond)}
     ${buildLongshotHtml(scored)}
     ${confidenceBadge}
