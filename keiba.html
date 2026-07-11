@@ -1813,6 +1813,36 @@ function analysisHtml(st) {
       }).join('')}</tr>`).join('')}
     </table><div class="legend">古馬戦を<b>実クラス（C4〜A・オープン）で分けた</b>走破タイム(良)の平均。C4とA級を混ぜないのでクラス毎の時計水準が分かる（右ほど上位＝速い）。空欄はサンプル不足。母数の少ないB/A/OPは別定・ハンデ混在で振れます。</div></div>` : '';
 
+  // クラス別 平均ラップ（区間200m毎・実測。ラップのある場のみ・表示専用＝予想指数には使っていない）
+  const lpc = st.lap_profile_class || {};
+  let lapClassHtml = '';
+  if (Object.keys(lpc).length) {
+    const byDist = {};
+    for (const key in lpc) {
+      const us = key.lastIndexOf('_');
+      const dStr = key.slice(0, us), cls = key.slice(us + 1);
+      (byDist[dStr] = byDist[dStr] || {})[cls] = lpc[key];
+    }
+    const dists = Object.keys(byDist).map(Number).sort((a, b) => a - b);
+    const clsOrder2 = ['C4', 'C3', 'C2', 'C1', 'B', 'A', 'OP'];
+    const tables = dists.map((d) => {
+      const clsPresent = clsOrder2.filter((c) => byDist[d][c]);
+      if (!clsPresent.length) return '';
+      const maxLen = Math.max(...clsPresent.map((c) => byDist[d][c].laps.length));
+      const header = Array.from({ length: maxLen }, (_, i) => `<th>${i + 1}</th>`).join('');
+      const rows = clsPresent.map((c) => {
+        const e = byDist[d][c];
+        const cells = e.laps.map((v) => `<td class="num">${v.toFixed(1)}</td>`).join('');
+        return `<tr><td><b>${c}</b> <span class="small" style="opacity:.6">n${e.n}</span></td>${cells}</tr>`;
+      }).join('');
+      return `<div><h4 class="sec" style="margin:12px 0 4px;font-size:14px">${d}m</h4>
+        <div class="card tablewrap"><table><tr><th>クラス</th>${header}</tr>${rows}</table></div></div>`;
+    }).join('');
+    lapClassHtml = `<h3 class="sec">クラス別 平均ラップ（区間200m毎・実測・表示専用）</h3>
+      <div class="grid2">${tables}</div>
+      <div class="legend">列は1本目(スタート直後)〜最終本(ゴール前)の区間タイム秒。距離が200mの倍数でない場合、1本目だけ200m未満の端数区間になります。<b>上のクラスほど全区間で一貫して速い</b>傾向（絶対的な速さの差）。ただし前傾/後傾＝ペースの流れ方自体はクラスでほぼ変わらないため（検証済）、この差はモデルの予想指数には使わず<b>クラスごとの流れの目安</b>として表示のみ。n=15未満のクラスは非表示。</div>`;
+  }
+
   // 騎手・厩舎（勝率順）
   const rankTable = (obj, label) => {
     const rows = Object.entries(obj).sort((a, b) => b[1].win_rate - a[1].win_rate).slice(0, 30)
@@ -1836,6 +1866,7 @@ function analysisHtml(st) {
   <h3 class="sec">基準タイム（クラス別・走破タイムは分秒の平均。偏差値/指数の土台）</h3>
   ${btByClass}
   ${kobaMatrix}
+  ${lapClassHtml}
   <div class="grid2">${rankTable(st.jockeys, '騎手')}${rankTable(st.trainers, '厩舎')}</div>`;
 }
 
