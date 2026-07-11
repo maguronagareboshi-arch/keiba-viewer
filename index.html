@@ -8573,12 +8573,23 @@ function saveMlLiveWeights(payload) {
 // （穴馬判定に直結する領域）で良好（予測7.2%→実際7.0%等）。分布型走力(上振れ度)は別途検証し
 // 効果確認できず不採用（高sd群ROI71.8% vs 低sd群70.7%・誤差範囲）。
 // KV_OFFSET_MODEL_DEFAULTは2026-07-10時点の全高知データ(3000R)で学習した出荷時係数。
+// 【2026-07-11】16→12特徴量に整理（condNew/winStrN/rakuN削除・rotN+takiNをrotTakiNへ統合）。
+// 根拠：高知全履歴12年13,576R（2014-2026）でexpanding-window walk-forward(3分割)+ホールドアウト検証。
+// 判定は必ず「16特徴量オフセットモデル(B)」対「候補(C)」で行う（旧・加算モデルとの比較は
+// 市場アンカー化そのものの効果が混ざるため判定に使わない＝2026-07-11のユーザー指摘で誤比較を修正）。
+// B↔Cの◎一致率96.5-98.7%（16→12はほぼ同じ馬を選ぶ）。不一致レースを含め◎勝率/複勝/回収の
+// 全指標でCがBを上回り（3fold中3fold・ホールドアウトも）採用基準クリア。「回収率改善モデル」
+// ではなく「同等以上の精度を保った整理」と位置付ける（本質的な回収率の課題は市場アンカー化
+// 自体のA→B効果＝◎勝率+4pt/回収-3.8pt。[[kochi-yoso-market-anchor-model]]参照、購入モデル分離で対応）。
+// condNewは係数ほぼ0、winStrN/rakuNはmarginNと相関0.25-0.46で包含関係
+// （winStrN発火の99.8%はmarginNも発火）、rotN/takiNは同時発火率0.12%でほぼ排他だが
+// takiN単体の係数が小さく単純和(rotTakiN)で同等以上の精度。
 const KV_OFFSET_MODEL_DEFAULT = {
-  trainedAt: '2026-07-10', races: 3000,
-  feats: ['base','condNew','distNew','rotN','clsN','cornN','trendN','weightN','agariN','comboN','marginN','winStrN','jockeyChgN','takiN','cornConsistN','rakuN'],
-  w:    [0.1703, 0.0038, 0.0213, 0.0194, 0.0381, -0.0180, 0.0181, 0.0213, 0.0337, 0.0322, -0.0113, 0.0470, 0.0339, 0.0069, -0.0411, 0.0132],
-  mean: [41.445, 0.008, -0.081, -0.087, -0.018, -0.898, 0.005, -0.032, -1.090, 0.049, 0.001, 0.078, 0.201, 0.035, 0.019, 0.141],
-  sd:   [9.857, 0.797, 0.493, 0.275, 0.346, 1.381, 0.819, 0.106, 0.401, 0.523, 0.451, 0.176, 1.574, 0.141, 0.505, 0.715],
+  trainedAt: '2026-07-11', races: 13576,
+  feats: ['base','distNew','clsN','cornN','trendN','weightN','agariN','comboN','marginN','jockeyChgN','cornConsistN','rotTakiN'],
+  w:    [0.3296, -0.0114, 0.0374, -0.0293, 0.0058, 0.0268, 0.0241, 0.0154, -0.0138, 0.0117, -0.0908, -0.0317],
+  mean: [41.207, -0.074, -0.002, -0.970, -0.027, -0.027, -1.144, 0.035, 0.001, 0.214, 0.005, -0.169],
+  sd:   [9.723, 0.404, 0.382, 1.371, 0.762, 0.096, 0.339, 0.558, 0.448, 1.638, 0.597, 0.403],
 };
 function getOffsetModelWeights() {
   try {
@@ -12225,6 +12236,58 @@ function getDayBiasForDateAndDist(babaCode, raceDate, distStr) {
   return getDayBiasForDate(babaCode, raceDate);
 }
 
+/**
+ * 同日馬場差の先読み監視（軽量ガード）。getDayBiasForDate/getHorseAnchoredBiasは
+ * 指定日の全レースをレース番号無視で集計するため、呼び出し元が「予測対象レースと同じ日」の
+ * バイアスを「未終了の後続レースを含む形」で使うと未来情報リークになる。
+ * 安全基準は biasDate < predictionDate（過去に終了した馬の実績を振り返るだけなら安全）。
+ * 違反時はconsole.errorで警告し、window._AUDIT_DAY_BIAS_STRICT=trueの時のみthrowする
+ * （既定はfalseで非破壊・本番の挙動には影響しない）。
+ */
+function auditDayBias({ predictionDate, predictionRaceNo, biasDate, sourceMaxRaceNo, caller } = {}) {
+  if (biasDate == null || predictionDate == null) return;
+  let msg = null;
+  if (biasDate > predictionDate) {
+    msg = `[auditDayBias] 未来日リーク疑い: biasDate=${biasDate} > predictionDate=${predictionDate} (caller=${caller || '?'})`;
+  } else if (biasDate === predictionDate && sourceMaxRaceNo != null && predictionRaceNo != null && sourceMaxRaceNo >= predictionRaceNo) {
+    msg = `[auditDayBias] 同日後続レース混入疑い: biasDate=${biasDate} sourceMaxRaceNo=${sourceMaxRaceNo} >= predictionRaceNo=${predictionRaceNo} (caller=${caller || '?'})`;
+  }
+  if (msg) {
+    console.error(msg);
+    if (window._AUDIT_DAY_BIAS_STRICT) throw new Error(msg);
+  }
+}
+
+/** auditDayBiasの3ユニットテスト（コンソールでwindow._testAuditDayBias()を実行） */
+window._testAuditDayBias = function() {
+  const results = [];
+  const run = (name, fn) => {
+    let threw = false;
+    const prevStrict = window._AUDIT_DAY_BIAS_STRICT;
+    window._AUDIT_DAY_BIAS_STRICT = true;
+    try { fn(); } catch (e) { threw = true; } finally { window._AUDIT_DAY_BIAS_STRICT = prevStrict; }
+    results.push({ name, threw });
+  };
+  // ① 過去日・その日の全レース使用 → 許可（throwしない）
+  run('past-day-full-usage=allowed', () => auditDayBias({
+    predictionDate: '2026/01/02', predictionRaceNo: 1,
+    biasDate: '2026/01/01', sourceMaxRaceNo: 16, caller: 'test1',
+  }));
+  // ② 予測対象日・終了済みレースのみ使用 → 許可（sourceMaxRaceNo < predictionRaceNo）
+  run('target-day-concluded-only=allowed', () => auditDayBias({
+    predictionDate: '2026/01/02', predictionRaceNo: 4,
+    biasDate: '2026/01/02', sourceMaxRaceNo: 3, caller: 'test2',
+  }));
+  // ③ 予測対象日・後続レース含む → 拒否（throwする）
+  run('target-day-with-later-races=rejected', () => auditDayBias({
+    predictionDate: '2026/01/02', predictionRaceNo: 4,
+    biasDate: '2026/01/02', sourceMaxRaceNo: 16, caller: 'test3',
+  }));
+  const pass = results[0].threw === false && results[1].threw === false && results[2].threw === true;
+  console.log('[_testAuditDayBias]', pass ? 'PASS' : 'FAIL', results);
+  return { pass, results };
+};
+
 /** 指定日・競馬場の当日馬場差を計算（グローバルキャッシュ付き） */
 if (!window._dayBiasCache) window._dayBiasCache = {};
 function getDayBiasForDate(babaCode, raceDate) {
@@ -15178,7 +15241,11 @@ const Yoso = {
 // h は getHorseHistory系が返す過去走エントリ1件（babaCode/raceDate/raceNo/time/distance/
 // raceClass/trackCond/kinryo/first3f/mukaeShoumen/shoumenStraight/fromOfficialを持つ）。
 // useAnchor=trueで馬アンカー馬場差(2026-07-02採用のCV合格版)、falseで当日バイアスのみ。
-function computeHorseSI(h, useAnchor) {
+function computeHorseSI(h, useAnchor, auditCtx) {
+  if (auditCtx) auditDayBias({
+    predictionDate: auditCtx.predictionDate, predictionRaceNo: auditCtx.predictionRaceNo,
+    biasDate: h.raceDate, sourceMaxRaceNo: 16, caller: auditCtx.caller || 'computeHorseSI',
+  });
   const f3Val = parseFloat(h.first3f);
   let bias;
   if (useAnchor) {
@@ -15346,12 +15413,13 @@ function computeYosoScored(raceNo, selCondOverride) {
     const kochiHist = histEx.filter(h => h.babaCode === '31');
     const otherHist = histEx.filter(h => h.babaCode !== '31');
     // 【2026-07-10】computeHorseSI()に統一（③）。ライブ/バックテスト/EV特徴量が同じ関数を呼ぶ。
-    const _siForLive = h => computeHorseSI(h, false);
+    const _siAuditCtx = { predictionDate: thisRaceDate, predictionRaceNo: thisRaceNo };
+    const _siForLive = h => computeHorseSI(h, false, { ..._siAuditCtx, caller: '_siForLive' });
     const { list: recentSI, kochiCount: kochiSICount } = Yoso.buildSIList(kochiHist, otherHist, _siForLive);
     // 馬基準差SI（2026-07-02採用）：ベーススコアの水準補正だけを馬アンカー方式に置換。
     // CVで印全体のランキング品質が改善（ペア整合率4/5fold・勝ち馬捕捉+0.4pt・○▲複勝+0.3pt）。
     // トレンド・勝ち馬強さ・siCount等は検証時の構成どおり従来SI（recentSI）を使い続ける。
-    const _siForLiveAnch = h => computeHorseSI(h, true);
+    const _siForLiveAnch = h => computeHorseSI(h, true, { ..._siAuditCtx, caller: '_siForLiveAnch' });
     let isEstimatedScore = false;
     let isTransfer = kochiSICount === 0 && recentSI.length > 0;
     let baseScore = Yoso.baseFromSIList(Yoso.buildSIList(kochiHist, otherHist, _siForLiveAnch).list) ?? Yoso.baseFromSIList(recentSI);
@@ -15557,13 +15625,18 @@ function computeYosoScored(raceNo, selCondOverride) {
     scored.forEach(s => { s.relSIMod = 0; });
   }
 
-  // ── 市場アンカーモデル（2026-07-10本採用）：印(◎○▲)の順位はこのモデルで決定する ──
-  // 全出走馬のオッズが揃っている時のみ有効。「市場の織り込み済み確率(log)＋各種補正の学習係数」を
-  // レース内softmaxで確率化したものは、3000R expanding-window walk-forward CV・完全未使用の
-  // 直近3ヶ月ホールドアウトの両方で、従来の加算totalScore順より一貫して的中率・回収率が上回ると
-  // 検証済み(◎勝率+6.7pt・◎複勝+5.7pt・◎回収+3.6pt@ホールドアウト)。totalScore自体は内訳表示用に
-  // そのまま残す（表示される数値は変えない。変わるのは印の並び順のみ）。オッズが未発売/不足の間は
+  // ── 市場アンカーモデル（2026-07-10本採用・2026-07-11に16→12特徴量へ整理）──
+  // 印(◎○▲)の順位はこのモデルで決定する。全出走馬のオッズが揃っている時のみ有効。
+  // 「市場の織り込み済み確率(log)＋各種補正の学習係数」をレース内softmaxで確率化したものは、
+  // expanding-window walk-forward CV・完全未使用ホールドアウトの両方で、従来の加算totalScore順
+  // より一貫して的中率・回収率が上回ると検証済み。totalScore自体は内訳表示用にそのまま残す
+  // （表示される数値は変えない。変わるのは印の並び順のみ）。オッズが未発売/不足の間は
   // 従来通りtotalScore順にフォールバックする。
+  // 【2026-07-11 16→12特徴量整理】3135R(直近3年)でユーザー指摘の全項目を個別・複合アブレーション
+  // 検証（expanding-window walk-forward+ホールドアウト）：condNew(係数+0.004でほぼ無風)・
+  // winStrN/rakuN(marginNと相関0.25-0.46で包含関係・削除してもmarginN単独で情報を維持)を削除、
+  // rotN+takiN(同時発火率0.12%でほぼ排他だがtakiN単独価値小)を1本化(rotTakiN)。
+  // 統合12項目は探索5分割中4分割で改善・ホールドアウトも◎勝率/複勝/回収/対数尤度の全指標で改善。
   const _omRunners = scored
     .filter(s => s.totalScore != null)
     .map(s => {
@@ -15571,10 +15644,10 @@ function computeYosoScored(raceNo, selCondOverride) {
       return (!isNaN(o) && o > 0) ? {
         s, odds: o,
         feat: {
-          base: s.baseScore, condNew: s.condMod, distNew: s.distMod, rotN: s.rotMod, clsN: s.classMod,
-          cornN: s._cornModRaw, trendN: s.trendMod, weightN: s.weightMod, agariN: s.agariMod,
-          comboN: s.comboMod, marginN: s.marginMod, winStrN: s.winStrMod, jockeyChgN: s.jockeyChgMod,
-          takiN: s.takiMod, cornConsistN: s.cornConsistMod, rakuN: s.rakuMod,
+          base: s.baseScore, distNew: s.distMod, clsN: s.classMod, cornN: s._cornModRaw,
+          trendN: s.trendMod, weightN: s.weightMod, agariN: s.agariMod, comboN: s.comboMod,
+          marginN: s.marginMod, jockeyChgN: s.jockeyChgMod, cornConsistN: s.cornConsistMod,
+          rotTakiN: s.rotMod + s.takiMod,
         },
       } : null;
     });
@@ -15756,7 +15829,7 @@ function _evHorseFeatures(hName, entry, ctx, maps) {
   const otherPre = preHist.filter(h => h.babaCode !== '31');
 
   // 【2026-07-10】computeHorseSI()に統一（③）。ライブ/バックテストと同じ計算。
-  const _siForBT = h => computeHorseSI(h, false);
+  const _siForBT = h => computeHorseSI(h, false, { predictionDate: raceDate, predictionRaceNo: rNo, caller: '_evHorseFeatures' });
   const { list: siList } = Yoso.buildSIList(kochiPre, otherPre, _siForBT);
   let base = Yoso.baseFromSIList(siList);
   if (base == null) { base = Yoso.estimateTransferScore(preHist, raceCls, hName, maps.officialByHorse); if (base == null) return null; }
@@ -16856,7 +16929,7 @@ function runYosoBacktest(raceNo) {
           const otherPre = preHist.filter(h => h.babaCode !== '31');
 
           // 【2026-07-10】computeHorseSI()に統一（③）。ライブと同じペース/ポジション補正込み。
-          const _siForBT = h => computeHorseSI(h, false);
+          const _siForBT = h => computeHorseSI(h, false, { predictionDate: raceDate, predictionRaceNo: rNo, caller: 'runYosoBacktest' });
           const { list: siList } = Yoso.buildSIList(kochiPre, otherPre, _siForBT);
 
           // SI算出不可でもhistEx/official_*から推定スコアを試す（ライブと同じフォールバック）。
@@ -16870,7 +16943,7 @@ function runYosoBacktest(raceNo) {
 
           // 馬基準差SI実験：水準補正だけを馬アンカー方式に置き換えたベーススコア。
           // 補正項は全て共通のまま＝置換の効果だけを分離して測る（推定スコア馬は同値）。
-          const _siForBTA = h => computeHorseSI(h, true);
+          const _siForBTA = h => computeHorseSI(h, true, { predictionDate: raceDate, predictionRaceNo: rNo, caller: 'runYosoBacktestA' });
           const baseA = _isEstimatedBT ? base : (Yoso.baseFromSIList(Yoso.buildSIList(kochiPre, otherPre, _siForBTA).list) ?? base);
 
 
@@ -17025,7 +17098,7 @@ function runYosoBacktest(raceNo) {
           const _sc = !!entry._scratched;
           const _odds = parseFloat(entry.odds);
           const _ninki = parseInt(entry.ninki);
-          if (!_sc) scanRaceData.push({ chaku, umaBan: parseInt(String(entry._key || '').split('_')[3]) || null, base, baseA, condNew, distNew, rotN, clsN, cornN, trendN, weightN, agariN, comboN, marginN, winStrN, jockeyChgN, takiN, cornConsistN, rakuN, paceCtxN, psfEs, psfG, psfCombo, psfKin, psfWcM, odds: (!isNaN(_odds) && _odds>0) ? _odds : null, ninki: isNaN(_ninki) ? null : _ninki });
+          if (!_sc) scanRaceData.push({ chaku, umaBan: parseInt(String(entry._key || '').split('_')[3]) || null, base, baseA, condNew, distNew, rotN, clsN, cornN, trendN, weightN, agariN, comboN, marginN, winStrN, jockeyChgN, takiN, cornConsistN, rakuN, paceCtxN, rotTakiN: rotN + takiN, psfEs, psfG, psfCombo, psfKin, psfWcM, odds: (!isNaN(_odds) && _odds>0) ? _odds : null, ninki: isNaN(_ninki) ? null : _ninki });
           scoredOld.push({ hName, chaku, score: base + condOld + distOld, _scratched: _sc });
           scoredNew.push({ hName, chaku, score: base + condNew + distNew + rotN + clsN + cornN + trendN + weightN + agariN + comboN + marginN + winStrN + jockeyChgN + takiN + cornConsistN + rakuN, base, _scratched: _sc, _cornN: cornN, _a4c: _a4c, _isTransferBT, _isDebutBT });
         }
@@ -17229,27 +17302,38 @@ function runYosoBacktest(raceNo) {
           .filter(rc => rc.length >= 2 && rc._fullOdds && rc.some(c => c.chaku === 1))
           .sort((a, b) => (a._date < b._date ? -1 : a._date > b._date ? 1 : (a._rno - b._rno)));
         if (_ovSorted.length >= 200) {
-          const _ovFeats = ['base','condNew','distNew','rotN','clsN','cornN','trendN','weightN','agariN','comboN','marginN','winStrN','jockeyChgN','takiN','cornConsistN','rakuN'];
+          // 【2026-07-11②】誤比較の再発防止（ユーザー指摘）：
+          // 「現行」という曖昧なラベルが、実際には常に"旧・加算モデル(getMlLiveWeights)"を指しており、
+          // 「16→12特徴量の効果」を検証しているつもりが「加算→市場アンカー化の効果」まで
+          // 混ぜて比較してしまっていた（全期間再検証で◎複勝+4pt/回収-6.7ptと出たのは実際には
+          // 市場アンカー化そのものの効果で、16→12の純粋な効果は+0.2pt/+0.9ptに過ぎなかった）。
+          // 再発防止のため、比較は必ず「モデル系統(family)」を明示した3本立てにする：
+          //   ①旧・加算モデル(additive・市場アンカー化前の基準) ②市場アンカー・16特徴量(アーキテクチャ基準)
+          //   ③市場アンカー・検証中の特徴量候補(_ovFeats、現在は12項目)
+          // ②③は同じfamily(market_offset)同士なので、この2つの差だけが「特徴量整理の純粋な効果」。
+          const _ovFeats16 = ['base','condNew','distNew','rotN','clsN','cornN','trendN','weightN','agariN','comboN','marginN','winStrN','jockeyChgN','takiN','cornConsistN','rakuN'];
+          const _ovFeats = ['base','distNew','clsN','cornN','trendN','weightN','agariN','comboN','marginN','jockeyChgN','cornConsistN','rotTakiN'];
           const _ovMktProbs = rc => {
             const invs = rc.map(c => c.odds > 0 ? 1 / c.odds : 0);
             const sum = invs.reduce((a, b) => a + b, 0);
             return invs.map(v => sum > 0 ? v / sum : 1 / rc.length);
           };
           // 条件付きロジット（オフセット固定・特徴量の係数だけ学習）。既存_mlTrainと同じ勾配上昇だが、
-          // 各馬のスコアに market log-prob を固定オフセットとして足す点だけが違う。
-          const _ovTrain = races => {
-            const F = _ovFeats.length;
+          // 各馬のスコアに market log-prob を固定オフセットとして足す点だけが違う。feats引数で
+          // 特徴量セットを外から指定できるようにし、16特徴量版・候補版の両方に使い回す。
+          const _ovTrain = (races, feats) => {
+            const F = feats.length;
             const mean = new Array(F).fill(0), sd = new Array(F).fill(0);
             let n = 0;
-            for (const rc of races) for (const c of rc) { n++; for (let f = 0; f < F; f++) mean[f] += c[_ovFeats[f]]; }
+            for (const rc of races) for (const c of rc) { n++; for (let f = 0; f < F; f++) mean[f] += c[feats[f]]; }
             for (let f = 0; f < F; f++) mean[f] /= n;
-            for (const rc of races) for (const c of rc) for (let f = 0; f < F; f++) { const d = c[_ovFeats[f]] - mean[f]; sd[f] += d * d; }
+            for (const rc of races) for (const c of rc) for (let f = 0; f < F; f++) { const d = c[feats[f]] - mean[f]; sd[f] += d * d; }
             for (let f = 0; f < F; f++) { sd[f] = Math.sqrt(sd[f] / n); if (!sd[f]) sd[f] = 1; }
             const Z = races.map(rc => {
               const mkt = _ovMktProbs(rc);
               return {
                 off: mkt.map(p => Math.log(Math.max(p, 1e-6))),
-                X: rc.map(c => _ovFeats.map((k, f) => (c[k] - mean[f]) / sd[f])),
+                X: rc.map(c => feats.map((k, f) => (c[k] - mean[f]) / sd[f])),
                 win: rc.findIndex(c => c.chaku === 1),
               };
             });
@@ -17269,7 +17353,7 @@ function runYosoBacktest(raceNo) {
               }
               for (let f = 0; f < F; f++) w[f] += LR * (g[f] / Z.length - L2 * w[f]);
             }
-            return { w, mean, sd, feats: _ovFeats, races: races.length };
+            return { w, mean, sd, feats, races: races.length, family: 'market_offset', featureCount: F };
           };
           const _ovPickOffset = (rc, m) => {
             const mkt = _ovMktProbs(rc);
@@ -17281,7 +17365,9 @@ function runYosoBacktest(raceNo) {
             }
             return bi;
           };
-          const _ovPickCur = rc => {   // 現行(本番と同じ加算totalScore・実効ML重み)方式との対決用
+          // 旧・加算モデル(family=additive・市場アンカー化以前のtotalScoreロジック)。
+          // 【重要】比較相手を選ぶ時、これを暗黙に「現行」と呼ばない。必ずfamilyを明示する。
+          const _ovPickAdditive = rc => {
             const _cw = getMlLiveWeights();
             const _ef = k => (_cw && _cw.eff[k] != null) ? _cw.eff[k] : (YOSO_FACTOR_SCALE[k] != null ? YOSO_FACTOR_SCALE[k] : 1);
             let bi = 0, bs = -Infinity;
@@ -17302,6 +17388,21 @@ function runYosoBacktest(raceNo) {
             }
             return { n: t, win: t ? +(100*h1/t).toFixed(1) : null, fuku: t ? +(100*h3/t).toFixed(1) : null, roi: bet ? +(ret/bet).toFixed(1) : null };
           };
+          // 16特徴量オフセット vs 候補オフセットの◎一致率・不一致レースのみの成績（16→12の純粋な効果）
+          const _ovAgreement = (set, m16, mC) => {
+            let same = 0, diff = 0, hit16 = 0, hit12 = 0, bet16 = 0, ret16 = 0, betC = 0, retC = 0;
+            for (const rc of set) {
+              const b16 = _ovPickOffset(rc, m16), bC = _ovPickOffset(rc, mC);
+              if (b16 === bC) { same++; continue; }
+              diff++;
+              if (rc[b16].chaku === 1) hit16++; if (rc[bC].chaku === 1) hit12++;
+              if (rc[b16].odds != null) { bet16++; if (rc[b16].chaku===1) ret16 += rc[b16].odds*100; }
+              if (rc[bC].odds != null) { betC++; if (rc[bC].chaku===1) retC += rc[bC].odds*100; }
+            }
+            return { same, diff, agreeRate: +(same/(same+diff)*100).toFixed(1),
+              switched16: { n: diff, win: diff?+(100*hit16/diff).toFixed(1):null, roi: bet16?+(ret16/bet16).toFixed(1):null },
+              switchedC: { n: diff, win: diff?+(100*hit12/diff).toFixed(1):null, roi: betC?+(retC/betC).toFixed(1):null } };
+          };
 
           // ① 直近10%（最低50R）を完全ホールドアウト＝このセッション中は一度も学習に使わない
           const _holdN = Math.max(50, Math.round(_ovSorted.length * 0.10));
@@ -17318,50 +17419,69 @@ function runYosoBacktest(raceNo) {
             const train = _preHold.slice(0, testStart);
             const test = _preHold.slice(testStart, testEnd);
             if (train.length < 100 || test.length < 20) continue;
-            const m = _ovTrain(train);
-            _wfFolds.push({ k, n: test.length, off: _ovEval(test, rc => _ovPickOffset(rc, m)), cur: _ovEval(test, _ovPickCur) });
+            const m16 = _ovTrain(train, _ovFeats16);
+            const mC = _ovTrain(train, _ovFeats);
+            _wfFolds.push({
+              k, n: test.length,
+              additive: _ovEval(test, _ovPickAdditive),
+              off16: _ovEval(test, rc => _ovPickOffset(rc, m16)),
+              offC: _ovEval(test, rc => _ovPickOffset(rc, mC)),
+              agree: _ovAgreement(test, m16, mC),
+            });
           }
 
           // ③ ホールドアウト評価は一度きり：pre-hold全体で学習→holdoutで1回だけ評価
-          const _holdModel = _ovTrain(_preHold);
-          const _holdOff = _ovEval(_holdSet, rc => _ovPickOffset(rc, _holdModel));
-          const _holdCur = _ovEval(_holdSet, _ovPickCur);
+          const _holdModel16 = _ovTrain(_preHold, _ovFeats16);
+          const _holdModelC = _ovTrain(_preHold, _ovFeats);
+          const _holdAdditive = _ovEval(_holdSet, _ovPickAdditive);
+          const _hold16 = _ovEval(_holdSet, rc => _ovPickOffset(rc, _holdModel16));
+          const _holdC = _ovEval(_holdSet, rc => _ovPickOffset(rc, _holdModelC));
+          const _holdAgree = _ovAgreement(_holdSet, _holdModel16, _holdModelC);
 
-          // ④ 本番採用用：全データ(ホールドアウト含む)で最終学習した係数
-          const _finalModel = _ovTrain(_ovSorted);
+          // ④ 本番採用用：全データ(ホールドアウト含む)で最終学習した係数（検証中の特徴量候補で）
+          const _finalModel = _ovTrain(_ovSorted, _ovFeats);
 
-          window._offsetModelVal = { wfFolds: _wfFolds, holdOff: _holdOff, holdCur: _holdCur, holdN: _holdSet.length, finalModel: _finalModel };
+          window._offsetModelVal = {
+            wfFolds: _wfFolds, holdAdditive: _holdAdditive, hold16: _hold16, holdC: _holdC,
+            holdAgree: _holdAgree, holdN: _holdSet.length, finalModel: _finalModel,
+          };
 
           const _wfRows = _wfFolds.map(f => `<tr style="border-bottom:1px solid #e2e8f0">
               <td style="padding:4px 6px;text-align:center;color:#6b7280">fold${f.k}(N=${f.n})</td>
-              <td style="padding:4px 6px;text-align:center">${f.cur.win}%</td>
-              <td style="padding:4px 6px;text-align:center;${f.off.win>f.cur.win?'background:#dcfce7;font-weight:700;color:#15803d':''}">${f.off.win}%</td>
-              <td style="padding:4px 6px;text-align:center">${f.cur.fuku}%</td>
-              <td style="padding:4px 6px;text-align:center;${f.off.fuku>f.cur.fuku?'background:#dcfce7;font-weight:700;color:#15803d':''}">${f.off.fuku}%</td>
-              <td style="padding:4px 6px;text-align:center">${f.cur.roi!=null?f.cur.roi+'%':'—'}</td>
-              <td style="padding:4px 6px;text-align:center;${(f.off.roi!=null&&f.cur.roi!=null&&f.off.roi>f.cur.roi)?'background:#dcfce7;font-weight:700;color:#15803d':''}">${f.off.roi!=null?f.off.roi+'%':'—'}</td>
+              <td style="padding:4px 6px;text-align:center">${f.additive.roi!=null?f.additive.roi+'%':'—'}</td>
+              <td style="padding:4px 6px;text-align:center">${f.off16.roi!=null?f.off16.roi+'%':'—'}</td>
+              <td style="padding:4px 6px;text-align:center;${(f.offC.roi!=null&&f.off16.roi!=null&&f.offC.roi>f.off16.roi)?'background:#dcfce7;font-weight:700;color:#15803d':''}">${f.offC.roi!=null?f.offC.roi+'%':'—'}</td>
+              <td style="padding:4px 6px;text-align:center;color:#6b7280">${f.agree.agreeRate}%</td>
             </tr>`).join('');
-          const _wfWins = _wfFolds.filter(f => f.off.fuku >= f.cur.fuku).length;
-          const _canAdopt = _wfFolds.length > 0 && _wfWins >= Math.ceil(_wfFolds.length * 0.75) && _holdOff.fuku >= _holdCur.fuku && _holdOff.win >= _holdCur.win;
+          const _cWins = _wfFolds.filter(f => f.offC.fuku >= f.off16.fuku).length;
+          const _canAdopt = _wfFolds.length > 0 && _cWins >= Math.ceil(_wfFolds.length * 0.75) && _holdC.fuku >= _hold16.fuku && _holdC.win >= _hold16.win;
           const _adoptBtn = (typeof isAdminMode === 'function' && isAdminMode())
-            ? `<button type="button" onclick='saveOffsetModelWeights({trainedAt:new Date().toISOString(),races:${_ovSorted.length},feats:${JSON.stringify(_finalModel.feats)},w:${JSON.stringify(_finalModel.w)},mean:${JSON.stringify(_finalModel.mean)},sd:${JSON.stringify(_finalModel.sd)}});alert("市場アンカーモデルを更新しました（全${_ovSorted.length}Rで再学習）");' style="margin-top:6px;padding:5px 12px;background:${_canAdopt?'#7c3aed':'#94a3b8'};color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">🧭 この結果で市場アンカーモデルを更新${_canAdopt?'（基準クリア）':'（基準未達・注意して判断）'}</button>`
+            ? `<button type="button" onclick='saveOffsetModelWeights({trainedAt:new Date().toISOString(),races:${_ovSorted.length},feats:${JSON.stringify(_finalModel.feats)},w:${JSON.stringify(_finalModel.w)},mean:${JSON.stringify(_finalModel.mean)},sd:${JSON.stringify(_finalModel.sd)}});alert("市場アンカーモデルを更新しました（全${_ovSorted.length}R・${_finalModel.featureCount}特徴量で再学習）");' style="margin-top:6px;padding:5px 12px;background:${_canAdopt?'#7c3aed':'#94a3b8'};color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">🧭 この結果で市場アンカーモデルを更新（${_finalModel.featureCount}特徴量）${_canAdopt?'（基準クリア）':'（基準未達・注意して判断）'}</button>`
             : '';
           _offsetValHtml = `<div style="font-size:12px;font-weight:800;color:#1a1a2e;margin-bottom:6px">🧭 現在のモデル評価（最新・最も信頼できる検証結果）</div>
           <div class="cv-verdict-card">
-            <div class="cv-verdict-title">🧭 市場アンカーモデル（現在使用中の印判定ロジック）</div>
-            <div>ホールドアウト（直近${_holdSet.length}R・一度も学習に使っていない初見データで検証）：◎勝率 旧方式${_holdCur.win}%→現行${_holdOff.win}%／◎複勝 旧方式${_holdCur.fuku}%→現行${_holdOff.fuku}%／◎単勝回収 旧方式${_holdCur.roi??'—'}%→現行${_holdOff.roi??'—'}%</div>
-            <div class="cv-verdict-note">${_canAdopt ? '✅ 総合スコア方式（旧）より明確に上回っている＝現行のまま運用継続で問題なし' : '⚠️ 基準未達（walk-forward複勝勝ちfold ' + _wfWins + '/' + _wfFolds.length + '・ホールドアウトは' + (_holdOff.fuku>=_holdCur.fuku?'○':'×') + '）。下の再学習ボタンで最新データに更新すると改善する可能性があります。'}</div>
+            <div class="cv-verdict-title">🧭 市場アンカーモデル 特徴量候補の検証</div>
+            <div style="font-size:10px;color:#6b7280;margin-bottom:4px">
+              A＝旧・加算モデル(family:additive) ／ B＝市場アンカー・16特徴量(family:market_offset, n=16, 参考基準) ／
+              C＝市場アンカー・検証中の候補(family:market_offset, n=${_finalModel.featureCount}, feats=${_finalModel.feats.join(',')})
+            </div>
+            <div>ホールドアウト（直近${_holdSet.length}R・一度も学習に使っていない初見データ）：
+              ◎勝率 A${_holdAdditive.win}%／B${_hold16.win}%／C${_holdC.win}%
+              ◎複勝 A${_holdAdditive.fuku}%／B${_hold16.fuku}%／C${_holdC.fuku}%
+              ◎単勝回収 A${_holdAdditive.roi??'—'}%／B${_hold16.roi??'—'}%／C${_holdC.roi??'—'}%
+            </div>
+            <div style="font-size:11px;color:#6b7280;margin-top:4px">B↔C の◎一致率：${_holdAgree.agreeRate}%（不一致${_holdAgree.diff}R）。
+              A↔B（加算→市場アンカー化）の差と、B↔C（特徴量整理そのものの差）を混同しないこと。</div>
+            <div class="cv-verdict-note">${_canAdopt ? '✅ B(16特徴量)よりCが複勝・勝率とも上回る＝特徴量整理として採用可' : '⚠️ 基準未達（walk-forward複勝勝ちfold ' + _cWins + '/' + _wfFolds.length + '・ホールドアウトは' + (_holdC.fuku>=_hold16.fuku?'○':'×') + '）'}</div>
           </div>
-          <details class="cv-sec" style="margin-top:6px"><summary>🧭 walk-forward 各foldの詳細</summary><div class="cv-sec-body">
+          <details class="cv-sec" style="margin-top:6px"><summary>🧭 walk-forward 各foldの詳細（◎単勝回収率＋B↔C一致率）</summary><div class="cv-sec-body">
             <div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:10px;width:100%">
               <thead><tr style="background:#1a1a2e;color:#fff">
-                <th style="padding:4px 6px" rowspan="2">fold</th><th colspan="2" style="padding:4px 6px">◎勝率</th><th colspan="2" style="padding:4px 6px">◎複勝</th><th colspan="2" style="padding:4px 6px">◎単勝回収</th>
-              </tr><tr style="background:#1a1a2e;color:#fff;font-size:9px">
-                <th style="padding:2px 6px">旧方式</th><th style="padding:2px 6px">現行</th><th style="padding:2px 6px">旧方式</th><th style="padding:2px 6px">現行</th><th style="padding:2px 6px">旧方式</th><th style="padding:2px 6px">現行</th>
+                <th style="padding:4px 6px">fold</th><th style="padding:4px 6px">A 加算(回収)</th><th style="padding:4px 6px">B 16特徴量(回収)</th><th style="padding:4px 6px">C 候補(回収)</th><th style="padding:4px 6px">B↔C一致率</th>
               </tr></thead>
               <tbody>${_wfRows}</tbody>
             </table></div>
-            <div style="font-size:10px;color:#374151;margin-top:5px">train=各foldのテスト開始日より前の全レースのみ（未来を混ぜない・オッズ判明レース限定N=${_ovSorted.length}）。旧方式＝総合スコアの加算順（getMlLiveWeights実効値・今回の市場アンカーモデル導入前のロジック）。</div>
+            <div style="font-size:10px;color:#374151;margin-top:5px">train=各foldのテスト開始日より前の全レースのみ（未来を混ぜない・オッズ判明レース限定N=${_ovSorted.length}）。Aは参考列（市場アンカー化そのものの効果を切り分けて見るため）。判定はB(16特徴量)とC(候補)の比較のみで行う。</div>
           </div></details>
           ${_adoptBtn}`;
         } else {
