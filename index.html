@@ -2630,6 +2630,25 @@ function _kvParseHash() {
 }
 let _kvNavFromPop = false; // popstate起因のページ遷移では履歴へ積まない（restoreFromSaved経由のswitchPage対策）
 
+// ══ 閲覧者の公開範囲（2026-07-11導入・段階公開）══
+// 閲覧者に見せる出馬表は「今週（月曜0時以降）の開催日」のみ。過去の出馬表はまだ公開しない。
+// 管理者（書き込みトークン保有端末）は全期間閲覧できる。
+// 対象＝出馬表（開催日一覧・レース表示・検索取得・ディープリンク）。
+// 分析・馬場傾向などの集計ページは個別レースの出馬表ではないため対象外。
+function _kvViewerDateAllowed(date) {
+  try {
+    if (typeof isAdminMode === 'function' && isAdminMode()) return true;
+    if (!date) return false;
+    const d = new Date(String(date).replace(/\//g, '-') + 'T00:00:00');
+    if (isNaN(d)) return false;
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - ((now.getDay() + 6) % 7)); // 今週の月曜0時
+    return d >= monday;
+  } catch (e) { return false; }
+}
+const _KV_PAST_HIDDEN_MSG = '過去の出馬表は現在公開していません（今週の開催のみ閲覧できます）';
+
 // ブラウザ戻る/進むの処理
 function _initNavHistory() {
   if (_navReady) return;
@@ -2648,7 +2667,7 @@ function _initNavHistory() {
       // ② state無し（手入力のハッシュ変更等）→ ハッシュから直接復元を試みる
       if (!e.state) {
         const dl = _kvParseHash();
-        if (dl) {
+        if (dl && _kvViewerDateAllowed(dl.date)) {
           try {
             restoreFromSaved(dl.date, '31', true);
             if (dl.raceNo && allRacesData[dl.raceNo]) switchRaceTab(dl.raceNo);
@@ -3235,6 +3254,15 @@ document.addEventListener('DOMContentLoaded', () => {
 function _kvTryDeepLink() {
   const dl = window._kvDeepLink;
   if (!dl) return false;
+  // 閲覧者に公開していない過去日へのリンク→ハッシュを消して通常起動（本日モード）へ
+  if (!_kvViewerDateAllowed(dl.date)) {
+    window._kvDeepLink = null;
+    try { history.replaceState(history.state, '', location.pathname + location.search); } catch(e) {}
+    const st = document.getElementById('save-status');
+    if (st) { st.textContent = '🔒 ' + _KV_PAST_HIDDEN_MSG; setTimeout(() => { st.textContent = ''; }, 6000); }
+    try { kvTodayMode(); } catch(e) {}
+    return true;
+  }
   const lsData = lsRead();
   const has = Object.values(lsData).some(v => v.type === 'race' && v.race_date === dl.date && v.baba_code === '31');
   if (!has) return false;
@@ -3299,6 +3327,7 @@ async function fetchAllRaces() {
   const baba = document.getElementById('baba-code').value;
   if (!dateRaw) { alert('日付を選択してください'); return; }
   const newDate = dateRaw.replace(/-/g,'/');
+  if (!_kvViewerDateAllowed(newDate)) { alert(_KV_PAST_HIDDEN_MSG); return; }
   if (newDate !== currentDate || baba !== currentBaba) { allRacesData = {}; clearRaceTabs(); }
   currentDate = newDate; currentBaba = baba;
   hideError(); showLoading(false); showProgress(true);
@@ -3997,6 +4026,7 @@ async function fetchDebaTableRace(raceDate, raceNo, babaCode) {
 
 async function fetchDebaTableSingle(raceDate, raceNo, babaCode) {
   const newDate = raceDate.replace(/-/g,'/');
+  if (!_kvViewerDateAllowed(newDate)) { alert(_KV_PAST_HIDDEN_MSG); return; }
   if (newDate !== currentDate || babaCode !== currentBaba) { allRacesData = {}; clearRaceTabs(); }
   currentDate = newDate; currentBaba = babaCode;
   showLoading(true); hideError();
@@ -9645,9 +9675,12 @@ function renderDebanDateList() {
   if (!el) return;
   buildSavedGroups();
   const DOW = ['日','月','火','水','木','金','土'];
-  const groups = (_savedGroups || []).filter(g => g.baba === '31');
+  // 閲覧者には今週の開催日のみ表示（過去の出馬表は段階公開のためまだ出さない）
+  const groups = (_savedGroups || []).filter(g => g.baba === '31' && _kvViewerDateAllowed(g.date));
   if (!groups.length) {
-    el.innerHTML = '<p style="color:#9ca3af;font-size:13px;line-height:1.8">保存済みの高知データがありません。<br>「検索」タブで開催日を取得すると、ここに一覧が出ます。</p>';
+    el.innerHTML = (typeof isAdminMode === 'function' && isAdminMode())
+      ? '<p style="color:#9ca3af;font-size:13px;line-height:1.8">保存済みの高知データがありません。<br>「検索」タブで開催日を取得すると、ここに一覧が出ます。</p>'
+      : '<p style="color:#9ca3af;font-size:13px;line-height:1.8">今週の出馬表はまだ準備中です。<br>開催日が近づくとここに表示されます。</p>';
     return;
   }
   const byYm = {};
@@ -9770,6 +9803,7 @@ function _gotoAnaForDay() {
 }
 
 function restoreFromSaved(date, baba, silent) {
+  if(!_kvViewerDateAllowed(date)){if(!silent)alert(_KV_PAST_HIDDEN_MSG);return;}
   const lsData=lsRead();
   const raceEntries=Object.entries(lsData).filter(([,v])=>v.type==='race'&&v.race_date===date&&v.baba_code===baba).sort((a,b)=>(a[1].race_no||0)-(b[1].race_no||0));
   if(!raceEntries.length){if(!silent)alert('このデータには出走表情報が見つかりません。\n「再取得」でkeiba.go.jpから読み込んでください。');return;}
