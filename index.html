@@ -2590,9 +2590,17 @@ function switchPage(pageId, _fromPop) {
   if (typeof toggleKbnMore === 'function') toggleKbnMore(false);
   window.scrollTo(0, 0);
   _currentPage = pageId;
-  // 履歴へ積む（戻るボタン由来の呼び出し時は積まない＝二重化防止）
-  if (_navReady && !_fromPop) {
-    try { history.pushState({ kvPage: pageId }, ''); } catch(e) {}
+  // 履歴へ積む（戻るボタン由来の呼び出し時は積まない＝二重化防止）。
+  // 出馬表ページではURLハッシュに日付/レース番号を反映し、他ページではハッシュを消す。
+  if (_navReady && !_fromPop && !_kvNavFromPop) {
+    try {
+      const _onDeban = pageId === 'deban' && typeof currentDate !== 'undefined' && currentDate && currentBaba === '31' && currentRaceNo;
+      history.pushState(
+        { kvPage: pageId, kvDate: (typeof currentDate !== 'undefined' && currentDate) || null, kvRace: (typeof currentRaceNo !== 'undefined' && currentRaceNo) || null },
+        '',
+        _onDeban ? _kvHashFor(currentDate, currentRaceNo) : (location.pathname + location.search)
+      );
+    } catch(e) {}
   }
   // 分析ページに切り替えたとき自動レンダリング
   if (pageId === 'bunseki') { setTimeout(() => { try { renderAnalysis(); } catch(e){} }, 0); }
@@ -2604,6 +2612,23 @@ function switchPage(pageId, _fromPop) {
   if (pageId === 'psfhist') { setTimeout(() => { try { renderPsfHistory(); } catch(e){} }, 0); }
   if (pageId === 'bets')    { setTimeout(() => { try { renderBetsPage(); } catch(e){} }, 0); }
 }
+
+// ══ URLハッシュルーティング（最小版・2026-07-11導入）══
+// 形式: #d/2026-07-11/9（開催日＋レース番号・高知固定）。
+// 書き込みは「出馬表ページでレースを開いている時」だけ。他ページではハッシュを消す。
+// 管理者モード等の状態は絶対にURLへ載せない（共有リンクから管理UIを推測されないため）。
+function _kvHashFor(date, raceNo) {
+  if (!date) return location.pathname + location.search;
+  return '#d/' + String(date).replace(/\//g, '-') + (raceNo ? '/' + raceNo : '');
+}
+function _kvParseHash() {
+  const m = (location.hash || '').match(/^#d\/(\d{4})-(\d{2})-(\d{2})(?:\/(\d{1,2}))?$/);
+  if (!m) return null;
+  const raceNo = m[4] ? parseInt(m[4]) : null;
+  if (raceNo != null && (raceNo < 1 || raceNo > 12)) return null;
+  return { date: `${m[1]}/${m[2]}/${m[3]}`, raceNo };
+}
+let _kvNavFromPop = false; // popstate起因のページ遷移では履歴へ積まない（restoreFromSaved経由のswitchPage対策）
 
 // ブラウザ戻る/進むの処理
 function _initNavHistory() {
@@ -2618,9 +2643,32 @@ function _initNavHistory() {
       try { history.pushState({ kvPage: _currentPage }, ''); } catch(err) {}
       return;
     }
-    // ② ページ状態を復元（戻る＝1つ前のページへ）
-    const st = e.state || {};
-    switchPage(st.kvPage || 'search', true);
+    _kvNavFromPop = true;
+    try {
+      // ② state無し（手入力のハッシュ変更等）→ ハッシュから直接復元を試みる
+      if (!e.state) {
+        const dl = _kvParseHash();
+        if (dl) {
+          try {
+            restoreFromSaved(dl.date, '31', true);
+            if (dl.raceNo && allRacesData[dl.raceNo]) switchRaceTab(dl.raceNo);
+            switchPage('deban', true);
+          } catch(err) {}
+          return;
+        }
+      }
+      // ③ ページ状態を復元（戻る＝1つ前のページへ。日付・レースも状態にあれば戻す）
+      const st = e.state || {};
+      try {
+        if (st.kvDate && st.kvDate !== currentDate) {
+          restoreFromSaved(st.kvDate, '31', true);
+          if (st.kvRace && allRacesData[st.kvRace]) switchRaceTab(st.kvRace);
+        } else if (st.kvRace && st.kvRace !== currentRaceNo && allRacesData[st.kvRace]) {
+          switchRaceTab(st.kvRace);
+        }
+      } catch(err) {}
+      switchPage(st.kvPage || 'search', true);
+    } finally { _kvNavFromPop = false; }
   });
 }
 
@@ -3176,10 +3224,25 @@ document.addEventListener('DOMContentLoaded', () => {
   const t = new Date();
   document.getElementById('race-date').value =
     `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+  // ディープリンク（#d/YYYY-MM-DD/N）があれば起動後に該当レースを開く（initDB内で消費）
+  try { window._kvDeepLink = _kvParseHash(); } catch(e) { window._kvDeepLink = null; }
   _initNavHistory();
   initDB();
   loadWeeklySchedule();
 });
+
+/** ディープリンクの消費を試みる。データ未到着ならfalse（Phase2完了後に再試行される）。 */
+function _kvTryDeepLink() {
+  const dl = window._kvDeepLink;
+  if (!dl) return false;
+  const lsData = lsRead();
+  const has = Object.values(lsData).some(v => v.type === 'race' && v.race_date === dl.date && v.baba_code === '31');
+  if (!has) return false;
+  window._kvDeepLink = null;
+  restoreFromSaved(dl.date, '31', true);
+  if (dl.raceNo && allRacesData[dl.raceNo]) switchRaceTab(dl.raceNo);
+  return true;
+}
 
 function injectStyles() {
   if(document.getElementById('kv-styles') || document.getElementById('kv-styles-injected')) return;
@@ -4168,6 +4231,7 @@ function rebuildAllTabs() { document.getElementById('race-tabs').innerHTML=''; O
 function switchRaceTab(raceNo) {
   currentRaceNo=raceNo;
   document.querySelectorAll('.race-tab').forEach(b=>b.classList.toggle('active',parseInt(b.dataset.raceNo)===raceNo));
+  _kvSyncRaceHash(raceNo);
   const area=document.getElementById('race-content-area');
   area.querySelectorAll('[data-race-section]').forEach(el=>el.style.display='none');
   const existing=document.getElementById(`race-section-${raceNo}`);
@@ -4175,6 +4239,23 @@ function switchRaceTab(raceNo) {
   renderRaceContent(raceNo);
   updateRaceSummaryBar(raceNo);
   try{renderDebanBias();}catch(e){}
+}
+
+// レース切替時にURLハッシュを更新（replace＝レース切替では履歴を積まない。
+// 戻るボタンはページ単位の遷移に対応し、URLは常に現在のレースを指す＝共有・リロード用）
+function _kvSyncRaceHash(raceNo) {
+  try {
+    if (!_navReady || _kvNavFromPop) return;
+    if (_currentPage !== 'deban') return;
+    if (typeof currentDate === 'undefined' || !currentDate || currentBaba !== '31') return;
+    // 現在の履歴エントリが「別の日付」のものならreplaceしない
+    // （日付切替時にrestoreFromSaved→switchRaceTabが先に走ると、前の日付のエントリを
+    //   上書きしてしまい日付間の「戻る」が壊れるため。新しい日付のURLは直後の
+    //   switchPage('deban')のpushStateが正しく積む）
+    const _st = history.state;
+    if (_st && _st.kvDate && _st.kvDate !== currentDate) return;
+    history.replaceState({ kvPage: 'deban', kvDate: currentDate, kvRace: raceNo }, '', _kvHashFor(currentDate, raceNo));
+  } catch(e) {}
 }
 
 function renderRaceContent(raceNo) {
@@ -7402,8 +7483,13 @@ async function initDB() {
   // ── Phase 1 完了 → 即描画（アプリが操作可能に） ──
   loadSavedData();
   if(typeof initAnalysisDateSelect==='function') initAnalysisDateSelect();
-  // 本日モード：開催日当日は本日の出馬表へ直行（1セッション1回）
-  setTimeout(() => { try { kvTodayMode(); } catch (e) { console.warn('[kvTodayMode]', e); } }, 0);
+  // ディープリンクがあればそちらを優先（本日モードより先。データ未到着ならPhase2後に再試行）
+  setTimeout(() => {
+    try {
+      if (window._kvDeepLink) { _kvTryDeepLink(); }
+      else { kvTodayMode(); }
+    } catch (e) { console.warn('[kvTodayMode/deepLink]', e); }
+  }, 0);
 
   // ── Phase 2: 残りを背景で取得（await しない＝UIをブロックしない） ──
   (async () => {
@@ -7424,6 +7510,8 @@ async function initDB() {
     _setBgLoadIndicator(false);
     loadSavedData();
     if(typeof initAnalysisDateSelect==='function') initAnalysisDateSelect();
+    // Phase1時点でデータ未到着だったディープリンクの再試行（古い開催日のリンク対応）
+    try { if (window._kvDeepLink) _kvTryDeepLink(); } catch(e) {}
     // 1400m戦の前半3Fを上がり4Fから一括補完（全データ揃った後に実行）
     const _bfCount = backfillFirst3fFrom1400m();
     // 自動ペースラベル（基準比ベース・paceTypeAuto）＋前後半差ペース(paceType)を補完。手入力のpaceTypeは保持
@@ -9681,10 +9769,10 @@ function _gotoAnaForDay() {
   setTimeout(() => { try { renderAnalysis(); } catch (e) {} }, 0);
 }
 
-function restoreFromSaved(date, baba) {
+function restoreFromSaved(date, baba, silent) {
   const lsData=lsRead();
   const raceEntries=Object.entries(lsData).filter(([,v])=>v.type==='race'&&v.race_date===date&&v.baba_code===baba).sort((a,b)=>(a[1].race_no||0)-(b[1].race_no||0));
-  if(!raceEntries.length){alert('このデータには出走表情報が見つかりません。\n「再取得」でkeiba.go.jpから読み込んでください。');return;}
+  if(!raceEntries.length){if(!silent)alert('このデータには出走表情報が見つかりません。\n「再取得」でkeiba.go.jpから読み込んでください。');return;}
   if(date!==currentDate||baba!==currentBaba){allRacesData={};clearRaceTabs();}
   currentDate=date;currentBaba=baba;
   document.getElementById('race-date').value=date.replace(/\//g,'-');
