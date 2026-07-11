@@ -10036,6 +10036,8 @@ function restoreFromSaved(date, baba, silent) {
   // 馬0頭で保存されたレース（パース不具合期にレース情報だけ保存された残骸）はライブ再取得で埋める
   const _emptyRns = Object.keys(allRacesData).map(Number).filter(rn => !allRacesData[rn].horses.length);
   if (_emptyRns.length) _refetchEmptyRaces(date, baba, _emptyRns);
+  // 当日カードは保存スナップショットが古い可能性があるため、全レースを背景でライブ最新化
+  _kvRefreshTodayAllRaces(date, baba);
 }
 
 // 保存に馬が無いレースをライブ再取得して差し替える（restoreFromSavedの補修）
@@ -10067,6 +10069,47 @@ async function _refetchEmptyRaces(date, baba, rns) {
     } catch(e) {}
   }
   if (st) { st.textContent = fixed ? `✅ 保存に馬が無かった ${fixed}レースを再取得しました` : ''; setTimeout(()=>{ if(st.textContent.startsWith('✅')) st.textContent=''; }, 4000); }
+}
+
+// 当日データの自動最新化（2026-07-12 ユーザー指摘）：restoreFromSavedは保存済み
+// （＝過去の取得時点）のスナップショットを表示するため、前日以前に取り込んだデータの
+// ままだと馬場状態やオッズが古く見える。当日のカードを開いた時、バックグラウンドで
+// 全レースをライブ再取得（fetchOneRace＝DebaTable/RaceMarkTableからオッズ・馬場状態・
+// 確定結果を含めて最新化）し、メモ/ペース/ラップ等の入力値は保持する。日付ごとに
+// セッション内1回のみ（既存のsettle-fetchティッカーが以後の継続的な最新化を担う）。
+const _kvTodayBulkRefreshed = {};
+async function _kvRefreshTodayAllRaces(date, baba) {
+  if (date !== _kvTodaySlash() || baba !== '31') return;
+  const key = `${date}_${baba}`;
+  if (_kvTodayBulkRefreshed[key]) return;
+  _kvTodayBulkRefreshed[key] = true;
+  const rns = Object.keys(allRacesData).map(Number).sort((a, b) => a - b);
+  const CONCURRENCY = 2, GAP = 500;
+  for (let i = 0; i < rns.length; i += CONCURRENCY) {
+    if (date !== currentDate || baba !== currentBaba) return;   // 別の日へ移ったら中止
+    const batch = rns.slice(i, i + CONCURRENCY);
+    await Promise.all(batch.map(async rn => {
+      try {
+        const result = await fetchOneRace(date, rn, baba);
+        if (date !== currentDate || baba !== currentBaba) return;
+        if (result && result.horses && result.horses.length) {
+          const prev = allRacesData[rn];
+          if (prev && prev.raceInfo) {
+            result.raceInfo.memo = prev.raceInfo.memo || result.raceInfo.memo;
+            result.raceInfo.paceType = prev.raceInfo.paceType || result.raceInfo.paceType;
+            if (prev.raceInfo.lapTimes && prev.raceInfo.lapTimes.some(v => v != null)) result.raceInfo.lapTimes = prev.raceInfo.lapTimes;
+          }
+          _sanDeep(result);
+          allRacesData[rn] = result;
+          document.getElementById(`race-section-${rn}`)?.remove();
+          if (currentRaceNo === rn) { switchRaceTab(rn); try { renderPredictionPanel(rn); } catch (e) {} }
+          _kvOddsAutoLast[rn] = Date.now();
+          _kvSetOddsAutoNote(rn, '自動更新');
+        }
+      } catch (e) { console.warn('[today bulk refresh]', rn, e); }
+    }));
+    if (i + CONCURRENCY < rns.length) await new Promise(r => setTimeout(r, GAP));
+  }
 }
 
 async function deleteSavedDay(event, date, baba) {
@@ -10708,6 +10751,19 @@ function toggleCommentVisible(checked, raceNo) {
   }
 }
 
+// 馬モーダルの距離適性/馬場状態スコアカード：高知のみ⇔他場を含む全成績のトグル表示
+function _hmToggleTrackScope(btn) {
+  const card = btn.closest('.hm-stat-card');
+  if (!card) return;
+  const kochiEl = card.querySelector('.hm-scope-kochi');
+  const allEl = card.querySelector('.hm-scope-all');
+  if (!kochiEl || !allEl) return;
+  const showingAll = allEl.style.display !== 'none';
+  kochiEl.style.display = showingAll ? '' : 'none';
+  allEl.style.display = showingAll ? 'none' : '';
+  btn.textContent = showingAll ? '他場を含める' : '高知のみに戻す';
+}
+
 function openHorseModal(horseName, raceNo) {
   // 表示中レースより後の結果は「過去成績」に含めない（未来の結果混入バグ対策）。
   // レース文脈が取れない場合（保存データ経由等）は従来通り全履歴を表示する。
@@ -10827,20 +10883,14 @@ function openHorseModal(horseName, raceNo) {
     </div>`;
   })();
 
-  // 距離適性スコア（高知のみ = ローカル保存成績から）
+  // 高知限定履歴（2026-07-12：距離適性/馬場状態スコアが他場成績を含んでいたバグ修正。
+  //   historyはgetHorseHistory経由でoffi_接頭辞の全国成績＝JRA/他地方競馬場も含むため、
+  //   babaCode==='31'で絞り込む。他場成績はボタンで開閉表示する）
+  const _hmHistKochi = history.filter(h => h.babaCode === '31');
+  const _hmHasOtherTrack = history.some(h => h.babaCode !== '31');
+
+  // 距離適性スコア（既定=高知のみ／トグルで他場込みに切替）
   const distScoreHtml = (()=>{
-    const distMap = {};
-    history.forEach(h=>{
-      const distNum = getDistNum(h.distance); if(!distNum)return;
-      const distKey = distNum + 'm';  // 正規化: "1300"/"1300m" → "1300m"
-      if(!distMap[distKey]) distMap[distKey]={wins:0,places:0,runs:0,distNum};
-      distMap[distKey].runs++;
-      const c=parseInt(h.chakujun)||999;
-      if(c<=3) distMap[distKey].places++;
-      if(c===1) distMap[distKey].wins++;
-    });
-    const entries = Object.entries(distMap).sort((a,b)=>b[1].runs-a[1].runs);
-    if(!entries.length) return '';
     const scoreLabel = r => {
       if(r>=0.6) return{label:'S',bg:'#7c3aed',fg:'#fff'};
       if(r>=0.4) return{label:'A',bg:'#1d4ed8',fg:'#fff'};
@@ -10848,36 +10898,48 @@ function openHorseModal(horseName, raceNo) {
       return{label:'C',bg:'#6b7280',fg:'#fff'};
     };
     const curDistNum2 = getDistNum(allRacesData[raceNo||currentRaceNo]?.raceInfo?.distance||'');
-    const rows2 = entries.map(([distKey,s])=>{
-      const r = s.runs>0?s.places/s.runs:0;
-      const sc=scoreLabel(r);
-      const isCur = curDistNum2 && s.distNum === curDistNum2;
-      return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;${isCur?'font-weight:700;background:#fef9c3;margin:0 -4px;padding:3px 4px;border-radius:4px':''}">
-        <span style="background:${sc.bg};color:${sc.fg};font-weight:800;font-size:12px;padding:1px 7px;border-radius:10px;min-width:24px;text-align:center">${sc.label}</span>
-        <span style="font-size:12px;min-width:54px">${distKey}</span>
-        <span style="font-size:11px;color:#374151">${s.places}/${s.runs}走</span>
-        <div style="flex:1;height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round(r*100)}%;background:${sc.bg};border-radius:3px"></div></div>
-        <span style="font-size:11px;color:#6b7280;min-width:28px;text-align:right">${Math.round(r*100)}%</span>
-      </div>`;
-    }).join('');
+    const buildRows = histList => {
+      const distMap = {};
+      histList.forEach(h=>{
+        const distNum = getDistNum(h.distance); if(!distNum)return;
+        const distKey = distNum + 'm';  // 正規化: "1300"/"1300m" → "1300m"
+        if(!distMap[distKey]) distMap[distKey]={wins:0,places:0,runs:0,distNum};
+        distMap[distKey].runs++;
+        const c=parseInt(h.chakujun)||999;
+        if(c<=3) distMap[distKey].places++;
+        if(c===1) distMap[distKey].wins++;
+      });
+      const entries = Object.entries(distMap).sort((a,b)=>b[1].runs-a[1].runs);
+      if(!entries.length) return '';
+      return entries.map(([distKey,s])=>{
+        const r = s.runs>0?s.places/s.runs:0;
+        const sc=scoreLabel(r);
+        const isCur = curDistNum2 && s.distNum === curDistNum2;
+        return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;${isCur?'font-weight:700;background:#fef9c3;margin:0 -4px;padding:3px 4px;border-radius:4px':''}">
+          <span style="background:${sc.bg};color:${sc.fg};font-weight:800;font-size:12px;padding:1px 7px;border-radius:10px;min-width:24px;text-align:center">${sc.label}</span>
+          <span style="font-size:12px;min-width:54px">${distKey}</span>
+          <span style="font-size:11px;color:#374151">${s.places}/${s.runs}走</span>
+          <div style="flex:1;height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round(r*100)}%;background:${sc.bg};border-radius:3px"></div></div>
+          <span style="font-size:11px;color:#6b7280;min-width:28px;text-align:right">${Math.round(r*100)}%</span>
+        </div>`;
+      }).join('');
+    };
+    const rowsKochi = buildRows(_hmHistKochi);
+    if(!rowsKochi && !_hmHasOtherTrack) return '';
+    const rowsAll = _hmHasOtherTrack ? buildRows(history) : '';
     return `<div class="hm-stat-card" style="min-width:200px;flex:2">
-      <div class="hm-stat-label">🎯 距離適性スコア（高知）</div>
-      <div style="margin-top:4px">${rows2}</div>
+      <div class="hm-stat-label" style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+        <span>🎯 距離適性スコア（高知）</span>
+        ${_hmHasOtherTrack?`<button type="button" onclick="_hmToggleTrackScope(this)" style="font-size:9px;padding:1px 6px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;color:#64748b;cursor:pointer;white-space:nowrap;font-weight:600">他場を含める</button>`:''}
+      </div>
+      <div class="hm-scope-kochi" style="margin-top:4px">${rowsKochi || '<div style="font-size:11px;color:#9ca3af;padding:3px 0">高知での出走履歴なし</div>'}</div>
+      ${_hmHasOtherTrack?`<div class="hm-scope-all" style="margin-top:4px;display:none">${rowsAll}</div>`:''}
     </div>`;
   })();
 
-  // 馬場状態スコア（良/稍重/重/不良ごとの3着内率。今日の馬場状態をハイライト）
+  // 馬場状態スコア（良/稍重/重/不良ごとの3着内率。今日の馬場状態をハイライト。既定=高知のみ）
   const trackScoreHtml = (()=>{
     const ORDER = ['良','稍重','重','不良'];
-    const tmap = {};
-    history.forEach(h=>{
-      const t = (h.trackCond||'').trim(); if(!ORDER.includes(t)) return;
-      if(!tmap[t]) tmap[t]={places:0,runs:0};
-      tmap[t].runs++;
-      if((parseInt(h.chakujun)||999)<=3) tmap[t].places++;
-    });
-    const entries = ORDER.filter(t=>tmap[t]);
-    if(!entries.length) return '';
     const scoreLabel = r => {
       if(r>=0.6) return{label:'S',bg:'#7c3aed'};
       if(r>=0.4) return{label:'A',bg:'#1d4ed8'};
@@ -10885,22 +10947,40 @@ function openHorseModal(horseName, raceNo) {
       return{label:'C',bg:'#6b7280'};
     };
     const curCond = (allRacesData[raceNo||currentRaceNo]?.raceInfo?.trackCond||'').trim();
-    const rowsT = entries.map(t=>{
-      const s = tmap[t];
-      const r = s.runs>0?s.places/s.runs:0;
-      const sc = scoreLabel(r);
-      const isCur = curCond && t===curCond;
-      return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;${isCur?'font-weight:700;background:#fef9c3;margin:0 -4px;padding:3px 4px;border-radius:4px':''}">
-        <span style="background:${sc.bg};color:#fff;font-weight:800;font-size:12px;padding:1px 7px;border-radius:10px;min-width:24px;text-align:center">${sc.label}</span>
-        <span style="font-size:12px;min-width:40px">${t}${isCur?'<span style="font-size:9px;color:#b45309">（本日）</span>':''}</span>
-        <span style="font-size:11px;color:#374151">${s.places}/${s.runs}走</span>
-        <div style="flex:1;height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round(r*100)}%;background:${sc.bg};border-radius:3px"></div></div>
-        <span style="font-size:11px;color:#6b7280;min-width:28px;text-align:right">${Math.round(r*100)}%</span>
-      </div>`;
-    }).join('');
+    const buildRows = histList => {
+      const tmap = {};
+      histList.forEach(h=>{
+        const t = (h.trackCond||'').trim(); if(!ORDER.includes(t)) return;
+        if(!tmap[t]) tmap[t]={places:0,runs:0};
+        tmap[t].runs++;
+        if((parseInt(h.chakujun)||999)<=3) tmap[t].places++;
+      });
+      const entries = ORDER.filter(t=>tmap[t]);
+      if(!entries.length) return '';
+      return entries.map(t=>{
+        const s = tmap[t];
+        const r = s.runs>0?s.places/s.runs:0;
+        const sc = scoreLabel(r);
+        const isCur = curCond && t===curCond;
+        return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;${isCur?'font-weight:700;background:#fef9c3;margin:0 -4px;padding:3px 4px;border-radius:4px':''}">
+          <span style="background:${sc.bg};color:#fff;font-weight:800;font-size:12px;padding:1px 7px;border-radius:10px;min-width:24px;text-align:center">${sc.label}</span>
+          <span style="font-size:12px;min-width:40px">${t}${isCur?'<span style="font-size:9px;color:#b45309">（本日）</span>':''}</span>
+          <span style="font-size:11px;color:#374151">${s.places}/${s.runs}走</span>
+          <div style="flex:1;height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round(r*100)}%;background:${sc.bg};border-radius:3px"></div></div>
+          <span style="font-size:11px;color:#6b7280;min-width:28px;text-align:right">${Math.round(r*100)}%</span>
+        </div>`;
+      }).join('');
+    };
+    const rowsKochi = buildRows(_hmHistKochi);
+    if(!rowsKochi && !_hmHasOtherTrack) return '';
+    const rowsAll = _hmHasOtherTrack ? buildRows(history) : '';
     return `<div class="hm-stat-card" style="min-width:200px;flex:2">
-      <div class="hm-stat-label">🌧 馬場状態スコア（高知・3着内率）</div>
-      <div style="margin-top:4px">${rowsT}</div>
+      <div class="hm-stat-label" style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+        <span>🌧 馬場状態スコア（高知・3着内率）</span>
+        ${_hmHasOtherTrack?`<button type="button" onclick="_hmToggleTrackScope(this)" style="font-size:9px;padding:1px 6px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;color:#64748b;cursor:pointer;white-space:nowrap;font-weight:600">他場を含める</button>`:''}
+      </div>
+      <div class="hm-scope-kochi" style="margin-top:4px">${rowsKochi || '<div style="font-size:11px;color:#9ca3af;padding:3px 0">高知での出走履歴なし</div>'}</div>
+      ${_hmHasOtherTrack?`<div class="hm-scope-all" style="margin-top:4px;display:none">${rowsAll}</div>`:''}
     </div>`;
   })();
 
