@@ -8687,6 +8687,17 @@ const SHADOW_FREEZE_CONFIG = {
   pass_rule: 'ROI>100% かつ 日単位95%CI下限>=100% → 合格候補',
   continue_rule: '(ROI>110% かつ CI下限<100%) または ROI 90〜110% → 400件まで継続',
   fail_rule: 'ROI<90% → 不合格候補。設定変更・漏洩発覚 → 全件無効・バージョン更新',
+  // 【2026-07-11④ 逐次判定ルール（シャドーデータ0件の時点で制定＝事前登録・以後変更しない）】
+  // 通常の信頼区間を50件ごとに覗くと誤判定が増えるため、anytime-validな
+  // empirical-Bernstein信頼列(Waudby-Smith & Ramdas 2023)を採用。実装と動作特性シミュレーションは
+  // 他場/scraper/eval_shadow.py（シミュレーション結果: 真ROI170%相当でPASS到達23%/400件・
+  // 誤PASS 0%・誤STOP 0.2%＝保守的で、CSがPASSに届かないこと自体は不合格を意味しない。
+  // 最終判定の主役は400件時点の日単位ブートストラップのまま）。
+  sequential_method: 'empirical-Bernstein CS (WSR 2023, predictable plug-in), X=payout/stake∈[0,30], α=0.05両側',
+  sequential_checkpoints: '決済50件ごと(50,100,...,400)。返還はnに含めない。',
+  sequential_pass: 'CS下限>1.0がどこかのチェックポイントで成立 → 早期の合格候補（最終確認は400件ブートストラップ）',
+  sequential_stop: 'n>=100かつCS上限<1.0 → 早期の不合格候補',
+  sequential_final: '400件で従来の判定表を日単位ブートストラップで適用（400件で不明確なら保留判定とし、延長はしない）',
 };
 
 /**
