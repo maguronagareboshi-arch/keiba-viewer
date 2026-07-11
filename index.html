@@ -8641,27 +8641,50 @@ const SHADOW_PURCHASE_MODEL = {
   },
 };
 
-// 凍結チェックリスト（購入判定ルール一式）。coefだけでなくmean/sd込みでハッシュ化。
+// 凍結チェックリスト（購入判定ルール一式）。ハッシュ対象はcoef/mean/sdだけでなく、欠損補完値
+// (0)・切片なしという設計・温度=1・オッズ正規化式・EV計算式・tie-break規則・適格条件も含む
+// （2026-07-11②ユーザー指摘：係数が同じでも運用ルールが変われば別モデル）。基準時計表
+// (STANDARD_TIMES)・クラス対応表(YOSO_CLASS_RANK)はモデル固有ではなくアプリ全体で共有される
+// 定数のため、ここでは再ハッシュせずcode_commit_shaでの提供を根拠とする。
 // 途中で1項目でも変更したら新しいversionを切り、シャドー件数は0から数え直すこと。
 const SHADOW_FREEZE_CONFIG = {
   shadow_model_version: 'shadow_v1',
-  additive_coef_hash: 'sha256:214a0a9d85163dbc6b0f66bdc45d13838f465b087f902eb5990d9f38a9131ab',
-  offset_coef_hash: 'sha256:9a5bf077429c87d17b7cf414cd3f42044a2ae432a6ae3adbe0d3b5db3a78686',
-  feature_schema_hash: 'sha256:a4febbf90e25a062f588a51bca520346005b8eecd216d144f3175f167c9b337',
-  code_commit_sha: '7354f0b', // SHADOW_PURCHASE_MODEL/SHADOW_FREEZE_CONFIG導入コミット
+  additive_coef_hash: 'sha256:a6b0394a9fb57aa22942960e6a2f0d5fb8d4806212bc2188305f4ad1b903e72',
+  offset_coef_hash: 'sha256:bafdc63b31f5fde242bc4f739e4e6357e88c172fc950064d9bd5ba4a69fcc83',
+  feature_schema_hash: 'sha256:c15e91b01ca36765d42026a6f8e3eb9f4f26d9c54eb604c296cf273fca7cfa3',
+  code_commit_sha: '8b6870b', // service_role専用書込み+ハッシュ拡張コミット
   trained_through: '2026-07-05',
-  freeze_timestamp: '2026-07-11T02:57:39Z',
-  odds_source: 'keiba.go.jp（発走10分前スナップショット）',
-  odds_cutoff_minutes: 10,
+  freeze_timestamp: '2026-07-11T02:57:39Z', // モデル・係数を固定した時刻
+  shadow_start_at: null, // 本番デプロイ完了・Supabaseテーブル作成・自動記録疎通確認・
+                          // テストレースの予測記録が全て完了した時刻を確定後に設定する。
+                          // race_start > shadow_start_atのレースのみ前向き集計の対象とする
+                          // （freeze_timestampとは意図的に分離：freeze時点ではDB/自動記録が
+                          // 未稼働だったため、freeze_timestampをそのまま開始時刻にはできない）。
+  odds_source: 'keiba.go.jp（OddsTanFukuページ・発走時刻付き）',
+  odds_cutoff_minutes: 10, // odds_observed_at <= scheduled_start_at - 10分を厳守。
+                            // 9分前以内のデータは使用禁止（capture_shadow.pyのMIN_BEFOREで実装）。
   odds_min: 5,
   odds_max: 30,
   ev_additive_min: 0,
   ev_offset_min: 0,
   max_bets_per_race: 1,
-  tie_break: 'min(EV_additive, EV_offset) が最大の1頭',
+  tie_break: 'argmax over eligible horses of min(EV_additive, EV_offset)',
   virtual_stake: 100,
   jockeyChgN: 'disabled',
   agariN: 'enabled',
+  missing_value_fill: 0, // 特徴量欠損時の補完値（(v||0)パターン）
+  intercept: 'none (softmax race-internal, intercept is redundant under normalization)',
+  temperature: 1.0,
+  odds_normalization: 'p_i = (1/odds_i) / sum_j(1/odds_j)',
+  ev_formula: 'EV_x = p_x * odds - 1',
+  eligibility: 'odds in [odds_min, odds_max) AND EV_additive>ev_additive_min AND EV_offset>ev_offset_min',
+  // 評価基準（100件は動作監査のみ・成績で変更禁止／200件で初回判定／不明確なら400件まで継続）
+  evaluation_at_100: '動作・漏洩・欠損の監査のみ。この時点の回収率で条件変更しない。',
+  evaluation_at_200: '初回成績判定。ROI/95%CI下限/最大DD/最大連敗/上位1・3件除外/月別収支/オッズ変化を確認。',
+  evaluation_at_400: '200件で不明確な場合のみ継続。',
+  pass_rule: 'ROI>100% かつ 日単位95%CI下限>=100% → 合格候補',
+  continue_rule: '(ROI>110% かつ CI下限<100%) または ROI 90〜110% → 400件まで継続',
+  fail_rule: 'ROI<90% → 不合格候補。設定変更・漏洩発覚 → 全件無効・バージョン更新',
 };
 
 /**
@@ -8720,79 +8743,15 @@ function computeShadowPurchasePick(scored) {
   return { pick, runners: rows };
 }
 
-/**
- * シャドー予測ログをkochi_shadow_predictionsへ記録（発走前・追記専用）。
- * raceId: "31_2026/07/11_9" 形式。oddsObservedAtISO: 10分前オッズを観測した時刻(ISO文字列)。
- * shadowResult: computeShadowPurchasePick()の戻り値。全出走馬ぶん1行ずつINSERTする
- * （選ばれなかった馬もnon_selection_reasonつきで必ず記録＝生存者バイアスを防ぐ）。
- * 同一(race_id,horse_id)は主キー制約で二重送信を防止（失敗時は既存行のまま・無害）。
- */
-async function logShadowPredictions(raceId, shadowResult, oddsObservedAtISO) {
-  if (!shadowResult.runners.length) return { ok: false, reason: 'NO_RUNNERS' };
-  const rows = shadowResult.runners.map(r => ({
-    race_id: raceId,
-    horse_id: r.horse.horseName || r.horse.horse_name || '',
-    uma_ban: parseInt(r.horse.umaBan || r.horse.uma_ban) || null,
-    prediction_created_at: new Date().toISOString(),
-    odds_observed_at: oddsObservedAtISO || null,
-    odds_10min: r.odds,
-    p_additive: r.pAdditive, p_offset: r.pOffset,
-    ev_additive: r.evAdditive, ev_offset: r.evOffset,
-    selected: r === shadowResult.pick,
-    non_selection_reason: r === shadowResult.pick ? null : r.reason,
-    model_version: SHADOW_FREEZE_CONFIG.shadow_model_version,
-    config_hash: SHADOW_FREEZE_CONFIG.feature_schema_hash,
-  }));
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/kochi_shadow_predictions`, {
-      method: 'POST', headers: { ...SUPABASE_HEADERS, 'Prefer': 'return=minimal' }, body: JSON.stringify(rows),
-    });
-    if (!res.ok) return { ok: false, reason: `HTTP${res.status}: ${await res.text()}` };
-    return { ok: true, n: rows.length };
-  } catch (e) { return { ok: false, reason: e.message }; }
-}
-
-/** 10分前オッズが取得できなかったレースの記録（後から補完せずNO_BET_DATA_MISSINGとして残す）。 */
-async function logShadowNoOddsData(raceId, scoredList) {
-  const rows = scoredList.filter(s => s.horse).map(s => ({
-    race_id: raceId,
-    horse_id: s.horse.horseName || s.horse.horse_name || '',
-    uma_ban: parseInt(s.horse.umaBan || s.horse.uma_ban) || null,
-    prediction_created_at: new Date().toISOString(),
-    selected: false, non_selection_reason: 'NO_BET_DATA_MISSING',
-    model_version: SHADOW_FREEZE_CONFIG.shadow_model_version,
-    config_hash: SHADOW_FREEZE_CONFIG.feature_schema_hash,
-  }));
-  if (!rows.length) return { ok: false, reason: 'NO_RUNNERS' };
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/kochi_shadow_predictions`, {
-      method: 'POST', headers: { ...SUPABASE_HEADERS, 'Prefer': 'return=minimal' }, body: JSON.stringify(rows),
-    });
-    if (!res.ok) return { ok: false, reason: `HTTP${res.status}: ${await res.text()}` };
-    return { ok: true, n: rows.length };
-  } catch (e) { return { ok: false, reason: e.message }; }
-}
-
-/**
- * シャドー結果ログをkochi_shadow_resultsへ記録（発走後・予測ログとは別テーブル＝上書き不可）。
- * results: [{ horseId, finalOdds, finishPosition, officialPayout, refunded }]
- */
-async function logShadowResults(raceId, results) {
-  if (!results.length) return { ok: false, reason: 'NO_RESULTS' };
-  const rows = results.map(r => ({
-    race_id: raceId, horse_id: r.horseId,
-    final_odds: r.finalOdds ?? null, finish_position: r.finishPosition ?? null,
-    official_payout: r.officialPayout ?? null, refunded: !!r.refunded,
-    settled_at: new Date().toISOString(),
-  }));
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/kochi_shadow_results`, {
-      method: 'POST', headers: { ...SUPABASE_HEADERS, 'Prefer': 'return=minimal' }, body: JSON.stringify(rows),
-    });
-    if (!res.ok) return { ok: false, reason: `HTTP${res.status}: ${await res.text()}` };
-    return { ok: true, n: rows.length };
-  } catch (e) { return { ok: false, reason: e.message }; }
-}
+// 【2026-07-11 セキュリティ修正】シャドーログの書き込み関数(logShadowPredictions等)は
+// ここに置かない。index.htmlは全訪問者に配信される公開JSであり、そこに書いたfetch呼び出しは
+// 埋め込まれたSUPABASE_KEY(anon)をそのまま使うため、誰でも同じキーでkochi_shadow_predictions
+// へ偽レコードを挿入できてしまう（RLSのINSERTポリシーをanonに許可する限り原理的に防げない）。
+// 実際の書き込みはローカル自動化(他場/scraper/capture_shadow.py)からSUPABASE_SERVICE_KEY
+// （非公開・.env）で直接行う。ブラウザ側はcomputeShadowPurchasePick()で計算するだけに限定し、
+// Supabase側もkochi_shadow_predictions/kochi_shadow_resultsにanonのINSERTポリシーを作らない
+// （SELECTのみ許可）。UPDATE/DELETEはservice_role含め全ロールでDBトリガーにより拒否され、
+// 追記専用が構造的に保証される。
 
 /** オッズ配列から市場勝率を算出（1/オッズを正規化してオーバーラウンドを除去）。 */
 function computeMarketProbs(oddsArr) {
