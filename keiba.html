@@ -1973,7 +1973,7 @@ async function renderCyokyo() {
     const pb = w.hanro ? w.pb : w.pb_honba;
     return `<tr>
       <td>${i + 1}</td>
-      <td class="l"><a class="horse-link" data-horse="${esc(w.name)}">${esc(w.name)}</a>${pb ? ' <span class="badge arrow-up">自己ベスト</span>' : ''}</td>
+      <td class="l"><a class="horse-link" data-horse="${esc(w.name)}">${esc(w.name)}</a>${pb ? ' <span class="badge arrow-up">自己ベスト</span>' : ''}${w.cls ? ` <span class="badge">${esc(w.cls)}</span>` : ''}</td>
       <td>${esc(w.sex || '')}</td><td class="l small">${esc(w.trainer || '')}</td><td>${esc(w.course)}</td><td>${esc(w.baba || '')}</td>
       <td class="num">${w.t4 != null ? w.t4.toFixed(1) : ''}</td>
       <td class="num ${sortBy === '3f' && i < 3 ? 'f1' : ''}">${w.t3 != null ? w.t3.toFixed(1) : ''}</td>
