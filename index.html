@@ -8655,11 +8655,13 @@ const SHADOW_FREEZE_CONFIG = {
   code_commit_sha: '8b6870b', // service_role専用書込み+ハッシュ拡張コミット
   trained_through: '2026-07-05',
   freeze_timestamp: '2026-07-11T02:57:39Z', // モデル・係数を固定した時刻
-  shadow_start_at: null, // 本番デプロイ完了・Supabaseテーブル作成・自動記録疎通確認・
-                          // テストレースの予測記録が全て完了した時刻を確定後に設定する。
-                          // race_start > shadow_start_atのレースのみ前向き集計の対象とする
-                          // （freeze_timestampとは意図的に分離：freeze時点ではDB/自動記録が
-                          // 未稼働だったため、freeze_timestampをそのまま開始時刻にはできない）。
+  // 2026-07-11: 本番デプロイ・Supabaseテーブル作成(v2)・自動記録の実地検証(capture_shadow.py が
+  // service_roleキーで9頭ぶん正しく記録)・結果突合の実地検証(settle_shadow.pyを2026/07/05の
+  // 実データで検証：1着払戻・取消refunded・4着0円・未確定待機すべて正常)が完了したため確定。
+  // 7/11の全レースは動作確認に使用済みのため明示的に除外し、7/12 0時(JST)を境界とする。
+  shadow_start_at: '2026-07-12T00:00:00+09:00',
+  // race_start > shadow_start_atのレースのみ前向き集計の対象とする（freeze_timestampとは
+  // 意図的に分離：freeze時点ではDB/自動記録が未稼働だったため、そのまま開始時刻にはできない）。
   odds_source: 'keiba.go.jp（OddsTanFukuページ・発走時刻付き）',
   odds_cutoff_minutes: 10, // odds_observed_at <= scheduled_start_at - 10分を厳守。
                             // 9分前以内のデータは使用禁止（capture_shadow.pyのMIN_BEFOREで実装）。
