@@ -265,11 +265,11 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 // ============================================================
 // 統合ビューアの場設定（門別＋南関4場を1枚で・場切替）
 // prefix=Supabase chihou_metaキー接頭辞 / baba=keiba.go.jpライブオッズ馬場コード / slug=NAR映像プレーヤー
-// noken=能検タブ(ホッカイドウ専用) / sim=シミュレータ(トラック描画がその場専用)
+// noken=能検タブ有 / sim=シミュレータ(トラック描画がその場専用)
 // ============================================================
 const TRACKS = {
   '門別': { prefix: 'monbetsu', baba: '36', slug: 'monbetsu', noken: true, sim: true },
-  '大井': { prefix: 'ooi', baba: '44', slug: 'ooi', sim: true },
+  '大井': { prefix: 'ooi', baba: '44', slug: 'ooi', noken: true, sim: true },
   '船橋': { prefix: 'funabashi', baba: '43', slug: 'funabashi' },
   '川崎': { prefix: 'kawasaki', baba: '45', slug: 'kawasaki' },
   '浦和': { prefix: 'urawa', baba: '42', slug: 'urawa' },
@@ -383,7 +383,7 @@ const providers = {
     },
     async loadNoken() {
       try {
-        const rows = await sbGet('chihou_meta?key=eq.monbetsu_noken&select=value');
+        const rows = await sbGet(`chihou_meta?key=eq.${trackCfg().prefix}_noken&select=value`);
         if (rows.length) return rows[0].value;
       } catch (e) { /* ローカルへ */ }
       return providers.local.loadNoken();
@@ -2235,22 +2235,25 @@ function nkRowHtml(h, afterDate, extra) {
   </tr>`;
 }
 
-function nokenRaceCard(r, afterDate) {
+function nokenRaceCard(r, afterDate, hasDayVideo) {
   const rows = (r.rows || []).map((h) => nkRowHtml(h, afterDate)).join('');
   const table = (r.rows || []).length ? `
     <div class="tablewrap"><table class="nk-table">
       <tr><th>着</th><th>番</th><th>馬名</th><th>性齢</th><th>タイム</th><th>テン1F</th><th>上3F</th><th>寸評</th><th>馬体重</th><th>合否</th><th>その後の成績</th></tr>
       ${rows}
-    </table></div>` : '<div class="note">成績データなし（PDFをご覧ください）</div>';
+    </table></div>` : '<div class="note">成績データなし</div>';
   const meta = [r.dist ? `${r.dist}m` : '', r.weather && r.going ? `${r.weather}・${r.going}` : (r.going || '')]
     .filter(Boolean).join('　');
+  // 動画: 門別=レース単位のmp4、大井等=開催日単位のYouTube（下のnk-day-head側で1本表示・ここでは重複案内しない）
+  const videoBlock = r.mp4
+    ? `<details class="nk-vid"><summary>▶ 動画を見る</summary>
+        <video class="nk-video" controls preload="none" playsinline src="${esc(r.mp4)}#t=0.1"></video></details>`
+    : (hasDayVideo ? '' : '<div class="note nk-novid">動画なし（2歳馬以外・未配信）</div>');
   return `
     <div class="nk-card">
       <div class="nk-cardhead"><b>${r.no}R${meta ? ` <span class="sub">${esc(meta)}</span>` : ''}</b>
         ${r.pdf ? `<a href="${esc(r.pdf)}" target="_blank" rel="noopener" class="nk-pdf">📄 成績表PDF</a>` : ''}</div>
-      ${r.mp4 ? `<details class="nk-vid"><summary>▶ 動画を見る</summary>
-        <video class="nk-video" controls preload="none" playsinline src="${esc(r.mp4)}#t=0.1"></video></details>`
-        : '<div class="note nk-novid">動画なし（2歳馬以外・未配信）</div>'}
+      ${videoBlock}
       ${table}
     </div>`;
 }
@@ -2300,13 +2303,18 @@ async function renderNoken() {
   const day = days.find((d) => d.date === state.nokenDate) || days[0];
   const dateBtns = days.map((d) =>
     `<button class="nk-date-btn${d.date === state.nokenDate ? ' active' : ''}" data-nkdate="${d.date}">${mmdd(d.date)}</button>`).join('');
-  const nvid = day.races.filter((r) => r.mp4).length;
+  const hasDayVideo = !!day.video;   // 大井等: レース単位ではなく開催日単位のYouTube動画
+  const nvid = hasDayVideo ? 1 : day.races.filter((r) => r.mp4).length;
   const sort = state.nokenSort || 'race';
-  const body = sort === 'time' ? nokenTimeCard(day) : day.races.map((r) => nokenRaceCard(r, day.date)).join('');
+  const body = sort === 'time' ? nokenTimeCard(day) : day.races.map((r) => nokenRaceCard(r, day.date, hasDayVideo)).join('');
+  const videoSrc = state.track === '門別' ? 'ホッカイドウ競馬公式' : '南関競馬公式(nankankeiba.com)';
+  const dayVideoBlock = hasDayVideo ? `<details class="nk-vid"><summary>▶ 能試映像を見る（${day.races.length}R分・1本）</summary>
+    <iframe width="100%" height="400" style="border:0;max-width:640px;aspect-ratio:16/9;height:auto" loading="lazy"
+      src="https://www.youtube.com/embed/${esc(day.video.split('/').pop())}" allowfullscreen></iframe></details>` : '';
   root.innerHTML = `
     <div class="card">
       <h2 style="margin:0 0 4px">🎓 能力検査（能検）</h2>
-      <div class="note">2歳馬の競走資格を確認する試験走。合格が新馬・未勝利への出走資格。動画=ホッカイドウ競馬公式／成績（タイム・上り3F・寸評・合否）=競馬ブック。「その後の成績」=能検後の実戦（着順/距離/タイム/馬体重）。馬名タップで詳細へ。${nk.updated ? `${esc(nk.updated)}更新。` : ''}</div>
+      <div class="note">2歳馬の競走資格を確認する試験走。合格が新馬・未勝利への出走資格。動画=${videoSrc}／成績（タイム・上り3F・寸評・合否）=競馬ブック。「その後の成績」=能検後の実戦（着順/距離/タイム/馬体重）。馬名タップで詳細へ。${nk.updated ? `${esc(nk.updated)}更新。` : ''}</div>
       <div class="nk-dates">${dateBtns}</div>
       <div class="nk-day-head">${day.date}（${day.races.length}R・動画${nvid}）
         <span class="nk-sort">
@@ -2314,6 +2322,7 @@ async function renderNoken() {
           <button class="nk-sort-btn${sort === 'time' ? ' active' : ''}" data-nksort="time">タイム順</button>
         </span>
         ${day.all_pdf ? `<a href="${esc(day.all_pdf)}" target="_blank" rel="noopener" class="nk-pdf">📄 全レース成績表PDF</a>` : ''}</div>
+      ${dayVideoBlock}
     </div>
     <div class="nk-grid${sort === 'time' ? ' nk-grid-1' : ''}">${body || '<div class="empty">この開催日のデータがありません</div>'}</div>`;
   loadNokenHist(day);   // その後の成績を裏で取得して該当セルを更新
