@@ -4580,6 +4580,16 @@ function renderRaceContent(raceNo) {
           <i class="fas fa-trophy"></i>
           <span>ランキング</span>
         </button>
+        <button id="tab-btn-baba-${raceNo}" class="kv-vtab" data-view="baba"
+                onclick="switchViewTab(${raceNo},'baba')">
+          <i class="fas fa-water"></i>
+          <span>馬場傾向</span>
+        </button>
+        <button id="tab-btn-f3avg-${raceNo}" class="kv-vtab" data-view="f3avg"
+                onclick="switchViewTab(${raceNo},'f3avg')">
+          <i class="fas fa-stopwatch"></i>
+          <span>前半3F基準</span>
+        </button>
       </div>
       <!-- 右：コメント操作 — 絶対配置で右端に固定 -->
       <div id="deban-controls-${raceNo}" class="kv-vctrl">
@@ -4685,6 +4695,17 @@ function renderRaceContent(raceNo) {
       <div id="ranking-panel-${raceNo}">
         <div style="text-align:center;padding:24px;color:#9ca3af;font-size:13px;"><i class="fas fa-spinner fa-spin"></i> 読み込み中...</div>
       </div>
+    </div>
+
+    <!-- 馬場傾向ビュー（2026-07-11・出馬表から直接開けるよう追加。中身は「馬場傾向」ページと同じ全履歴集計） -->
+    <div id="view-baba-${raceNo}" style="display:none;padding:12px 14px 12px;">
+      <div style="font-size:11px;color:#6b7280;margin-bottom:8px">馬場差：マイナス＝速い馬場 / プラス＝遅い馬場（高知・全履歴の集計）</div>
+      <div id="track-trend-table-${raceNo}"><div style="text-align:center;padding:24px;color:#9ca3af;font-size:13px;"><i class="fas fa-spinner fa-spin"></i> 読み込み中...</div></div>
+    </div>
+
+    <!-- 前半3F基準ビュー（2026-07-11・出馬表から直接開けるよう追加。中身は「前半3F基準」ページと同じ全履歴集計） -->
+    <div id="view-f3avg-${raceNo}" style="display:none;padding:12px 14px 12px;">
+      <div id="f3avg-body-${raceNo}"><p style="color:#9ca3af;font-size:13px">計算中...</p></div>
     </div>`;
   section.appendChild(tSec);
   // 着順1位から表示（着順未設定馬は末尾に馬番順）
@@ -5559,16 +5580,20 @@ function switchViewTab(raceNo, view) {
   const abilityView = document.getElementById(`view-ability-${raceNo}`);
   const yosoView    = document.getElementById(`view-yoso-${raceNo}`);
   const rankingView = document.getElementById(`view-ranking-${raceNo}`);
+  const babaView    = document.getElementById(`view-baba-${raceNo}`);
+  const f3avgView   = document.getElementById(`view-f3avg-${raceNo}`);
   const debanBtn    = document.getElementById(`tab-btn-deban-${raceNo}`);
   const kekkaBtn    = document.getElementById(`tab-btn-kekka-${raceNo}`);
   const abilityBtn  = document.getElementById(`tab-btn-ability-${raceNo}`);
   const yosoBtn     = document.getElementById(`tab-btn-yoso-${raceNo}`);
   const rankingBtn  = document.getElementById(`tab-btn-ranking-${raceNo}`);
+  const babaBtn     = document.getElementById(`tab-btn-baba-${raceNo}`);
+  const f3avgBtn    = document.getElementById(`tab-btn-f3avg-${raceNo}`);
   const debanCtrl   = document.getElementById(`deban-controls-${raceNo}`);
   if (!debanView || !abilityView) return;
 
-  [debanView, kekkaView, abilityView, yosoView, rankingView].forEach(v => { if (v) v.style.display = 'none'; });
-  [debanBtn, kekkaBtn, abilityBtn, yosoBtn, rankingBtn].forEach(b => { if (b) b.classList.remove('on'); });
+  [debanView, kekkaView, abilityView, yosoView, rankingView, babaView, f3avgView].forEach(v => { if (v) v.style.display = 'none'; });
+  [debanBtn, kekkaBtn, abilityBtn, yosoBtn, rankingBtn, babaBtn, f3avgBtn].forEach(b => { if (b) b.classList.remove('on'); });
   if (debanCtrl) debanCtrl.style.display = 'none';
 
   if (view === 'deban') {
@@ -5591,6 +5616,14 @@ function switchViewTab(raceNo, view) {
     if (rankingView) rankingView.style.display = '';
     if (rankingBtn) rankingBtn.classList.add('on');
     renderRankingPanel(raceNo);
+  } else if (view === 'baba') {
+    if (babaView) babaView.style.display = '';
+    if (babaBtn) babaBtn.classList.add('on');
+    try { renderTrackTrend(raceNo); } catch(e) { console.warn('[renderTrackTrend embedded]', e); }
+  } else if (view === 'f3avg') {
+    if (f3avgView) f3avgView.style.display = '';
+    if (f3avgBtn) f3avgBtn.classList.add('on');
+    try { renderF3Averages(raceNo); } catch(e) { console.warn('[renderF3Averages embedded]', e); }
   }
 }
 
@@ -5878,23 +5911,26 @@ function renderRankingPanel(raceNo, subTab) {
     const avgSI = siVals.length ? siVals.reduce((a,b)=>a+b,0)/siVals.length : null;
     const maxSI = siVals.length ? Math.max(...siVals) : null;
 
-    // 当該距離
-    const distH = hist.filter(h => String(h.distance||'').replace(/[^\d]/g,'')===raceDist && h.chakujun && h.time);
+    // 当該距離（直近2年のみ集計・2026-07-11：古すぎる好走が最高値を占有し続けるのを防ぐ）
+    const RANKING_LOOKBACK_DAYS = 730;
+    const distH = hist.filter(h => String(h.distance||'').replace(/[^\d]/g,'')===raceDist && h.chakujun && h.time && dateDiffDays(raceInfo.raceDate, h.raceDate) <= RANKING_LOOKBACK_DAYS);
     const distC = distH.map(h=>parseInt(h.chakujun)).filter(c=>c>0&&c<99);
-    const distSI = distH.map(h => calcSpeedIndex(h.time,h.distance,h.raceClass,h.trackCond,getDayBiasForDateAndDist(h.babaCode,h.raceDate,h.distance),h.kinryo,null)).filter(s=>s!=null);
-    const distMax = distSI.length ? Math.max(...distSI) : null;
+    const distSIPairs = distH.map(h => ({ si: calcSpeedIndex(h.time,h.distance,h.raceClass,h.trackCond,getDayBiasForDateAndDist(h.babaCode,h.raceDate,h.distance),h.kinryo,null), date: h.raceDate })).filter(p=>p.si!=null);
+    let distMax = null, distMaxDate = null;
+    if (distSIPairs.length) { const _b = distSIPairs.reduce((a,b)=>b.si>a.si?b:a); distMax = _b.si; distMaxDate = _b.date; }
     const dn = distC.length;
     const dStr = dn ? `${distC.filter(c=>c===1).length}.${distC.filter(c=>c===2).length}.${distC.filter(c=>c===3).length}.${dn-distC.filter(c=>c<=3).length}` : '—';
 
-    // 当該コース（同競馬場+距離）
-    const crsH = hist.filter(h => h.babaCode===raceBaba && String(h.distance||'').replace(/[^\d]/g,'')===raceDist && h.chakujun && h.time);
+    // 当該コース（同競馬場+距離・直近2年のみ集計）
+    const crsH = hist.filter(h => h.babaCode===raceBaba && String(h.distance||'').replace(/[^\d]/g,'')===raceDist && h.chakujun && h.time && dateDiffDays(raceInfo.raceDate, h.raceDate) <= RANKING_LOOKBACK_DAYS);
     const crsC = crsH.map(h=>parseInt(h.chakujun)).filter(c=>c>0&&c<99);
-    const crsSI = crsH.map(h => calcSpeedIndex(h.time,h.distance,h.raceClass,h.trackCond,getDayBiasForDateAndDist(h.babaCode,h.raceDate,h.distance),h.kinryo,null)).filter(s=>s!=null);
-    const crsMax = crsSI.length ? Math.max(...crsSI) : null;
+    const crsSIPairs = crsH.map(h => ({ si: calcSpeedIndex(h.time,h.distance,h.raceClass,h.trackCond,getDayBiasForDateAndDist(h.babaCode,h.raceDate,h.distance),h.kinryo,null), date: h.raceDate })).filter(p=>p.si!=null);
+    let crsMax = null, crsMaxDate = null;
+    if (crsSIPairs.length) { const _b = crsSIPairs.reduce((a,b)=>b.si>a.si?b:a); crsMax = _b.si; crsMaxDate = _b.date; }
     const cn = crsC.length;
     const cStr = cn ? `${crsC.filter(c=>c===1).length}.${crsC.filter(c=>c===2).length}.${crsC.filter(c=>c===3).length}.${cn-crsC.filter(c=>c<=3).length}` : '—';
 
-    return { horse, recent5, siVals, avgSI, maxSI, distMax, dn, distC, dStr, crsMax, cn, crsC, cStr };
+    return { horse, recent5, siVals, avgSI, maxSI, distMax, distMaxDate, dn, distC, dStr, crsMax, crsMaxDate, cn, crsC, cStr };
   });
 
   // AI印（SI加重平均でランク付け）
@@ -5917,7 +5953,7 @@ function renderRankingPanel(raceNo, subTab) {
   ).join('');
 
   // 共通列ヘッダー
-  const commonHead = `<th style="padding:6px 4px;text-align:center;color:#6b7280;font-size:10px;white-space:nowrap">順位</th><th style="padding:6px 4px;text-align:center;color:#6b7280;font-size:10px">枠</th><th style="padding:6px 4px;text-align:center;color:#6b7280;font-size:10px">馬番</th><th style="padding:6px 4px;text-align:center;color:#6b7280;font-size:10px">AI印</th><th style="padding:6px 8px;text-align:left;color:#6b7280;font-size:10px">馬名</th>`;
+  const commonHead = `<th style="padding:6px 4px;text-align:center;color:#6b7280;font-size:10px;white-space:nowrap" title="このタブの基準（左の指数列）で並べた順位">順位</th><th style="padding:6px 4px;text-align:center;color:#6b7280;font-size:10px" title="枠番">枠</th><th style="padding:6px 4px;text-align:center;color:#6b7280;font-size:10px" title="馬番">馬番</th><th style="padding:6px 4px;text-align:center;color:#6b7280;font-size:10px" title="予想AIの印（上位5頭にSI加重平均で付与）">AI印</th><th style="padding:6px 8px;text-align:left;color:#6b7280;font-size:10px">馬名</th>`;
 
   // 共通行プレフィックス
   const rowPfx = (hd, idx) => {
@@ -5947,8 +5983,8 @@ function renderRankingPanel(raceNo, subTab) {
       ${avg!=null?`<div style="margin-bottom:8px;font-size:12px;color:#6b7280">全出走馬の${lbl} <span style="color:#d97706;font-weight:800;font-size:14px">${avg}</span></div>`:''}
       <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
         <thead><tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0">${commonHead}
-          <th style="padding:6px 8px;text-align:center;color:#16a34a;font-size:11px;white-space:nowrap">${lbl}</th>
-          ${['前走','2走前','3走前','4走前','5走前'].map(l=>`<th style="padding:6px 4px;text-align:center;color:#6b7280;font-size:10px">${l}</th>`).join('')}
+          <th style="padding:6px 8px;text-align:center;color:#16a34a;font-size:11px;white-space:nowrap" title="${active==='recent'?'直近5走のSI平均（新しい走ほど重みを大きく加重）':'直近5走の中の最高SI'}">${lbl}</th>
+          ${['前走','2走前','3走前','4走前','5走前'].map(l=>`<th style="padding:6px 4px;text-align:center;color:#6b7280;font-size:10px" title="その走のSI（走破タイムを距離・馬場・斤量で点数化した指数）">${l}</th>`).join('')}
         </tr></thead>
         <tbody>${sorted.map((hd,idx)=>{
           const v = hd[key]; const [mb,mc]=siC(v);
@@ -5960,6 +5996,7 @@ function renderRankingPanel(raceNo, subTab) {
   } else {
     const isCrs = active==='course';
     const maxKey = isCrs?'crsMax':'distMax';
+    const maxDateKey = isCrs?'crsMaxDate':'distMaxDate';
     const nKey   = isCrs?'cn':'dn';
     const cKey   = isCrs?'crsC':'distC';
     const sKey   = isCrs?'cStr':'dStr';
@@ -5971,20 +6008,21 @@ function renderRankingPanel(raceNo, subTab) {
       ${avg!=null?`<div style="margin-bottom:8px;font-size:12px;color:#6b7280">全出走馬の${lbl} 最高値の平均 <span style="color:#d97706;font-weight:800;font-size:14px">${avg}</span></div>`:''}
       <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
         <thead><tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0">${commonHead}
-          <th style="padding:6px 8px;text-align:center;color:#16a34a;font-size:11px;white-space:nowrap">${lbl}<br>最高指数</th>
-          <th style="padding:6px 6px;text-align:center;color:#6b7280;font-size:10px">着度数</th>
-          <th style="padding:6px 6px;text-align:center;color:#6b7280;font-size:10px">勝率</th>
-          <th style="padding:6px 6px;text-align:center;color:#6b7280;font-size:10px">連対率</th>
-          <th style="padding:6px 6px;text-align:center;color:#6b7280;font-size:10px">複勝率</th>
+          <th style="padding:6px 8px;text-align:center;color:#16a34a;font-size:11px;white-space:nowrap" title="直近2年・${lbl}戦の自己ベストSI（走破タイムを距離・馬場・斤量で点数化した指数）">${lbl}<br>最高指数</th>
+          <th style="padding:6px 6px;text-align:center;color:#6b7280;font-size:10px" title="直近2年・${lbl}戦の着度数（1着.2着.3着.着外）">着度数</th>
+          <th style="padding:6px 6px;text-align:center;color:#6b7280;font-size:10px" title="直近2年・${lbl}戦での1着率">勝率</th>
+          <th style="padding:6px 6px;text-align:center;color:#6b7280;font-size:10px" title="直近2年・${lbl}戦での2着以内率">連対率</th>
+          <th style="padding:6px 6px;text-align:center;color:#6b7280;font-size:10px" title="直近2年・${lbl}戦での3着以内率">複勝率</th>
         </tr></thead>
         <tbody>${sorted.map((hd,idx)=>{
           const mx=hd[maxKey]; const [mb,mc]=siC(mx);
+          const mxDate=hd[maxDateKey];
           const n=hd[nKey]; const ch=hd[cKey];
           const wr=n?Math.round(ch.filter(c=>c===1).length/n*100):null;
           const pr=n?Math.round(ch.filter(c=>c<=2).length/n*100):null;
           const sr=n?Math.round(ch.filter(c=>c<=3).length/n*100):null;
           return `<tr style="border-bottom:1px solid #f1f5f9">${rowPfx(hd,idx)}
-            <td style="padding:5px 8px;text-align:center;background:${mb};color:${mc};font-weight:800;font-size:14px">${mx!=null?Math.round(mx):'未経験'}</td>
+            <td style="padding:5px 8px;text-align:center;background:${mb};color:${mc};font-weight:800;font-size:14px">${mx!=null?Math.round(mx):'未経験'}${mxDate?`<br><span style="font-size:9px;font-weight:400;color:#94a3b8">${mxDate.slice(2).replace(/\//g,'/')}</span>`:''}</td>
             <td style="padding:5px 6px;text-align:center;font-size:11px;color:#6b7280">${hd[sKey]}</td>
             ${rateCell(wr,[20,40])}${rateCell(pr,[35,60])}${rateCell(sr,[50,75])}
           </tr>`;
@@ -9414,13 +9452,14 @@ function backfillPaceType() {
  * 前半3F基準表（クラス×馬場状態×距離）を保存データから自動計算して描画。
  * ページを開くたびに再計算するので、データが増えれば数値も自動で最新化される。
  */
-function renderF3Averages() {
-  const body = document.getElementById('f3avg-body');
+function renderF3Averages(raceNo) {
+  const body = document.getElementById(raceNo ? `f3avg-body-${raceNo}` : 'f3avg-body');
   if (!body) return;
   const CONDS = ['良', '稍重', '重', '不良'];
   const CLS_ORDER = ['重賞', 'OP', 'A', 'B', 'C1', 'C2', 'C3', '3歳', '2歳'];
   const agg = { '1300': {}, '1400': {}, '1600': {} };
   let totalN = 0;
+  let minDate = null, maxDate = null;   // 2026-07-11：集計に使われた実際の日付範囲を表示するため記録
   for (const v of Object.values(lsRead())) {
     if (v.type !== 'race' || v.baba_code !== '31' || !v.first3f) continue;
     const d = String(v.distance || '').replace(/[^\d]/g, '');
@@ -9435,6 +9474,8 @@ function renderF3Averages() {
     if (!agg[d][cls][cond]) agg[d][cls][cond] = [];
     agg[d][cls][cond].push(f);
     totalN++;
+    const rd = v.race_date || '';
+    if (rd) { if (!minDate || rd < minDate) minDate = rd; if (!maxDate || rd > maxDate) maxDate = rd; }
   }
   const distSec = ['1300', '1400', '1600'].map(d => {
     const clsRows = CLS_ORDER.filter(c => agg[d][c]);
@@ -9455,14 +9496,15 @@ function renderF3Averages() {
       </table></div>`;
   }).join('');
   body.innerHTML = distSec + `<div class="f3avg-note">
-    保存データから自動計算（現在 ${totalN}R）。データが増えるたびに開くだけで最新の平均に更新されます。薄い表示＝5レース未満（参考値）。<br>
+    保存データから自動計算（現在 ${totalN}R${minDate && maxDate ? `・対象期間 ${minDate}〜${maxDate}` : ''}）。データが増えるたびに開くだけで最新の平均に更新されます。薄い表示＝5レース未満（参考値）。<br>
     前半3Fの由来：実測値＋自動補完（1400m＝決着タイム−上がり4F／1300m＝(決着タイム−上がり4F)で前半2.5Fを出し、残り100m分＝(上がり4F−上がり3F)÷2を加算／1600m＝決着タイム−上がり4F−4F目仮置き 良14.5〜不良13.5秒）。1600mは前半800mの内訳が計測されないため、稍重の逆転など±0.3秒程度の不確実性が残ります。</div>`;
 }
 
-function renderTrackTrend() {
-  const wrap = document.getElementById('track-trend-table');
+function renderTrackTrend(raceNo) {
+  const wrap = document.getElementById(raceNo ? `track-trend-table-${raceNo}` : 'track-trend-table');
   if (!wrap) return;
-  const babaFilter = document.getElementById('track-trend-baba')?.value || '';
+  // 出馬表タブから開いた埋め込み版は常に高知固定（フィルタUIを出さない簡易版）
+  const babaFilter = raceNo ? '31' : (document.getElementById('track-trend-baba')?.value || '');
   let groups = (_savedGroups || []).filter(g => !babaFilter || g.baba === babaFilter);
   if (!groups.length) {
     wrap.innerHTML = '<p class="no-data">データがありません</p>';
@@ -9542,32 +9584,42 @@ function renderTrackTrend() {
       <td class="tt-cell" data-label="馬基準差" style="padding:8px 10px;text-align:center">${horseBiasCell}</td>
       <td class="tt-cell" data-label="条件内比較" style="padding:8px 10px;text-align:center">${condCell2}</td>
       <td class="tt-cell" data-label="レース数" style="padding:8px 4px;color:#6b7280;font-size:11px;text-align:center">${g.races.length}R</td>
-      <td class="tt-memo" style="padding:8px 10px">
-        <input type="text" value="${memoVal}" placeholder="馬場傾向を入力..."
-          onchange="saveDaySettings('${g.baba}','${g.date}',{memo:this.value})"
-          style="width:100%;padding:5px 8px;border:1.5px solid #e2e8f0;border-radius:6px;font-size:12px;color:#374151;outline:none;background:#fff"
-          onfocus="this.style.borderColor='#93c5fd'" onblur="this.style.borderColor='#e2e8f0'">
+      <td class="tt-memo" style="padding:8px 10px;min-width:160px">
+        ${isAdminMode()
+          ? `<input type="text" value="${memoVal}" placeholder="馬場傾向を入力..."
+              onchange="saveDaySettings('${g.baba}','${g.date}',{memo:this.value})"
+              style="width:100%;padding:5px 8px;border:1.5px solid #e2e8f0;border-radius:6px;font-size:12px;color:#374151;outline:none;background:#fff"
+              onfocus="this.style.borderColor='#93c5fd'" onblur="this.style.borderColor='#e2e8f0'">`
+          : (ds.memo ? `<span style="font-size:12px;color:#374151">${memoVal}</span>` : `<span style="font-size:11px;color:#cbd5e1">—</span>`)
+        }
       </td>
     </tr>`;
   }).join('');
 
-  wrap.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+  // 2026-07-11：閲覧者もメモ以外は今まで通り見えるが、日付/競馬場/馬場状態/R数は幅を絞り、
+  // 馬場傾向メモに横幅を回して長文でも折り返し表示できるようにする（テーブルは固定レイアウト化）。
+  wrap.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed">
+    <colgroup>
+      <col style="width:9%"><col style="width:7%"><col style="width:7%">
+      <col style="width:13%"><col style="width:13%"><col style="width:11%">
+      <col style="width:6%"><col style="width:34%">
+    </colgroup>
     <thead>
       <tr style="background:#f4f6fa;font-size:11px;color:#6b7280;text-align:left">
-        <th style="padding:8px 10px;border-bottom:2px solid #e2e8f0;white-space:nowrap">日付</th>
-        <th style="padding:8px 10px;border-bottom:2px solid #e2e8f0;white-space:nowrap">競馬場</th>
-        <th style="padding:8px 10px;border-bottom:2px solid #e2e8f0;text-align:center;white-space:nowrap">馬場状態</th>
-        <th style="padding:8px 10px;border-bottom:2px solid #e2e8f0;text-align:center;white-space:nowrap">馬場差<br><span style="font-size:9px;font-weight:400;color:#9ca3af">（良比較）</span></th>
-        <th style="padding:8px 10px;border-bottom:2px solid #e2e8f0;text-align:center;white-space:nowrap">馬基準差<br><span style="font-size:9px;font-weight:400;color:#9ca3af">同一馬の自己比較</span></th>
-        <th style="padding:8px 10px;border-bottom:2px solid #e2e8f0;text-align:center;white-space:nowrap">条件内比較<br><span style="font-size:9px;font-weight:400;color:#9ca3af">条件基準との差</span></th>
-        <th style="padding:8px 10px;border-bottom:2px solid #e2e8f0;text-align:center;white-space:nowrap">R数</th>
-        <th style="padding:8px 10px;border-bottom:2px solid #e2e8f0">馬場傾向メモ</th>
+        <th style="padding:8px 6px;border-bottom:2px solid #e2e8f0">日付</th>
+        <th style="padding:8px 6px;border-bottom:2px solid #e2e8f0">競馬場</th>
+        <th style="padding:8px 6px;border-bottom:2px solid #e2e8f0;text-align:center">馬場状態</th>
+        <th style="padding:8px 6px;border-bottom:2px solid #e2e8f0;text-align:center">馬場差<br><span style="font-size:9px;font-weight:400;color:#9ca3af">（良比較）</span></th>
+        <th style="padding:8px 6px;border-bottom:2px solid #e2e8f0;text-align:center">馬基準差<br><span style="font-size:9px;font-weight:400;color:#9ca3af">同一馬の自己比較</span></th>
+        <th style="padding:8px 6px;border-bottom:2px solid #e2e8f0;text-align:center">条件内比較<br><span style="font-size:9px;font-weight:400;color:#9ca3af">条件基準との差</span></th>
+        <th style="padding:8px 4px;border-bottom:2px solid #e2e8f0;text-align:center">R数</th>
+        <th style="padding:8px 10px;border-bottom:2px solid #e2e8f0">馬場傾向メモ${isAdminMode() ? '' : '<span style="font-size:9px;font-weight:400;color:#9ca3af">（閲覧のみ）</span>'}</th>
       </tr>
     </thead>
     <tbody>${rows}</tbody>
   </table>`;
 
-  // 1400m ペース別 前残り傾向（同じ競馬場フィルタで連動）
+  // 1400m ペース別 前残り傾向（同じ競馬場フィルタで連動・出馬表からの埋め込み版では対象要素がないため自動的にスキップ）
   try { renderPaceBias1400(babaFilter); } catch(e) { console.warn('[paceBias1400]', e); }
 }
 
