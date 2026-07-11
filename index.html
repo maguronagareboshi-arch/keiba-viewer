@@ -1407,6 +1407,48 @@ const KV_APP_CSS = [
       // 🔍距離/馬場実績ありバッジ（近走不振でも条件一致の好走歴・参考情報のみ）
       '.cond-fit-bar{margin-bottom:10px;background:#ecfeff;border:1.5px solid #0891b2;border-radius:8px;padding:7px 12px;font-size:12px;color:#155e75;font-weight:600}',
       '.cond-fit-bar .cfb-sub{font-size:11px;opacity:.85;font-weight:500}',
+      // ⓘ バッジ説明文の折りたたみ（?ボタンで開閉・パッと見の情報量を減らす 2026-07-11）
+      '.kvi-info{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;border:1px solid currentColor;background:transparent;color:inherit;font-size:11px;font-weight:800;cursor:pointer;margin-left:6px;vertical-align:middle;opacity:.65;flex-shrink:0;padding:0;line-height:1}',
+      '.kvi-info:hover{opacity:1}',
+      '.kvi-hidden{display:none}',
+      '.kvi-open .kvi-hidden{display:inline}',
+      // ⏱ 発走カウントダウン（レースヘッダー）
+      '.race-countdown{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:800;border-radius:12px;padding:2px 10px;background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;vertical-align:middle}',
+      '.race-countdown.cd-soon{background:#fff7ed;color:#c2410c;border-color:#fdba74;animation:kv-cd-pulse 1.6s ease-in-out infinite}',
+      '.race-countdown.cd-imminent{background:#fef2f2;color:#dc2626;border-color:#fca5a5;animation:kv-cd-pulse .9s ease-in-out infinite}',
+      '.race-countdown.cd-done{background:#f1f5f9;color:#64748b;border-color:#e2e8f0;animation:none}',
+      '@keyframes kv-cd-pulse{0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(220,38,38,.28)}50%{transform:scale(1.06);box-shadow:0 0 0 6px rgba(220,38,38,0)}}',
+      '@media (prefers-reduced-motion:reduce){.race-countdown{animation:none!important}}',
+      'body.dark-mode .race-countdown{background:#1e1b4b;color:#a5b4fc;border-color:#4338ca}',
+      'body.dark-mode .race-countdown.cd-soon{background:#431407;color:#fdba74;border-color:#9a3412}',
+      'body.dark-mode .race-countdown.cd-imminent{background:#450a0a;color:#fca5a5;border-color:#b91c1c}',
+      'body.dark-mode .race-countdown.cd-done{background:#1e293b;color:#94a3b8;border-color:#334155}',
+      // 💹 オッズ自動更新の状態表示
+      '.odds-auto-note{font-size:10px;color:#64748b;margin-left:6px;vertical-align:middle}',
+      'body.dark-mode .odds-auto-note{color:#94a3b8}',
+      // 🔎 「その他」補正の全内訳テーブル
+      '.other-mod-detail{margin-top:8px}',
+      '.other-mod-detail>summary{cursor:pointer;font-size:12px;font-weight:700;color:#0e7490;padding:6px 12px;background:#ecfeff;border:1px solid #a5f3fc;border-radius:7px;display:inline-block;list-style:none}',
+      '.other-mod-detail>summary::-webkit-details-marker{display:none}',
+      '.other-mod-detail[open]>summary{border-radius:7px 7px 0 0}',
+      '.other-mod-detail .omd-wrap{overflow-x:auto;border:1px solid #e2e8f0;border-radius:0 7px 7px 7px;background:#fff}',
+      '.other-mod-detail table{width:100%;border-collapse:collapse;font-size:11px;white-space:nowrap}',
+      '.other-mod-detail th{background:#f1f5f9;color:#475569;font-size:10px;padding:5px 7px;text-align:center}',
+      '.other-mod-detail td{padding:5px 7px;text-align:center;border-top:1px solid #f1f5f9;font-family:ui-monospace,Consolas,monospace}',
+      '.other-mod-detail td.omd-name{text-align:left;font-family:inherit;font-weight:700}',
+      '.other-mod-detail td.omd-pos{color:#15803d}',
+      '.other-mod-detail td.omd-neg{color:#dc2626}',
+      '.other-mod-detail td.omd-zero{color:#cbd5e1}',
+      '.other-mod-detail td.omd-sum{font-weight:900;background:#f8fafc}',
+      '.other-mod-detail .omd-note{font-size:10px;color:#94a3b8;padding:5px 8px}',
+      'body.dark-mode .other-mod-detail>summary{background:#083344;border-color:#155e75;color:#67e8f9}',
+      'body.dark-mode .other-mod-detail .omd-wrap{background:#0f172a;border-color:#334155}',
+      'body.dark-mode .other-mod-detail th{background:#1e293b;color:#94a3b8}',
+      'body.dark-mode .other-mod-detail td{border-top-color:#1e293b}',
+      'body.dark-mode .other-mod-detail td.omd-pos{color:#4ade80}',
+      'body.dark-mode .other-mod-detail td.omd-neg{color:#f87171}',
+      'body.dark-mode .other-mod-detail td.omd-zero{color:#475569}',
+      'body.dark-mode .other-mod-detail td.omd-sum{background:#1e293b}',
       // 💹 EVモニター（中穴×傾斜・単勝）
       '.ev-monitor-bar{margin-bottom:10px;background:#f0fdf4;border:2px solid #16a34a;border-radius:10px;padding:9px 13px;font-size:12px;color:#14532d}',
       '.ev-monitor-bar.skip{background:#f8fafc;border:1.5px solid #cbd5e1;color:#475569}',
@@ -3246,6 +3288,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // ディープリンク（#d/YYYY-MM-DD/N）があれば起動後に該当レースを開く（initDB内で消費）
   try { window._kvDeepLink = _kvParseHash(); } catch(e) { window._kvDeepLink = null; }
   _initNavHistory();
+  _kvStartTickers();   // 発走カウントダウン＆当日オッズの5分毎自動更新
   initDB();
   loadWeeklySchedule();
 });
@@ -4313,7 +4356,7 @@ function renderRaceContent(raceNo) {
           </div>
           <div class="race-meta">
             <span><i class="fas fa-calendar-alt"></i> ${raceInfo.raceDate}</span>
-            ${(()=>{try{const _t=_kvGetRaceTime(raceInfo.raceDate,raceNo);return _t?`<span class="race-hasso-badge"><i class="far fa-clock"></i> ${_t}発走</span>`:'';}catch(e){return '';}})()}
+            ${(()=>{try{const _t=_kvGetRaceTime(raceInfo.raceDate,raceNo);return _t?`<span class="race-hasso-badge"><i class="far fa-clock"></i> ${_t}発走</span><span class="race-countdown" data-cd-date="${raceInfo.raceDate}" data-cd-time="${_t}" style="display:none"></span>`:'';}catch(e){return '';}})()}
             <span><i class="fas fa-horse"></i> ${horses.length}頭</span>
             ${raceInfo.distance ? distanceBadgeHtml(raceInfo.distance) : ''}
             ${raceInfo.trackCond?`<span class="track-cond-badge track-cond-${trackCondClass(raceInfo.trackCond)}"><i class="fas fa-cloud-rain"></i> ${raceInfo.trackCond}</span>`:''}
@@ -4562,7 +4605,7 @@ function renderRaceContent(raceNo) {
           <div class="table-wrapper">
             <div style="display:flex;justify-content:flex-end;gap:8px;padding:6px 8px 4px;">
               <button type="button" onclick="openCommentSheet(${raceNo})" class="btn btn-secondary btn-sm viewer-ok" title="出走馬全頭の最新コメント10件を一覧表示・PDF/画像で保存">💬 コメント一覧</button>
-              <button type="button" id="odds-btn-${raceNo}" onclick="fetchLiveOddsBtn(${raceNo})" class="btn btn-secondary btn-sm viewer-ok" title="公式サイトから単勝オッズ・馬体重を取得（開催日はリアルタイム更新）">💹 オッズ取得</button>
+              <button type="button" id="odds-btn-${raceNo}" onclick="fetchLiveOddsBtn(${raceNo})" class="btn btn-secondary btn-sm viewer-ok" title="公式サイトから単勝オッズ・馬体重を取得（開催日は5分毎に自動更新・このボタンで今すぐ最新化）">💹 オッズ取得</button><span class="odds-auto-note" id="odds-auto-${raceNo}"></span>
               <button type="button" id="deban-mode-btn-${raceNo}" onclick="toggleDebanMode(${raceNo})" class="btn btn-secondary btn-sm admin-only" title="レース前の出馬表と、結果・記録入力用の表を切り替え">📝 記録表示へ</button>
             </div>
             <table class="deban-table" id="deban-table-${raceNo}">
@@ -4723,12 +4766,89 @@ async function fetchLiveOddsBtn(raceNo) {
     // 表を再構築するとコメント行が消えるので、保存済みコメントを再描画（オッズ取得でコメントが消えるバグ修正）
     if (allRacesData[raceNo]?.horses.some(h => h.postComment)) _renderCommentsInTable(raceNo);
     if (btn) btn.innerHTML = `💹 更新済（${n}頭）`;
+    _kvOddsAutoLast[raceNo] = Date.now();   // 手動取得も5分カウントに含める（直後の自動再取得を防ぐ）
+    _kvSetOddsAutoNote(raceNo, '手動更新');
   } catch(e) {
     if (btn) btn.innerHTML = '💹 未発売/取得失敗';
     console.warn('[odds]', raceNo, e);
   } finally {
     if (btn) { btn.disabled = false; setTimeout(() => { const b = document.getElementById(`odds-btn-${raceNo}`); if (b) b.innerHTML = '💹 オッズ取得'; }, 5000); }
   }
+}
+
+// ══ オッズ自動更新＆発走カウントダウン（2026-07-11）══
+// オッズ：当日・発走前（4時間前〜発走2分後）の「いま開いているレース」だけを5分間隔で
+// 自動取得。手動の「💹 オッズ取得」ボタンは従来通り（＝任意タイミングの最新化）。
+// カウントダウン：レースヘッダーの発走時刻から残り時間を15秒ごとに更新。
+const _kvOddsAutoLast = {};   // raceNo -> 最終取得時刻(ms)。手動取得も共有
+let _kvTickersStarted = false;
+function _kvStartTickers() {
+  if (_kvTickersStarted) return;
+  _kvTickersStarted = true;
+  setInterval(_kvTickCountdown, 15000);
+  setInterval(_kvTickOddsAuto, 30000);
+  setTimeout(_kvTickCountdown, 500);
+}
+function _kvTodaySlash() {
+  const t = new Date();
+  return `${t.getFullYear()}/${String(t.getMonth()+1).padStart(2,'0')}/${String(t.getDate()).padStart(2,'0')}`;
+}
+function _kvPostDate(dateSlash, hhmm) {
+  try {
+    const m = String(hhmm||'').match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+    const d = new Date(String(dateSlash).replace(/\//g,'-') + 'T00:00:00');
+    if (isNaN(d)) return null;
+    d.setHours(parseInt(m[1]), parseInt(m[2]), 0, 0);
+    return d;
+  } catch(e) { return null; }
+}
+function _kvTickCountdown() {
+  document.querySelectorAll('.race-countdown').forEach(el => {
+    const dt = _kvPostDate(el.dataset.cdDate, el.dataset.cdTime);
+    if (!dt) { el.style.display = 'none'; return; }
+    const mins = (dt - Date.now()) / 60000;
+    el.classList.remove('cd-soon','cd-imminent','cd-done');
+    if (mins > 180 || mins < -20) { el.style.display = 'none'; return; }
+    el.style.display = '';
+    if (mins <= 0) { el.classList.add('cd-done'); el.textContent = '発走済み'; return; }
+    const mm = Math.ceil(mins);
+    if (mm <= 3)       { el.classList.add('cd-imminent'); el.textContent = `🏇 まもなく発走（あと${mm}分）`; }
+    else if (mm <= 10) { el.classList.add('cd-soon');     el.textContent = `⏱ 発走まで あと${mm}分`; }
+    else if (mm < 60)  { el.textContent = `発走まで ${mm}分`; }
+    else               { el.textContent = `発走まで ${Math.floor(mm/60)}時間${mm%60}分`; }
+  });
+}
+function _kvSetOddsAutoNote(raceNo, how) {
+  const note = document.getElementById(`odds-auto-${raceNo}`);
+  if (note) note.textContent = `🔄 ${how} ${new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}（5分毎に自動更新）`;
+}
+async function _kvTickOddsAuto() {
+  try {
+    if (typeof _currentPage === 'undefined' || _currentPage !== 'deban') return;
+    if (!currentRaceNo || !allRacesData[currentRaceNo]) return;
+    const data = allRacesData[currentRaceNo];
+    const d = data.raceInfo.raceDate;
+    if (d !== _kvTodaySlash()) return;                        // 当日のみ
+    const t = (typeof _kvGetRaceTime === 'function') ? _kvGetRaceTime(d, currentRaceNo) : null;
+    const post = t ? _kvPostDate(d, t) : null;
+    if (post) {
+      const mins = (post - Date.now()) / 60000;
+      if (mins < -2 || mins > 240) return;                    // 発走2分後まで／4時間前から
+    }
+    const last = _kvOddsAutoLast[currentRaceNo] || 0;
+    if (Date.now() - last < 5 * 60 * 1000) return;            // 5分間隔
+    _kvOddsAutoLast[currentRaceNo] = Date.now();
+    const raceNo = currentRaceNo;
+    const n = await fetchLiveOdds(raceNo);
+    if (raceNo !== currentRaceNo || !allRacesData[raceNo]) return;  // 取得中にレース移動したら描画しない
+    if (n > 0) {
+      renderHorseRows(raceNo, allRacesData[raceNo].horses);
+      if (allRacesData[raceNo].horses.some(h => h.postComment)) { try { _renderCommentsInTable(raceNo); } catch(e) {} }
+      try { renderPredictionPanel(raceNo); } catch(e) {}      // オッズ変化でAI印・EVも見直す
+      _kvSetOddsAutoNote(raceNo, '自動更新');
+    }
+  } catch(e) { /* 未発売・プロキシ失敗などは静かに次回へ */ }
 }
 
 /** 出馬表モード切替：レース前（AI印・オッズ・スコア）⇔ 記録（タイム・前半3F・ペース等の入力列） */
@@ -16745,11 +16865,45 @@ function renderPredictionPanel(raceNo) {
         <th style="padding:6px 6px;text-align:center">近況<br><span style="font-weight:400;font-size:9px">トレンド</span></th>
         <th style="padding:6px 6px;text-align:center">厩舎<br><span style="font-weight:400;font-size:9px">コンボ</span></th>
         <th style="padding:6px 6px;text-align:center">脚質<br><span style="font-weight:400;font-size:9px">補正</span></th>
-        <th style="padding:6px 6px;text-align:center" title="ローテ・昇降級・馬体重・上がり・着差・勝ち馬強さ・乗替・叩き・コーナー一貫性・前走楽勝・相対SI の合計">その他<br><span style="font-weight:400;font-size:9px">補正計</span></th>
+        <th style="padding:6px 6px;text-align:center" title="ローテ・昇降級・馬体重・上がり・着差・勝ち馬強さ・乗替・叩き・コーナー一貫性・前走楽勝・展開文脈・相対SI の合計。下の「全内訳を表示」で項目別に確認できます">その他<br><span style="font-weight:400;font-size:9px">補正計</span></th>
         <th style="padding:6px 8px;text-align:center;background:#2d1b69">総合<br><span style="font-weight:400;font-size:9px">スコア</span></th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
+
+    // ── 「その他」補正の全内訳（2026-07-11公開）──
+    // まとめ値ではなく12項目を個別に開示する折りたたみ表。値は学習済みの実効倍率を
+    // 適用した「総合スコアに実際に効いている量」（上表の各列と同じ基準）。
+    const _omdComponents = [
+      ['ローテ','rotMod','rotN','前走からの間隔'],
+      ['昇降級','classMod','clsN','クラスの上げ下げ'],
+      ['馬体重','weightMod','weightN','増減の影響'],
+      ['上がり3F','agariMod','agariN','過去の末脚'],
+      ['着差','marginMod','marginN','近走の着差'],
+      ['勝ち強','winStrMod','winStrN','勝ち馬との力差'],
+      ['乗替','jockeyChgMod','jockeyChgN','騎手の乗り替わり'],
+      ['叩き','takiMod','takiN','休み明け何戦目か'],
+      ['C一貫','cornConsistMod','cornConsistN','コーナー位置の安定度'],
+      ['楽勝','rakuMod','rakuN','前走の楽勝ボーナス'],
+      ['展開','paceCtxMod','paceCtxN','脚質と展開の相性'],
+      ['相対SI','relSIMod',null,'メンバー内での相対走力'],
+    ];
+    const _omdRows = scored.map((s, idx) => {
+      let _sum = 0;
+      const cells = _omdComponents.map(([label, key, effKey]) => {
+        const raw = s[key] || 0;
+        const v = raw * (effKey ? _effDisp(effKey) : 1);
+        _sum += v;
+        const cls = Math.abs(v) < 0.05 ? 'omd-zero' : v > 0 ? 'omd-pos' : 'omd-neg';
+        return `<td class="${cls}">${Math.abs(v) < 0.05 ? '—' : (v > 0 ? '+' : '') + v.toFixed(1)}</td>`;
+      }).join('');
+      return `<tr><td>${s.horse.umaBan||'—'}</td><td class="omd-name">${MARKS[idx]||''} ${s.horse.horseName||'—'}</td>${cells}<td class="omd-sum">${(_sum>0?'+':'')+_sum.toFixed(1)}</td></tr>`;
+    }).join('');
+    tableHtml += `<details class="other-mod-detail"><summary>🔎 「その他」補正の全内訳を表示（12項目）</summary><div class="omd-wrap"><table>
+      <thead><tr><th>馬番</th><th style="text-align:left">馬名</th>${_omdComponents.map(c=>`<th title="${c[3]}">${c[0]}</th>`).join('')}<th>合計</th></tr></thead>
+      <tbody>${_omdRows}</tbody></table>
+      <div class="omd-note">※各値は学習済みの実効倍率を適用した「総合スコアに実際に効いている量」。丸めの関係で上表の「その他」と±0.1程度ずれることがあります。列名にカーソルを合わせると項目の説明が出ます。</div></div>
+    </details>`;
   }
 
   const afterBtnLabel  = _viewMode === 'after' ? '▶ レース前予想に戻る' : '📊 結果照合モード';
@@ -16782,8 +16936,8 @@ function renderPredictionPanel(raceNo) {
       <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:${vBg};border:1px solid ${vColor}33;border-radius:8px;padding:7px 12px;font-size:12px">
         <span style="font-weight:800;color:${vColor}">${vIcon} ${verdict}</span>
         <span style="color:#475569">${condTxt} × <strong>${pace}予想</strong></span>
-        <span style="color:#94a3b8;font-size:11px">前後の有利さ ${facTxt}${isHigh ? '' : '（1400mの傾向を参考適用）'}</span>
-        <span style="margin-left:auto;color:#94a3b8;font-size:10px">出走馬の脚質構成から推定</span>
+        <button type="button" class="kvi-info" onclick="this.parentElement.classList.toggle('kvi-open')" title="説明を表示">?</button>
+        <span class="kvi-hidden" style="color:#94a3b8;font-size:11px">前後の有利さ ${facTxt}${isHigh ? '' : '（1400mの傾向を参考適用）'}｜出走馬の脚質構成から推定</span>
       </div>`;
   }
 
@@ -16806,7 +16960,8 @@ function renderPredictionPanel(raceNo) {
         <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:${bg};border:1px solid ${color}33;border-radius:8px;padding:7px 12px;font-size:12px">
           <span style="font-weight:800;color:${color}">${icon} ${label}</span>
           <span style="color:#475569">◎と○のスコア差 <strong>${_gap>=0?'+':''}${_gap}</strong></span>
-          <span style="margin-left:auto;color:#94a3b8;font-size:10px">過去${_stN}レースの集計：差が大きい時の◎は3着内${_stS}%・僅差の時は${_stT}%</span>
+          <button type="button" class="kvi-info" onclick="this.parentElement.classList.toggle('kvi-open')" title="説明を表示">?</button>
+          <span class="kvi-hidden" style="color:#94a3b8;font-size:10px">過去${_stN}レースの集計：差が大きい時の◎は3着内${_stS}%・僅差の時は${_stT}%</span>
         </div>`;
     }
   }
@@ -16963,7 +17118,7 @@ function renderPredictionPanel(raceNo) {
       _pickSleeper = { name: _anaHits[0].s.horse.horseName, idx: _anaHits[0].idx, why: _anaHits[0].why.slice() };
       const _items = _anaHits.slice(0, 3).map(x =>
         `<b>${x.s.horse.horseName}</b>（${x.idx + 1}番手・${x.why.join('＋')}）`).join('　');
-      anaBadge = `<div class="ana-run-bar">⚡ <b>穴馬激走注意</b>：${_items}<span class="arb-sub">｜こういう特徴のある評価下位馬は、普通の下位馬（3着以内11%）の約2倍＝20〜24%の確率で馬券に絡みます。ワイドや3連系の相手候補に</span></div>`;
+      anaBadge = `<div class="ana-run-bar">⚡ <b>穴馬激走注意</b>：${_items}<button type="button" class="kvi-info" onclick="this.closest('.ana-run-bar').classList.toggle('kvi-open')" title="説明を表示">?</button><span class="arb-sub kvi-hidden">｜こういう特徴のある評価下位馬は、普通の下位馬（3着以内11%）の約2倍＝20〜24%の確率で馬券に絡みます。ワイドや3連系の相手候補に</span></div>`;
     }
   }
 
@@ -16994,7 +17149,7 @@ function renderPredictionPanel(raceNo) {
     });
     if (_cfHits.length) {
       const _items = _cfHits.slice(0, 3).map(x => `<b>${x.s.horse.horseName}</b>（${x.idx + 1}番手）`).join('　');
-      condFitBadge = `<div class="cond-fit-bar">🔍 <b>距離/馬場実績あり</b>：${_items}<span class="cfb-sub">｜最近の成績は良くないものの、今日と同じ距離・馬場状態では過去に3着以内あり。同タイプの馬はやや好走しやすい（3着以内25.6%・実績なし馬は22.7%）ですが、オッズにも織り込まれがちなので過信は禁物の参考情報です</span></div>`;
+      condFitBadge = `<div class="cond-fit-bar">🔍 <b>距離/馬場実績あり</b>：${_items}<button type="button" class="kvi-info" onclick="this.closest('.cond-fit-bar').classList.toggle('kvi-open')" title="説明を表示">?</button><span class="cfb-sub kvi-hidden">｜最近の成績は良くないものの、今日と同じ距離・馬場状態では過去に3着以内あり。同タイプの馬はやや好走しやすい（3着以内25.6%・実績なし馬は22.7%）ですが、オッズにも織り込まれがちなので過信は禁物の参考情報です</span></div>`;
     }
   }
 
