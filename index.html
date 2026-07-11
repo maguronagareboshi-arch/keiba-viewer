@@ -4580,16 +4580,6 @@ function renderRaceContent(raceNo) {
           <i class="fas fa-trophy"></i>
           <span>ランキング</span>
         </button>
-        <button id="tab-btn-baba-${raceNo}" class="kv-vtab" data-view="baba"
-                onclick="switchViewTab(${raceNo},'baba')">
-          <i class="fas fa-water"></i>
-          <span>馬場傾向</span>
-        </button>
-        <button id="tab-btn-f3avg-${raceNo}" class="kv-vtab" data-view="f3avg"
-                onclick="switchViewTab(${raceNo},'f3avg')">
-          <i class="fas fa-stopwatch"></i>
-          <span>前半3F基準</span>
-        </button>
       </div>
       <!-- 右：コメント操作 — 絶対配置で右端に固定 -->
       <div id="deban-controls-${raceNo}" class="kv-vctrl">
@@ -4653,6 +4643,8 @@ function renderRaceContent(raceNo) {
           <div id="split-panel-body-${raceNo}"><div style="text-align:center;padding:16px;color:#c4c8d0;font-size:11px;">読込中...</div></div>
         </div>
       </div>
+      <!-- 展開予想・乗り替わり診断（2026-07-11：予想AIタブから出馬表タブへ移設。タブ増設はせずここに集約） -->
+      <div id="deban-extra-${raceNo}" style="padding:0 8px 8px;"></div>
     </div>
 
     <!-- 結果ビュー（着順・位置取り・払戻金） -->
@@ -4695,17 +4687,6 @@ function renderRaceContent(raceNo) {
       <div id="ranking-panel-${raceNo}">
         <div style="text-align:center;padding:24px;color:#9ca3af;font-size:13px;"><i class="fas fa-spinner fa-spin"></i> 読み込み中...</div>
       </div>
-    </div>
-
-    <!-- 馬場傾向ビュー（2026-07-11・出馬表から直接開けるよう追加。中身は「馬場傾向」ページと同じ全履歴集計） -->
-    <div id="view-baba-${raceNo}" style="display:none;padding:12px 14px 12px;">
-      <div style="font-size:11px;color:#6b7280;margin-bottom:8px">馬場差：マイナス＝速い馬場 / プラス＝遅い馬場（高知・全履歴の集計）</div>
-      <div id="track-trend-table-${raceNo}"><div style="text-align:center;padding:24px;color:#9ca3af;font-size:13px;"><i class="fas fa-spinner fa-spin"></i> 読み込み中...</div></div>
-    </div>
-
-    <!-- 前半3F基準ビュー（2026-07-11・出馬表から直接開けるよう追加。中身は「前半3F基準」ページと同じ全履歴集計） -->
-    <div id="view-f3avg-${raceNo}" style="display:none;padding:12px 14px 12px;">
-      <div id="f3avg-body-${raceNo}"><p style="color:#9ca3af;font-size:13px">計算中...</p></div>
     </div>`;
   section.appendChild(tSec);
   // 着順1位から表示（着順未設定馬は末尾に馬番順）
@@ -4726,6 +4707,7 @@ function renderRaceContent(raceNo) {
   setTimeout(() => renderTrackBiasPanel(raceNo), 0);
   setTimeout(() => renderDeploySimPanel(raceNo), 0);
   setTimeout(() => renderPaceAIPanel(raceNo), 0);
+  setTimeout(() => renderDebanExtra(raceNo), 0);
   // コメントが保存済みなら再描画（レース移動後も維持）
   if (data.horses.some(h => h.postComment)) {
     _renderCommentsInTable(raceNo);
@@ -4739,6 +4721,19 @@ function renderRaceContent(raceNo) {
     // チェックボックスの状態に合わせて表示切替
     if (!_commentVisible) _hideCommentRows(raceNo);
   }
+}
+
+/**
+ * 出馬表タブ内・展開予想＋乗り替わり診断（2026-07-11：予想AIタブから移設）。
+ * どちらも自己完結関数（allRacesData[raceNo]から直接計算）のためscored不要で呼べる。
+ */
+function renderDebanExtra(raceNo) {
+  const el = document.getElementById(`deban-extra-${raceNo}`);
+  if (!el) return;
+  let html = '';
+  try { html += buildPaceFormationHtml(raceNo); } catch(e) { console.warn('[buildPaceFormationHtml]', e); }
+  try { html += buildJockeyChangeDiag(raceNo); } catch(e) { console.warn('[buildJockeyChangeDiag]', e); }
+  el.innerHTML = html;
 }
 
 /**
@@ -5580,20 +5575,16 @@ function switchViewTab(raceNo, view) {
   const abilityView = document.getElementById(`view-ability-${raceNo}`);
   const yosoView    = document.getElementById(`view-yoso-${raceNo}`);
   const rankingView = document.getElementById(`view-ranking-${raceNo}`);
-  const babaView    = document.getElementById(`view-baba-${raceNo}`);
-  const f3avgView   = document.getElementById(`view-f3avg-${raceNo}`);
   const debanBtn    = document.getElementById(`tab-btn-deban-${raceNo}`);
   const kekkaBtn    = document.getElementById(`tab-btn-kekka-${raceNo}`);
   const abilityBtn  = document.getElementById(`tab-btn-ability-${raceNo}`);
   const yosoBtn     = document.getElementById(`tab-btn-yoso-${raceNo}`);
   const rankingBtn  = document.getElementById(`tab-btn-ranking-${raceNo}`);
-  const babaBtn     = document.getElementById(`tab-btn-baba-${raceNo}`);
-  const f3avgBtn    = document.getElementById(`tab-btn-f3avg-${raceNo}`);
   const debanCtrl   = document.getElementById(`deban-controls-${raceNo}`);
   if (!debanView || !abilityView) return;
 
-  [debanView, kekkaView, abilityView, yosoView, rankingView, babaView, f3avgView].forEach(v => { if (v) v.style.display = 'none'; });
-  [debanBtn, kekkaBtn, abilityBtn, yosoBtn, rankingBtn, babaBtn, f3avgBtn].forEach(b => { if (b) b.classList.remove('on'); });
+  [debanView, kekkaView, abilityView, yosoView, rankingView].forEach(v => { if (v) v.style.display = 'none'; });
+  [debanBtn, kekkaBtn, abilityBtn, yosoBtn, rankingBtn].forEach(b => { if (b) b.classList.remove('on'); });
   if (debanCtrl) debanCtrl.style.display = 'none';
 
   if (view === 'deban') {
@@ -5616,14 +5607,6 @@ function switchViewTab(raceNo, view) {
     if (rankingView) rankingView.style.display = '';
     if (rankingBtn) rankingBtn.classList.add('on');
     renderRankingPanel(raceNo);
-  } else if (view === 'baba') {
-    if (babaView) babaView.style.display = '';
-    if (babaBtn) babaBtn.classList.add('on');
-    try { renderTrackTrend(raceNo); } catch(e) { console.warn('[renderTrackTrend embedded]', e); }
-  } else if (view === 'f3avg') {
-    if (f3avgView) f3avgView.style.display = '';
-    if (f3avgBtn) f3avgBtn.classList.add('on');
-    try { renderF3Averages(raceNo); } catch(e) { console.warn('[renderF3Averages embedded]', e); }
   }
 }
 
@@ -9452,8 +9435,8 @@ function backfillPaceType() {
  * 前半3F基準表（クラス×馬場状態×距離）を保存データから自動計算して描画。
  * ページを開くたびに再計算するので、データが増えれば数値も自動で最新化される。
  */
-function renderF3Averages(raceNo) {
-  const body = document.getElementById(raceNo ? `f3avg-body-${raceNo}` : 'f3avg-body');
+function renderF3Averages() {
+  const body = document.getElementById('f3avg-body');
   if (!body) return;
   const CONDS = ['良', '稍重', '重', '不良'];
   const CLS_ORDER = ['重賞', 'OP', 'A', 'B', 'C1', 'C2', 'C3', '3歳', '2歳'];
@@ -9500,11 +9483,10 @@ function renderF3Averages(raceNo) {
     前半3Fの由来：実測値＋自動補完（1400m＝決着タイム−上がり4F／1300m＝(決着タイム−上がり4F)で前半2.5Fを出し、残り100m分＝(上がり4F−上がり3F)÷2を加算／1600m＝決着タイム−上がり4F−4F目仮置き 良14.5〜不良13.5秒）。1600mは前半800mの内訳が計測されないため、稍重の逆転など±0.3秒程度の不確実性が残ります。</div>`;
 }
 
-function renderTrackTrend(raceNo) {
-  const wrap = document.getElementById(raceNo ? `track-trend-table-${raceNo}` : 'track-trend-table');
+function renderTrackTrend() {
+  const wrap = document.getElementById('track-trend-table');
   if (!wrap) return;
-  // 出馬表タブから開いた埋め込み版は常に高知固定（フィルタUIを出さない簡易版）
-  const babaFilter = raceNo ? '31' : (document.getElementById('track-trend-baba')?.value || '');
+  const babaFilter = document.getElementById('track-trend-baba')?.value || '';
   let groups = (_savedGroups || []).filter(g => !babaFilter || g.baba === babaFilter);
   if (!groups.length) {
     wrap.innerHTML = '<p class="no-data">データがありません</p>';
@@ -9619,7 +9601,7 @@ function renderTrackTrend(raceNo) {
     <tbody>${rows}</tbody>
   </table>`;
 
-  // 1400m ペース別 前残り傾向（同じ競馬場フィルタで連動・出馬表からの埋め込み版では対象要素がないため自動的にスキップ）
+  // 1400m ペース別 前残り傾向（同じ競馬場フィルタで連動）
   try { renderPaceBias1400(babaFilter); } catch(e) { console.warn('[paceBias1400]', e); }
 }
 
@@ -17272,8 +17254,6 @@ function renderPredictionPanel(raceNo) {
     ${anaBadge}
     ${condFitBadge}
     ${paceBiasBadge}
-    ${buildPaceFormationHtml(raceNo)}
-    ${buildJockeyChangeDiag(raceNo)}
     <div style="overflow-x:auto;">${tableHtml}</div>
     <div id="yoso-backtest-${raceNo}"></div>
     <div id="yoso-report-${raceNo}"></div>
