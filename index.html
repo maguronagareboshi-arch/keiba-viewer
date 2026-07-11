@@ -8607,6 +8607,193 @@ function saveOffsetModelWeights(payload) {
   lsWrite('offset_model_31', { type: 'offsetModel', memo });
   apiUpsert('keiba_day_settings', '31_offset-model', { baba_code: '31', race_date: 'offset-model', memo }).catch(() => {});
 }
+
+// ══════════ 購入モデル専用：凍結済みシャドーモデル (2026-07-11 freeze) ══════════
+// 【分離の原則】通常予想(◎○▲の並び順)はKV_OFFSET_MODEL_DEFAULT(12特徴量・jockeyChgN込み)を使う。
+// 購入判定(EV一致シグナル)は必ずこのSHADOW_PURCHASE_MODEL(加算15特徴量+オフセット11特徴量・
+// jockeyChgN除外・agariN維持)を使い、本番ランキングモデル(offset12)を暗黙に購入判定へ流用しない。
+// 2026-07-11のユーザー指摘により明示的に分離。
+//
+// 【agariN=enabledの根拠（凍結前の再検証・2026-07-11）】
+// 「レース内softmaxでは全馬同じ固定値なら順位に影響しない」という指摘は理論上正しいが、agariNは
+// 完全な定数ではない：全体標準偏差0.346・レース内標準偏差平均0.175（レース内std=0のレースは
+// 14,776R中52.7%）・欠損率0%・値の種類360通り（89.2%が下限飽和値-1.25、7.7%が0、残り3.1%が
+// 連続値）・馬ごとのユニーク値数は中央値2（1種類のみの馬は6.2%）。レース内でagariNが完全に一定
+// (std=0)のレースでも◎が変わる例があるのは、agariN込み/除外で再学習した際に他の特徴量
+// （base/marginN/trendN等）の係数自体がシフトするため（agariN込みoffset11モデルの係数と比べ、
+// 除外後はbase 0.3911→0.3815・marginN -0.0018→-0.0067等、全項目が小さくシフトすることを実測で
+// 確認）。つまりagariN自身の係数がゼロ分散レースの順位を動かすのではなく、agariNが他特徴量と
+// 相関しているために除外時にその説明力が再配分される、という間接効果。
+const SHADOW_PURCHASE_MODEL = {
+  version: 'shadow_v1',
+  trainedThrough: '2026-07-05', races: 14776,
+  additive: {
+    feats: ['base','condNew','distNew','rotN','clsN','cornN','trendN','weightN','agariN','comboN','marginN','winStrN','takiN','cornConsistN','rakuN'],
+    w:    [1.5381, 0.0257, 0.0259, 0.0009, 0.1245, 0.1874, 0.0873, 0.0494, 0.046, 0.2719, 0.0528, -0.0226, -0.0025, -0.1103, 0.082],
+    mean: [40.9012, 0.003, -0.0735, -0.1825, -0.0014, -0.9774, -0.0269, -0.0273, -1.1399, 0.0284, -0.0034, 0.081, 0.0164, 0.0021, 0.1299],
+    sd:   [10.0024, 0.7684, 0.4003, 0.3825, 0.3802, 1.3648, 0.7613, 0.097, 0.3463, 0.5572, 0.4482, 0.1784, 0.0979, 0.5965, 0.6897],
+  },
+  offset: {
+    feats: ['base','distNew','clsN','cornN','trendN','weightN','agariN','comboN','marginN','cornConsistN','rotTakiN'],
+    w:    [0.3547, -0.0169, 0.0244, -0.1135, -0.0293, 0.0366, -0.0533, 0.0055, 0, -0.1042, -0.0565],
+    mean: [40.9012, -0.0735, -0.0014, -0.9774, -0.0269, -0.0273, -1.1399, 0.0284, -0.0034, 0.0021, -0.1661],
+    sd:   [10.0024, 0.4003, 0.3802, 1.3648, 0.7613, 0.097, 0.3463, 0.5572, 0.4482, 0.5965, 0.4008],
+  },
+};
+
+// 凍結チェックリスト（購入判定ルール一式）。coefだけでなくmean/sd込みでハッシュ化。
+// 途中で1項目でも変更したら新しいversionを切り、シャドー件数は0から数え直すこと。
+const SHADOW_FREEZE_CONFIG = {
+  shadow_model_version: 'shadow_v1',
+  additive_coef_hash: 'sha256:214a0a9d85163dbc6b0f66bdc45d13838f465b087f902eb5990d9f38a9131ab',
+  offset_coef_hash: 'sha256:9a5bf077429c87d17b7cf414cd3f42044a2ae432a6ae3adbe0d3b5db3a78686',
+  feature_schema_hash: 'sha256:a4febbf90e25a062f588a51bca520346005b8eecd216d144f3175f167c9b337',
+  code_commit_sha: '7354f0b', // SHADOW_PURCHASE_MODEL/SHADOW_FREEZE_CONFIG導入コミット
+  trained_through: '2026-07-05',
+  freeze_timestamp: '2026-07-11T02:57:39Z',
+  odds_source: 'keiba.go.jp（発走10分前スナップショット）',
+  odds_cutoff_minutes: 10,
+  odds_min: 5,
+  odds_max: 30,
+  ev_additive_min: 0,
+  ev_offset_min: 0,
+  max_bets_per_race: 1,
+  tie_break: 'min(EV_additive, EV_offset) が最大の1頭',
+  virtual_stake: 100,
+  jockeyChgN: 'disabled',
+  agariN: 'enabled',
+};
+
+/**
+ * 購入モデル専用のEV一致ピック計算。SHADOW_PURCHASE_MODELのみを使い、本番ランキング
+ * モデル(KV_OFFSET_MODEL_DEFAULT/offset12)には一切依存しない（意図的な完全分離）。
+ * scored: computeYosoScoredが返すscored配列（baseScore/condMod/distMod等を持つ）。
+ * 戻り値: { pick, runners }。pickはEV一致で選ばれた1頭(なければnull)。
+ * runnersは全頭ぶんのp_additive/p_offset/EV/非選択理由(non_selection_reason)を含み、
+ * シャドーログの「全出走馬を記録する」要件にそのまま使える。
+ */
+function computeShadowPurchasePick(scored) {
+  const runners = scored
+    .filter(s => s.horse && !isNaN(parseFloat(s.horse.odds)) && parseFloat(s.horse.odds) > 0)
+    .map(s => ({
+      s, odds: parseFloat(s.horse.odds),
+      featOffset: {
+        base: s.baseScore, distNew: s.distMod, clsN: s.classMod, cornN: s._cornModRaw,
+        trendN: s.trendMod, weightN: s.weightMod, agariN: s.agariMod, comboN: s.comboMod,
+        marginN: s.marginMod, cornConsistN: s.cornConsistMod, rotTakiN: (s.rotMod||0) + (s.takiMod||0),
+      },
+      featAdditive: {
+        base: s.baseScore, condNew: s.condMod, distNew: s.distMod, rotN: s.rotMod, clsN: s.classMod,
+        cornN: s._cornModRaw, trendN: s.trendMod, weightN: s.weightMod, agariN: s.agariMod,
+        comboN: s.comboMod, marginN: s.marginMod, winStrN: s.winStrMod, takiN: s.takiMod,
+        cornConsistN: s.cornConsistMod, rakuN: s.rakuMod || 0,
+      },
+    }));
+  if (runners.length < 2) return { pick: null, runners: [] };
+
+  const cfg = SHADOW_FREEZE_CONFIG;
+  const { probs: pOffset } = computeOffsetModelProbs(
+    runners.map(r => ({ odds: r.odds, feat: r.featOffset })), SHADOW_PURCHASE_MODEL.offset);
+  const { probs: pAdditive } = computeAdditiveModelProbs(
+    runners.map(r => ({ feat: r.featAdditive })), SHADOW_PURCHASE_MODEL.additive);
+
+  const rows = runners.map((r, i) => {
+    const evOffset = pOffset[i] * r.odds - 1;
+    const evAdditive = pAdditive[i] * r.odds - 1;
+    let reason = null;
+    if (!(r.odds >= cfg.odds_min && r.odds < cfg.odds_max)) reason = 'ODDS_OUT_OF_BAND';
+    else if (!(evOffset > cfg.ev_offset_min)) reason = 'EV_OFFSET_NOT_POSITIVE';
+    else if (!(evAdditive > cfg.ev_additive_min)) reason = 'EV_ADDITIVE_NOT_POSITIVE';
+    return {
+      s: r.s, horse: r.s.horse, odds: r.odds,
+      pOffset: pOffset[i], pAdditive: pAdditive[i], evOffset, evAdditive,
+      eligible: reason === null, reason,
+    };
+  });
+  let pick = null;
+  for (const r of rows) {
+    if (!r.eligible) continue;
+    r._floor = Math.min(r.evOffset, r.evAdditive);
+    if (!pick || r._floor > pick._floor) pick = r;
+  }
+  rows.forEach(r => { if (pick && r !== pick && r.eligible) r.reason = 'NOT_MAX_EV_FLOOR'; });
+  return { pick, runners: rows };
+}
+
+/**
+ * シャドー予測ログをkochi_shadow_predictionsへ記録（発走前・追記専用）。
+ * raceId: "31_2026/07/11_9" 形式。oddsObservedAtISO: 10分前オッズを観測した時刻(ISO文字列)。
+ * shadowResult: computeShadowPurchasePick()の戻り値。全出走馬ぶん1行ずつINSERTする
+ * （選ばれなかった馬もnon_selection_reasonつきで必ず記録＝生存者バイアスを防ぐ）。
+ * 同一(race_id,horse_id)は主キー制約で二重送信を防止（失敗時は既存行のまま・無害）。
+ */
+async function logShadowPredictions(raceId, shadowResult, oddsObservedAtISO) {
+  if (!shadowResult.runners.length) return { ok: false, reason: 'NO_RUNNERS' };
+  const rows = shadowResult.runners.map(r => ({
+    race_id: raceId,
+    horse_id: r.horse.horseName || r.horse.horse_name || '',
+    uma_ban: parseInt(r.horse.umaBan || r.horse.uma_ban) || null,
+    prediction_created_at: new Date().toISOString(),
+    odds_observed_at: oddsObservedAtISO || null,
+    odds_10min: r.odds,
+    p_additive: r.pAdditive, p_offset: r.pOffset,
+    ev_additive: r.evAdditive, ev_offset: r.evOffset,
+    selected: r === shadowResult.pick,
+    non_selection_reason: r === shadowResult.pick ? null : r.reason,
+    model_version: SHADOW_FREEZE_CONFIG.shadow_model_version,
+    config_hash: SHADOW_FREEZE_CONFIG.feature_schema_hash,
+  }));
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/kochi_shadow_predictions`, {
+      method: 'POST', headers: { ...SUPABASE_HEADERS, 'Prefer': 'return=minimal' }, body: JSON.stringify(rows),
+    });
+    if (!res.ok) return { ok: false, reason: `HTTP${res.status}: ${await res.text()}` };
+    return { ok: true, n: rows.length };
+  } catch (e) { return { ok: false, reason: e.message }; }
+}
+
+/** 10分前オッズが取得できなかったレースの記録（後から補完せずNO_BET_DATA_MISSINGとして残す）。 */
+async function logShadowNoOddsData(raceId, scoredList) {
+  const rows = scoredList.filter(s => s.horse).map(s => ({
+    race_id: raceId,
+    horse_id: s.horse.horseName || s.horse.horse_name || '',
+    uma_ban: parseInt(s.horse.umaBan || s.horse.uma_ban) || null,
+    prediction_created_at: new Date().toISOString(),
+    selected: false, non_selection_reason: 'NO_BET_DATA_MISSING',
+    model_version: SHADOW_FREEZE_CONFIG.shadow_model_version,
+    config_hash: SHADOW_FREEZE_CONFIG.feature_schema_hash,
+  }));
+  if (!rows.length) return { ok: false, reason: 'NO_RUNNERS' };
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/kochi_shadow_predictions`, {
+      method: 'POST', headers: { ...SUPABASE_HEADERS, 'Prefer': 'return=minimal' }, body: JSON.stringify(rows),
+    });
+    if (!res.ok) return { ok: false, reason: `HTTP${res.status}: ${await res.text()}` };
+    return { ok: true, n: rows.length };
+  } catch (e) { return { ok: false, reason: e.message }; }
+}
+
+/**
+ * シャドー結果ログをkochi_shadow_resultsへ記録（発走後・予測ログとは別テーブル＝上書き不可）。
+ * results: [{ horseId, finalOdds, finishPosition, officialPayout, refunded }]
+ */
+async function logShadowResults(raceId, results) {
+  if (!results.length) return { ok: false, reason: 'NO_RESULTS' };
+  const rows = results.map(r => ({
+    race_id: raceId, horse_id: r.horseId,
+    final_odds: r.finalOdds ?? null, finish_position: r.finishPosition ?? null,
+    official_payout: r.officialPayout ?? null, refunded: !!r.refunded,
+    settled_at: new Date().toISOString(),
+  }));
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/kochi_shadow_results`, {
+      method: 'POST', headers: { ...SUPABASE_HEADERS, 'Prefer': 'return=minimal' }, body: JSON.stringify(rows),
+    });
+    if (!res.ok) return { ok: false, reason: `HTTP${res.status}: ${await res.text()}` };
+    return { ok: true, n: rows.length };
+  } catch (e) { return { ok: false, reason: e.message }; }
+}
+
 /** オッズ配列から市場勝率を算出（1/オッズを正規化してオーバーラウンドを除去）。 */
 function computeMarketProbs(oddsArr) {
   const invs = oddsArr.map(o => (o > 0) ? 1 / o : 0);
@@ -8635,6 +8822,26 @@ function computeOffsetModelProbs(runners, model) {
   const ex = scores.map(s => Math.exp(s - mx));
   const sum = ex.reduce((a, b) => a + b, 0);
   return { probs: ex.map(e => e / sum), marketProbs };
+}
+/**
+ * 加算モデル（市場オフセットなし）で各馬の勝率を計算する。購入モデル(SHADOW_PURCHASE_MODEL.additive)専用。
+ * runners: [{feat:{base,...}}, ...]（featはmodel.featsと同じキー）
+ * 戻り値: probs:[...]（runnersと同じ順）
+ */
+function computeAdditiveModelProbs(runners, model) {
+  const scores = runners.map(r => {
+    let s = 0;
+    for (let f = 0; f < model.feats.length; f++) {
+      const k = model.feats[f];
+      const v = (r.feat[k] || 0);
+      s += ((v - model.mean[f]) / model.sd[f]) * model.w[f];
+    }
+    return s;
+  });
+  const mx = Math.max(...scores);
+  const ex = scores.map(s => Math.exp(s - mx));
+  const sum = ex.reduce((a, b) => a + b, 0);
+  return { probs: ex.map(e => e / sum) };
 }
 
 
