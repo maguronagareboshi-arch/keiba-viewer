@@ -444,7 +444,7 @@ const providers = {
 
 const state = { provider: null, dates: {}, month: null, date: null, raceId: null, track: '門別',
   sub: 'seiseki', stats: null, model: null, view: 'race', prevRace: null,
-  noken: null, nokenDate: null, nokenSort: 'race', nokenHist: null, nokenByHorse: null };
+  noken: null, nokenDate: null, nokenSort: 'race', nokenTwoOnly: false, nokenHist: null, nokenByHorse: null };
 
 // ============================================================
 // ユーティリティ
@@ -2275,15 +2275,20 @@ function nokenTimeCard(day) {
     <td class="num"><b>${esc(h.time)}</b></td>
     <td class="num">${nkTen(h)}</td>
     <td class="num">${esc(h.last3f)}</td>
+    <td class="l">${esc(h.comment)}</td>
+    <td class="num">${esc(h.weight)}</td>
     <td class="${nkOkCls(h.ok)}">${esc(h.ok)}</td>
     <td class="l small nk-aftercell">${nkAfterHtml(h.horse_id, day.date)}</td>
   </tr>`).join('');
   return `<div class="nk-card"><div class="tablewrap"><table class="nk-table">
-    <tr><th>順</th><th>R</th><th>距離</th><th>番</th><th>馬名</th><th>性齢</th><th>タイム</th><th>テン1F</th><th>上3F</th><th>合否</th><th>その後の成績</th></tr>
+    <tr><th>順</th><th>R</th><th>距離</th><th>番</th><th>馬名</th><th>性齢</th><th>タイム</th><th>テン1F</th><th>上3F</th><th>寸評</th><th>馬体重</th><th>合否</th><th>その後の成績</th></tr>
     ${rows}
   </table></div>
-  <div class="note">※距離をまたいで純タイム最速順（800mと1000mが混在。距離列でご確認を）。</div></div>`;
+  <div class="note">※距離をまたいで純タイム最速順（800mと1000mが混在。距離列でご確認を）。2歳と古馬は同条件で走っても体力差でタイムが比較にならないため、上の「2歳限定」で絞り込み可。</div></div>`;
 }
+
+// 性齢文字列（牡2/牝3等）から馬齢を取り出す。2歳限定フィルタで使用。
+const nkAge = (sexage) => { const m = String(sexage || '').match(/(\d+)/); return m ? +m[1] : null; };
 
 async function renderNoken() {
   const root = $('nokenRoot');
@@ -2300,32 +2305,39 @@ async function renderNoken() {
   }
   const days = nk.days;
   if (!state.nokenDate || !days.some((d) => d.date === state.nokenDate)) state.nokenDate = days[0].date;
-  const day = days.find((d) => d.date === state.nokenDate) || days[0];
+  const dayRaw = days.find((d) => d.date === state.nokenDate) || days[0];
+  const twoOnly = !!state.nokenTwoOnly;
+  // 2歳限定: 古馬の調教試験と2歳の能力試験が同じ距離設定で混在しタイム順で紛れるための絞り込み
+  const day = twoOnly
+    ? { ...dayRaw, races: dayRaw.races.map((r) => ({ ...r, rows: (r.rows || []).filter((h) => nkAge(h.sexage) === 2) })) }
+    : dayRaw;
   const dateBtns = days.map((d) =>
     `<button class="nk-date-btn${d.date === state.nokenDate ? ' active' : ''}" data-nkdate="${d.date}">${mmdd(d.date)}</button>`).join('');
   const hasDayVideo = !!day.video;   // 大井等: レース単位ではなく開催日単位のYouTube動画
   const nvid = hasDayVideo ? 1 : day.races.filter((r) => r.mp4).length;
   const sort = state.nokenSort || 'race';
-  const body = sort === 'time' ? nokenTimeCard(day) : day.races.map((r) => nokenRaceCard(r, day.date, hasDayVideo)).join('');
+  const racesShown = twoOnly ? day.races.filter((r) => (r.rows || []).length) : day.races;
+  const body = sort === 'time' ? nokenTimeCard(day) : racesShown.map((r) => nokenRaceCard(r, day.date, hasDayVideo)).join('');
   const videoSrc = state.track === '門別' ? 'ホッカイドウ競馬公式' : '南関競馬公式(nankankeiba.com)';
-  const dayVideoBlock = hasDayVideo ? `<details class="nk-vid"><summary>▶ 能試映像を見る（${day.races.length}R分・1本）</summary>
+  const dayVideoBlock = hasDayVideo ? `<details class="nk-vid"><summary>▶ 能試映像を見る（${dayRaw.races.length}R分・1本）</summary>
     <iframe width="100%" height="400" style="border:0;max-width:640px;aspect-ratio:16/9;height:auto" loading="lazy"
       src="https://www.youtube.com/embed/${esc(day.video.split('/').pop())}" allowfullscreen></iframe></details>` : '';
   root.innerHTML = `
     <div class="card">
       <h2 style="margin:0 0 4px">🎓 能力検査（能検）</h2>
-      <div class="note">2歳馬の競走資格を確認する試験走。合格が新馬・未勝利への出走資格。動画=${videoSrc}／成績（タイム・上り3F・寸評・合否）=競馬ブック。「その後の成績」=能検後の実戦（着順/距離/タイム/馬体重）。馬名タップで詳細へ。${nk.updated ? `${esc(nk.updated)}更新。` : ''}</div>
+      <div class="note">2歳馬の競走資格を確認する試験走（古馬の調教試験も同じ日に混在）。合格が新馬・未勝利への出走資格。動画=${videoSrc}／成績（タイム・上り3F・寸評・合否）=競馬ブック。「その後の成績」=能検後の実戦（着順/距離/タイム/馬体重）。馬名タップで詳細へ。${nk.updated ? `${esc(nk.updated)}更新。` : ''}</div>
       <div class="nk-dates">${dateBtns}</div>
-      <div class="nk-day-head">${day.date}（${day.races.length}R・動画${nvid}）
+      <div class="nk-day-head">${dayRaw.date}（${dayRaw.races.length}R・動画${nvid}）
         <span class="nk-sort">
           <button class="nk-sort-btn${sort === 'race' ? ' active' : ''}" data-nksort="race">レース別</button>
           <button class="nk-sort-btn${sort === 'time' ? ' active' : ''}" data-nksort="time">タイム順</button>
         </span>
+        <button class="nk-sort-btn${twoOnly ? ' active' : ''}" data-nktwoonly style="margin-left:6px">2歳限定${twoOnly ? ' ✓' : ''}</button>
         ${day.all_pdf ? `<a href="${esc(day.all_pdf)}" target="_blank" rel="noopener" class="nk-pdf">📄 全レース成績表PDF</a>` : ''}</div>
       ${dayVideoBlock}
     </div>
     <div class="nk-grid${sort === 'time' ? ' nk-grid-1' : ''}">${body || '<div class="empty">この開催日のデータがありません</div>'}</div>`;
-  loadNokenHist(day);   // その後の成績を裏で取得して該当セルを更新
+  loadNokenHist(dayRaw);   // その後の成績を裏で取得して該当セルを更新（絞り込み前の全馬分をキャッシュ）
 }
 
 // 能検を horse_id で引ける索引（新馬出馬表・その後成績用）
@@ -2538,6 +2550,8 @@ async function init() {
     if (hl && hl.dataset.hid) { e.preventDefault(); openHorseModal(hl.dataset.hid, true, hl.textContent.trim()); return; }
     const s = e.target.closest('button[data-nksort]');
     if (s) { state.nokenSort = s.dataset.nksort; renderNoken(); return; }
+    const two = e.target.closest('button[data-nktwoonly]');
+    if (two) { state.nokenTwoOnly = !state.nokenTwoOnly; renderNoken(); return; }
     const b = e.target.closest('button[data-nkdate]');
     if (b) { state.nokenDate = b.dataset.nkdate; renderNoken(); }
   });
