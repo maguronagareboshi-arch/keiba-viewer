@@ -836,7 +836,14 @@ function lapChartSvg(raceLaps, avgLaps, dist) {
     ${line(raceLaps, 'var(--accent)', false)}
   </svg>`;
 }
-function lapChartCard(race) {
+// 秒→"1.26.8"形式（既存time_str表記に合わせる）
+function secToTimeStr(sec) {
+  if (sec == null) return '';
+  const m = Math.floor(sec / 60);
+  const s = (sec - m * 60).toFixed(1);
+  return m > 0 ? `${m}.${s.padStart(4, '0')}` : s;
+}
+function lapChartCard(race, results) {
   const laps = race.extra && race.extra.laps;
   if (!laps || laps.length < 2) return '';
   // クラスを混ぜると意味が無いため、同距離×同クラスの平均のみを比較対象にする（無ければ比較なし）
@@ -845,10 +852,33 @@ function lapChartCard(race) {
   const key = cls ? `${race.distance_m}_${cls}` : null;
   const avg = key && state.stats && state.stats.lap_profile_class && state.stats.lap_profile_class[key];
   const chart = lapChartSvg(laps, avg && avg.laps, race.distance_m);
+  // 決着時計 vs そのクラスの平均勝ち時計
+  const winner = (results || []).find((r) => r.finish === 1);
+  const decidingSec = laps.reduce((a, b) => a + b, 0);
+  const wt = key && state.stats && state.stats.winner_time_class && state.stats.winner_time_class[key];
+  let timeLine = '';
+  if (winner || wt) {
+    const decidingStr = (winner && winner.time_str) || secToTimeStr(decidingSec);
+    const diff = wt ? decidingSec - wt.mean : null;
+    const diffStr = diff != null ? `（クラス平均${diff <= -0.1 ? 'より' : diff >= 0.1 ? 'より' : 'と'}<b>${Math.abs(diff).toFixed(1)}秒${diff <= -0.1 ? '速い' : diff >= 0.1 ? '遅い' : '同程度'}</b>）` : '';
+    timeLine = `<div class="note">決着時計 <b>${esc(decidingStr)}</b>　${cls ? `${esc(cls)}級平均勝ち時計 ${wt ? `<b>${secToTimeStr(wt.mean)}</b>(n${wt.n})` : 'データ不足'}` : ''}${diffStr}</div>`;
+  }
+  // 当日の馬場傾向（前残り/差し）。速い/遅いとの組み合わせでコメントを合成。
+  const rdate = race.date || race.race_date;
+  const bd = rdate && state.stats && state.stats.bias_daily && state.stats.bias_daily[rdate];
+  let biasLine = '';
+  if (bd && bd.label && bd.label !== '-') {
+    const wt2 = key && state.stats.winner_time_class && state.stats.winner_time_class[key];
+    const diff2 = wt2 ? decidingSec - wt2.mean : null;
+    const speedNote = diff2 == null ? '' : diff2 <= -0.5 ? '決着は平均より速いのに' : diff2 >= 0.5 ? '決着は平均より遅いのに' : '決着は平均並みで';
+    const concl = bd.label === '前有利' ? `${speedNote}前残り傾向` : bd.label === '差し有利' ? `${speedNote}差しが決まる傾向` : 'フラットな傾向';
+    biasLine = `<div class="note">当日の馬場傾向: <b>${esc(bd.label)}</b>（${concl}・前残り度${bd.rel >= 0 ? '+' : ''}${bd.rel}）</div>`;
+  }
   return `<div class="card">
     <h3 class="sec" style="margin-top:0">ラップタイム（区間200m毎・実測）</h3>
     ${chart}
     <div class="legend"><span style="color:var(--accent)">━</span> このレース　${avg ? `<span style="color:var(--sub)">┅</span> ${state.track}平均(距離${race.distance_m}m・${esc(cls)}級・n${avg.n})` : `<span class="sub">（${cls ? `${esc(cls)}級はデータ不足のため比較なし` : 'クラス不明のため比較なし'}）</span>`}　※縦軸は上ほど速い（時間が短い）。</div>
+    ${timeLine}${biasLine}
   </div>`;
 }
 // 区間ラップ配列を距離のちょうど半分で前半/後半に分割（本数が奇数＝中央の区間は前後に按分）
@@ -1007,7 +1037,7 @@ function seisekiHtml(data, aiMark) {
     </tr>`;
   }).join('');
   return raceHeaderHtml(race) + `
-  ${lapChartCard(race)}
+  ${lapChartCard(race, results)}
   ${isShort ? '<div class="note">※1200m未満のため「前半3F」列は 距離−600m の前半タイム（1000mならテン2F相当）</div>' : ''}
   <div class="card"><div class="tablewrap">
     <table>
