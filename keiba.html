@@ -354,7 +354,7 @@ const providers = {
         const ra = r.chihou_races || {};
         (map[r.horse_id] = map[r.horse_id] || []).push({
           date: ra.race_date, race_id: r.race_id, dist: ra.distance_m, going: ra.going,
-          pace: ra.pace, cls: classGroup(ra.klass), race_name: ra.race_name, fin: r.finish, pop: r.pop, sex: r.sex_age,
+          pace: ra.pace, cls: classGroup((ra.klass || '') + (ra.race_name || '')), race_name: ra.race_name, fin: r.finish, pop: r.pop, sex: r.sex_age,
           f3: r.first3f, l3: r.last3f, tsec: r.time_sec, kin: r.kinryo,
           kyaku: kyakuFromPassing(r.passing), passing: r.passing, c4: r.corner4_pos,
           comment: r.comment, time: r.time_str, weight: r.body_weight, jockey: r.jockey,
@@ -768,7 +768,7 @@ function renderViewTabs() {
 function renderSubTabs() {
   $('subTabs').hidden = false;
   const cfg = trackCfg();
-  const subs = [['yosou', '🎯 予想'], ['syutuba', '出馬表'], ['cyokyo', '調教'], ['seiseki', '成績'], ['eizo', '🎬 映像']];
+  const subs = [['yosou', '🎯 予想'], ['syutuba', '出馬表'], ['cyokyo', '調教'], ['zenkouhan', '前後半'], ['seiseki', '成績'], ['eizo', '🎬 映像']];
   if (cfg.sim) subs.push(['sim', '🎲 シミュレータ']);   // シミュレータは門別のみ（トラック描画が門別専用）
   $('subTabs').innerHTML = subs.map(([s, l]) => `<button data-sub="${s}" class="${state.sub === s ? 'active' : ''}">${l}</button>`).join('');
 }
@@ -839,12 +839,16 @@ function lapChartSvg(raceLaps, avgLaps, dist) {
 function lapChartCard(race) {
   const laps = race.extra && race.extra.laps;
   if (!laps || laps.length < 2) return '';
-  const avg = state.stats && state.stats.lap_profile && state.stats.lap_profile[String(race.distance_m)];
+  // クラスを混ぜると意味が無いため、同距離×同クラスの平均のみを比較対象にする（無ければ比較なし）
+  const ageFallback = classGroup((race.klass || '') + (race.race_name || ''));
+  const cls = classMajor(race.race_name) || (ageFallback !== '3歳以上' ? ageFallback : null);
+  const key = cls ? `${race.distance_m}_${cls}` : null;
+  const avg = key && state.stats && state.stats.lap_profile_class && state.stats.lap_profile_class[key];
   const chart = lapChartSvg(laps, avg && avg.laps, race.distance_m);
   return `<div class="card">
     <h3 class="sec" style="margin-top:0">ラップタイム（区間200m毎・実測）</h3>
     ${chart}
-    <div class="legend"><span style="color:var(--accent)">━</span> このレース　${avg ? `<span style="color:var(--sub)">┅</span> ${state.track}平均(距離${race.distance_m}m・n${avg.n})` : ''}　※縦軸は上ほど速い（時間が短い）。</div>
+    <div class="legend"><span style="color:var(--accent)">━</span> このレース　${avg ? `<span style="color:var(--sub)">┅</span> ${state.track}平均(距離${race.distance_m}m・${esc(cls)}級・n${avg.n})` : `<span class="sub">（${cls ? `${esc(cls)}級はデータ不足のため比較なし` : 'クラス不明のため比較なし'}）</span>`}　※縦軸は上ほど速い（時間が短い）。</div>
   </div>`;
 }
 // 区間ラップ配列を距離のちょうど半分で前半/後半に分割（本数が奇数＝中央の区間は前後に按分）
@@ -857,7 +861,17 @@ function splitHalf(laps) {
   if (n % 2 === 1) { const half = laps[mid] / 2; front += half; back += half; }
   return { front, back };
 }
-// 前後半タイムの1セル分（日付+クラス／前3F-上3F／ペース区分+半分割）。競馬ブックの「前半3F-後半3F」「H/M/S」2段表記に合わせる。
+// レース全体の前半3F・上がり3Fをラップから算出（馬の前半3F/上り3Fと同じ定義＝1200m未満は距離-600mが前半）
+function raceFrontAgari(laps, dist) {
+  if (!laps || laps.length < 3) return null;
+  const n = laps.length;
+  const frontLen = (dist && dist < 1200) ? Math.max(1, Math.round((dist - 600) / 200)) : 3;
+  if (frontLen >= n) return null;
+  const front = laps.slice(0, frontLen).reduce((a, b) => a + b, 0);
+  const agari = laps.slice(-3).reduce((a, b) => a + b, 0);
+  return { front, agari };
+}
+// 前後半タイムの1セル分（日付+クラス／前3F-上3F／ペース区分+半分割）。競馬ブックの「前半3F-後半3F」「H/M/S」2段表記に合わせる。日付クリックでそのレースへ。
 function zenkouhanCellHtml(h) {
   const sp = splitHalf(h.laps);
   const cls = classBadge(h);
@@ -866,13 +880,16 @@ function zenkouhanCellHtml(h) {
   const half = sp ? `${sp.front.toFixed(1)}-${sp.back.toFixed(1)}` : '-';
   const diff = sp ? sp.back - sp.front : 0;
   const color = diff <= -0.3 ? 'var(--accent)' : diff >= 0.3 ? 'var(--sub)' : 'inherit';
-  return `<div style="font-size:11px;white-space:nowrap">${mmdd(h.date)}${cls ? ` <span class="badge">${esc(cls)}</span>` : ''}</div>
+  const dateHtml = h.race_id
+    ? `<span class="racelink" data-rid="${esc(h.race_id)}" data-rd="${esc(h.date || '')}" title="クリックでそのレースへ">${mmdd(h.date)}</span>`
+    : mmdd(h.date);
+  return `<div style="font-size:11px;white-space:nowrap">${dateHtml}${cls ? ` <span class="badge">${esc(cls)}</span>` : ''}</div>
     <div style="font-size:11px;color:var(--sub);font-variant-numeric:tabular-nums;white-space:nowrap">前3F-上3F ${f3l3}</div>
     <div style="font-size:11px;color:${color};font-variant-numeric:tabular-nums;white-space:nowrap">${pl ? `<b>${pl}</b> ` : ''}${half}</div>`;
 }
 // 前後半タイム・直近5走（時系列）
-function zenkouhanRecentCard(data, hist) {
-  const rows = (data.results || []).filter((r) => r.horse_id).map((r) => {
+function zenkouhanRecentCard(horses, hist) {
+  const rows = (horses || []).filter((r) => r.horse_id).map((r) => {
     const hs = (hist[r.horse_id] || []).filter((h) => h.laps && h.laps.length >= 2).slice(0, 5);
     if (!hs.length) return '';
     const cells = hs.map((h) => `<td class="l">${zenkouhanCellHtml(h)}</td>`).join('') + '<td></td>'.repeat(5 - hs.length);
@@ -884,15 +901,14 @@ function zenkouhanRecentCard(data, hist) {
   </table></div>`;
 }
 // 前後半タイム・コース/距離別ベスト（keibabookの「コース・距離を選択」ランキング表と同じ形）
-function zenkouhanRankedCard(data, hist) {
-  const race = data.race || {};
+function zenkouhanRankedCard(race, horses, hist) {
   const distSet = new Set();
-  (data.results || []).forEach((r) => { for (const h of (hist[r.horse_id] || [])) if (h.dist) distSet.add(h.dist); });
+  (horses || []).forEach((r) => { for (const h of (hist[r.horse_id] || [])) if (h.dist) distSet.add(h.dist); });
   if (race.distance_m) distSet.add(race.distance_m);
   const dists = [...distSet].sort((a, b) => a - b);
   const selDist = state.zenkouhanDist || race.distance_m || dists[0];
   const selSort = state.zenkouhanSort || 'time';
-  const rows = (data.results || []).filter((r) => r.horse_id).map((r) => {
+  const rows = (horses || []).filter((r) => r.horse_id).map((r) => {
     const withSplit = (hist[r.horse_id] || [])
       .filter((h) => h.dist === selDist && h.laps && h.laps.length >= 2)
       .map((h) => ({ h, sp: splitHalf(h.laps) })).filter((x) => x.sp);
@@ -914,36 +930,43 @@ function zenkouhanRankedCard(data, hist) {
     ${rows || '<tr><td colspan="8">その距離での実測ラップデータがありません</td></tr>'}
   </table></div>`;
 }
-function zenkouhanBodyHtml(data, hist) {
-  return state.zenkouhanMode === 'ranked' ? zenkouhanRankedCard(data, hist) : zenkouhanRecentCard(data, hist);
+function zenkouhanBodyHtml(race, horses, hist) {
+  return state.zenkouhanMode === 'ranked' ? zenkouhanRankedCard(race, horses, hist) : zenkouhanRecentCard(horses, hist);
 }
 function renderZenkouhan() {
   const el = $('zenkouhanWrap');
-  if (el) el.innerHTML = zenkouhanContainerInner(state.curSeisekiData, state.curSeisekiHist);
+  if (el) el.innerHTML = zenkouhanContainerInner(state.zkRace, state.zkHorses, state.zkHist);
 }
-function zenkouhanContainerInner(data, hist) {
-  return `<div style="display:flex;gap:6px;margin:2px 0 10px">
+function zenkouhanContainerInner(race, horses, hist) {
+  const laps = race.extra && race.extra.laps;
+  const fa = laps ? raceFrontAgari(laps, race.distance_m) : null;
+  const faLine = fa ? `<div class="note">このレース: 前半3F <b>${fa.front.toFixed(1)}</b>－上り3F <b>${fa.agari.toFixed(1)}</b>（馬の前半3F/上り3Fと同じ定義）</div>` : '';
+  return `${faLine}
+    <div style="display:flex;gap:6px;margin:8px 0 10px">
       <button class="cyo-yr-btn${state.zenkouhanMode !== 'ranked' ? ' active' : ''}" onclick="state.zenkouhanMode='recent';renderZenkouhan()">直近5走</button>
       <button class="cyo-yr-btn${state.zenkouhanMode === 'ranked' ? ' active' : ''}" onclick="state.zenkouhanMode='ranked';renderZenkouhan()">コース・距離別ベスト</button>
     </div>
-    ${zenkouhanBodyHtml(data, hist)}
-    <div class="legend">前3F-上3F=前半3F・上り3Fの実測値。太字H/M/S=そのレースのペース(ハイ/ミドル/スロー)。下段の数字は距離をちょうど半分に分割した前半-後半タイム（区間ラップのあるレースのみ集計）。<span style="color:var(--accent)">水色</span>=後半(半分)が0.3秒以上速い(後傾)　<span style="color:var(--sub)">グレー</span>=前半(半分)が0.3秒以上速い(前傾)。</div>`;
+    ${zenkouhanBodyHtml(race, horses, hist)}
+    <div class="legend">前3F-上3F=前半3F・上り3Fの実測値。太字H/M/S=そのレースのペース(ハイ/ミドル/スロー)。下段の数字は距離をちょうど半分に分割した前半-後半タイム（区間ラップのあるレースのみ集計）。<span style="color:var(--accent)">水色</span>=後半(半分)が0.3秒以上速い(後傾)　<span style="color:var(--sub)">グレー</span>=前半(半分)が0.3秒以上速い(前傾)。日付クリックでそのレースへ移動。</div>`;
 }
-// 前後半タイム（各馬）カード全体。直近5走の時系列表とコース/距離別ベスト表をタブで切替。
-function zenkouhanCard(data, hist) {
+// 前後半タイム（各馬）本体。直近5走の時系列表とコース/距離別ベスト表をタブで切替。
+function zenkouhanCard(race, horses, hist) {
   if (!hist) return '';
-  const race = data.race || {};
-  const hasAny = (data.results || []).some((r) => (hist[r.horse_id] || []).some((h) => h.laps && h.laps.length >= 2));
-  if (!hasAny) return '';
+  const hasAny = (horses || []).some((r) => (hist[r.horse_id] || []).some((h) => h.laps && h.laps.length >= 2));
+  if (!hasAny) return '<div class="empty">前後半タイムのデータがありません（区間ラップのある南関等での出走歴が無い馬のみのため）</div>';
   if (state._zkRaceId !== race.race_id) { state._zkRaceId = race.race_id; state.zenkouhanDist = null; state.zenkouhanSort = 'time'; }
-  state.curSeisekiData = data; state.curSeisekiHist = hist;
-  return `<div class="card"><h3 class="sec" style="margin-top:0">前後半タイム</h3>
-  <div id="zenkouhanWrap">${zenkouhanContainerInner(data, hist)}</div>
+  state.zkRace = race; state.zkHorses = horses; state.zkHist = hist;
+  return `<div id="zenkouhanWrap">${zenkouhanContainerInner(race, horses, hist)}</div>`;
+}
+// 前後半タイムのサブタブ本体（調教タブの横に配置）
+function zenkouhanTabHtml(raceMeta, entries, history) {
+  return raceHeaderHtml(raceMeta) + `<div class="card"><h3 class="sec" style="margin-top:0">前後半タイム</h3>
+  ${zenkouhanCard(raceMeta, entries, history)}
   </div>`;
 }
 
 // ---- 成績サブビュー ----
-function seisekiHtml(data, aiMark, hist) {
+function seisekiHtml(data, aiMark) {
   const race = data.race || {};
   const results = (data.results || []).slice();
   if (!results.length) return raceHeaderHtml(race) + '<div class="empty">成績はまだありません（未発走）</div>';
@@ -993,8 +1016,7 @@ function seisekiHtml(data, aiMark, hist) {
       ${rows}
     </table>
   </div>
-  <div class="legend"><span class="sw f"></span> 前半3F上位3頭　<span class="sw a"></span> 上り3F上位3頭<br>${TRIP_LEGEND}</div></div>
-  ${zenkouhanCard(data, hist)}`;
+  <div class="legend"><span class="sw f"></span> 前半3F上位3頭　<span class="sw a"></span> 上り3F上位3頭<br>${TRIP_LEGEND}</div></div>`;
 }
 
 // ---- 出馬表サブビュー（keibabook風＋能力表＋調教） ----
@@ -1746,7 +1768,7 @@ async function renderRaceView() {
         .sort((a, b) => b[1] - a[1]);
       const aiMark = new Map();
       scored.forEach(([um], i) => { if (i < MARKS.length) aiMark.set(um, MARKS[i]); });
-      $('raceView').innerHTML = seisekiHtml(data, aiMark, hist);
+      $('raceView').innerHTML = seisekiHtml(data, aiMark);
     } else {
       const meta = (state.dates[state.date] || []).find((r) => r.race_id === raceId) || {};
       const [raceData, entries, cyokyo, nouryoku] = await Promise.all([
@@ -1772,7 +1794,9 @@ async function renderRaceView() {
         ? yosouHtml(raceMeta, entries, cyokyo, history, nouryoku)
         : state.sub === 'cyokyo'
           ? cyokyoRaceHtml(raceMeta, entries, cyokyo, history)
-          : syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku);
+          : state.sub === 'zenkouhan'
+            ? zenkouhanTabHtml(raceMeta, entries, history)
+            : syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku);
       startLiveOdds(raceMeta);   // 当日レースは現在オッズをライブ取得・自動更新
     }
   } catch (e) {
@@ -2751,6 +2775,8 @@ async function init() {
       hl.dataset.hid ? openHorseModal(hl.dataset.hid, true, nm) : openHorseModal(hl.dataset.horse, false, nm); return; }
     const od = e.target.closest('[data-live-odds]');
     if (od) { e.stopPropagation(); showOddsFlow(od.dataset.liveOdds, od); return; }
+    const rl = e.target.closest('.racelink');   // 前後半タイムの日付タップ→そのレースへ
+    if (rl && rl.dataset.rid) { openHistoricalRace(rl.dataset.rid, rl.dataset.rd); return; }
     const kk = e.target.closest('td.fold');   // スマホ: 長い列（根拠/寸評/近3走/調教）をタップで展開
     if (kk) kk.classList.toggle('open');
   });
