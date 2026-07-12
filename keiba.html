@@ -881,16 +881,6 @@ function lapChartCard(race, results) {
     ${timeLine}${biasLine}
   </div>`;
 }
-// 区間ラップ配列を距離のちょうど半分で前半/後半に分割（本数が奇数＝中央の区間は前後に按分）
-function splitHalf(laps) {
-  if (!laps || laps.length < 2) return null;
-  const n = laps.length;
-  const mid = Math.floor(n / 2);
-  let front = laps.slice(0, mid).reduce((a, b) => a + b, 0);
-  let back = laps.slice(n % 2 === 0 ? mid : mid + 1).reduce((a, b) => a + b, 0);
-  if (n % 2 === 1) { const half = laps[mid] / 2; front += half; back += half; }
-  return { front, back };
-}
 // レース全体の前半3F・上がり3Fをラップから算出（馬の前半3F/上り3Fと同じ定義＝1200m未満は距離-600mが前半）
 function raceFrontAgari(laps, dist) {
   if (!laps || laps.length < 3) return null;
@@ -901,21 +891,21 @@ function raceFrontAgari(laps, dist) {
   const agari = laps.slice(-3).reduce((a, b) => a + b, 0);
   return { front, agari };
 }
-// 前後半タイムの1セル分（日付+クラス／前3F-上3F／ペース区分+半分割）。競馬ブックの「前半3F-後半3F」「H/M/S」2段表記に合わせる。日付クリックでそのレースへ。
+// 前後半タイムの1セル分（日付+クラス／馬の前3F-上3F／そのレース全体のラップ由来の前3F-上3F）。両方とも3F表記で統一。日付クリックでそのレースへ。
 function zenkouhanCellHtml(h) {
-  const sp = splitHalf(h.laps);
+  const fa = raceFrontAgari(h.laps, h.dist);
   const cls = classBadge(h);
   const pl = paceLetter(h.pace);
   const f3l3 = (h.f3 != null && h.l3 != null) ? `${h.f3.toFixed(1)}-${h.l3.toFixed(1)}` : '-';
-  const half = sp ? `${sp.front.toFixed(1)}-${sp.back.toFixed(1)}` : '-';
-  const diff = sp ? sp.back - sp.front : 0;
+  const raceSplit = fa ? `${fa.front.toFixed(1)}-${fa.agari.toFixed(1)}` : '-';
+  const diff = fa ? fa.agari - fa.front : 0;
   const color = diff <= -0.3 ? 'var(--accent)' : diff >= 0.3 ? 'var(--sub)' : 'inherit';
   const dateHtml = h.race_id
     ? `<span class="racelink" data-rid="${esc(h.race_id)}" data-rd="${esc(h.date || '')}" title="クリックでそのレースへ">${mmdd(h.date)}</span>`
     : mmdd(h.date);
   return `<div style="font-size:11px;white-space:nowrap">${dateHtml}${cls ? ` <span class="badge">${esc(cls)}</span>` : ''}</div>
-    <div style="font-size:11px;color:var(--sub);font-variant-numeric:tabular-nums;white-space:nowrap">前3F-上3F ${f3l3}</div>
-    <div style="font-size:11px;color:${color};font-variant-numeric:tabular-nums;white-space:nowrap">${pl ? `<b>${pl}</b> ` : ''}${half}</div>`;
+    <div style="font-size:11px;color:var(--sub);font-variant-numeric:tabular-nums;white-space:nowrap" title="この馬の公式前半3F-上り3F">前3F-上3F ${f3l3}</div>
+    <div style="font-size:11px;color:${color};font-variant-numeric:tabular-nums;white-space:nowrap" title="そのレース全体のラップから算出した前半3F-上り3F（レースラップ）">${pl ? `<b>${pl}</b> ` : ''}レL ${raceSplit}</div>`;
 }
 // 前後半タイム・直近5走（時系列）
 function zenkouhanRecentCard(horses, hist) {
@@ -941,15 +931,15 @@ function zenkouhanRankedCard(race, horses, hist) {
   const rows = (horses || []).filter((r) => r.horse_id).map((r) => {
     const withSplit = (hist[r.horse_id] || [])
       .filter((h) => h.dist === selDist && h.laps && h.laps.length >= 2)
-      .map((h) => ({ h, sp: splitHalf(h.laps) })).filter((x) => x.sp);
+      .map((h) => ({ h, fa: raceFrontAgari(h.laps, h.dist) })).filter((x) => x.fa);
     if (!withSplit.length) return '';
-    const sorted = withSplit.sort((a, b) => selSort === 'front' ? a.sp.front - b.sp.front
-      : selSort === 'back' ? a.sp.back - b.sp.back : (a.h.tsec ?? 9999) - (b.h.tsec ?? 9999)).slice(0, 5);
+    const sorted = withSplit.sort((a, b) => selSort === 'front' ? a.fa.front - b.fa.front
+      : selSort === 'agari' ? a.fa.agari - b.fa.agari : (a.h.tsec ?? 9999) - (b.h.tsec ?? 9999)).slice(0, 5);
     const cells = sorted.map(({ h }) => `<td class="l">${zenkouhanCellHtml(h)}</td>`).join('') + '<td></td>'.repeat(5 - sorted.length);
     return `<tr><td>${r.waku ?? ''}</td><td>${r.umaban ?? ''}</td><td class="l stickyname">${esc(r.horse_name || '')}</td>${cells}</tr>`;
   }).filter(Boolean).join('');
   const distOpts = dists.map((d) => `<option value="${d}"${d === selDist ? ' selected' : ''}>${d}m</option>`).join('');
-  const sortOpts = [['time', 'タイム順'], ['front', '前半順'], ['back', '後半順']]
+  const sortOpts = [['time', 'タイム順'], ['front', 'レースラップ前半3F順'], ['agari', 'レースラップ上り3F順']]
     .map(([k, lab]) => `<option value="${k}"${k === selSort ? ' selected' : ''}>${lab}</option>`).join('');
   return `<div style="display:flex;gap:14px;flex-wrap:wrap;margin:4px 0 10px;font-size:13px">
     <label>距離を選択: <select onchange="state.zenkouhanDist=+this.value;renderZenkouhan()">${distOpts}</select></label>
@@ -977,7 +967,11 @@ function zenkouhanContainerInner(race, horses, hist) {
       <button class="cyo-yr-btn${state.zenkouhanMode === 'ranked' ? ' active' : ''}" onclick="state.zenkouhanMode='ranked';renderZenkouhan()">コース・距離別ベスト</button>
     </div>
     ${zenkouhanBodyHtml(race, horses, hist)}
-    <div class="legend">前3F-上3F=前半3F・上り3Fの実測値。太字H/M/S=そのレースのペース(ハイ/ミドル/スロー)。下段の数字は距離をちょうど半分に分割した前半-後半タイム（区間ラップのあるレースのみ集計）。<span style="color:var(--accent)">水色</span>=後半(半分)が0.3秒以上速い(後傾)　<span style="color:var(--sub)">グレー</span>=前半(半分)が0.3秒以上速い(前傾)。日付クリックでそのレースへ移動。</div>`;
+    <div class="legend">
+      <b>上段「前3F-上3F」</b>＝この馬個別の公式前半3F・上り3F実測値。<br>
+      <b>下段「レL（レースラップ）」</b>＝その過去走「全体」のラップから算出した前半3F・上り3F（この馬個別の値ではなく、距離に関わらず常に3F表記で統一。太字H/M/Sはそのレースのペース区分ハイ/ミドル/スロー）。<span style="color:var(--accent)">水色</span>=そのレースの上り3Fが前半3Fより0.3秒以上速い(後傾)　<span style="color:var(--sub)">グレー</span>=前半3Fが上り3Fより0.3秒以上速い(前傾)。<br>
+      日付クリックでそのレースへ移動。
+    </div>`;
 }
 // 前後半タイム（各馬）本体。直近5走の時系列表とコース/距離別ベスト表をタブで切替。
 function zenkouhanCard(race, horses, hist) {
