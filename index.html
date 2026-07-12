@@ -1096,6 +1096,15 @@ const KV_APP_CSS = [
       '.horse-modal-close{background:rgba(255,255,255,.15);border:none;color:#fff;font-size:18px;width:32px;height:32px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center}',
       '.horse-modal-close:hover{background:rgba(255,255,255,.3)}',
       '.horse-modal-content{padding:18px 22px;overflow-y:auto;flex:1}',
+      // 狭幅(<=640px)対策：flexヘッダで日本語タイトルがmin-content(1文字)まで潰れて縦積みになるのを防ぐ。
+      // タイトルを1行占有させ横書きで折り返し、ボタン群(公式/取得/保存/✕)は次段に右寄せ。デスクトップmodalは不変。
+      '@media(max-width:640px){',
+      '  .horse-modal-header{flex-wrap:wrap;gap:10px;padding:14px 16px}',
+      '  .horse-modal-title{flex:1 1 100%;min-width:0;order:-1;white-space:normal;overflow-wrap:anywhere;word-break:normal;font-size:15px;line-height:1.35}',
+      '  .horse-modal-header>div{width:100%;justify-content:flex-end;flex-wrap:wrap}',   // ボタン群は縮小でなく折返し（✕のタップ領域を保持）
+      '  .horse-modal-close{flex-shrink:0}',
+      '  .horse-modal-content{padding:16px 16px}',
+      '}',
       '.hm-summary{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px}',
       '.hm-stat-card{background:#f4f6fa;border:1.5px solid #e2e8f0;border-radius:8px;padding:10px 14px;display:flex;flex-direction:column;gap:2px;min-width:110px;flex:1}',
       '.hm-stat-card.hm-stat-highlight{border-color:#1a56a0;background:#eff6ff}',
@@ -1772,6 +1781,140 @@ const KV_APP_CSS = [
       'body.dark-mode .kr-pay-yen{color:#f87171}',
       // スマホ：結果テーブルはフォント微縮小＋馬名幅制限
       '@media(max-width:640px){.kr-table{font-size:11.5px}.kr-table th,.kr-table td{padding:5px 5px}.kr-name{max-width:96px;overflow:hidden;text-overflow:ellipsis}.kr-pay-row{grid-template-columns:52px 1fr auto 44px;font-size:12px}}',
+      // ── Phase3-1 新出馬表プレビュー（管理者限定β・feature flag・独立名前空間 .kvx-・新規!importantなし）──
+      '#kvx-deban-v2-bar{display:flex;align-items:center;gap:10px;margin:12px 0 4px;flex-wrap:wrap}',
+      '.kvx-toggle{background:#111c2e;color:#e5edf7;border:1px solid rgba(255,255,255,.16);border-radius:8px;padding:6px 12px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit}',
+      '.kvx-toggle[aria-pressed="true"]{background:rgba(56,189,248,.14);color:#38bdf8;border-color:rgba(56,189,248,.5)}',
+      '.kvx-bar-note{font-size:12px;color:#8492a6;font-weight:600}',
+      '.kvx-root{--kvx-surface:#111c2e;--kvx-sunken:#0d1728;--kvx-line:rgba(255,255,255,.08);--kvx-line2:rgba(255,255,255,.16);--kvx-text:#e5edf7;--kvx-muted:#8492a6;--kvx-accent:#38bdf8;background:#0b1220;border:1px solid var(--kvx-line2);border-radius:14px;padding:12px;margin:4px 0 14px;color:var(--kvx-text);font-family:inherit}',
+      '.kvx-empty{color:var(--kvx-muted);text-align:center;padding:20px;font-size:13px}',
+      '.kvx-hd{font-size:12.5px;font-weight:800;margin-bottom:8px}',
+      '.kvx-note-inline{color:var(--kvx-muted);font-weight:600;font-size:12px}',
+      // レスポンシブ切替：641px以上は表・640px以下はカード。同一データからCSSで表示切替（display:none側はタブ順から外れフォーカス不可）。
+      '.kvx-desktop{display:block}',
+      '.kvx-mobile{display:none;list-style:none;margin:0;padding:0}',
+      '.kvx-scroll{overflow-x:auto}',
+      'table.kvx-deban{border-collapse:separate;border-spacing:0;width:100%;min-width:820px;font-size:13px}',
+      '.kvx-deban th,.kvx-deban td{padding:9px 10px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--kvx-line);color:var(--kvx-text);vertical-align:middle}',
+      '.kvx-deban thead th{position:sticky;top:0;z-index:3;background:var(--kvx-sunken);color:var(--kvx-muted);font-size:12px;font-weight:700}',
+      '.kvx-deban tbody tr:last-child td{border-bottom:none}',
+      // sticky左列（印/枠・馬番/馬名）。leftはJSが実測幅から設定。不透明背景で右の列の透けを防ぎ、z-indexで重なり順を固定。
+      '.kvx-deban .kvx-c-mark,.kvx-deban .kvx-c-num,.kvx-deban .kvx-c-name{position:sticky;z-index:2;background:var(--kvx-surface)}',
+      '.kvx-deban .kvx-c-mark{left:0}',
+      '.kvx-deban .kvx-c-name{box-shadow:1px 0 0 var(--kvx-line2)}',
+      '.kvx-deban thead .kvx-c-mark,.kvx-deban thead .kvx-c-num,.kvx-deban thead .kvx-c-name{z-index:4;background:var(--kvx-sunken)}',
+      '.kvx-mark{font-size:18px;font-weight:800;color:var(--kvx-text)}',
+      '.kvx-mark.kvx-honmei{color:var(--kvx-accent)}',
+      '.kvx-mark.kvx-keshi{color:var(--kvx-muted)}',
+      '.kvx-num{font-variant-numeric:tabular-nums}',
+      '.kvx-wk{font-size:12px;color:var(--kvx-muted);font-weight:700;margin-right:5px}',
+      '.kvx-waku{display:inline-grid;place-items:center;min-width:26px;height:26px;border-radius:7px;background:var(--kvx-sunken);border:1px solid var(--kvx-line2);font-weight:800;font-size:13px}',
+      '.kvx-name{font-size:15px;font-weight:800}',
+      '.kvx-sub{font-size:12px;color:var(--kvx-muted);font-weight:600;margin-top:1px}',
+      '.kvx-odds{font-variant-numeric:tabular-nums;font-weight:800;font-size:14px}',
+      // オッズ帯＝オッズの大きさの区分のみ。良し悪し（買える/妙味等）の色分けは付けない。
+      '.kvx-band{display:inline-block;font-size:12px;color:var(--kvx-muted);font-weight:600;margin-left:2px}',
+      '.kvx-sc{font-variant-numeric:tabular-nums;font-weight:800;color:var(--kvx-accent);font-size:15px}',
+      '.kvx-si{font-variant-numeric:tabular-nums;font-weight:800;font-size:14px}',
+      '.kvx-dim{color:var(--kvx-muted)}',
+      '.kvx-detail{border:1px solid var(--kvx-line2);background:transparent;color:var(--kvx-text);border-radius:7px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .12s ease}',
+      '.kvx-detail:hover{background:var(--kvx-surface)}',
+      '.kvx-detail:focus-visible{outline:2px solid var(--kvx-accent);outline-offset:2px}',
+      '.kvx-note{font-size:12px;color:var(--kvx-muted);margin-top:9px;font-weight:600;line-height:1.6}',
+      // スマホカード（640px以下）。表を縮小せず一覧性優先のカードへ。sticky/横スクロールは持ち込まない。
+      '.kvx-root .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}',
+      '.kvx-card{background:var(--kvx-surface);border:1px solid var(--kvx-line);border-radius:12px;padding:12px}',
+      '.kvx-card-top{display:flex;align-items:center;gap:10px}',
+      '.kvx-card-name{flex:1;min-width:0;font-size:16px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.kvx-card-odds{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;text-align:right}',
+      '.kvx-card-meta{display:flex;flex-wrap:wrap;gap:6px 8px;margin-top:10px}',
+      '.kvx-tag{display:inline-flex;align-items:baseline;gap:4px;font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;background:var(--kvx-sunken);border:1px solid var(--kvx-line);border-radius:8px;padding:4px 9px}',
+      '.kvx-k{font-size:12px;color:var(--kvx-muted);font-weight:600}',
+      '.kvx-card-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;font-size:12px}',
+      // 表示切替＋最後のカードが下部ナビ(#kv-bottom-nav)に隠れないよう余白を確保（.app-main側のpadding-bottomに加えた保険）。
+      '@media(max-width:640px){.kvx-desktop{display:none}.kvx-mobile{display:flex;flex-direction:column;gap:10px;padding-bottom:12px}.kvx-mobile>.kvx-card-li:last-child{margin-bottom:24px}}',
+      '@media(prefers-reduced-motion:reduce){.kvx-detail{transition:none}}',
+      // 【Phase3-2d】AI総合指数の内訳（horse-modal内・管理者限定・kvx起点のみ）。ライト/ダーク両対応・横スクロールなし。
+      '.kvx-brk{border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;margin:0 0 14px;background:#f8fafc;font-size:13px;color:#1e293b}',
+      'body.dark-mode .kvx-brk{background:#0f1a2e;border-color:#1e3048;color:#e5edf7}',
+      '.kvx-brk-hd{font-size:13px;font-weight:800;margin-bottom:8px}',
+      '.kvx-brk-adm{font-weight:600;color:#64748b;font-size:12px}',
+      'body.dark-mode .kvx-brk-adm{color:#8492a6}',
+      '.kvx-brk-warn{font-size:13px;font-weight:700;color:#b45309;background:rgba(180,83,9,.10);border-radius:8px;padding:8px 10px}',
+      'body.dark-mode .kvx-brk-warn{color:#fbbf24;background:rgba(251,191,36,.12)}',
+      '.kvx-brk-top{display:flex;flex-wrap:wrap;gap:8px 18px;padding:8px 0;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0}',
+      'body.dark-mode .kvx-brk-top{border-color:#1e3048}',
+      '.kvx-brk-cell{display:flex;flex-direction:column;gap:1px;min-width:0}',
+      '.kvx-brk-k{font-size:12px;color:#64748b;font-weight:600}',
+      'body.dark-mode .kvx-brk-k{color:#8492a6}',
+      '.kvx-brk-num{font-size:16px;font-weight:800;font-variant-numeric:tabular-nums}',
+      '.kvx-brk-total{color:#1a56a0}',
+      'body.dark-mode .kvx-brk-total{color:#38bdf8}',
+      '.kvx-brk-desc{font-size:12px;color:#64748b;margin:8px 0;line-height:1.6}',
+      'body.dark-mode .kvx-brk-desc{color:#93a6c0}',
+      '.kvx-brk-h2{font-size:12.5px;font-weight:800;margin:10px 0 4px}',
+      '.kvx-brk-h2-up{color:#15803d}', 'body.dark-mode .kvx-brk-h2-up{color:#4ade80}',
+      '.kvx-brk-h2-down{color:#b91c1c}', 'body.dark-mode .kvx-brk-h2-down{color:#f87171}',
+      '.kvx-brk-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}',
+      '.kvx-brk-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:3px 6px;border-radius:6px;background:rgba(148,163,184,.08)}',
+      '.kvx-brk-name{font-size:13px;font-weight:700;flex:1;min-width:0;word-break:break-word}',
+      '.kvx-brk-val{font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;flex-shrink:0;white-space:nowrap}',
+      '.kvx-brk-up{color:#15803d}', 'body.dark-mode .kvx-brk-up{color:#4ade80}',
+      '.kvx-brk-down{color:#b91c1c}', 'body.dark-mode .kvx-brk-down{color:#f87171}',
+      '.kvx-brk-none{font-size:12px;color:#94a3b8;padding:2px 6px}',
+      '.kvx-brk-det{margin-top:10px;font-size:12px}',
+      '.kvx-brk-det summary{cursor:pointer;font-weight:700;color:#475569;padding:2px 0}',
+      'body.dark-mode .kvx-brk-det summary{color:#93a6c0}',
+      '.kvx-brk-det summary:focus-visible{outline:2px solid #1a56a0;outline-offset:2px}',
+      '.kvx-brk-detwrap{overflow-x:auto;margin-top:6px}',
+      '.kvx-brk-tbl{border-collapse:collapse;width:100%;min-width:320px;font-size:12px}',
+      '.kvx-brk-tbl th,.kvx-brk-tbl td{border-bottom:1px solid #e2e8f0;padding:4px 8px;text-align:right;white-space:nowrap}',
+      '.kvx-brk-tbl th:first-child,.kvx-brk-tbl td:first-child{text-align:left}',
+      'body.dark-mode .kvx-brk-tbl th,body.dark-mode .kvx-brk-tbl td{border-color:#1e3048}',
+      '.kvx-brk-src{font-size:11px;color:#94a3b8;margin-top:6px}',
+      '.kvx-brk-foot{font-size:11px;color:#94a3b8;margin-top:10px;line-height:1.5}',
+      // ═══ 【最終統合】Phase1 ダークシェル。管理者+flag(kvxV2Enabled)時のみ body.kvx-shell-on が付き、以下は全て
+      //   .kvx-shell-on 配下だけに限定＝OFF/閲覧者では1ルールも適用されない。既存id/data-page/switchPage/DOMは不変（外観のみ）。
+      'body.kvx-shell-on{--kvxs-bg:#0B1220;--kvxs-surface:#111C2E;--kvxs-sunken:#0D1728;--kvxs-hover:#17243A;--kvxs-text:#E5EDF7;--kvxs-muted:#8492A6;--kvxs-accent:#38BDF8;--kvxs-line:rgba(255,255,255,.08);--kvxs-line2:rgba(255,255,255,.14);--kvxs-positive:#22C55E;--kvxs-negative:#EF4444;--kvxs-focus:#7DD3FC;--kvxs-topa:#0E1A2E;--kvxs-topb:#0C1526;--kvxs-chipa:#123252;--kvxs-chipb:#0F2036;background:var(--kvxs-bg)!important;color:var(--kvxs-text)}',
+      'body.kvx-shell-on .app-main{background:transparent}',
+      // 概要/検索/保存カード
+      'body.kvx-shell-on .search-card,body.kvx-shell-on .race-header-card,body.kvx-shell-on .saved-card{background:var(--kvxs-surface)!important;color:var(--kvxs-text)!important;border:1px solid var(--kvxs-line)!important;box-shadow:0 8px 30px rgba(0,0,0,.35)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}',
+      'body.kvx-shell-on .race-header-card{border-left:4px solid var(--kvxs-accent)!important}',
+      'body.kvx-shell-on .race-meta{color:var(--kvxs-muted)!important}',
+      'body.kvx-shell-on .race-meta span{background:var(--kvxs-sunken)!important;color:var(--kvxs-muted)!important;border:1px solid var(--kvxs-line)!important}',
+      // 上部ヘッダ
+      'body.kvx-shell-on .app-header{background:linear-gradient(180deg,var(--kvxs-topa),var(--kvxs-topb))!important;border-bottom:1px solid var(--kvxs-line);box-shadow:0 2px 12px rgba(0,0,0,.45)}',
+      'body.kvx-shell-on .header-title h1{color:var(--kvxs-text)}',
+      'body.kvx-shell-on .header-sub{color:var(--kvxs-muted)}',
+      // 上部ナビ（既存 .header-nav-btn[data-page]/switchPage/active は不変・外観のみ）
+      'body.kvx-shell-on .header-nav-btn{color:var(--kvxs-muted)!important;background:transparent!important;border:1px solid transparent!important;border-radius:9px;transition:background .15s,color .15s,border-color .15s}',
+      'body.kvx-shell-on .header-nav-btn:hover{color:var(--kvxs-text)!important;background:var(--kvxs-hover)!important}',
+      'body.kvx-shell-on .header-nav-btn.active{color:var(--kvxs-text)!important;background:rgba(56,189,248,.14)!important;border-color:rgba(56,189,248,.5)!important}',
+      'body.kvx-shell-on .header-nav-btn:focus-visible{outline:2px solid var(--kvxs-focus)!important;outline-offset:2px}',
+      // スマホ下部ナビ（既存 data-page 契約不変・外観のみ）
+      'body.kvx-shell-on #kv-bottom-nav{background:var(--kvxs-surface)!important;border-top:1px solid var(--kvxs-line)!important;box-shadow:0 -4px 22px rgba(0,0,0,.5)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}',
+      'body.kvx-shell-on #kv-bottom-nav .kbn-btn,body.kvx-shell-on #kv-bottom-nav>button{color:var(--kvxs-muted)!important}',
+      'body.kvx-shell-on #kv-bottom-nav .kbn-btn.active{color:var(--kvxs-accent)!important}',
+      'body.kvx-shell-on #kv-bottom-nav .kbn-btn:focus-visible,body.kvx-shell-on #kv-bottom-nav>button:focus-visible{outline:2px solid var(--kvxs-focus)!important;outline-offset:-3px}',
+      'body.kvx-shell-on #kbn-more-menu{background:var(--kvxs-surface)!important;border:1px solid var(--kvxs-line2)!important;box-shadow:0 8px 30px rgba(0,0,0,.5)!important}',
+      'body.kvx-shell-on #kbn-more-menu button{color:var(--kvxs-text)!important}',
+      // レース切替チップ（既存DOM/クリック契約不変・sidebar-mode含め外観のみ。dark-mode(1,3,1)/(1,4,1)と同specificity+後着で上書き）
+      'body.kvx-shell-on #race-tabs-section,body.kvx-shell-on #race-tabs-section.sidebar-mode{background:var(--kvxs-surface)!important;border:1px solid var(--kvxs-line)!important;box-shadow:0 3px 14px rgba(0,0,0,.4)!important}',
+      'body.kvx-shell-on #race-tabs-section .race-tab,body.kvx-shell-on #race-tabs-section.sidebar-mode .race-tab{background:var(--kvxs-sunken)!important;color:var(--kvxs-muted)!important;border:1px solid var(--kvxs-line)!important}',
+      'body.kvx-shell-on #race-tabs-section .race-tab:hover,body.kvx-shell-on #race-tabs-section.sidebar-mode .race-tab:hover{background:var(--kvxs-hover)!important;color:var(--kvxs-text)!important}',
+      'body.kvx-shell-on #race-tabs-section .race-tab.active,body.kvx-shell-on #race-tabs-section.sidebar-mode .race-tab.active{background:linear-gradient(180deg,var(--kvxs-chipa),var(--kvxs-chipb))!important;color:var(--kvxs-text)!important;border-color:rgba(56,189,248,.55)!important}',
+      'body.kvx-shell-on #race-tabs-section .race-tab:focus-visible,body.kvx-shell-on #race-tabs-section.sidebar-mode .race-tab:focus-visible{outline:2px solid var(--kvxs-focus)!important;outline-offset:2px}',
+      // ─ release hardening（.kvx-shell-on 限定・OFF/閲覧者では未適用）: 新UIの最終画面でページ横スクロールを0にする ─
+      // ① 既存テーブルは直近ラッパ .table-wrapper の内部だけで横スクロール（ページを押し広げない）。既存の overflow-x:auto を明示＋max-width:100%で保証。テーブル自体は縮小しない。
+      'body.kvx-shell-on .table-wrapper{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}',
+      'body.kvx-shell-on .split-view-wrap,body.kvx-shell-on .split-table-area{min-width:0;max-width:100%}',
+      // ② 本文領域：管理者専用パネル等がページ幅を超えても、ページ自体は横スクロールさせない。overflow-x:clip は overflow-y:visible を保てるので sticky/固定要素を壊さない（テーブル内部スクロールは①で維持）。
+      'body.kvx-shell-on .app-main{overflow-x:clip;max-width:100%}',
+      // ③ ヘッダー：収まらないボタン群（管理者ツール等）は折り返す（ボタンは隠さない・ページを押し広げない）。
+      //    内側グループの inline flex-shrink:0 を上書きして縮小可にし、flex-wrap:wrap で複数行に折り返させる。
+      'body.kvx-shell-on .header-inner{max-width:100%}',
+      'body.kvx-shell-on .header-inner>div{flex-wrap:wrap;min-width:0;flex-shrink:1!important}',
+      'body.kvx-shell-on .header-nav-inner{flex-wrap:wrap}',
 ];
 (function kvInjectStyles(){
   if (document.getElementById('kv-styles')) return;
@@ -2014,6 +2157,13 @@ const KV_APP_CSS = [
 
     <!-- 出馬表メインエリア -->
     <div id="race-content-area"></div>
+
+    <!-- 【Phase3-1 管理者限定β】新出馬表プレビュー（feature flag・初期OFF・閲覧者非表示・本番表示不変） -->
+    <div id="kvx-deban-v2-bar" class="admin-only">
+      <button type="button" id="kvx-toggle-btn" class="kvx-toggle" aria-pressed="false">新出馬表プレビュー β：OFF</button>
+      <span class="kvx-bar-note">管理者限定・OFFなら本番表示に一切影響しません</span>
+    </div>
+    <div id="kvx-deban-v2" class="kvx-root" hidden></div>
   </div>
 
 </div><!-- /page-deban -->
@@ -2455,7 +2605,7 @@ const KV_APP_CSS = [
 </div><!-- /page-baba -->
 
 <!-- ① 馬別過去成績モーダル -->
-<div id="horse-modal" class="horse-modal-overlay hidden" role="dialog" aria-modal="true" aria-label="馬別過去成績" onclick="if(event.target===this)closeHorseModal()">
+<div id="horse-modal" class="horse-modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="horse-modal-title" onclick="if(event.target===this)closeHorseModal()">
   <div class="horse-modal">
     <div class="horse-modal-header">
       <span id="horse-modal-title" class="horse-modal-title">過去成績</span>
@@ -2474,7 +2624,7 @@ const KV_APP_CSS = [
           onmouseenter="this.style.background='rgba(255,255,255,.30)'" onmouseleave="this.style.background='rgba(255,255,255,.18)'">
           <i class="fas fa-camera"></i> 保存
         </button>
-        <button class="horse-modal-close" onclick="closeHorseModal()" aria-label="閉じる">✕</button>
+        <button class="horse-modal-close" onclick="closeHorseModal()" aria-label="過去成績を閉じる">✕</button>
       </div>
     </div>
     <div id="horse-modal-content" class="horse-modal-content"></div>
@@ -11160,6 +11310,110 @@ function openHorseModal(horseName, raceNo) {
 }
 function closeHorseModal(){const m=document.getElementById('horse-modal');if(m)m.classList.add('hidden');}
 
+// ===== horse-modal アクセシビリティ（Phase3-2b・キーボード操作のみ追補）=====
+// 既存 openHorseModal / closeHorseModal・表示データ・過去成績の計算/取得経路には一切触れない。
+// #horse-modal の hidden クラス遷移を1点で監視し、全ての開閉経路（✕/overlay/Escape）に対して
+// フォーカス管理・スクロールロック・Tabトラップを付与する。listener は各1回だけ登録する。
+(function hmA11y(){
+  if (window.__hmA11yInit) return;   // 二重登録防止（renderのたびに増やさない）
+  window.__hmA11yInit = true;
+  var _trigger = null;        // 直近クリックで記録した「開いた起点」
+  var _returnTarget = null;   // 閉じた時に戻すフォーカス先（このオープンの起点で確定）
+  var _open = false;
+  var _sx = 0, _sy = 0;
+  var FOCUS_SEL = 'a[href],area[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary,[tabindex]';   // summary＝AI内訳detailsもトラップ対象
+
+  function modalEl(){ return document.getElementById('horse-modal'); }
+  function dialogEl(){ var m = modalEl(); return m ? m.querySelector('.horse-modal') : null; }
+  function isOpen(){ var m = modalEl(); return !!m && !m.classList.contains('hidden'); }
+  function visible(el){
+    if (!el || !el.isConnected || el.disabled) return false;
+    if (el.getAttribute && el.getAttribute('aria-hidden') === 'true') return false;
+    var cs = getComputedStyle(el);
+    if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+    return el.getClientRects().length > 0;
+  }
+  function focusables(){   // モーダル内の可視・タブ可能な要素（hidden/disabled/display:none/tabindex=-1 を除外）
+    var d = dialogEl(); if (!d) return [];
+    return Array.prototype.slice.call(d.querySelectorAll(FOCUS_SEL)).filter(function(el){
+      if (el.getAttribute('tabindex') === '-1') return false;
+      return visible(el);
+    });
+  }
+  window.__hmFocusables = focusables;   // テスト用（実フィルタと同一の順序を参照させる）
+  function naturallyFocusable(el){
+    if (!el) return false;
+    var t = el.tagName;
+    if (t === 'BUTTON' || t === 'INPUT' || t === 'SELECT' || t === 'TEXTAREA') return true;
+    if ((t === 'A' || t === 'AREA') && el.hasAttribute('href')) return true;
+    return el.hasAttribute('tabindex');
+  }
+  // クリック捕捉（capture・1回）：起点要素を記録。span等はtabindex=-1を付けて戻せるようにする（タブ順は変えない）。
+  document.addEventListener('click', function(e){
+    var t = (e.target && e.target.closest) ? e.target.closest('[data-kvx-detail],[onclick*="openHorseModal"]') : null;
+    if (t){ if (!naturallyFocusable(t)) t.setAttribute('tabindex', '-1'); _trigger = t; }
+  }, true);
+
+  function lockScroll(){   // 背景スクロールを完全停止（overflow:hiddenは programmatic scroll を止められないため position:fixed 方式）
+    _sx = window.scrollX; _sy = window.scrollY;
+    var b = document.body;
+    b.style.position = 'fixed'; b.style.top = (-_sy) + 'px'; b.style.left = (-_sx) + 'px'; b.style.width = '100%';
+  }
+  function unlockScroll(){
+    var b = document.body;
+    b.style.position = ''; b.style.top = ''; b.style.left = ''; b.style.width = '';
+    window.scrollTo(_sx, _sy);   // 元のスクロール位置を維持
+  }
+  function returnFocus(){
+    // focus は preventScroll で行い、unlockScroll が戻したスクロール位置を維持する（focusの自動スクロールを抑止）。
+    if (visible(_returnTarget) && (naturallyFocusable(_returnTarget) || _returnTarget.getAttribute('tabindex') != null)){
+      try { _returnTarget.focus({ preventScroll: true }); return; } catch(e){}
+    }
+    // 起点が日付/レース変更で消えた等 → 安全な代替先（body へは無条件に当てない）
+    var alt = document.querySelector('.header-nav-btn.active')
+           || document.getElementById('kvx-toggle-btn')
+           || document.querySelector('#kvx-deban-v2 [data-kvx-detail]')
+           || document.querySelector('.header-nav-btn');
+    if (visible(alt)){ try { alt.focus({ preventScroll: true }); return; } catch(e){} }
+    var region = document.getElementById('race-content-area') || document.querySelector('.app-main');
+    if (region){ region.setAttribute('tabindex', '-1'); try { region.focus({ preventScroll: true }); } catch(e){} }
+  }
+  function onOpen(){
+    _open = true; _returnTarget = _trigger;   // このオープンの起点を確定
+    lockScroll();
+    if (typeof window.kvxOnModalOpen === 'function') { try { window.kvxOnModalOpen(_trigger); } catch(e){} }   // 【seam】kvx起点ならAI内訳を注入（管理者/flag/identityはkvx側で判定）
+    var m = modalEl(), c = m ? m.querySelector('.horse-modal-close') : null;
+    if (c){ try { c.focus({ preventScroll: true }); } catch(e){} }   // 開いたら閉じるボタンへフォーカス
+  }
+  function onClose(){ _open = false; unlockScroll(); returnFocus(); _returnTarget = null; if (typeof window.kvxOnModalClose === 'function') { try { window.kvxOnModalClose(); } catch(e){} } }   // 【seam】内訳DOMを破棄
+
+  // hidden クラス遷移を監視（✕/overlay/Escape すべてが最終的にここを通る）
+  var mo = new MutationObserver(function(){
+    var o = isOpen();
+    if (o && !_open) onOpen();
+    else if (!o && _open) onClose();
+  });
+  // Escape で閉じる / Tab トラップ（document keydown は1回だけ）
+  document.addEventListener('keydown', function(e){
+    if (!isOpen()) return;                                   // horse-modal が開いている時だけ介入
+    if (e.key === 'Escape'){
+      if (e.defaultPrevented || e.isComposing) return;      // 他ハンドラ処理済み / IME変換中は閉じない
+      e.preventDefault();
+      if (typeof closeHorseModal === 'function') closeHorseModal();   // 既存の閉じる経路（history不変）
+      return;
+    }
+    if (e.key === 'Tab'){
+      var f = focusables(), d = dialogEl();
+      if (!f.length){ e.preventDefault(); return; }
+      var first = f[0], last = f[f.length - 1], a = document.activeElement, inside = !!(d && d.contains(a));
+      if (e.shiftKey){ if (a === first || !inside){ last.focus({ preventScroll: true }); e.preventDefault(); } }
+      else { if (a === last || !inside){ first.focus({ preventScroll: true }); e.preventDefault(); } }
+    }
+  });
+  function init(){ var m = modalEl(); if (m){ mo.observe(m, { attributes: true, attributeFilter: ['class'] }); if (isOpen() && !_open) onOpen(); } }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
+
 /**
  * _hmSwitchCommentCount — コメント表示件数切り替えボタン共通処理
  */
@@ -15233,6 +15487,7 @@ function applyModeUI() {
   if (badge)  badge.classList.toggle('hidden', !isAdmin);      // 管理者のときだけバッジ表示
   if (logoutBtn) logoutBtn.classList.toggle('hidden', !isAdmin); // 管理者のときだけログアウト表示
   if (isAdmin && typeof _renderAccessCounter === 'function') { try { _renderAccessCounter(); } catch (e) {} }
+  if (typeof kvxApplyShell === 'function') kvxApplyShell();   // 管理者⇔閲覧者でシェル外観を即同期（閲覧者化で即除去）
 }
 
 /** 管理者ログインの秘密の入口を仕込む：①URLに #admin ②ヘッダーのロゴを5回タップ。閲覧者には何も見えない。 */
@@ -16824,13 +17079,354 @@ function renderYosoReport(raceNo) {
     '</div>';
 }
 
+// ══ Phase3-1 新出馬表プレビュー（管理者限定β・feature flag・読み取り専用・独立名前空間 kvx*）══
+// 予測計算(computeYosoScored)・印・totalScore・shadowには一切変更を加えない。確定済みscoredを読むだけ。
+// AI総合指数=totalScore（オッズ非依存・aiProb/市場アンカー/shadow購入モデルとは別）。走力SI=baseScore。印=既存horseMarkMap。
+var _kvxShown = false, _kvxWired = false, _kvxKey = null;   // _kvxKey=現在kvxで表示中のdisplayKey(正規化日付:レース番号)
+var _kvxSnap = null, _kvxSnapGen = 0;   // 【Phase3-2d】AI指数内訳snapshot（render同期で確定・immutable・表示用コピーのみ凍結）
+// 共通HTMLエスケープ（テキスト・属性値の両方に安全な最小集合 & < > " '）。既存の_esc(5703)はJS文字列用で別物。
+function escapeHTML(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function kvxEsc(s){ return escapeHTML(s); }   // kvxも共通escapeHTMLを使う（単一実装）
+function kvxNormDate(d){ return String(d == null ? '' : d).replace(/\//g, '-').trim(); }   // 2026/07/11 と 2026-07-11 を正規化
+// 【一般公開の分離／kill switch】管理者プレビューと一般公開を分離する。
+// KVX_PUBLIC_UI_DEFAULT はデプロイされた定数（＝サーバ管理・ブラウザ利用者が編集できない・秘密情報でない）で、
+// 一般公開のON/OFFを司る唯一の信頼源。既定は false（未公開）。公開時は true にして deploy、緊急停止は false にして deploy。
+// localStorage(kvx_deban_v2) は「管理者プレビュー専用flag」であり、一般公開の信頼源には決して使わない
+// （閲覧者が任意に書き換え可能なため）。URLパラメータでも有効化しない（一切参照しない）。
+var KVX_PUBLIC_UI_DEFAULT = false;   // ← 一般公開switch。今回は false のまま（公開しない）。
+try { window.KVX_PUBLIC_UI_DEFAULT = KVX_PUBLIC_UI_DEFAULT; } catch(e){}
+function publicRolloutEnabled(){ try { return window.KVX_PUBLIC_UI_DEFAULT === true; } catch(e){ try { return KVX_PUBLIC_UI_DEFAULT === true; } catch(_){ return false; } } }
+window.publicRolloutEnabled = publicRolloutEnabled;
+// 新UI有効判定 = 一般公開ON（deploy定数）｜｜（管理者 かつ プレビューflag）。
+// 閲覧者は publicRolloutEnabled()===true の時だけ新UI。localStorageを書き換えても isAdminMode()=false なので有効化不可。
+function kvxV2Enabled(){
+  try {
+    if (publicRolloutEnabled()) return true;                                                        // 一般公開（全閲覧者）
+    return typeof isAdminMode === 'function' && isAdminMode() && localStorage.getItem('kvx_deban_v2') === '1';  // 管理者プレビュー
+  } catch(e){ return false; }
+}
+// 【最終統合】Phase1ダークシェルのON/OFF。kvxV2Enabled()（一般公開 or 管理者プレビュー）の時だけ body へ kvx-shell-on を付与し、
+// 全シェルCSSは .kvx-shell-on 配下だけに限定する（OFF/閲覧者では1つも適用されない）。既存DOM/id/data-page/
+// switchPageは不変で、外観のみをCSSで切替える。applyModeUI(管理者⇔閲覧者)からも呼ばれ、閲覧者化で即除去される。
+// kill/OFF時は shell class 除去に加え、新UIのDOM（kvx表/カード・AI内訳）も片付けてリロード無しで旧UIへ戻す。
+function kvxApplyShell(){
+  try {
+    var on = kvxV2Enabled();
+    document.body.classList.toggle('kvx-shell-on', on);
+    if (!on) {                                                          // kill/OFF/閲覧者化：新UI DOMを撤去し既存UIへ復帰
+      try { if (typeof kvxClearHide === 'function' && _kvxShown) kvxClearHide(); } catch(_){}       // kvx表/カード＋snapshot clear
+      try { var brk = document.getElementById('kvx-ai-breakdown'); if (brk && brk.parentNode) brk.parentNode.removeChild(brk); } catch(_){}  // モーダルが開いていてもAI内訳だけ除去
+    }
+  } catch(e){ try { document.body.classList.remove('kvx-shell-on'); } catch(_){} }
+}
+window.kvxApplyShell = kvxApplyShell;
+function kvxClearHide(){ var c = document.getElementById('kvx-deban-v2'); if (c) { c.innerHTML = ''; c.hidden = true; } _kvxShown = false; _kvxKey = null; _kvxSnap = null; }
+function kvxLast5(name, raceDate, raceNo){
+  try {
+    if (typeof getHorseHistoryBefore !== 'function') return { zensou:'—', last5:'—' };
+    var h = getHorseHistoryBefore(name, raceDate, raceNo) || [];
+    var chk = function(v){ var n = parseInt(v, 10); return (!isNaN(n) && n > 0) ? n : '-'; };
+    var l5 = h.slice(0, 5).map(function(x){ return chk(x.chakujun); });
+    return { zensou: h.length ? (chk(h[0].chakujun) + '着') : '—', last5: l5.length ? ('[' + l5.join('-') + ']') : '—' };
+  } catch(e){ return { zensou:'—', last5:'—' }; }
+}
+// オッズ帯：オッズの「大きさ」の区分のみ（価値判断ではない・色で良し悪しを表さない）。
+function kvxOddsBand(odds){
+  var o = parseFloat(odds);
+  if (!isFinite(o) || o <= 0) return '—';
+  if (o < 10) return '1桁台';
+  if (o < 20) return '10倍台';
+  if (o < 30) return '20倍台';
+  return '30倍以上';
+}
+// デスクトップ表の sticky 左列(印/枠馬番/馬名)の left を実測幅から算出（paddingを含む実幅に一致させ、
+// 横スクロール時の座標ズレ・他セルの透けを防ぐ）。スマホカードには sticky を持ち込まない。
+function kvxSetSticky(){
+  try {
+    var t = document.querySelector('#kvx-deban-v2 table.kvx-deban');
+    if (!t) return;
+    var hm = t.querySelector('thead .kvx-c-mark'), hn = t.querySelector('thead .kvx-c-num');
+    if (!hm || !hn) return;
+    var w0 = hm.getBoundingClientRect().width, w1 = hn.getBoundingClientRect().width;
+    var nums = t.querySelectorAll('.kvx-c-num'); for (var i = 0; i < nums.length; i++) nums[i].style.left = w0 + 'px';
+    var names = t.querySelectorAll('.kvx-c-name'); for (var j = 0; j < names.length; j++) names[j].style.left = (w0 + w1) + 'px';
+  } catch(e){}
+}
+function kvxRenderDebanV2(raceNo, scored, horseMarkMap, renderDate){
+  var c = document.getElementById('kvx-deban-v2');
+  if (!c) return;
+  kvxApplyShell();   // 描画のたびにシェル外観をflag/管理者状態へ同期
+  if (!kvxV2Enabled()) { if (_kvxShown) kvxClearHide(); return; }   // OFF：DOM生成/履歴取得/再計算をしない
+  // 表示identityは「日付＋レース番号」。currentRaceNoだけでは前日R1と当日R1を識別できないため日付を含める。
+  // render開始時のcontext(renderDate=描画対象データの日付)をhookで受け取り、現在選択(currentDate:currentRaceNo)と
+  // 一致するときだけ現在表示とみなす。グローバルcurrentDateを後から読むのではなく、hookへ渡された render 側の
+  // 日付を使うことで、古いscoredが新日付として扱われるのを防ぐ。
+  //  ・選択が無効(日付未設定 or レース未選択)→ 残留を消して終了。
+  //  ・renderKey≠curKey(古い非同期/別日付/別レース)→ 描画もclearもしない（現在表示を消さない）。
+  //  ・renderKey==curKeyでデータなし → 旧表示を必ず消す（前日R1を当日R1として見せない）。
+  var _cd = (typeof currentDate !== 'undefined') ? currentDate : null;
+  var _cr = (typeof currentRaceNo !== 'undefined') ? currentRaceNo : null;
+  if (!_cd || _cr == null) { if (_kvxShown) kvxClearHide(); return; }
+  var curKey    = kvxNormDate(_cd) + ':' + String(_cr);
+  var renderKey = kvxNormDate(renderDate) + ':' + String(raceNo);
+  if (renderKey !== curKey) return;
+  if (!scored || !scored.length) { kvxClearHide(); return; }   // 現在選択がデータなし → 必ずclear
+  var data = (typeof allRacesData !== 'undefined') ? allRacesData[raceNo] : null;
+  var raceDate = data && data.raceInfo ? (data.raceInfo.raceDate || '') : '';
+  var mm = horseMarkMap || {};
+  // 既存契約：scoredはtotalScore降順(sort済)。表示用コピー参照のみ（sort/splice/書換え/再計算しない）。
+  // 同じ行データからデスクトップ表とスマホカードの両方を1回で生成し、CSSで表示切替（二重計算しない）。
+  var items = Array.prototype.map.call(scored, function(s){
+    var horse = s.horse || {};
+    var name = horse.horseName || '';
+    var mark = (s.totalScore != null) ? (mm[name] || '') : '';         // null馬に印なし
+    var oddsRaw = (horse.odds != null && horse.odds !== '') ? horse.odds : null;
+    var fh = kvxLast5(name, raceDate, raceNo);
+    return {
+      markRaw: mark, mark: kvxEsc(mark),
+      markCls: mark === '◎' ? ' kvx-honmei' : (mark === '×' ? ' kvx-keshi' : ''),
+      markLabel: mark ? ('印 ' + mark) : '印なし',
+      nameEsc: kvxEsc(name), jockey: kvxEsc(s.jockey || horse.jockey || ''),
+      waku: (horse.waku != null && horse.waku !== '') ? kvxEsc(horse.waku) : '',
+      uma: (horse.umaBan != null && horse.umaBan !== '') ? kvxEsc(horse.umaBan) : '—',
+      odds: oddsRaw != null ? kvxEsc(oddsRaw) : '—', band: kvxOddsBand(oddsRaw),
+      ninki: (horse.ninki != null && horse.ninki !== '') ? kvxEsc(horse.ninki) : '—',
+      ts: (s.totalScore != null) ? s.totalScore.toFixed(1) : '—',   // AI総合指数=既存「総合スコア」と同一
+      bs: (s.baseScore  != null) ? s.baseScore.toFixed(1)  : '—',   // 走力SI=baseScore
+      zensou: fh.zensou, last5: fh.last5
+    };
+  });
+  kvxBuildBreakdownSnap(scored, kvxNormDate(renderDate), raceNo);   // 【Phase3-2d】AI指数内訳snapshot（render同期でeff確定・原本不変）
+  var raceEsc = kvxEsc(raceNo);
+  var deskRows = items.map(function(it){
+    return '<tr>' +
+      '<td class="kvx-c-mark"><span class="kvx-mark' + it.markCls + '" aria-hidden="true">' + it.mark + '</span><span class="sr-only">' + it.markLabel + '</span></td>' +
+      '<td class="kvx-c-num">' + (it.waku ? '<span class="kvx-wk">枠' + it.waku + '</span>' : '') + '<span class="kvx-waku kvx-num">' + it.uma + '</span></td>' +
+      '<td class="kvx-c-name"><div class="kvx-name">' + it.nameEsc + '</div><div class="kvx-sub">高知 / ' + it.jockey + '</div></td>' +
+      '<td class="kvx-num"><span class="kvx-odds">' + it.odds + '</span> <span class="kvx-band">' + it.band + '</span></td>' +
+      '<td class="kvx-num">' + it.ninki + '</td>' +
+      '<td class="kvx-num"><span class="kvx-sc">' + it.ts + '</span></td>' +
+      '<td class="kvx-num"><span class="kvx-si">' + it.bs + '</span></td>' +
+      '<td class="kvx-num kvx-dim">' + it.zensou + '</td>' +
+      '<td class="kvx-num kvx-dim">' + it.last5 + '</td>' +
+      '<td><button type="button" class="kvx-detail" data-kvx-detail="1" data-name="' + it.nameEsc + '" data-race="' + raceEsc + '" aria-label="' + it.nameEsc + ' の詳細を開く">詳細</button></td>' +
+    '</tr>';
+  }).join('');
+  var cards = items.map(function(it){
+    return '<li class="kvx-card-li"><article class="kvx-card">' +
+      '<div class="kvx-card-top">' +
+        '<span class="kvx-mark' + it.markCls + '" aria-hidden="true">' + it.mark + '</span><span class="sr-only">' + it.markLabel + '</span>' +
+        '<span class="kvx-waku kvx-num">' + it.uma + '</span>' +
+        '<span class="kvx-card-name">' + it.nameEsc + '</span>' +
+        '<span class="kvx-card-odds"><span class="kvx-odds">' + it.odds + '</span><span class="kvx-band">' + it.band + '</span></span>' +
+      '</div>' +
+      '<div class="kvx-card-meta">' +
+        '<span class="kvx-tag"><span class="kvx-k">騎手</span>' + it.jockey + '</span>' +
+        '<span class="kvx-tag"><span class="kvx-k">人気</span>' + it.ninki + '</span>' +
+        '<span class="kvx-tag"><span class="kvx-k">AI総合指数</span>' + it.ts + '</span>' +
+        '<span class="kvx-tag"><span class="kvx-k">走力SI</span>' + it.bs + '</span>' +
+      '</div>' +
+      '<div class="kvx-card-foot"><span class="kvx-dim">前走 ' + it.zensou + ' ・ 近5走 ' + it.last5 + '</span>' +
+        '<button type="button" class="kvx-detail" data-kvx-detail="1" data-name="' + it.nameEsc + '" data-race="' + raceEsc + '" aria-label="' + it.nameEsc + ' の詳細を開く">詳細</button></div>' +
+    '</article></li>';
+  }).join('');
+  var aiDesc = 'AI総合指数：走力SIと各種補正を合成した、レース内比較用の指数です。勝率・的中確率・回収率を表す数値ではありません。';
+  var siDesc = '走力SI：過去のタイムを距離・馬場ごとに点数化した基本の走力（baseScore）です。';
+  c.innerHTML =
+    '<div class="kvx-hd">新出馬表プレビュー β <span class="kvx-note-inline">（管理者限定・本番表示とは別）</span></div>' +
+    '<div class="kvx-desktop"><div class="kvx-scroll"><table class="kvx-deban">' +
+      '<thead><tr>' +
+        '<th scope="col" class="kvx-c-mark">印</th><th scope="col" class="kvx-c-num">枠/馬番</th><th scope="col" class="kvx-c-name">馬名 / 騎手</th>' +
+        '<th scope="col">オッズ / オッズ帯</th><th scope="col">人気</th>' +
+        '<th scope="col" aria-label="' + aiDesc + '">AI総合指数</th>' +
+        '<th scope="col" aria-label="' + siDesc + '">走力SI</th>' +
+        '<th scope="col">前走</th><th scope="col">近5走</th><th scope="col">詳細</th>' +
+      '</tr></thead><tbody>' + deskRows + '</tbody></table></div></div>' +
+    '<ul class="kvx-mobile" aria-label="出馬表カード">' + cards + '</ul>' +
+    '<div class="kvx-note">' + aiDesc + ' オッズ非依存で、aiProb（市場アンカーモデル）や shadow購入モデルとは別物です。印はAI総合指数の降順、走力SIはbaseScore。オッズ帯はオッズの大きさの区分（価値判断ではありません）。</div>';
+  c.hidden = false; _kvxShown = true; _kvxKey = renderKey;   // 表示中のdisplayKey(日付:レース)を記録（古い日付/レース混入防止）
+  if (!_kvxWired) { c.addEventListener('click', kvxOnClick); _kvxWired = true; }   // 委譲は1回だけ（表/カード共通）
+  kvxSetSticky();
+}
+function kvxOnClick(e){
+  var b = (e.target && e.target.closest) ? e.target.closest('[data-kvx-detail]') : null;
+  if (!b) return;
+  var nm = b.getAttribute('data-name'), rn = parseInt(b.getAttribute('data-race'), 10);
+  if (typeof openHorseModal === 'function') openHorseModal(nm, rn);   // 既存詳細UIを再利用（signature不変）
+}
+
+// ═══ 【Phase3-2d】AI総合指数の内訳（管理者限定・kvx起点のみ）═══
+// 監査(Phase3-2c)で確定した加算契約だけを表示する。computeYosoScored/getMlLiveWeightsの挙動・
+// 予測ロジック・係数・sort・aiProb・shadow には一切触れない。表示は「実寄与＝stored Mod × snapshot eff」。
+// allowlist（表示可）：condMod/distMod/trendMod/comboMod/rotMod/classMod/cornMod(scaled)/weightMod/
+//   agariMod/marginMod/winStrMod/jockeyChgMod/takiMod/cornConsistMod/rakuMod/paceCtxMod/relSIMod ＋ baseScore(基準)。
+// denylist：jockeyMod/jockeyWR/trainerMod/avg4C/_cornModRaw/aiProb/marketProb/odds/ninki/offset係数/shadow/siCount/payout。
+var KVX_BRK_KEYS = [
+  ['condMod','condNew','馬場適性'], ['distMod','distNew','距離適性'], ['trendMod','trendN','近況トレンド'],
+  ['comboMod','comboN','騎手×厩舎'], ['rotMod','rotN','ローテーション'], ['classMod','clsN','昇降級'],
+  ['cornMod','cornN','位置・脚質（4角）'], ['weightMod','weightN','馬体重変化'], ['agariMod','agariN','上がり3F'],
+  ['marginMod','marginN','前走着差'], ['winStrMod','winStrN','勝ち馬の強さ'], ['jockeyChgMod','jockeyChgN','乗り替わり'],
+  ['takiMod','takiN','叩き'], ['cornConsistMod','cornConsistN','コーナー一貫性'], ['rakuMod','rakuN','前走楽勝'],
+  ['paceCtxMod','paceCtxN','展開補正']
+];
+var KVX_BRK_EPS = 0.005;   // 表示中立の技術的固定値＝totalScore(2桁)の表示量子0.01の半分（探索しない）
+// renderと同じ同期処理でeffを確定し、各馬の実寄与を計算して immutable snapshot に保存。原本(scored/horse)は変更しない。
+function kvxBuildBreakdownSnap(scored, normDate, raceNo){
+  try {
+    var mlW = (typeof getMlLiveWeights === 'function') ? getMlLiveWeights() : null;
+    var effOf = function(k){
+      if (mlW && mlW.eff && mlW.eff[k] != null) return mlW.eff[k];
+      if (typeof YOSO_FACTOR_SCALE !== 'undefined' && YOSO_FACTOR_SCALE[k] != null) return YOSO_FACTOR_SCALE[k];
+      return 1;
+    };
+    var srcDefault = (typeof KV_ML_WEIGHTS_DEFAULT !== 'undefined') && (mlW === KV_ML_WEIGHTS_DEFAULT);
+    var byHorse = {};
+    Array.prototype.forEach.call(scored, function(s){
+      var name = (s.horse && s.horse.horseName) || '';
+      var base = s.baseScore, total = s.totalScore;
+      var uma = (s.horse && s.horse.umaBan != null) ? String(s.horse.umaBan) : '';
+      if (name === '') return;
+      if (base == null || total == null || typeof base !== 'number' || typeof total !== 'number' || !isFinite(base) || !isFinite(total)) return;   // null/非有限馬は内訳対象外
+      var contribs = [], sum = 0, bad = false;
+      for (var i = 0; i < KVX_BRK_KEYS.length; i++){
+        var mk = KVX_BRK_KEYS[i][0], ek = KVX_BRK_KEYS[i][1], nm = KVX_BRK_KEYS[i][2];
+        var mod = (typeof s[mk] === 'number') ? s[mk] : 0;   // cornModはpace-bias scaled済み値をそのまま使用（別行にしない）
+        var eff = effOf(ek);
+        var v = mod * eff;
+        if (!isFinite(mod) || !isFinite(eff) || !isFinite(v)) { bad = true; break; }
+        contribs.push({ key: ek, name: nm, rawMod: mod, eff: eff, value: v });
+        sum += v;
+      }
+      var relV = (typeof s.relSIMod === 'number') ? s.relSIMod : 0;   // relSIは倍率なしで生加算
+      if (bad || !isFinite(relV)) { byHorse[name] = Object.freeze({ ok: false, umaBan: uma, reconstructionDiff: null }); return; }
+      contribs.push({ key: 'relSI', name: '相対SI', rawMod: relV, eff: 1, value: relV });
+      sum += relV;
+      var reconstructed = base + sum;                 // 内部はfull precision（表示時のみ2桁）
+      var diff = reconstructed - total;
+      var pass = isFinite(reconstructed) && isFinite(diff) && Math.abs(diff) <= 0.011;
+      byHorse[name] = Object.freeze({
+        umaBan: uma, baseScore: base, totalScore: total, correctionSum: total - base,
+        contributions: Object.freeze(contribs.map(function(c){ return Object.freeze(c); })),
+        reconstructed: reconstructed, reconstructionDiff: diff, ok: pass
+      });
+    });
+    _kvxSnapGen++;
+    _kvxSnap = Object.freeze({
+      key: normDate + ':' + String(raceNo), normalizedDate: normDate, raceNo: raceNo,
+      coefficientSource: srcDefault ? '出荷時定数(既定)' : 'ローカル再学習',
+      coefficientTrainedAt: (mlW && mlW.trainedAt) || '不明',
+      gen: _kvxSnapGen, createdAt: Date.now(), byHorse: Object.freeze(byHorse)
+    });
+  } catch(e){ _kvxSnap = null; }
+}
+function _kvxBrkFmt(v){ return (v >= 0 ? '+' : '-') + Math.abs(v).toFixed(2); }   // 符号付き2桁
+function kvxBreakdownHtml(entry, snap){
+  var esc = (typeof escapeHTML === 'function') ? escapeHTML : function(x){ return String(x); };
+  var hd = '<div class="kvx-brk-hd">AI総合指数の内訳 <span class="kvx-brk-adm">（管理者限定）</span></div>';
+  if (!entry.ok) {   // 再構成安全ゲート不通過：内訳を出さず管理者向けメッセージのみ
+    return hd + '<div class="kvx-brk-warn" role="status">内訳を安全に再構成できません。</div>';
+  }
+  var ups = [], downs = [];
+  entry.contributions.forEach(function(c){
+    if (!isFinite(c.value)) return;
+    if (c.value > KVX_BRK_EPS) ups.push(c);
+    else if (c.value < -KVX_BRK_EPS) downs.push(c);   // 中立(|v|<=eps)は非表示。分類は最終寄与の符号（rawではない）
+  });
+  ups.sort(function(a, b){ return b.value - a.value; });                        // 上げた要因：寄与の大きい順
+  downs.sort(function(a, b){ return Math.abs(b.value) - Math.abs(a.value); });  // 下げた要因：絶対値の大きい順
+  var rows = function(arr, cls){
+    if (!arr.length) return '<li class="kvx-brk-none">該当する要因なし</li>';
+    return arr.map(function(c){
+      return '<li class="kvx-brk-row"><span class="kvx-brk-name">' + esc(c.name) + '</span>' +
+             '<span class="kvx-brk-val ' + cls + '">' + _kvxBrkFmt(c.value) + '</span></li>';
+    }).join('');
+  };
+  var top = '<div class="kvx-brk-top">' +
+    '<div class="kvx-brk-cell"><span class="kvx-brk-k">走力SI（基準）</span><span class="kvx-brk-num">' + entry.baseScore.toFixed(2) + '</span></div>' +
+    '<div class="kvx-brk-cell"><span class="kvx-brk-k">補正合計</span><span class="kvx-brk-num">' + _kvxBrkFmt(entry.correctionSum) + '</span></div>' +
+    '<div class="kvx-brk-cell"><span class="kvx-brk-k">AI総合指数</span><span class="kvx-brk-num kvx-brk-total">' + entry.totalScore.toFixed(2) + '</span></div>' +
+  '</div>';
+  var desc = '<div class="kvx-brk-desc">走力SIと各補正を合成したレース内比較用の指数です。勝率・的中確率・回収率ではありません。</div>';
+  var cols = '<div class="kvx-brk-h2 kvx-brk-h2-up">＋ AI総合指数を上げた要因</div><ul class="kvx-brk-list">' + rows(ups, 'kvx-brk-up') + '</ul>' +
+             '<div class="kvx-brk-h2 kvx-brk-h2-down">− AI総合指数を下げた要因</div><ul class="kvx-brk-list">' + rows(downs, 'kvx-brk-down') + '</ul>';
+  var det = entry.contributions.map(function(c){
+    return '<tr><td>' + esc(c.name) + '</td><td class="kvx-num">' + c.rawMod.toFixed(4) + '</td><td class="kvx-num">' + c.eff.toFixed(3) + '</td><td class="kvx-num">' + _kvxBrkFmt(c.value) + '</td></tr>';
+  }).join('');
+  var details = '<details class="kvx-brk-det"><summary>詳細（raw Mod × 係数 = 実寄与）</summary>' +
+    '<div class="kvx-brk-detwrap"><table class="kvx-brk-tbl"><thead><tr><th scope="col">項目</th><th scope="col">raw Mod</th><th scope="col">係数</th><th scope="col">実寄与</th></tr></thead><tbody>' + det + '</tbody></table></div>' +
+    '<div class="kvx-brk-src">係数: ' + esc(snap.coefficientSource) + '（学習: ' + esc(snap.coefficientTrainedAt) + '）／再構成差: ' + entry.reconstructionDiff.toFixed(4) + '</div></details>';
+  var foot = '<div class="kvx-brk-foot">各項目の丸めにより合計に最大0.01の差が出る場合があります。</div>';
+  return hd + top + desc + cols + details + foot;
+}
+// モーダルopen（a11y seam経由）：kvx起点＋管理者＋flag＋identity完全一致のときだけ内訳を注入。
+function kvxOnModalOpen(trigger){
+  var mc = document.getElementById('horse-modal-content');
+  var old = document.getElementById('kvx-ai-breakdown'); if (old && old.parentNode) old.parentNode.removeChild(old);   // 常にstale除去（A→B・既存表open で残さない）
+  if (!mc) return;
+  if (!kvxV2Enabled()) return;                                                   // flag OFF/閲覧者は出さない
+  if (typeof isAdminMode !== 'function' || !isAdminMode()) return;               // 管理者のみ
+  if (!trigger || !trigger.closest || !trigger.closest('#kvx-deban-v2') || !trigger.getAttribute || trigger.getAttribute('data-kvx-detail') == null) return;   // kvx詳細ボタン起点のみ
+  var name = trigger.getAttribute('data-name');
+  var rn = parseInt(trigger.getAttribute('data-race'), 10);
+  var _cd = (typeof currentDate !== 'undefined') ? currentDate : null;
+  var _cr = (typeof currentRaceNo !== 'undefined') ? currentRaceNo : null;
+  if (!_cd || _cr == null) return;
+  if (!_kvxSnap || _kvxSnap.key !== (kvxNormDate(_cd) + ':' + String(_cr)) || rn !== _cr) return;   // 日付+レース+選択の完全一致
+  var titleEl = document.getElementById('horse-modal-title');
+  if (!titleEl || String(titleEl.textContent).indexOf(name) < 0) return;         // 現在開いている馬と一致（stale trigger防御）
+  var entry = _kvxSnap.byHorse[name];
+  if (!entry) return;                                                            // null馬など→内訳なし
+  var sec = document.createElement('section');
+  sec.id = 'kvx-ai-breakdown'; sec.className = 'kvx-brk'; sec.setAttribute('aria-label', 'AI総合指数の内訳（管理者限定）');   // 管理者限定はJSゲート(上のisAdminMode)で担保。CSS .admin-only は body.public-mode と衝突し隠れるため付けない。
+  sec.innerHTML = kvxBreakdownHtml(entry, _kvxSnap);
+  mc.insertBefore(sec, mc.firstChild);                                           // 過去成績より上
+  if (!entry.ok) { try { console.warn('[kvx-breakdown] reconstruct-fail', { date: _kvxSnap.normalizedDate, race: _cr, umaBan: entry.umaBan, diff: entry.reconstructionDiff }); } catch(e){} }   // 馬名等は出さない
+}
+function kvxOnModalClose(){ var old = document.getElementById('kvx-ai-breakdown'); if (old && old.parentNode) old.parentNode.removeChild(old); }
+window.kvxOnModalOpen = kvxOnModalOpen; window.kvxOnModalClose = kvxOnModalClose;
+
+function kvxSafeRenderDebanV2(raceNo, scored, horseMarkMap, renderDate){   // 例外隔離：kvxの失敗で既存パネルを落とさない
+  try { kvxRenderDebanV2(raceNo, scored, horseMarkMap, renderDate); }
+  catch(err){ try { console.error('[kvx] preview render failed (既存パネルは維持):', err); } catch(e){} try { kvxClearHide(); } catch(e2){} }
+}
+window.kvxSafeRenderDebanV2 = kvxSafeRenderDebanV2;
+function kvxToggleV2(){
+  if (typeof isAdminMode !== 'function' || !isAdminMode()) { kvxClearHide(); return; }   // 管理者のみ
+  var next = (localStorage.getItem('kvx_deban_v2') === '1') ? '0' : '1';
+  try { localStorage.setItem('kvx_deban_v2', next); } catch(e){}
+  var btn = document.getElementById('kvx-toggle-btn');
+  if (btn) { btn.setAttribute('aria-pressed', next === '1' ? 'true' : 'false'); btn.textContent = '新出馬表プレビュー β：' + (next === '1' ? 'ON' : 'OFF'); }
+  if (next === '1') { if (typeof currentRaceNo !== 'undefined' && currentRaceNo && typeof renderPredictionPanel === 'function') { try { renderPredictionPanel(currentRaceNo); } catch(e){} } }
+  else { kvxClearHide(); }   // ON→OFF：コンテナ hidden＋内容破棄
+  kvxApplyShell();   // シェル外観もflagに同期
+}
+var _kvxResizeWired = false;
+function kvxInitToggle(){
+  var btn = document.getElementById('kvx-toggle-btn');
+  if (btn && !btn._kvxWired) {
+    btn._kvxWired = true;
+    btn.addEventListener('click', kvxToggleV2);
+    var on = (function(){ try { return localStorage.getItem('kvx_deban_v2') === '1'; } catch(e){ return false; } })();
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.textContent = '新出馬表プレビュー β：' + (on ? 'ON' : 'OFF');
+  }
+  if (!_kvxResizeWired) {   // sticky左列のleftは実測幅依存。表→カード→表の幅変化やフォント回り込みで再計算（委譲は1回だけ）。
+    _kvxResizeWired = true;
+    window.addEventListener('resize', function(){ if (_kvxShown) kvxSetSticky(); });
+  }
+  kvxApplyShell();   // 初期ロード時にシェル外観を同期（初期OFF・管理者+flagのときだけON）
+}
+document.addEventListener('DOMContentLoaded', kvxInitToggle);
+
 function renderPredictionPanel(raceNo) {
+  const _rd0 = (allRacesData[raceNo] && allRacesData[raceNo].raceInfo && allRacesData[raceNo].raceInfo.raceDate) || null;   // 【Phase3-1】render開始時の日付context（displayKey用）
   const container = document.getElementById(`yoso-panel-${raceNo}`);
-  if (!container) return;
+  if (!container) { if (window.kvxSafeRenderDebanV2) window.kvxSafeRenderDebanV2(raceNo, null, null, _rd0); return; }   // 【Phase3-1 hook】パネル無し経路：現在選択(日付:レース)一致時のみ片付け
 
   const data = allRacesData[raceNo];
   if (!data || !data.horses.length) {
     container.innerHTML = '<p style="color:#9ca3af;text-align:center;padding:24px">レースデータがありません</p>';
+    if (window.kvxSafeRenderDebanV2) window.kvxSafeRenderDebanV2(raceNo, null, null, _rd0);   // 【Phase3-1 hook】データなし経路：現在選択一致時のみclear/hide
     return;
   }
 
@@ -16886,8 +17482,8 @@ function renderPredictionPanel(raceNo) {
         <td style="padding:8px;text-align:center;font-size:17px;font-weight:900;color:${chakuCol}">${chaku}着</td>
         <td style="padding:8px;text-align:center;font-size:20px;font-weight:900;color:${mCol};line-height:1">${mark}</td>
         <td style="padding:8px;text-align:center;font-size:12px;color:#6b7280">${h.umaBan||'—'}</td>
-        <td style="padding:8px;font-size:13px;font-weight:700;color:#1a1a2e">${h.horseName||'—'}</td>
-        <td style="padding:8px;font-size:12px;color:#374151">${(h.jockey||'').trim()}</td>
+        <td style="padding:8px;font-size:13px;font-weight:700;color:#1a1a2e">${escapeHTML(h.horseName||'—')}</td>
+        <td style="padding:8px;font-size:12px;color:#374151">${escapeHTML((h.jockey||'').trim())}</td>
         <td style="padding:8px;text-align:center;font-size:12px;font-family:monospace;color:#7c3aed">${ts!=null?ts.toFixed(1):'—'}</td>
         <td style="padding:8px;text-align:center;font-size:11px;font-weight:700;color:${hit1?'#15803d':hit2?'#2563eb':hit3?'#d97706':'#9ca3af'}">${hit1?'◎的中':hit2?'○的中':hit3?'▲的中':'—'}</td>
       </tr>`;
@@ -16905,7 +17501,7 @@ function renderPredictionPanel(raceNo) {
       <tbody>${afterRows}</tbody>
     </table>
     <div style="margin-top:8px;font-size:11px;color:#374151">
-      ◎本命：<strong>${honmei?.horse.horseName||'—'}</strong> → <strong style="color:${honmeiChaku===1?'#15803d':'#dc2626'}">${honmeiChaku===1?'1着的中':honmeiChaku+'着（ハズレ）'}</strong>
+      ◎本命：<strong>${escapeHTML(honmei?.horse.horseName||'—')}</strong> → <strong style="color:${honmeiChaku===1?'#15803d':'#dc2626'}">${honmeiChaku===1?'1着的中':honmeiChaku+'着（ハズレ）'}</strong>
     </div>`;
   } else if (_displayMode === 'simple') {
     // ── レース前予想モード（基本表示：印・馬番・馬名・騎手・走力SI・総合スコア） ──
@@ -16925,8 +17521,8 @@ function renderPredictionPanel(raceNo) {
       return `<tr style="border-bottom:1px solid #e2e8f0;${noData?'opacity:.55':''}">
         <td style="padding:9px 8px;text-align:center;font-size:26px;font-weight:900;color:${mCol};line-height:1">${mark}</td>
         <td style="padding:9px 6px;text-align:center;font-size:13px;color:#6b7280">${s.horse.umaBan||'—'}</td>
-        <td style="padding:9px 8px;font-size:15px;font-weight:700;color:#1a1a2e;white-space:nowrap">${s.horse.horseName||'—'}${transferBadge}</td>
-        <td style="padding:9px 8px;font-size:13px;color:#374151;white-space:nowrap">${s.jockey}</td>
+        <td style="padding:9px 8px;font-size:15px;font-weight:700;color:#1a1a2e;white-space:nowrap">${escapeHTML(s.horse.horseName||'—')}${transferBadge}</td>
+        <td style="padding:9px 8px;font-size:13px;color:#374151;white-space:nowrap">${escapeHTML(s.jockey)}</td>
         <td style="padding:9px 8px;text-align:center;font-size:14px;font-family:monospace;font-weight:700;color:${s.baseScore!=null?(s.isEstimatedScore?'#7c3aed':s.isTransfer?'#d97706':'#1a56a0'):'#9ca3af'}">${bs}${siNote}</td>
         <td style="padding:9px 8px;text-align:center;font-size:19px;font-family:monospace;font-weight:900;color:${s.totalScore!=null?'#7c3aed':'#9ca3af'};background:${s.totalScore!=null&&idx<2?'rgba(124,58,237,.05)':'transparent'}">${ts}</td>
       </tr>`;
@@ -16992,8 +17588,8 @@ function renderPredictionPanel(raceNo) {
       return `<tr style="border-bottom:1px solid #e2e8f0;${noData?'opacity:.55':''}">
         <td style="padding:7px 8px;text-align:center;font-size:22px;font-weight:900;color:${mCol};line-height:1">${mark}</td>
         <td style="padding:7px 6px;text-align:center;font-size:12px;color:#6b7280">${umaBan}</td>
-        <td style="padding:7px 8px;font-size:13px;font-weight:700;color:#1a1a2e;white-space:nowrap">${s.horse.horseName||'—'}${transferBadge}</td>
-        <td style="padding:7px 6px;font-size:12px;color:#374151;white-space:nowrap">${s.jockey}${jStatsKnown?'':' <span style="font-size:9px;color:#ef4444">*</span>'}</td>
+        <td style="padding:7px 8px;font-size:13px;font-weight:700;color:#1a1a2e;white-space:nowrap">${escapeHTML(s.horse.horseName||'—')}${transferBadge}</td>
+        <td style="padding:7px 6px;font-size:12px;color:#374151;white-space:nowrap">${escapeHTML(s.jockey)}${jStatsKnown?'':' <span style="font-size:9px;color:#ef4444">*</span>'}</td>
         <td style="padding:7px 8px;text-align:center;font-size:13px;font-family:monospace;font-weight:700;color:${s.baseScore!=null?(s.isEstimatedScore?'#7c3aed':s.isTransfer?'#d97706':'#1a56a0'):'#9ca3af'}">${bs}${siNote}</td>
         <td style="padding:7px 6px;text-align:center;font-size:11px;color:${col(jMod)}">${jMod}<br><span style="font-size:9px;color:#9ca3af">${jwr}%</span></td>
         <td style="padding:7px 6px;text-align:center;font-size:11px;color:${s.condMod!==0?col(cMod):'#9ca3af'}">${s.condMod!==0?cMod:'—'}</td>
@@ -17050,7 +17646,7 @@ function renderPredictionPanel(raceNo) {
         const cls = Math.abs(v) < 0.05 ? 'omd-zero' : v > 0 ? 'omd-pos' : 'omd-neg';
         return `<td class="${cls}">${Math.abs(v) < 0.05 ? '—' : (v > 0 ? '+' : '') + v.toFixed(1)}</td>`;
       }).join('');
-      return `<tr><td>${s.horse.umaBan||'—'}</td><td class="omd-name">${MARKS[idx]||''} ${s.horse.horseName||'—'}</td>${cells}<td class="omd-sum">${(_sum>0?'+':'')+_sum.toFixed(1)}</td></tr>`;
+      return `<tr><td>${s.horse.umaBan||'—'}</td><td class="omd-name">${MARKS[idx]||''} ${escapeHTML(s.horse.horseName||'—')}</td>${cells}<td class="omd-sum">${(_sum>0?'+':'')+_sum.toFixed(1)}</td></tr>`;
     }).join('');
     tableHtml += `<details class="other-mod-detail"><summary>🔎 「その他」補正の全内訳を表示（12項目）</summary><div class="omd-wrap"><table>
       <thead><tr><th>馬番</th><th style="text-align:left">馬名</th>${_omdComponents.map(c=>`<th title="${c[3]}">${c[0]}</th>`).join('')}<th>合計</th></tr></thead>
@@ -17142,9 +17738,9 @@ function renderPredictionPanel(raceNo) {
           const _favNames = horses
             .filter(h => { const n = parseInt(h.ninki); return !isNaN(n) && h.horseName !== _vh.horseName; })
             .sort((a, b) => parseInt(a.ninki) - parseInt(b.ninki)).slice(0, 2).map(h => h.horseName);
-          if (_favNames.length) _sub = `<span class="vbb-sub">｜馬単 ${_vh.horseName}→（${_favNames.join('・')}）も過去の検証では回収率104%（当たり外れの波は大きめ）</span>`;
+          if (_favNames.length) _sub = `<span class="vbb-sub">｜馬単 ${escapeHTML(_vh.horseName)}→（${_favNames.join('・')}）も過去の検証では回収率104%（当たり外れの波は大きめ）</span>`;
         }
-        valueBetBadge = `<div class="value-bet-bar">💰 <b>単勝妙味${_isTop ? 'ゾーン' : '：' + _vh.horseName}</b>（AIの評価${_isTop ? 'トップ＝◎' : 'は高いが◎とは別の馬'}・単勝${_vod.toFixed(1)}倍）＝AIの評価に対してオッズが高め。過去の同条件では平均より回収率が良い帯です${_sub}</div>`;
+        valueBetBadge = `<div class="value-bet-bar">💰 <b>単勝妙味${escapeHTML(_isTop ? 'ゾーン' : '：' + _vh.horseName)}</b>（AIの評価${_isTop ? 'トップ＝◎' : 'は高いが◎とは別の馬'}・単勝${_vod.toFixed(1)}倍）＝AIの評価に対してオッズが高め。過去の同条件では平均より回収率が良い帯です${_sub}</div>`;
         _pickValue = { name: _vh.horseName, odds: _vod, isTop: _isTop };
       }
     }
@@ -17187,7 +17783,7 @@ function renderPredictionPanel(raceNo) {
         }
       }
       if (_dfReasons.length) {
-        dangerFavBadge = `<div class="danger-fav-bar">⚠️ <b>危険な1番人気：${_dfH.horseName}</b>（${_dfReasons.join('・')}）＝過去のデータでは、こういうタイプの1番人気は3着以内に来る率54%（普通の1番人気は79%）<span class="dfb-sub">｜過去2,386レースの集計</span></div>`;
+        dangerFavBadge = `<div class="danger-fav-bar">⚠️ <b>危険な1番人気：${escapeHTML(_dfH.horseName)}</b>（${_dfReasons.join('・')}）＝過去のデータでは、こういうタイプの1番人気は3着以内に来る率54%（普通の1番人気は79%）<span class="dfb-sub">｜過去2,386レースの集計</span></div>`;
         _pickDanger = { name: _dfH.horseName, reasons: _dfReasons.slice() };
       }
     }
@@ -17202,7 +17798,7 @@ function renderPredictionPanel(raceNo) {
     const _honmei = scored.find(s => s.totalScore != null);
     if (_honmei && _honmei.avg4C != null && _honmei.avg4C > 5) {
       const _lt = _honmei.avg4C > 7 ? '追込' : '差し';
-      legWarnBadge = `<div class="leg-warn-bar">🏇 <b>◎脚質注意：${_honmei.horse.horseName}</b>（4角平均${_honmei.avg4C.toFixed(1)}番手＝${_lt}脚質）＝高知の前有利で差し◎は複勝48.8%（◎が逃げ先行なら77%）<span class="lwb-sub">｜相手の逃げ先行馬を厚めに・軸は割引推奨</span></div>`;
+      legWarnBadge = `<div class="leg-warn-bar">🏇 <b>◎脚質注意：${escapeHTML(_honmei.horse.horseName)}</b>（4角平均${_honmei.avg4C.toFixed(1)}番手＝${_lt}脚質）＝高知の前有利で差し◎は複勝48.8%（◎が逃げ先行なら77%）<span class="lwb-sub">｜相手の逃げ先行馬を厚めに・軸は割引推奨</span></div>`;
     }
   }
 
@@ -17221,7 +17817,7 @@ function renderPredictionPanel(raceNo) {
     if (_mb.length) {
       const _items = _mb.map(x => {
         const _fk = x.nk <= 2 ? '45%' : '33%';
-        return `<b>${x.s.horse.horseName}</b>（AI${x.rank}番手→${x.nk}番人気・この型は複勝${_fk}）`;
+        return `<b>${escapeHTML(x.s.horse.horseName)}</b>（AI${x.rank}番手→${x.nk}番人気・この型は複勝${_fk}）`;
       }).join('　');
       marketBackBadge = `<div class="market-back-bar">🔵 <b>AIは低評価でも人気の馬</b>：${_items}<span class="mbb-sub">｜AIがまだ能力を測れていない可能性あり。直前で急に人気が上がった馬は特に要注意（関係者しか知らない好材料があることも）</span></div>`;
     }
@@ -17241,7 +17837,7 @@ function renderPredictionPanel(raceNo) {
       const _ld = lsRead();
       for (const h of getHorseHistoryBefore(hName, raceInfo.raceDate, raceNo).slice(0, 3)) {
         if (h.babaCode !== '31') continue;
-        const rrec = _ld[`race_31_${h.raceDate}_${h.raceNo}`];
+        const rrec = _ld[`race_31_${escapeHTML(h.raceDate)}_${h.raceNo}`];
         if (!rrec || !rrec.first3f) continue;
         const pd = getPaceDevLabel(rrec.distance, rrec.race_class, rrec.track_cond, rrec.first3f);
         if (!pd) continue;
@@ -17258,7 +17854,7 @@ function renderPredictionPanel(raceNo) {
     scored.forEach((s, idx) => {
       if (idx < 5 || s.totalScore == null) return;   // 指数6番手以下のみ
       const why = [];
-      const cm = Yoso.comboMod(_allCombo[`${s.jockey}_${s.trainer}`], scored.length);
+      const cm = Yoso.comboMod(_allCombo[`${escapeHTML(s.jockey)}_${escapeHTML(s.trainer)}`], scored.length);
       if (cm >= 0.5) why.push('厩舎コンボ好調');
       if (s.cornMod >= 1) why.push('逃げ先行型');
       let pcv = 0;
@@ -17270,7 +17866,7 @@ function renderPredictionPanel(raceNo) {
       _anaHits.sort((a, b) => b.nSig - a.nSig || a.idx - b.idx);
       _pickSleeper = { name: _anaHits[0].s.horse.horseName, idx: _anaHits[0].idx, why: _anaHits[0].why.slice() };
       const _items = _anaHits.slice(0, 3).map(x =>
-        `<b>${x.s.horse.horseName}</b>（${x.idx + 1}番手・${x.why.join('＋')}）`).join('　');
+        `<b>${escapeHTML(x.s.horse.horseName)}</b>（${x.idx + 1}番手・${x.why.join('＋')}）`).join('　');
       anaBadge = `<div class="ana-run-bar">⚡ <b>穴馬激走注意</b>：${_items}<button type="button" class="kvi-info" onclick="this.closest('.ana-run-bar').classList.toggle('kvi-open')" title="説明を表示">?</button><span class="arb-sub kvi-hidden">｜こういう特徴のある評価下位馬は、普通の下位馬（3着以内11%）の約2倍＝20〜24%の確率で馬券に絡みます。ワイドや3連系の相手候補に</span></div>`;
     }
   }
@@ -17301,7 +17897,7 @@ function renderPredictionPanel(raceNo) {
       if (matched) _cfHits.push({ s, idx });
     });
     if (_cfHits.length) {
-      const _items = _cfHits.slice(0, 3).map(x => `<b>${x.s.horse.horseName}</b>（${x.idx + 1}番手）`).join('　');
+      const _items = _cfHits.slice(0, 3).map(x => `<b>${escapeHTML(x.s.horse.horseName)}</b>（${x.idx + 1}番手）`).join('　');
       condFitBadge = `<div class="cond-fit-bar">🔍 <b>距離/馬場実績あり</b>：${_items}<button type="button" class="kvi-info" onclick="this.closest('.cond-fit-bar').classList.toggle('kvi-open')" title="説明を表示">?</button><span class="cfb-sub kvi-hidden">｜最近の成績は良くないものの、今日と同じ距離・馬場状態では過去に3着以内あり。同タイプの馬はやや好走しやすい（3着以内25.6%・実績なし馬は22.7%）ですが、オッズにも織り込まれがちなので過信は禁物の参考情報です</span></div>`;
     }
   }
@@ -17326,7 +17922,7 @@ function renderPredictionPanel(raceNo) {
       let _evPick = null;
       try { const _er = computeEvBets(raceNo, container._selCond); if (_er && _er.runners) _evPick = _er.runners.find(r => r.inWindow) || null; } catch (e) {}
       const _row = (label, color, body) => `<div class="ps-row"><span class="ps-tag" style="background:${color}">${label}</span><span class="ps-body">${body}</span></div>`;
-      let _rows = _row('本命', '#dc2626', `◎ <b>${_hm.horse.horseName}</b> <span class="ps-mut">${_confIcon}${_confTxt}${_g != null ? '（差' + (_g >= 0 ? '+' : '') + _g + '）' : ''}</span>`);
+      let _rows = _row('本命', '#dc2626', `◎ <b>${escapeHTML(_hm.horse.horseName)}</b> <span class="ps-mut">${_confIcon}${_confTxt}${_g != null ? '（差' + (_g >= 0 ? '+' : '') + _g + '）' : ''}</span>`);
       if (_evPick) _rows += _row('妙味', '#7c3aed', `中穴 <b>${_evPick.name}</b> <span class="ps-mut">単勝${_evPick.odds.toFixed(1)}倍｜AIの見立てよりオッズが高くお得</span>`);
       else if (_pickValue) _rows += _row('妙味', '#7c3aed', `<b>${_pickValue.name}</b> <span class="ps-mut">単勝${_pickValue.odds.toFixed(1)}倍・AI評価とオッズのズレ</span>`);
       if (_pickSleeper) _rows += _row('穴', '#0891b2', `2-3着に <b>${_pickSleeper.name}</b> <span class="ps-mut">${_pickSleeper.idx + 1}番手・${_pickSleeper.why.join('＋')}</span>`);
@@ -17383,9 +17979,13 @@ function renderPredictionPanel(raceNo) {
         <b>🔧 その他</b> … 細かい加点・減点の合計。出走間隔／クラスが上がった・下がった／馬体重の増減／ゴール前の伸び脚／勝った相手の強さ／騎手の乗り替わり／休み明け何戦目か、などです。<br><br>
         <span style="color:#b45309">※「騎手」の数字は参考表示で、スコアには足していません</span>（騎手の影響は「コンビ」と「乗り替わり」で反映済み）。<br>
         印の意味：◎いちばん期待 ○二番手 ▲三番手 △おさえ ×評価低め。「転入」＝他の競馬場から来たばかりで参考値、「推定」＝データが少なくクラスから推定した値です。<br><br>
-        <b>🧭 印の並び順について</b> … 単勝オッズが全馬ぶん発表されると、印（◎○▲…）は「総合スコア」の順位ではなく、AI評価とオッズ（みんなの人気度）を組み合わせた最終順位で決まります。過去データでの検証では、この方式のほうが◎の的中率・回収率とも従来より高い結果でした。総合スコアの数字自体は変わらず、内訳の参考として残しています。オッズ発表前は総合スコア順で暫定表示します。
+        <b>🧭 印の並び順について</b> … 印（◎○▲…）は<b>単勝オッズに関係なく、「総合スコア」の高い順</b>に決まります（オッズ非依存のAI単独評価）。市場のオッズから推定した確率（AI推定確率）は🔭穴馬チェックの妙味判定にのみ使い、印の並び順には影響しません。
       </div>
     </details>`;
+  // 【Phase3-1 hook・seam A案】確定scored(totalScore降順・sort済)＋既存印マップを、パネルinnerHTML反映直後に
+  // 新UIへ1回だけ渡す。既存パネルの出力・状態は不変、二重計算なし（同じscored/horseMarkMapを渡す）。
+  // 例外は kvxSafeRenderDebanV2 内部で隔離し、既存renderPredictionPanelを絶対に失敗させない。
+  if (window.kvxSafeRenderDebanV2) window.kvxSafeRenderDebanV2(raceNo, scored, horseMarkMap, _rd0);
 }
 
 // ── 精度バックテスト（旧 vs 新 ◎的中率比較） ──
