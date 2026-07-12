@@ -17093,7 +17093,7 @@ function kvxNormDate(d){ return String(d == null ? '' : d).replace(/\//g, '-').t
 // 一般公開のON/OFFを司る唯一の信頼源。既定は false（未公開）。公開時は true にして deploy、緊急停止は false にして deploy。
 // localStorage(kvx_deban_v2) は「管理者プレビュー専用flag」であり、一般公開の信頼源には決して使わない
 // （閲覧者が任意に書き換え可能なため）。URLパラメータでも有効化しない（一切参照しない）。
-var KVX_PUBLIC_UI_DEFAULT = false;   // ← 一般公開switch。今回は false のまま（公開しない）。
+var KVX_PUBLIC_UI_DEFAULT = true;   // ← 一般公開switch。一般公開ON（2026-07-12）。緊急停止は false に戻して再デプロイ（README参照）。
 try { window.KVX_PUBLIC_UI_DEFAULT = KVX_PUBLIC_UI_DEFAULT; } catch(e){}
 function publicRolloutEnabled(){ try { return window.KVX_PUBLIC_UI_DEFAULT === true; } catch(e){ try { return KVX_PUBLIC_UI_DEFAULT === true; } catch(_){ return false; } } }
 window.publicRolloutEnabled = publicRolloutEnabled;
