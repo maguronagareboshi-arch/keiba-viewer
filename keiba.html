@@ -1212,11 +1212,42 @@ function danwaCard(entries, danwaByUma) {
     const nameHtml = `<a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}>${esc(e.horse_name)}</a>`;
     return `<div style="padding:6px 0;border-bottom:1px solid var(--border)">
       <b>${e.umaban}</b> ${nameHtml}${d.headline ? ` <span class="badge">${esc(d.headline)}</span>` : ''}
+      <button class="foldbtn danwa-expand" style="font-size:11px;padding:1px 8px;margin-left:6px" data-hid="${esc(e.horse_id || '')}" data-hname="${esc(e.horse_name || '')}" data-cur-rid="${esc(d.race_id || '')}">▼過去のコメント</button>
       <div style="font-size:13px;color:var(--sub);margin-top:2px">${d.trainer ? `<b>${esc(d.trainer)}</b>――` : ''}${esc(d.comment || d.raw || '')}</div>
+      <div class="danwa-past" hidden></div>
     </div>`;
   }).join('');
   if (!rows) return '';
   return `<div class="card"><h3 class="sec" style="margin-top:0">厩舎の話</h3>${rows}</div>`;
+}
+// 厩舎の話「▼過去のコメント」展開（クリック時に遅延ロード・horse_id優先/無ければhorse_name）
+async function toggleDanwaPast(btn) {
+  const wrap = btn.parentElement.querySelector('.danwa-past');
+  if (!wrap) return;
+  if (!wrap.hidden) { wrap.hidden = true; btn.textContent = '▼過去のコメント'; return; }
+  wrap.hidden = false;
+  btn.textContent = '▲閉じる';
+  if (wrap.dataset.loaded) return;
+  wrap.dataset.loaded = '1';
+  wrap.innerHTML = '<div style="font-size:12px;color:var(--sub)">読み込み中…</div>';
+  try {
+    const hid = btn.dataset.hid, hname = btn.dataset.hname, curRid = btn.dataset.curRid;
+    const filt = hid ? `horse_id=eq.${encodeURIComponent(hid)}` : `horse_name=eq.${encodeURIComponent(hname)}`;
+    const rows = await sbGet(`chihou_danwa?${filt}&select=race_id,headline,trainer,comment,raw&order=race_id.desc&limit=8`);
+    const past = rows.filter((r) => r.race_id !== curRid);
+    if (!past.length) { wrap.innerHTML = '<div style="font-size:12px;color:var(--sub)">過去のコメントはありません</div>'; return; }
+    wrap.innerHTML = past.map((r) => {
+      const y = r.race_id.slice(0, 4), mm = r.race_id.slice(12, 14), dd = r.race_id.slice(14, 16);
+      const date = `${y}-${mm}-${dd}`;
+      return `<div style="font-size:12px;padding:4px 0;border-top:1px dashed var(--border)">
+        <span class="racelink" data-rid="${esc(r.race_id)}" data-rd="${esc(date)}" title="クリックでそのレースへ">${mmdd(date)}</span>
+        ${r.headline ? ` <span class="badge">${esc(r.headline)}</span>` : ''}
+        ${r.trainer ? ` <b>${esc(r.trainer)}</b>――` : ' '}${esc(r.comment || r.raw || '')}
+      </div>`;
+    }).join('');
+  } catch (e) {
+    wrap.innerHTML = '<div style="font-size:12px;color:var(--sub)">読み込み失敗</div>';
+  }
 }
 
 function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
@@ -2834,6 +2865,8 @@ async function init() {
     if (od) { e.stopPropagation(); showOddsFlow(od.dataset.liveOdds, od); return; }
     const rl = e.target.closest('.racelink');   // 前後半タイムの日付タップ→そのレースへ
     if (rl && rl.dataset.rid) { openHistoricalRace(rl.dataset.rid, rl.dataset.rd); return; }
+    const de = e.target.closest('.danwa-expand');   // 厩舎の話「▼過去のコメント」展開
+    if (de) { toggleDanwaPast(de); return; }
     const kk = e.target.closest('td.fold');   // スマホ: 長い列（根拠/寸評/近3走/調教）をタップで展開
     if (kk) kk.classList.toggle('open');
   });
