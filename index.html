@@ -1915,6 +1915,20 @@ const KV_APP_CSS = [
       'body.kvx-shell-on .header-inner{max-width:100%}',
       'body.kvx-shell-on .header-inner>div{flex-wrap:wrap;min-width:0;flex-shrink:1!important}',
       'body.kvx-shell-on .header-nav-inner{flex-wrap:wrap}',
+      // ── 「AI予想」サブタブ：kvx AI予想ランキングのスロット＋データなし文言＋管理者詳細の折りたたみ ──
+      '.kvx-yoso-slot{display:block}',
+      '.kvx-yoso-empty{text-align:center;padding:24px;color:#9ca3af;font-size:13px}',
+      '.yoso-admin-detail{margin-top:14px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;overflow:hidden}',
+      '.yoso-admin-detail>summary{cursor:pointer;padding:10px 12px;font-size:12px;font-weight:700;color:#475569;list-style:none;user-select:none}',
+      '.yoso-admin-detail>summary::-webkit-details-marker{display:none}',
+      '.yoso-admin-detail>summary::before{content:"\\25B6  ";font-size:10px}',
+      '.yoso-admin-detail[open]>summary::before{content:"\\25BC  "}',
+      'body.dark-mode .yoso-admin-detail{border-color:#1e3048;background:#0f1b2c}',
+      'body.dark-mode .yoso-admin-detail>summary{color:#94a3b8}',
+      'body.dark-mode .kvx-yoso-empty{color:#64748b}',
+      'body.kvx-shell-on .yoso-admin-detail{border-color:var(--kvxs-line)!important;background:var(--kvxs-sunken)!important}',
+      'body.kvx-shell-on .yoso-admin-detail>summary{color:var(--kvxs-muted)!important}',
+      'body.kvx-shell-on .kvx-yoso-empty{color:var(--kvxs-muted)!important}',
 ];
 (function kvInjectStyles(){
   if (document.getElementById('kv-styles')) return;
@@ -2158,10 +2172,10 @@ const KV_APP_CSS = [
     <!-- 出馬表メインエリア -->
     <div id="race-content-area"></div>
 
-    <!-- 【Phase3-1 管理者限定β】新出馬表プレビュー（feature flag・初期OFF・閲覧者非表示・本番表示不変） -->
-    <div id="kvx-deban-v2-bar" class="admin-only">
-      <button type="button" id="kvx-toggle-btn" class="kvx-toggle" aria-pressed="false">新出馬表プレビュー β：OFF</button>
-      <span class="kvx-bar-note">管理者限定・OFFなら本番表示に一切影響しません</span>
+    <!-- kvx AI予想ランキングは「AI予想」サブタブ内(kvx-yoso-slot)へ移動して表示。旧トグルバーは一般公開後は不要のため非表示（DOM/機能は保持・二重描画防止）。 -->
+    <div id="kvx-deban-v2-bar" class="admin-only" hidden>
+      <button type="button" id="kvx-toggle-btn" class="kvx-toggle" aria-pressed="true">AI予想ランキング：ON</button>
+      <span class="kvx-bar-note"></span>
     </div>
     <div id="kvx-deban-v2" class="kvx-root" hidden></div>
   </div>
@@ -4722,8 +4736,7 @@ function renderRaceContent(raceNo) {
         <button id="tab-btn-yoso-${raceNo}" class="kv-vtab" data-view="yoso"
                 onclick="switchViewTab(${raceNo},'yoso')">
           <i class="fas fa-star"></i>
-          <span>予想AI</span>
-          <span class="vt-badge vt-badge-beta">BETA</span>
+          <span>AI予想</span>
         </button>
         <button id="tab-btn-ranking-${raceNo}" class="kv-vtab" data-view="ranking"
                 onclick="switchViewTab(${raceNo},'ranking')">
@@ -4825,11 +4838,17 @@ function renderRaceContent(raceNo) {
       </div>
     </div>
 
-    <!-- 予想AIビュー -->
+    <!-- AI予想ビュー：AI予想ランキング（全員に表示）＋管理者詳細（旧予想AIパネル・折りたたみ初期閉・管理者のみ） -->
     <div id="view-yoso-${raceNo}" style="display:none;padding:12px 14px 12px;">
-      <div id="yoso-panel-${raceNo}">
-        <div style="text-align:center;padding:24px;color:#9ca3af;font-size:13px;"><i class="fas fa-spinner fa-spin"></i> 読み込み中...</div>
+      <div id="kvx-yoso-slot-${raceNo}" class="kvx-yoso-slot">
+        <div id="kvx-yoso-empty-${raceNo}" class="kvx-yoso-empty" hidden>AI予想を表示できません</div>
       </div>
+      <details id="yoso-admin-detail-${raceNo}" class="yoso-admin-detail admin-only">
+        <summary>管理者詳細（AI予想の内部パネル・EV／穴馬／検証）</summary>
+        <div id="yoso-panel-${raceNo}">
+          <div style="text-align:center;padding:24px;color:#9ca3af;font-size:13px;"><i class="fas fa-spinner fa-spin"></i> 読み込み中...</div>
+        </div>
+      </details>
     </div>
 
     <!-- ランキングビュー -->
@@ -17152,6 +17171,18 @@ function kvxSetSticky(){
     var names = t.querySelectorAll('.kvx-c-name'); for (var j = 0; j < names.length; j++) names[j].style.left = (w0 + w1) + 'px';
   } catch(e){}
 }
+// 単一の #kvx-deban-v2 を現在レースの「AI予想」サブタブ内スロット(kvx-yoso-slot)へ移す。
+// これで出馬表タブとの縦並びを解消し、サブタブのdisplay切替で自動的に排他表示になる（要素・listenerは使い回し＝二重描画/二重計算なし）。
+// hasData=false のときは「AI予想を表示できません」を表示。
+function kvxPlaceInYosoSlot(raceNo, hasData){
+  try {
+    var slot = document.getElementById('kvx-yoso-slot-' + raceNo);
+    var c = document.getElementById('kvx-deban-v2');
+    if (slot && c && c.parentNode !== slot) slot.appendChild(c);   // 現在レースのスロットへ移動
+    var empty = document.getElementById('kvx-yoso-empty-' + raceNo);
+    if (empty) empty.hidden = !!hasData;
+  } catch(e){}
+}
 function kvxRenderDebanV2(raceNo, scored, horseMarkMap, renderDate){
   var c = document.getElementById('kvx-deban-v2');
   if (!c) return;
@@ -17170,7 +17201,7 @@ function kvxRenderDebanV2(raceNo, scored, horseMarkMap, renderDate){
   var curKey    = kvxNormDate(_cd) + ':' + String(_cr);
   var renderKey = kvxNormDate(renderDate) + ':' + String(raceNo);
   if (renderKey !== curKey) return;
-  if (!scored || !scored.length) { kvxClearHide(); return; }   // 現在選択がデータなし → 必ずclear
+  if (!scored || !scored.length) { kvxClearHide(); kvxPlaceInYosoSlot(raceNo, false); return; }   // 現在選択がデータなし → clear＋「AI予想を表示できません」
   var data = (typeof allRacesData !== 'undefined') ? allRacesData[raceNo] : null;
   var raceDate = data && data.raceInfo ? (data.raceInfo.raceDate || '') : '';
   var mm = horseMarkMap || {};
@@ -17246,6 +17277,7 @@ function kvxRenderDebanV2(raceNo, scored, horseMarkMap, renderDate){
     '<div class="kvx-note">' + aiDesc + ' オッズ非依存で、aiProb（市場アンカーモデル）や shadow購入モデルとは別物です。印はAI総合指数の降順、走力SIはbaseScore。オッズ帯はオッズの大きさの区分（価値判断ではありません）。</div>';
   c.hidden = false; _kvxShown = true; _kvxKey = renderKey;   // 表示中のdisplayKey(日付:レース)を記録（古い日付/レース混入防止）
   if (!_kvxWired) { c.addEventListener('click', kvxOnClick); _kvxWired = true; }   // 委譲は1回だけ（表/カード共通）
+  kvxPlaceInYosoSlot(raceNo, true);   // 「AI予想」サブタブ内へ配置（出馬表タブと縦並びにしない）
   kvxSetSticky();
 }
 function kvxOnClick(e){
@@ -17395,7 +17427,7 @@ function kvxToggleV2(){
   var next = (localStorage.getItem('kvx_deban_v2') === '1') ? '0' : '1';
   try { localStorage.setItem('kvx_deban_v2', next); } catch(e){}
   var btn = document.getElementById('kvx-toggle-btn');
-  if (btn) { btn.setAttribute('aria-pressed', next === '1' ? 'true' : 'false'); btn.textContent = '新出馬表プレビュー β：' + (next === '1' ? 'ON' : 'OFF'); }
+  if (btn) { btn.setAttribute('aria-pressed', next === '1' ? 'true' : 'false'); btn.textContent = 'AI予想ランキング：' + (next === '1' ? 'ON' : 'OFF'); }
   if (next === '1') { if (typeof currentRaceNo !== 'undefined' && currentRaceNo && typeof renderPredictionPanel === 'function') { try { renderPredictionPanel(currentRaceNo); } catch(e){} } }
   else { kvxClearHide(); }   // ON→OFF：コンテナ hidden＋内容破棄
   kvxApplyShell();   // シェル外観もflagに同期
@@ -17408,7 +17440,7 @@ function kvxInitToggle(){
     btn.addEventListener('click', kvxToggleV2);
     var on = (function(){ try { return localStorage.getItem('kvx_deban_v2') === '1'; } catch(e){ return false; } })();
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    btn.textContent = '新出馬表プレビュー β：' + (on ? 'ON' : 'OFF');
+    btn.textContent = 'AI予想ランキング：' + (on ? 'ON' : 'OFF');
   }
   if (!_kvxResizeWired) {   // sticky左列のleftは実測幅依存。表→カード→表の幅変化やフォント回り込みで再計算（委譲は1回だけ）。
     _kvxResizeWired = true;
