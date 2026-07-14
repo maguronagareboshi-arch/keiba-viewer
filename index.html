@@ -123,12 +123,6 @@ body.dark-mode .collapse-body{color:#c8d8ec!important}
 /* スティッキー列ダークモード */
 body.dark-mode .deban-table td.col-mukae,body.dark-mode .deban-table td.col-straight{background:#111827!important}
 
-/* 分割パネル */
-body.dark-mode .split-right-panel{background:#0d1826!important;border-color:#111827!important}
-body.dark-mode .split-right-panel h4{border-color:#111827!important;color:#7386a0!important}
-body.dark-mode .split-horse-row{border-color:#111827!important}
-body.dark-mode .split-horse-name{color:#e2e8f0!important}
-
 /* テーブル全般 */
 body.dark-mode table{border-color:#1e3048!important}
 /* thead: 深ネイビー＋グラデ＋シアン文字 */
@@ -1260,7 +1254,6 @@ const KV_APP_CSS = [
       // 閲覧者は「取得（表示のみ・書き込みなし）」は可・「保存/公式成績/コメント（書き込み）」は不可。
       // viewer-okを付けた取得系ボタンだけ無効化から除外する（B案・2026-07-04）
       'body.public-mode .btn-primary:not(.viewer-ok),.public-mode .btn-secondary:not(.viewer-ok){pointer-events:none!important;opacity:.4!important}',
-      'body.public-mode #comment-btn-1,body.public-mode [id^=comment-btn-]{pointer-events:none!important;opacity:.4!important}',
       'body.public-mode #fetch-all-official-btn{pointer-events:none!important;opacity:.4!important}',
       'body.public-mode .search-btns .btn:not(.viewer-ok){pointer-events:none!important;opacity:.4!important}',
       'body.public-mode .url-input-row .btn:not(.viewer-ok){pointer-events:none!important;opacity:.4!important}',
@@ -1323,6 +1316,9 @@ const KV_APP_CSS = [
       /* === D: サマリーバー === */
       '#race-summary-bar{position:fixed;bottom:0;left:0;right:0;z-index:90;background:#1a3a6e;color:#fff;display:none;align-items:center;height:40px;box-shadow:0 -2px 8px rgba(0,0,0,.25);}',
       '#race-summary-bar.visible{display:flex;}',
+      // モバイルは下部ナビ(#kv-bottom-nav・z-index:200)がbottom:0で重なり、サマリーバー(z-index:90)を覆い隠してしまうため、
+      // ナビの高さぶん上に持ち上げる（ナビの実測content高さ+安全マージン。notch端末はsafe-area-inset分を加算）。
+      '@media(max-width:640px){#race-summary-bar{bottom:calc(52px + env(safe-area-inset-bottom,0px))}}',
       '.rsb-race{padding:0 12px;font-size:14px;font-weight:800;border-right:1px solid rgba(255,255,255,.2);height:100%;display:flex;align-items:center;gap:4px;background:rgba(0,0,0,.2);flex-shrink:0;white-space:nowrap;}',
       '.rsb-item{padding:0 10px;border-right:1px solid rgba(255,255,255,.12);height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;}',
       '.rsb-label{font-size:8px;opacity:.65;font-weight:600;letter-spacing:.03em;}',
@@ -1332,13 +1328,6 @@ const KV_APP_CSS = [
       /* === F: 分割表示 === */
       '.split-view-wrap{display:block;}',
       '.split-table-area{display:block;}',
-      '.split-right-panel{width:200px;min-width:200px;flex-shrink:0;border-left:1.5px solid #e2e8f0;background:#fafbfc;padding:10px 12px;max-height:600px;overflow-y:auto;}',
-      '.split-right-panel h4{font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;padding-bottom:5px;border-bottom:1px solid #e8edf5;}',
-      '.split-horse-row{display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #f4f6fa;}',
-      '.split-horse-mark{font-size:15px;font-weight:800;width:22px;text-align:center;flex-shrink:0;}',
-      '.split-horse-name{font-size:12px;font-weight:600;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
-      '.split-horse-si{font-size:11px;font-weight:800;font-family:monospace;padding:1px 5px;border-radius:4px;flex-shrink:0;}',
-      '.split-right-panel{display:none!important;}',
       /* 折りたたみパネル */
       '.collapsible-panel{border-radius:8px;overflow:hidden;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.09);border:1px solid #e9eef5;}',
       '.collapse-btn{width:100%;display:flex;align-items:center;justify-content:space-between;padding:10px 14px 10px 11px;background:#f5f8fc;border:none;border-left:3px solid #1a56a0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;color:#1e293b;gap:8px;transition:background .15s;}',
@@ -1386,7 +1375,6 @@ const KV_APP_CSS = [
       '.ability-table td{padding:4px 6px;border-bottom:1px solid #f0f0f0;vertical-align:middle;text-align:center}',
       '.ability-table tbody tr:hover{background:#f0f4ff!important}',
       '@media(max-width:640px){#race-layout-wrap{flex-direction:column;}#race-tabs-section.sidebar-mode{width:100%;min-width:0;border-radius:0;display:block;padding:8px 10px;}#race-tabs-section.sidebar-mode .race-tabs{flex-direction:row;flex-wrap:wrap;gap:4px;}}',
-      '@media(max-width:1399px){.split-right-panel{display:none;}}',
       // ── 出馬表レース前モード（2026-07-02）：記録列（着順/タイム/上がり/コーナー/前半3F/ペース/位置取り/所属）を隠し、
       //    AI印・オッズ・AIスコア列を表示するnetkeiba風ビュー。deban-preクラスで切替 ──
       '.deban-table .col-ai,.deban-table .col-aiscore,.deban-table .col-odds,.deban-table .col-recent{display:none}',
@@ -4775,7 +4763,7 @@ function renderRaceContent(raceNo) {
                  style="width:13px;height:13px;cursor:pointer;accent-color:#1a56a0;">
           <span>コメント表示</span>
         </label>
-        <button id="comment-btn-${raceNo}"
+        <button id="comment-btn-${raceNo}" class="admin-only"
                 onclick="fetchAndApplyComments(${raceNo})"
                 style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:linear-gradient(135deg,#1a56a0,#1e40af);color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;box-shadow:0 1px 3px rgba(26,86,160,.3);letter-spacing:.3px;">
           <i class="fas fa-comment-dots"></i>コメント取得
@@ -4824,10 +4812,6 @@ function renderRaceContent(raceNo) {
               <tbody id="tbody-${raceNo}"></tbody>
             </table>
           </div>
-        </div>
-        <div class="split-right-panel" id="split-panel-${raceNo}">
-          <h4><i class="fas fa-trophy" style="font-size:10px;margin-right:3px;"></i>指数ランキング</h4>
-          <div id="split-panel-body-${raceNo}"><div style="text-align:center;padding:16px;color:#c4c8d0;font-size:11px;">読込中...</div></div>
         </div>
       </div>
     </div>
@@ -4893,7 +4877,6 @@ function renderRaceContent(raceNo) {
   // 決着時計を1着馬から自動設定
   _updateFinishTime(raceNo);
   // 重いパネルをそれぞれ別タスクに分散（UIブロックを防ぎ、getHorseHistoryキャッシュも活用）
-  setTimeout(() => renderSplitPanel(raceNo), 0);
   setTimeout(() => renderClassDistBenchmark(raceNo), 0);
   setTimeout(() => renderTrackBiasPanel(raceNo), 0);
   setTimeout(() => renderDeploySimPanel(raceNo), 0);
@@ -6034,45 +6017,6 @@ function updateRaceSummaryBar(raceNo) {
 // ============================================================
 // F: 分割パネル（出馬表右側の指数ランキング）
 // ============================================================
-function renderSplitPanel(raceNo) {
-  const panelBody = document.getElementById(`split-panel-body-${raceNo}`);
-  if (!panelBody || panelBody.dataset.rendered) return;
-  panelBody.dataset.rendered = '1';
-  const data = allRacesData[raceNo];
-  if (!data) return;
-  const { horses, raceInfo } = data;
-  const siC = si => si==null?['#f4f6fa','#9ca3af']:si>=75?['#fed7aa','#92400e']:si>=65?['#fef3c7','#78350f']:si>=55?['#fffbeb','#451a03']:['#f4f6fa','#374151'];
-  const MARKS = ['◎','○','▲','△','△'];
-  const MCOL  = ['#dc2626','#2563eb','#d97706','#9ca3af','#9ca3af'];
-
-  const horsesWithSI = horses.map(h => {
-    const hist = getHorseHistoryBefore(h.horseName, raceInfo.raceDate, raceNo);
-    const sis = hist.slice(0,5).map(r => {
-      const bias = getDayBiasForDateAndDist(r.babaCode, r.raceDate, r.distance);
-      const avgF3 = getRaceAvgF3(r.babaCode, r.raceDate, r.raceNo);
-      const pAdj = calcPaceAdj(parseFloat(r.first3f), avgF3);
-      return calcSpeedIndex(r.time, r.distance, r.raceClass, r.trackCond, bias, r.kinryo, pAdj);
-    }).filter(v => v != null);
-    const avgSI = sis.length ? sis.reduce((a,b)=>a+b,0)/sis.length : null;
-    return { name: h.horseName, umaBan: h.umaBan, avgSI };
-  }).filter(h => h.avgSI != null).sort((a,b) => b.avgSI - a.avgSI);
-
-  if (!horsesWithSI.length) {
-    panelBody.innerHTML = '<div style="text-align:center;padding:14px;color:#9ca3af;font-size:11px;">過去データなし</div>';
-    return;
-  }
-  panelBody.innerHTML = horsesWithSI.slice(0,8).map((h,i) => {
-    const [bg,fg] = siC(h.avgSI);
-    return `<div class="split-horse-row">
-      <span class="split-horse-mark" style="color:${MCOL[i]||'#9ca3af'}">${MARKS[i]||''}</span>
-      <span class="split-horse-name" title="${h.name}">${h.name}</span>
-      <span class="split-horse-si" style="background:${bg};color:${fg};">${h.avgSI.toFixed(1)}</span>
-    </div>`;
-  }).join('');
-  const missing = horses.length - horsesWithSI.length;
-  if (missing > 0) panelBody.innerHTML += `<div style="font-size:9px;color:#c4c8d0;margin-top:5px;text-align:center;">データなし ${missing}頭除外</div>`;
-}
-
 // ============================================================
 // 能力表 距離フィルター / 日付ハイライト制御
 // ============================================================
@@ -6141,7 +6085,7 @@ function renderRankingPanel(raceNo, subTab) {
     return { horse, recent5, siVals, avgSI, maxSI, distMax, distMaxDate, dn, distC, dStr, crsMax, crsMaxDate, cn, crsC, cStr };
   });
 
-  // AI印（SI加重平均でランク付け）
+  // SI印（近5走SIの加重平均でランク付け・出馬表/AI予想タブのAI印とは別計算）
   const MARKS = ['◎','○','▲','△','△'];
   const MCOL  = { '◎':'#dc2626','○':'#2563eb','▲':'#d97706','△':'#9ca3af' };
   const aiScored = horseData.map(hd => {
@@ -6161,7 +6105,7 @@ function renderRankingPanel(raceNo, subTab) {
   ).join('');
 
   // 共通列ヘッダー
-  const commonHead = `<th style="padding:6px 4px;text-align:center;color:#6b7280;font-size:10px;white-space:nowrap" title="このタブの基準（左の指数列）で並べた順位">順位</th><th style="padding:6px 4px;text-align:center;color:#6b7280;font-size:10px" title="枠番">枠</th><th style="padding:6px 4px;text-align:center;color:#6b7280;font-size:10px" title="馬番">馬番</th><th style="padding:6px 4px;text-align:center;color:#6b7280;font-size:10px" title="予想AIの印（上位5頭にSI加重平均で付与）">AI印</th><th style="padding:6px 8px;text-align:left;color:#6b7280;font-size:10px">馬名</th>`;
+  const commonHead = `<th style="padding:6px 4px;text-align:center;color:#6b7280;font-size:10px;white-space:nowrap" title="このタブの基準（左の指数列）で並べた順位">順位</th><th style="padding:6px 4px;text-align:center;color:#6b7280;font-size:10px" title="枠番">枠</th><th style="padding:6px 4px;text-align:center;color:#6b7280;font-size:10px" title="馬番">馬番</th><th style="padding:6px 4px;text-align:center;color:#6b7280;font-size:10px" title="近5走SIの加重平均に基づく参考の印（出馬表・AI予想タブのAI印とは別の計算です）">SI印</th><th style="padding:6px 8px;text-align:left;color:#6b7280;font-size:10px">馬名</th>`;
 
   // 共通行プレフィックス
   const rowPfx = (hd, idx) => {
