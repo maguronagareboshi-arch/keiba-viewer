@@ -1905,6 +1905,8 @@ const KV_APP_CSS = [
       'body.kvx-shell-on .header-nav-inner{flex-wrap:wrap}',
       // ── 「AI予想」サブタブ：kvx AI予想ランキングのスロット＋データなし文言＋管理者詳細の折りたたみ ──
       '.kvx-yoso-slot{display:block}',
+      '.yoso-public-extra{margin-top:14px}',
+      '.yoso-public-extra:empty{margin-top:0}',
       '.kvx-yoso-empty{text-align:center;padding:24px;color:#9ca3af;font-size:13px}',
       '.yoso-admin-detail{margin-top:14px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;overflow:hidden}',
       '.yoso-admin-detail>summary{cursor:pointer;padding:10px 12px;font-size:12px;font-weight:700;color:#475569;list-style:none;user-select:none}',
@@ -3740,11 +3742,11 @@ function kvJumpToRace(date, raceNo) {
 }
 function _xsRunRow(h) {
   const cls = h.raceClass || h._raceClass || '';
-  return `<button type="button" class="xs-run" onclick="kvJumpToRace('${h.raceDate}',${parseInt(h.raceNo) || 0})" title="このレースを開く">
-    <span class="xs-run-date">${(h.raceDate || '').slice(2)}</span>
-    <span class="xs-run-no">${h.raceNo}R</span>
+  return `<button type="button" class="xs-run" onclick="kvJumpToRace('${jsAttrEsc(h.raceDate)}',${parseInt(h.raceNo) || 0})" title="このレースを開く">
+    <span class="xs-run-date">${escapeHTML((h.raceDate || '').slice(2))}</span>
+    <span class="xs-run-no">${escapeHTML(h.raceNo)}R</span>
     ${_xsChaku(h.chakujun)}
-    <span class="xs-run-meta">${cls}${h.distance ? ' ' + String(h.distance).replace(/[^\d]/g, '') + 'm' : ''}${h.time ? ' ' + h.time : ''}${h.jockey ? ' ' + h.jockey : ''}</span>
+    <span class="xs-run-meta">${escapeHTML(cls)}${h.distance ? ' ' + String(h.distance).replace(/[^\d]/g, '') + 'm' : ''}${h.time ? ' ' + escapeHTML(h.time) : ''}${h.jockey ? ' ' + escapeHTML(h.jockey) : ''}</span>
   </button>`;
 }
 function kvCrossSearch() {
@@ -3780,7 +3782,7 @@ function kvCrossSearch() {
   }
   const jkHits = Object.entries(jkMap).sort((a, b) => b[1].length - a[1].length).slice(0, 4);
 
-  if (!horseHits.length && !jkHits.length) { out.innerHTML = `<p class="xs-hint">「${qRaw}」に一致する馬・騎手が見つかりません</p>`; return; }
+  if (!horseHits.length && !jkHits.length) { out.innerHTML = `<p class="xs-hint">「${escapeHTML(qRaw)}」に一致する馬・騎手が見つかりません</p>`; return; }
 
   let html = '';
   if (horseHits.length) {
@@ -3791,9 +3793,9 @@ function kvCrossSearch() {
       const latest = hist[0];
       return `<details class="xs-item">
         <summary class="xs-sum">
-          <span class="xs-name">${name}</span>
+          <span class="xs-name">${escapeHTML(name)}</span>
           <span class="xs-chips">${last5 || '<span class="xs-hint">出走記録なし</span>'}</span>
-          <span class="xs-meta">${hist.length}走${latest ? '・最新 ' + latest.raceDate : ''}</span>
+          <span class="xs-meta">${hist.length}走${latest ? '・最新 ' + escapeHTML(latest.raceDate) : ''}</span>
         </summary>
         <div class="xs-runs">${hist.slice(0, 30).map(_xsRunRow).join('') || '<p class="xs-hint">出走記録がありません</p>'}</div>
       </details>`;
@@ -3816,13 +3818,13 @@ function kvCrossSearch() {
       }).filter(r => r.date).sort((a, b) => b.date.localeCompare(a.date) || b.raceNo - a.raceNo).slice(0, 20);
       return `<details class="xs-item">
         <summary class="xs-sum">
-          <span class="xs-name">${jk}</span>
+          <span class="xs-name">${escapeHTML(jk)}</span>
           <span class="xs-meta">${rides.length}騎乗</span>
           <span class="xs-meta">勝率${pct(w)}%・連対${pct(q2)}%・複勝${pct(p3)}%</span>
         </summary>
-        <div class="xs-runs">${recent.map(r => `<button type="button" class="xs-run" onclick="kvJumpToRace('${r.date}',${r.raceNo})">
-          <span class="xs-run-date">${r.date.slice(2)}</span><span class="xs-run-no">${r.raceNo}R</span>
-          ${_xsChaku(r.v.chakujun)}<span class="xs-run-meta">${r.v.horseName || ''}</span>
+        <div class="xs-runs">${recent.map(r => `<button type="button" class="xs-run" onclick="kvJumpToRace('${jsAttrEsc(r.date)}',${r.raceNo})">
+          <span class="xs-run-date">${escapeHTML(r.date.slice(2))}</span><span class="xs-run-no">${r.raceNo}R</span>
+          ${_xsChaku(r.v.chakujun)}<span class="xs-run-meta">${escapeHTML(r.v.horseName)}</span>
         </button>`).join('') || '<p class="xs-hint">騎乗データなし</p>'}</div>
       </details>`;
     }).join('');
@@ -4844,11 +4846,12 @@ function renderRaceContent(raceNo) {
       </div>
     </div>
 
-    <!-- AI予想ビュー：AI予想ランキング（全員に表示）＋管理者詳細（旧予想AIパネル・折りたたみ初期閉・管理者のみ） -->
+    <!-- AI予想ビュー：AI予想ランキング＋狙い目/穴馬/買い得チェック/スコア解説（全員に表示）＋管理者詳細（旧予想AIパネル・折りたたみ初期閉・管理者のみ） -->
     <div id="view-yoso-${raceNo}" style="display:none;padding:12px 14px 12px;">
       <div id="kvx-yoso-slot-${raceNo}" class="kvx-yoso-slot">
         <div id="kvx-yoso-empty-${raceNo}" class="kvx-yoso-empty" hidden>AI予想を表示できません</div>
       </div>
+      <div id="yoso-public-extra-${raceNo}" class="yoso-public-extra"></div>
       <details id="yoso-admin-detail-${raceNo}" class="yoso-admin-detail admin-only">
         <summary>管理者詳細（AI予想の内部パネル・EV／穴馬／検証）</summary>
         <div id="yoso-panel-${raceNo}">
@@ -5164,23 +5167,23 @@ function kvToggleHist(ev, raceNo, umaBan, horseName) {
     const ch = parseInt(h.chakujun);
     const chBadge = isNaN(ch) ? '－' : `<span class="chakujun-badge ${chakujunClass(h.chakujun)}">${ch}</span>`;
     return `<tr>
-      <td>${(h.raceDate || '').slice(2)}</td>
-      <td>${h.raceNo}R</td>
-      <td>${h.raceClass || h._raceClass || '－'}</td>
+      <td>${escapeHTML((h.raceDate || '').slice(2))}</td>
+      <td>${escapeHTML(h.raceNo)}R</td>
+      <td>${escapeHTML(h.raceClass || h._raceClass) || '－'}</td>
       <td>${String(h.distance || '').replace(/[^\d]/g, '') || '－'}m</td>
-      <td>${h.trackCond || '－'}</td>
+      <td>${escapeHTML(h.trackCond) || '－'}</td>
       <td>${chBadge}</td>
-      <td>${h.time || '－'}</td>
-      <td>${h.agari3f || '－'}</td>
-      <td>${h.corner || '－'}</td>
-      <td>${h.jockey || '－'}</td>
+      <td>${escapeHTML(h.time) || '－'}</td>
+      <td>${escapeHTML(h.agari3f) || '－'}</td>
+      <td>${escapeHTML(h.corner) || '－'}</td>
+      <td>${escapeHTML(h.jockey) || '－'}</td>
     </tr>`;
   }).join('');
   const tr = document.createElement('tr');
   tr.className = 'kv-hist-row';
   tr.id = existId;
   tr.innerHTML = `<td colspan="22">
-    <div class="kv-hist-title">🐴 ${horseName} の近5走
+    <div class="kv-hist-title">🐴 ${escapeHTML(horseName)} の近5走
       <button type="button" class="kv-hist-jump" onclick="switchViewTab(${raceNo},'ability')">全頭の能力表を見る →</button>
     </div>
     ${hist.length ? `<div style="overflow-x:auto"><table class="kv-hist-tbl">
@@ -5226,11 +5229,22 @@ function renderHorseRows(raceNo, horses) {
         const ch=parseInt(h.chakujun);
         const cls=isNaN(ch)?'rf-x':ch===1?'rf-1':ch===2?'rf-2':ch===3?'rf-3':'rf-o';
         const tip=`${h.raceDate||''} ${h.raceClass||''} ${h.distance||''} ${isNaN(ch)?'':ch+'着'}`.trim();
-        return `<span class="rf-chip ${cls}" title="${tip}">${isNaN(ch)?'－':ch}</span>`;
+        return `<span class="rf-chip ${cls}" title="${escapeHTML(tip)}">${isNaN(ch)?'－':ch}</span>`;
       }).join('');
     })();
     const _psfGem=_psfValueName===horse.horseName?`<span class="psf-badge" title="PSF妙味：位置構造モデルの単独推し。オッズ3〜10倍が本域">💎</span>`:'';
-    const _nameEsc=horse.horseName.replace(/'/g,"\\'");
+    // 外部由来(スクレイピング/入力)文字列の表示・属性エスケープ（jsAttrEsc=onclick内JS文字列用・escapeHTML=通常表示/属性用）
+    const _nameEsc=jsAttrEsc(horse.horseName);
+    const _nameHtml=escapeHTML(horse.horseName);
+    const _jockeyHtml=escapeHTML(horse.jockey||'');
+    const _trainerHtml=escapeHTML(horse.trainer||'');
+    const _belongHtml=escapeHTML(horse.belong||'');
+    const _sexAgeHtml=escapeHTML(horse.sexAge||'');
+    const _timeHtml=escapeHTML(horse.time||'');
+    const _agari3fHtml=escapeHTML(horse.agari3f||'');
+    const _cornerHtml=escapeHTML(horse.corner||'');
+    const _first3fHtml=escapeHTML(horse.first3f||'');
+    const _paceTypeHtml=escapeHTML(horse.paceType||'');
     const _raced=/^\d+$/.test(String(horse.chakujun));
     return `<tr class="horse-row">
       <td class="col-chakujun">${horse.chakujun?`<span class="chakujun-badge ${chakujunClass(horse.chakujun)}">${horse.chakujun}</span>`:'<span class="data-empty">—</span>'}</td>
@@ -5239,21 +5253,21 @@ function renderHorseRows(raceNo, horses) {
       <td class="col-umano"><span class="umano-badge">${horse.umaBan}</span></td>
       <td class="col-ai">${_ai.mark?`<span class="ai-mark ${_aiCls}">${_ai.mark}</span>`:'<span class="data-empty">—</span>'}${_psfGem}</td>
       <td class="col-mymark">${kvMyMarkHtml(allRacesData[raceNo]?.raceInfo?.raceDate||'',raceNo,horse.umaBan,false)}</td>
-      <td class="col-umaname"><span class="horse-name horse-name-link" onclick="openHorseModal('${_nameEsc}',${raceNo})"><i class="fas fa-history horse-hist-icon"></i>${horse.horseName}</span></td>
+      <td class="col-umaname"><span class="horse-name horse-name-link" onclick="openHorseModal('${_nameEsc}',${raceNo})"><i class="fas fa-history horse-hist-icon"></i>${_nameHtml}</span></td>
       <td class="col-recent" title="クリックで近5走の詳細をこの場に展開" onclick="kvToggleHist(event,${raceNo},${horse.umaBan},'${_nameEsc}')">${_rfHtml}</td>
-      <td class="col-belong">${horse.belong||'－'}</td>
-      <td class="col-sexage">${horse.sexAge||'－'}</td>
+      <td class="col-belong">${_belongHtml||'－'}</td>
+      <td class="col-sexage">${_sexAgeHtml||'－'}</td>
       <td class="col-kinryo">${horse.kinryo||'－'}</td>
-      <td class="col-jockey">${horse.jockey||'－'}</td>
-      <td class="col-trainer">${horse.trainer||'－'}</td>
+      <td class="col-jockey">${_jockeyHtml||'－'}</td>
+      <td class="col-trainer">${_trainerHtml||'－'}</td>
       <td class="col-weight">${horse.weight||'－'}</td>
       <td class="col-odds">${(!isNaN(_oddsV)&&_oddsV>0)?_oddsV.toFixed(1):'<span class="data-empty">—</span>'}</td>
       <td class="col-aiscore">${_ai.score!=null?`<span class="ai-rank-chip">${_ai.rank}位</span> ${_ai.score.toFixed(1)}`:'<span class="data-empty">—</span>'}</td>
-      <td class="col-time">${horse.time||'<span class="data-empty">—</span>'}</td>
-      <td class="col-agari3f">${horse.agari3f||'<span class="data-empty">—</span>'}</td>
-      <td class="col-corner">${horse.corner?`<span class="corner-text">${horse.corner}</span>`:'<span class="data-empty">—</span>'}</td>
-      <td class="col-3f"><div class="threef-cell admin-only"><input type="number" class="threef-input" value="${horse.first3f||''}" step="0.1" min="30" max="60" placeholder="--.-" oninput="onHorse3FInput(this,${raceNo},${horse.umaBan})"><span class="threef-unit">秒</span></div><span class="viewer-only vw-val">${horse.first3f?horse.first3f+'秒':'—'}</span></td>
-      <td class="col-pace"><div class="horse-pace-cell admin-only"><select class="pace-select" onchange="onHorsePaceChange(this,${raceNo},${horse.umaBan})"><option value="">－</option><option value="ハイ" ${horse.paceType==='ハイ'?'selected':''}>ハイ</option><option value="ミドル" ${horse.paceType==='ミドル'?'selected':''}>ミドル</option><option value="スロー" ${horse.paceType==='スロー'?'selected':''}>スロー</option></select><span class="pace-dot ${getPaceDotClass(horse.paceType)}"></span></div><span class="viewer-only vw-val">${horse.paceType||'—'}</span></td>
+      <td class="col-time">${_timeHtml||'<span class="data-empty">—</span>'}</td>
+      <td class="col-agari3f">${_agari3fHtml||'<span class="data-empty">—</span>'}</td>
+      <td class="col-corner">${horse.corner?`<span class="corner-text">${_cornerHtml}</span>`:'<span class="data-empty">—</span>'}</td>
+      <td class="col-3f"><div class="threef-cell admin-only"><input type="number" class="threef-input" value="${_first3fHtml}" step="0.1" min="30" max="60" placeholder="--.-" oninput="onHorse3FInput(this,${raceNo},${horse.umaBan})"><span class="threef-unit">秒</span></div><span class="viewer-only vw-val">${horse.first3f?_first3fHtml+'秒':'—'}</span></td>
+      <td class="col-pace"><div class="horse-pace-cell admin-only"><select class="pace-select" onchange="onHorsePaceChange(this,${raceNo},${horse.umaBan})"><option value="">－</option><option value="ハイ" ${horse.paceType==='ハイ'?'selected':''}>ハイ</option><option value="ミドル" ${horse.paceType==='ミドル'?'selected':''}>ミドル</option><option value="スロー" ${horse.paceType==='スロー'?'selected':''}>スロー</option></select><span class="pace-dot ${getPaceDotClass(horse.paceType)}"></span></div><span class="viewer-only vw-val">${_paceTypeHtml||'—'}</span></td>
       <td class="col-mukae${mukaeCls}"><select class="pos-select admin-only" onchange="onHorsePosChange(this,${raceNo},${horse.umaBan},'mukaeShoumen')" tabindex="0"><option value="">－</option><option value="最内" ${horse.mukaeShoumen==='最内'?'selected':''}>最内</option><option value="内" ${horse.mukaeShoumen==='内'?'selected':''}>内</option><option value="外2" ${horse.mukaeShoumen==='外2'?'selected':''}>外2</option><option value="外3" ${horse.mukaeShoumen==='外3'?'selected':''}>外3</option><option value="大外" ${horse.mukaeShoumen==='大外'?'selected':''}>大外</option></select><span class="viewer-only vw-val">${horse.mukaeShoumen||'—'}</span></td>
       <td class="col-straight${strCls}"><select class="pos-select admin-only" onchange="onHorsePosChange(this,${raceNo},${horse.umaBan},'shoumenStraight')" tabindex="0"><option value="">－</option><option value="内" ${horse.shoumenStraight==='内'?'selected':''}>内</option><option value="中" ${horse.shoumenStraight==='中'?'selected':''}>中</option><option value="外" ${horse.shoumenStraight==='外'?'selected':''}>外</option></select><span class="viewer-only vw-val">${horse.shoumenStraight||'—'}</span></td>
     </tr>
@@ -5264,21 +5278,21 @@ function renderHorseRows(raceNo, horses) {
           <span class="umano-badge">${horse.umaBan}</span>
           ${_ai.mark?`<span class="ai-mark ${_aiCls}">${_ai.mark}</span>`:''}${_psfGem}
           ${kvMyMarkHtml(allRacesData[raceNo]?.raceInfo?.raceDate||'',raceNo,horse.umaBan,true)}
-          <span class="spr-name" onclick="openHorseModal('${_nameEsc}',${raceNo})">${horse.horseName}</span>
+          <span class="spr-name" onclick="openHorseModal('${_nameEsc}',${raceNo})">${_nameHtml}</span>
           ${(!isNaN(_oddsV)&&_oddsV>0)?`<span class="spr-odds">${_oddsV.toFixed(1)}<small>倍</small></span>`:''}
           ${horse.ninki?ninkiBadge(horse.ninki):''}
         </div>
         <div class="spr-l2">
-          <span><b>${horse.jockey||'－'}</b>${horse.kinryo?` ${horse.kinryo}`:''}</span>
-          <span>${horse.sexAge||''}${horse.weight?` ${horse.weight}`:''}</span>
+          <span><b>${_jockeyHtml||'－'}</b>${horse.kinryo?` ${horse.kinryo}`:''}</span>
+          <span>${_sexAgeHtml}${horse.weight?` ${horse.weight}`:''}</span>
           ${!_raced&&_ai.score!=null?`<span class="spr-score">AI ${_ai.rank}位 ${_ai.score.toFixed(1)}</span>`:''}
         </div>
         ${(_raced && _isAdminView)?`<div class="spr-l3 spr-result">
-          ${horse.time?`<span>タイム <b>${horse.time}</b></span>`:''}
-          ${horse.agari3f?`<span>上がり ${horse.agari3f}</span>`:''}
-          ${horse.corner?`<span>通過 ${horse.corner}</span>`:''}
-          ${horse.first3f?`<span>前半 ${horse.first3f}</span>`:''}
-          ${horse.paceType?`<span class="spr-pace">${horse.paceType}</span>`:''}
+          ${horse.time?`<span>タイム <b>${_timeHtml}</b></span>`:''}
+          ${horse.agari3f?`<span>上がり ${_agari3fHtml}</span>`:''}
+          ${horse.corner?`<span>通過 ${_cornerHtml}</span>`:''}
+          ${horse.first3f?`<span>前半 ${_first3fHtml}</span>`:''}
+          ${horse.paceType?`<span class="spr-pace">${_paceTypeHtml}</span>`:''}
         </div>`:`<div class="spr-l3" onclick="kvToggleHist(event,${raceNo},${horse.umaBan},'${_nameEsc}')">${_rfHtml}</div>`}
       </td>
     </tr>`;
@@ -5843,7 +5857,7 @@ function renderResultView(raceNo) {
   }
   const sorted = [...finished].sort((a, b) => parseInt(a.chakujun) - parseInt(b.chakujun));
   const scratched = horses.filter(h => !/^\d+$/.test(String(h.chakujun)) && h.horseName);
-  const _esc = s => String(s || '').replace(/'/g, "\\'");
+  const _esc = s => jsAttrEsc(s);   // onclick内JS文字列用（属性突破・スクリプト注入対策）
   const _hasReplay = finished.some(h => String(h.corner || '').indexOf('-') >= 0);
 
   // ── ① 着順テーブル（最大5着まで表示・残りは折りたたみ）──
@@ -5851,19 +5865,19 @@ function renderResultView(raceNo) {
       <td class="kr-chaku"><span class="chakujun-badge ${chakujunClass(h.chakujun)}">${parseInt(h.chakujun)}</span></td>
       <td><span class="waku-badge ${_kvWakuCls(h)}">${h.wakuBan || ''}</span></td>
       <td class="kr-uma">${h.umaBan || '—'}</td>
-      <td class="kr-name"><span class="horse-name-link" onclick="openHorseModal('${_esc(h.horseName)}',${raceNo})">${h.horseName || '—'}</span></td>
-      <td class="kr-jockey">${h.jockey || '—'}</td>
-      <td class="kr-time">${h.time || '—'}</td>
-      <td class="kr-diff">${h.diff || ''}</td>
-      <td>${h.agari3f || '—'}</td>
-      <td>${h.first3f || '—'}</td>
-      <td class="kr-pass">${h.corner || '—'}</td>
+      <td class="kr-name"><span class="horse-name-link" onclick="openHorseModal('${_esc(h.horseName)}',${raceNo})">${escapeHTML(h.horseName) || '—'}</span></td>
+      <td class="kr-jockey">${escapeHTML(h.jockey) || '—'}</td>
+      <td class="kr-time">${escapeHTML(h.time) || '—'}</td>
+      <td class="kr-diff">${escapeHTML(h.diff)}</td>
+      <td>${escapeHTML(h.agari3f) || '—'}</td>
+      <td>${escapeHTML(h.first3f) || '—'}</td>
+      <td class="kr-pass">${escapeHTML(h.corner) || '—'}</td>
     </tr>`;
   const _scrRow = h => `<tr style="opacity:.5">
-      <td class="kr-chaku" style="font-size:10px">${h.chakujun || '除外'}</td>
+      <td class="kr-chaku" style="font-size:10px">${escapeHTML(h.chakujun) || '除外'}</td>
       <td><span class="waku-badge ${_kvWakuCls(h)}">${h.wakuBan || ''}</span></td>
       <td class="kr-uma">${h.umaBan || '—'}</td>
-      <td class="kr-name">${h.horseName || '—'}</td>
+      <td class="kr-name">${escapeHTML(h.horseName) || '—'}</td>
       <td colspan="6"></td>
     </tr>`;
   const top5Rows = sorted.slice(0, 5).map(_resRow).join('');
@@ -5898,7 +5912,7 @@ function renderResultView(raceNo) {
       return `<tr>
         <td><span class="waku-badge ${_kvWakuCls(h)}">${h.wakuBan || ''}</span></td>
         <td class="kr-uma">${h.umaBan || ''}</td>
-        <td class="kr-name" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.horseName || '—'}</td>
+        <td class="kr-name" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(h.horseName) || '—'}</td>
         ${cells.join('')}
         <td class="kr-chaku"><span class="chakujun-badge ${chakujunClass(h.chakujun)}" style="min-width:18px;height:18px;font-size:10px">${parseInt(h.chakujun)}</span></td>
       </tr>`;
@@ -5954,10 +5968,10 @@ function _kvPayoutTable(entries) {
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
   });
   const rows = sorted.map(e => `<div class="kr-pay-row">
-      <span class="kr-pay-type">${disp[e.type] || e.type}</span>
-      <span class="kr-pay-combo">${e.combo || ''}</span>
+      <span class="kr-pay-type">${escapeHTML(disp[e.type] || e.type)}</span>
+      <span class="kr-pay-combo">${escapeHTML(e.combo)}</span>
       <span class="kr-pay-yen">¥${(e.yen || 0).toLocaleString('en-US')}</span>
-      <span class="kr-pay-nin">${e.ninki || ''}</span>
+      <span class="kr-pay-nin">${escapeHTML(e.ninki)}</span>
     </div>`).join('');
   return `<div class="kr-pay-grid">${rows}</div>`;
 }
@@ -6115,7 +6129,7 @@ function renderRankingPanel(raceNo, subTab) {
       <td style="padding:5px 4px;text-align:center"><span class="waku-badge waku-${wn}" style="font-size:10px;width:18px;height:18px">${hd.horse.wakuBan||'—'}</span></td>
       <td style="padding:5px 4px;text-align:center;font-weight:700;font-size:12px">${hd.horse.umaBan||'—'}</td>
       <td style="padding:5px 4px;text-align:center;font-size:15px;font-weight:900;color:${MCOL[mark]||'#9ca3af'}">${mark||'—'}</td>
-      <td style="padding:5px 8px;font-weight:600;white-space:nowrap;font-size:12px">${hd.horse.horseName}</td>`;
+      <td style="padding:5px 8px;font-weight:600;white-space:nowrap;font-size:12px">${escapeHTML(hd.horse.horseName)}</td>`;
   };
 
   // 勝率セル
@@ -6577,13 +6591,13 @@ function renderAbilityTable(raceNo) {
 
         <!-- ② クラス / 距離 / 枠番+馬番 / 馬場 -->
         <div style="padding:4px 8px 0;display:flex;align-items:center;gap:3px;flex-wrap:wrap;">
-          ${r.raceClass ? `<span class="race-class-badge ${raceClassCssClass(r.raceClass)}" style="font-size:8px;padding:0 5px;line-height:17px;">${r.raceClass}</span>` : ''}
-          ${r.distance  ? `<span style="font-size:10px;font-weight:700;color:${isDark?'#c8d8ec':'#334155'};">${r.distance}</span>` : ''}
+          ${r.raceClass ? `<span class="race-class-badge ${raceClassCssClass(r.raceClass)}" style="font-size:8px;padding:0 5px;line-height:17px;">${escapeHTML(r.raceClass)}</span>` : ''}
+          ${r.distance  ? `<span style="font-size:10px;font-weight:700;color:${isDark?'#c8d8ec':'#334155'};">${escapeHTML(r.distance)}</span>` : ''}
           ${rWaku ? `<span style="display:inline-flex;align-items:center;gap:2px;background:${isDark?'#0d1520':'#f1f5f9'};border:1px solid ${isDark?'#1e3048':'#e2e8f0'};border-radius:3px;padding:0 4px;height:17px;flex-shrink:0;">
             <span style="background:${WBG(rWaku)};color:${WFG(rWaku)};border:${WBD(rWaku)};font-size:9px;font-weight:800;min-width:14px;height:14px;border-radius:2px;display:inline-flex;align-items:center;justify-content:center;">${rWaku}</span>
             <span style="font-size:9px;font-weight:700;color:${isDark?'#c8d8ec':'#374151'};">${r.umaBan||''}番</span>
           </span>` : ''}
-          ${r.trackCond ? `<span style="font-size:9px;color:${isDark?'#8fa3be':'#6b7280'};font-weight:600;">${r.trackCond}</span>` : ''}
+          ${r.trackCond ? `<span style="font-size:9px;color:${isDark?'#8fa3be':'#6b7280'};font-weight:600;">${escapeHTML(r.trackCond)}</span>` : ''}
         </div>
 
         <!-- ③ 着順 + タイム + 1着差 + ペース -->
@@ -6606,8 +6620,8 @@ function renderAbilityTable(raceNo) {
         <!-- ④ 騎手 + 厩舎（横並び）+ 斤量 + 馬体重 -->
         <div style="padding:2px 8px 4px;border-bottom:1px solid ${isDark?'#1e3048':'#f0f4fa'};display:flex;align-items:center;gap:2px;flex-wrap:nowrap;">
           <div style="flex:1;min-width:0;overflow:hidden;display:flex;align-items:baseline;gap:2px;">
-            <span style="font-size:10px;font-weight:700;color:${isDark?'#c8d8ec':'#1e3a5f'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1;min-width:0;" title="${rJockey}">${rJockey||'—'}</span>
-            ${rTrainer?`<span style="font-size:8px;color:${isDark?'#8fa3be':'#64748b'};font-weight:600;white-space:nowrap;flex-shrink:0;" title="${rTrainer}">厩${rTrainer}</span>`:''}
+            <span style="font-size:10px;font-weight:700;color:${isDark?'#c8d8ec':'#1e3a5f'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1;min-width:0;" title="${escapeHTML(rJockey)}">${escapeHTML(rJockey)||'—'}</span>
+            ${rTrainer?`<span style="font-size:8px;color:${isDark?'#8fa3be':'#64748b'};font-weight:600;white-space:nowrap;flex-shrink:0;" title="${escapeHTML(rTrainer)}">厩${escapeHTML(rTrainer)}</span>`:''}
           </div>
           ${isJockeyChange?`<span style="font-size:8px;font-weight:800;background:#dc2626;color:#fff;border-radius:3px;padding:0 4px;height:15px;display:inline-flex;align-items:center;flex-shrink:0;white-space:nowrap;">乗替</span>`:''}
           <span style="font-size:10px;font-weight:700;color:${isDark?'#c8d8ec':'#374151'};white-space:nowrap;flex-shrink:0;">${kr||'—'}</span>
@@ -6680,23 +6694,23 @@ function renderAbilityTable(raceNo) {
               ${isChangeMain ? `<span style="font-size:8px;font-weight:800;background:#dc2626;color:#fff;border-radius:3px;padding:0 4px;height:15px;display:inline-flex;align-items:center;flex-shrink:0;white-space:nowrap;">乗替</span>` : ''}
             </div>
             <!-- 馬名 -->
-            <div style="font-size:11px;font-weight:900;color:${isDark?'#e2e8f0':'#0f172a'};line-height:1.3;word-break:keep-all;">${horse.horseName}</div>
+            <div style="font-size:11px;font-weight:900;color:${isDark?'#e2e8f0':'#0f172a'};line-height:1.3;word-break:keep-all;">${escapeHTML(horse.horseName)}</div>
             <!-- 性齢（馬名と同じ値なら非表示） -->
-            ${(horse.sexAge && horse.sexAge !== horse.horseName) ? `<div style="font-size:9px;color:${isDark?'#8fa3be':'#64748b'};font-weight:600;">${horse.sexAge}</div>` : ''}
+            ${(horse.sexAge && horse.sexAge !== horse.horseName) ? `<div style="font-size:9px;color:${isDark?'#8fa3be':'#64748b'};font-weight:600;">${escapeHTML(horse.sexAge)}</div>` : ''}
             <!-- 騎手 / 厩舎（横並び） -->
             <div style="display:flex;align-items:center;gap:3px;border-top:1px solid ${isDark?'#1e3048':'#e2e8f0'};padding-top:3px;">
-              <div style="font-size:9px;color:${isDark?'#c8d8ec':'#374151'};font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;" title="${todayJockey}">${todayJockey || '—'}</div>
-              ${trainerName ? `<div style="font-size:8px;color:${isDark?'#8fa3be':'#64748b'};font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;" title="${trainerName}">厩 ${trainerName}</div>` : ''}
+              <div style="font-size:9px;color:${isDark?'#c8d8ec':'#374151'};font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;" title="${escapeHTML(todayJockey)}">${escapeHTML(todayJockey) || '—'}</div>
+              ${trainerName ? `<div style="font-size:8px;color:${isDark?'#8fa3be':'#64748b'};font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;" title="${escapeHTML(trainerName)}">厩 ${escapeHTML(trainerName)}</div>` : ''}
             </div>
             <!-- 近走指数サマリー -->
             ${_idxSummaryHtml}
             <!-- 記録件数 -->
             <div style="font-size:8px;color:#94a3b8;">${selDist ? `${filteredHist.length}走(全${allHist.length})` : `${allHist.length}走記録`}</div>
             <!-- 特徴タグ -->
-            <div class="horse-tag-badges" data-horse="${horse.horseName}" style="display:flex;flex-wrap:wrap;gap:2px;margin-top:3px;">
+            <div class="horse-tag-badges" data-horse="${escapeHTML(horse.horseName)}" style="display:flex;flex-wrap:wrap;gap:2px;margin-top:3px;">
               ${horseTagBadgesHtml(horse.horseName)}
             </div>
-            <button class="admin-only" onclick="event.stopPropagation();showHorseNoteEditor('${horse.horseName.replace(/'/g,"\\'")}',this)" style="margin-top:2px;font-size:8px;padding:1px 5px;border-radius:3px;border:1px solid ${isDark?'#1e3048':'#cbd5e1'};background:${isDark?'#0d1520':'#f8fafc'};color:${isDark?'#8fa3be':'#64748b'};cursor:pointer;width:100%;">+特徴</button>
+            <button class="admin-only" onclick="event.stopPropagation();showHorseNoteEditor('${jsAttrEsc(horse.horseName)}',this)" style="margin-top:2px;font-size:8px;padding:1px 5px;border-radius:3px;border:1px solid ${isDark?'#1e3048':'#cbd5e1'};background:${isDark?'#0d1520':'#f8fafc'};color:${isDark?'#8fa3be':'#64748b'};cursor:pointer;width:100%;">+特徴</button>
           </div>`;
         })()}
 
@@ -6940,8 +6954,8 @@ function openCommentSheet(raceNo) {
       <div style="display:flex;align-items:center;gap:7px;background:#f1f5f9;border-bottom:1px solid #dde3ef;padding:4px 10px;">
         <span style="background:${WBG2(waku)};color:${WFG2(waku)};border:${waku===1?'1px solid #aaa':'none'};min-width:19px;height:19px;border-radius:3px;font-size:11px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;">${waku}</span>
         <span style="font-size:12px;font-weight:800;color:#475569;">${h.umaBan}番</span>
-        <span style="font-size:13.5px;font-weight:900;color:#0f172a;">${h.horseName}</span>
-        ${h.jockey?`<span style="font-size:10.5px;color:#64748b;">${h.jockey}</span>`:''}
+        <span style="font-size:13.5px;font-weight:900;color:#0f172a;">${escapeHTML(h.horseName)}</span>
+        ${h.jockey?`<span style="font-size:10.5px;color:#64748b;">${escapeHTML(h.jockey)}</span>`:''}
         <span style="margin-left:auto;font-size:9px;color:#94a3b8;">コメント${hist.length}件</span>
       </div>
       <div style="padding:4px 10px 6px;">${lines}</div>
@@ -8759,7 +8773,7 @@ function buildJockeyChangeDiag(raceNo) {
     const hist = getHorseHistoryBefore(h.horseName, raceInfo.raceDate, raceNo).filter(x => x.babaCode === '31');
     const prevJk = hist.length ? (hist[0].jockey || '').trim() : '';
     const waku = _wk(h);
-    const nameCell = `<span style="background:${WBG(waku)};color:${WFG(waku)};${waku===1?'border:1px solid #bbb;':''}min-width:18px;height:18px;border-radius:3px;font-size:10px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${h.umaBan}</span> <b>${h.horseName}</b>`;
+    const nameCell = `<span style="background:${WBG(waku)};color:${WFG(waku)};${waku===1?'border:1px solid #bbb;':''}min-width:18px;height:18px;border-radius:3px;font-size:10px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${h.umaBan}</span> <b>${escapeHTML(h.horseName)}</b>`;
     if (!prevJk) return { kind: 'debut', nameCell };
     if (prevJk === nowJk) {
       const c = pick(finMaps ? finMaps.sameB : {}, allMaps.sameB, nowJk);
@@ -8782,9 +8796,9 @@ function buildJockeyChangeDiag(raceNo) {
 
   const tbody = rows.map(r => {
     if (r.kind === 'debut') return `<tr><td style="text-align:left">${r.nameCell}</td><td style="text-align:left;color:#9ca3af">高知初騎乗/履歴なし</td><td style="text-align:left">—</td><td style="text-align:center">—</td></tr>`;
-    if (r.kind === 'cont') return `<tr><td style="text-align:left">${r.nameCell}</td><td style="text-align:left"><span style="font-size:10px;color:#64748b">継続</span> ${r.jk}</td><td style="text-align:left">継続 ${statTxt(r.stat)}</td><td style="text-align:center">${vbadge(r.verdict)}</td></tr>`;
+    if (r.kind === 'cont') return `<tr><td style="text-align:left">${r.nameCell}</td><td style="text-align:left"><span style="font-size:10px;color:#64748b">継続</span> ${escapeHTML(r.jk)}</td><td style="text-align:left">継続 ${statTxt(r.stat)}</td><td style="text-align:center">${vbadge(r.verdict)}</td></tr>`;
     const detail = `乗替時 ${statTxt(r.dst)}${r.pr && r.pr.n >= 5 ? ` ｜ この乗替 ${statTxt(r.pr)}` : ''}${r.trF != null ? ` ｜ 厩舎 <span class="${cls(r.trF)}" style="font-weight:700">${r.trF}%</span>` : ''}${r.cont ? ` ｜ 継続なら ${r.cont.f}%` : ''}`;
-    return `<tr><td style="text-align:left">${r.nameCell}</td><td style="text-align:left"><span style="font-size:10px;color:#dc2626;font-weight:700">乗替</span> ${r.prevJk}<span style="color:#94a3b8">→</span>${r.nowJk}</td><td style="text-align:left;font-size:11px">${detail}</td><td style="text-align:center">${vbadge(r.verdict)}</td></tr>`;
+    return `<tr><td style="text-align:left">${r.nameCell}</td><td style="text-align:left"><span style="font-size:10px;color:#dc2626;font-weight:700">乗替</span> ${escapeHTML(r.prevJk)}<span style="color:#94a3b8">→</span>${escapeHTML(r.nowJk)}</td><td style="text-align:left;font-size:11px">${detail}</td><td style="text-align:center">${vbadge(r.verdict)}</td></tr>`;
   }).join('');
 
   return `
@@ -10906,7 +10920,7 @@ function openHorseModal(horseName, raceNo) {
     <div class="horse-tag-badges" data-horse="${horseName.replace(/"/g,'&quot;')}" style="display:flex;flex-wrap:wrap;gap:3px;flex:1;">
       ${horseTagBadgesHtml(horseName)}
     </div>
-    <button class="admin-only" onclick="showHorseNoteEditor('${horseName.replace(/'/g,"\\'")}',this)" style="font-size:10px;padding:2px 8px;border-radius:4px;border:1px solid #cbd5e1;background:#fff;color:#64748b;cursor:pointer;white-space:nowrap;">+特徴</button>
+    <button class="admin-only" onclick="showHorseNoteEditor('${jsAttrEsc(horseName)}',this)" style="font-size:10px;padding:2px 8px;border-radius:4px;border:1px solid #cbd5e1;background:#fff;color:#64748b;cursor:pointer;white-space:nowrap;">+特徴</button>
   `;
 
   // lineageLoginCodeを取得（現在または過去のレースデータから探す）
@@ -11157,25 +11171,25 @@ function openHorseModal(horseName, raceNo) {
       ? `<td class="col-comment" style="font-size:9.5px;color:#0e7490;white-space:normal;line-height:1.4;padding:4px 4px;vertical-align:top"><i class="fas fa-comment-dots" style="margin-right:2px;opacity:.7"></i>${escapeHTML(commentTxt)}</td>`
       : `<td class="col-comment" style="color:#d1d5db;font-size:10px;text-align:center;vertical-align:middle">—</td>`;
     return `<tr class="hm-row ${isWin?'hm-row-win':''}">
-      <td class="col-date" style="font-size:9.5px">${h.raceDate}</td>
+      <td class="col-date" style="font-size:9.5px">${escapeHTML(h.raceDate)}</td>
       <td class="col-rname" style="text-align:left;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.raceName?escapeHTML(h.raceName):'—'}</td>
-      <td class="col-cls"><span class="race-class-badge ${raceClassCssClass(h.raceClass)}" style="font-size:9px;padding:1px 4px">${h.raceClass||'—'}</span></td>
-      <td class="col-dist ${sameDist?'hm-match-cell':''}" style="font-size:10px">${h.distance||'—'}</td>
-      <td class="col-track" style="font-size:10px">${h.trackCond||'—'}</td>
+      <td class="col-cls"><span class="race-class-badge ${raceClassCssClass(h.raceClass)}" style="font-size:9px;padding:1px 4px">${escapeHTML(h.raceClass)||'—'}</span></td>
+      <td class="col-dist ${sameDist?'hm-match-cell':''}" style="font-size:10px">${escapeHTML(h.distance)||'—'}</td>
+      <td class="col-track" style="font-size:10px">${escapeHTML(h.trackCond)||'—'}</td>
       <td class="col-rank"><span class="chakujun-badge ${cCls(h.chakujun)}" style="font-size:11px;min-width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center">${chaku<900?chaku:'—'}</span></td>
       <td class="col-first3f" style="font-family:monospace;font-weight:700;font-size:10px">${!isNaN(f3Val)?f3Val.toFixed(1):'—'}</td>
       <td class="col-last3f" style="font-family:monospace;font-size:10px">${!isNaN(agVal)?agVal.toFixed(1):'—'}</td>
       <td class="col-front" style="font-family:monospace;font-size:10px;font-weight:700" title="この馬自身の前半区間タイム（走破−上がり3F）。下段は基準比：−=速い(ハイ)/＋=遅い(スロー)">${_frontCell}</td>
-      <td class="col-time" style="font-family:monospace;font-size:10px">${h.time||'—'}</td>
+      <td class="col-time" style="font-family:monospace;font-size:10px">${escapeHTML(h.time)||'—'}</td>
       <td class="col-idx" style="text-align:center;">${_siHtml}</td>
       <td class="col-weight" style="font-size:10px">${fmtWeightDiff(h.weight)}</td>
       <td class="col-pace" style="line-height:1.4;padding:2px 3px;">
-        <span class="pace-label pace-label-${pKey(horseOwnPace||racePace2)} ${samePace?'hm-pace-match':''}" style="font-size:9px;padding:1px 4px;display:inline-block;">${horseOwnPace||'—'}</span>
-        ${racePace2?`<div style="font-size:8px;color:#9ca3af;margin-top:1px;">R:${racePace2}</div>`:''}
+        <span class="pace-label pace-label-${pKey(horseOwnPace||racePace2)} ${samePace?'hm-pace-match':''}" style="font-size:9px;padding:1px 4px;display:inline-block;">${escapeHTML(horseOwnPace)||'—'}</span>
+        ${racePace2?`<div style="font-size:8px;color:#9ca3af;margin-top:1px;">R:${escapeHTML(racePace2)}</div>`:''}
       </td>
-      <td class="col-mid" style="font-size:10px">${h.mukaeShoumen||'—'}</td>
-      <td class="col-str" style="font-size:10px">${h.shoumenStraight||'—'}</td>
-      <td class="col-jockey" style="font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.jockey||'—'}</td>
+      <td class="col-mid" style="font-size:10px">${escapeHTML(h.mukaeShoumen)||'—'}</td>
+      <td class="col-str" style="font-size:10px">${escapeHTML(h.shoumenStraight)||'—'}</td>
+      <td class="col-jockey" style="font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(h.jockey)||'—'}</td>
       <td class="col-interval" style="font-size:9.5px;line-height:1.3">${rotCell}</td>
       ${commentCell}
     </tr>`;
@@ -11710,12 +11724,12 @@ function _renderOfficialSection(parsed, code, horseName) {
   const bi=parsed.basicInfo;
   const basicHtml=Object.keys(bi).length?`
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;font-size:12px">
-      ${bi.sexAge?`<span style="background:#e0f0ff;color:#1d4ed8;padding:2px 8px;border-radius:10px;font-weight:700">${bi.sexAge}</span>`:''}
-      ${bi.trainer?`<span style="background:#f4f6fa;color:#374151;padding:2px 8px;border-radius:10px">調教師: ${bi.trainer}</span>`:''}
-      ${bi.owner?`<span style="background:#f4f6fa;color:#374151;padding:2px 8px;border-radius:10px">馬主: ${bi.owner}</span>`:''}
-      ${bi.sire?`<span style="background:#fef9c3;color:#713f12;padding:2px 8px;border-radius:10px">父: ${bi.sire}</span>`:''}
-      ${bi.dam?`<span style="background:#fef9c3;color:#713f12;padding:2px 8px;border-radius:10px">母: ${bi.dam}</span>`:''}
-      ${bi.broodmareSire?`<span style="background:#fef9c3;color:#713f12;padding:2px 8px;border-radius:10px">母父: ${bi.broodmareSire}</span>`:''}
+      ${bi.sexAge?`<span style="background:#e0f0ff;color:#1d4ed8;padding:2px 8px;border-radius:10px;font-weight:700">${escapeHTML(bi.sexAge)}</span>`:''}
+      ${bi.trainer?`<span style="background:#f4f6fa;color:#374151;padding:2px 8px;border-radius:10px">調教師: ${escapeHTML(bi.trainer)}</span>`:''}
+      ${bi.owner?`<span style="background:#f4f6fa;color:#374151;padding:2px 8px;border-radius:10px">馬主: ${escapeHTML(bi.owner)}</span>`:''}
+      ${bi.sire?`<span style="background:#fef9c3;color:#713f12;padding:2px 8px;border-radius:10px">父: ${escapeHTML(bi.sire)}</span>`:''}
+      ${bi.dam?`<span style="background:#fef9c3;color:#713f12;padding:2px 8px;border-radius:10px">母: ${escapeHTML(bi.dam)}</span>`:''}
+      ${bi.broodmareSire?`<span style="background:#fef9c3;color:#713f12;padding:2px 8px;border-radius:10px">母父: ${escapeHTML(bi.broodmareSire)}</span>`:''}
     </div>`:'';
 
   // ── 賞金計算（JRA含む全成績・当日・未来のみ除外） ──
@@ -11798,10 +11812,10 @@ function _renderOfficialSection(parsed, code, horseName) {
       <div style="font-weight:700;margin-bottom:4px;color:#6b7280">🔍 換算明細（対象走のみ）</div>
       ${prizeSummary.prizeDetails.map(d=>`<div style="display:flex;gap:6px;padding:2px 0;border-bottom:1px solid #f3f4f6;align-items:center;flex-wrap:wrap">
         <span style="min-width:78px;color:#9ca3af">${d.date}</span>
-        <span style="min-width:24px;text-align:center">${d.chakujun}着</span>
-        <span style="min-width:40px;color:#0369a1;font-size:9px">${d.course||'?'}</span>
-        <span style="min-width:48px;color:#7c3aed;font-weight:700">${d.raceClass||'(空)'}</span>
-        <span style="min-width:90px;color:#374151;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.raceName||'(空)'}</span>
+        <span style="min-width:24px;text-align:center">${escapeHTML(d.chakujun)}着</span>
+        <span style="min-width:40px;color:#0369a1;font-size:9px">${escapeHTML(d.course)||'?'}</span>
+        <span style="min-width:48px;color:#7c3aed;font-weight:700">${escapeHTML(d.raceClass)||'(空)'}</span>
+        <span style="min-width:90px;color:#374151;font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(d.raceName)||'(空)'}</span>
         ${d.rate!=null?`<span style="color:#6b7280">${d.rawPrize.toFixed(1)}万×<strong style="color:${d.rate<0.5?'#dc2626':d.rate<1?'#d97706':'#15803d'}">${(d.rate*100).toFixed(0)}%</strong></span>`:'<span style="color:#9ca3af">推定値</span>'}
         <span style="margin-left:auto;font-weight:700;color:#15803d">=&nbsp;${d.prize.toFixed(1)}万</span>
       </div>`).join('')}
@@ -11816,32 +11830,32 @@ function _renderOfficialSection(parsed, code, horseName) {
     const isWin=c<=3;
     const cCls=c===1?'chakujun-1':c===2?'chakujun-2':c===3?'chakujun-3':'';
     const isJRA = isJRACourse(r.course||'');
-    const tenkiHtml=r.tenki?`<span style="font-size:10px;color:#374151">${r.tenki}</span>`:'';
+    const tenkiHtml=r.tenki?`<span style="font-size:10px;color:#374151">${escapeHTML(r.tenki)}</span>`:'';
     const trackCondHtml=r.trackCond
-      ?`<span class="track-cond-badge track-cond-${trackCondClass(r.trackCond)}" style="font-size:10px;padding:1px 5px;margin-left:2px">${r.trackCond}</span>`:'';
+      ?`<span class="track-cond-badge track-cond-${trackCondClass(r.trackCond)}" style="font-size:10px;padding:1px 5px;margin-left:2px">${escapeHTML(r.trackCond)}</span>`:'';
     const clsBadge=r.raceClass
-      ?`<span class="race-class-badge ${raceClassCssClass(r.raceClass)}" style="font-size:10px;padding:1px 5px">${r.raceClass}</span>`:'—';
+      ?`<span class="race-class-badge ${raceClassCssClass(r.raceClass)}" style="font-size:10px;padding:1px 5px">${escapeHTML(r.raceClass)}</span>`:'—';
     const rowStyle = isJRA
       ? 'opacity:0.42;background:#f1f5f9'
       : isWin ? 'background:#fffbeb' : '';
     return`<tr style="${rowStyle}">
-      <td style="font-size:11px;white-space:nowrap">${r.raceDate}</td>
-      <td style="font-size:11px;text-align:left${isJRA?';color:#94a3b8':''}">${r.course||'—'}${isJRA?'<span style="font-size:9px;color:#94a3b8;margin-left:3px">JRA</span>':''}</td>
-      <td style="font-size:11px">${r.raceNo||'—'}</td>
-      <td style="font-size:11px;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left">${r.raceName||'—'}</td>
+      <td style="font-size:11px;white-space:nowrap">${escapeHTML(r.raceDate)}</td>
+      <td style="font-size:11px;text-align:left${isJRA?';color:#94a3b8':''}">${escapeHTML(r.course)||'—'}${isJRA?'<span style="font-size:9px;color:#94a3b8;margin-left:3px">JRA</span>':''}</td>
+      <td style="font-size:11px">${escapeHTML(r.raceNo)||'—'}</td>
+      <td style="font-size:11px;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left">${escapeHTML(r.raceName)||'—'}</td>
       <td style="font-size:10px">${clsBadge}</td>
-      <td style="font-size:11px">${r.dist||'—'}</td>
+      <td style="font-size:11px">${escapeHTML(r.dist)||'—'}</td>
       <td style="font-size:11px;white-space:nowrap">${tenkiHtml}${trackCondHtml}</td>
-      <td style="font-size:11px">${r.headCount||'—'}</td>
-      <td style="font-size:11px">${r.ninki||'—'}</td>
-      <td><span class="chakujun-badge ${cCls}" style="font-size:12px;min-width:22px;height:22px">${c<900?r.chakujun:'—'}</span></td>
-      <td style="font-family:monospace;font-size:11px">${r.time||'—'}</td>
-      <td style="font-family:monospace;font-weight:800;color:#1d4ed8;font-size:13px">${r.agari3f||'—'}</td>
-      <td style="font-size:11px">${r.weight?r.weight+'kg':'—'}</td>
-      <td style="font-size:11px">${r.jockey||'—'}</td>
-      <td style="font-size:11px">${r.kinryo||'—'}</td>
-      ${hasPrize?`<td style="font-size:11px;color:#15803d;font-weight:700">${r.prize?r.prize+'万':'—'}</td>`:''}
-      ${hasWinner?`<td style="font-size:11px;color:#6b7280;max-width:80px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.winner||'—'}</td>`:''}
+      <td style="font-size:11px">${escapeHTML(r.headCount)||'—'}</td>
+      <td style="font-size:11px">${escapeHTML(r.ninki)||'—'}</td>
+      <td><span class="chakujun-badge ${cCls}" style="font-size:12px;min-width:22px;height:22px">${c<900?escapeHTML(r.chakujun):'—'}</span></td>
+      <td style="font-family:monospace;font-size:11px">${escapeHTML(r.time)||'—'}</td>
+      <td style="font-family:monospace;font-weight:800;color:#1d4ed8;font-size:13px">${escapeHTML(r.agari3f)||'—'}</td>
+      <td style="font-size:11px">${r.weight?escapeHTML(r.weight)+'kg':'—'}</td>
+      <td style="font-size:11px">${escapeHTML(r.jockey)||'—'}</td>
+      <td style="font-size:11px">${escapeHTML(r.kinryo)||'—'}</td>
+      ${hasPrize?`<td style="font-size:11px;color:#15803d;font-weight:700">${r.prize?escapeHTML(r.prize)+'万':'—'}</td>`:''}
+      ${hasWinner?`<td style="font-size:11px;color:#6b7280;max-width:80px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHTML(r.winner)||'—'}</td>`:''}
     </tr>`;
   }).join('');
 
@@ -13737,7 +13751,7 @@ function renderDeploySimPanel(raceNo) {
         <span style="background:${wakuBg(wku)};color:${wakuFg(wku)};width:18px;height:18px;border-radius:4px;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center">${wku}</span>
         <span style="font-size:11px;font-weight:700;color:#1a1a2e">${h.umaBan}</span>
       </div>
-      <div style="font-size:10px;font-weight:700;color:#1a1a2e;max-width:58px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${h.name}</div>
+      <div style="font-size:10px;font-weight:700;color:#1a1a2e;max-width:58px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHTML(h.name)}</div>
       <div style="font-size:9px;color:#6b7280">${srcIcon} ${h.posDetail||'—'}</div>
       ${h.bestPace?`<div style="font-size:9px;color:${pcColor};font-weight:700">${h.bestPace}好走</div>`:'<div style="font-size:9px;color:#d1d5db">ペース不明</div>'}
     </div>`;
@@ -14194,7 +14208,7 @@ function closePosDetailModal(){
 
 
 // ── 好走馬一覧テーブル ──
-function renderResultTable(winners,topN){const tbody=document.getElementById('ana-result-tbody');if(!tbody)return;const sorted=[...winners].sort((a,b)=>a.raceNo-b.raceNo||a.chakujun-b.chakujun);tbody.innerHTML=sorted.map(h=>{const cCls=h.chakujun===1?'chakujun-1':h.chakujun===2?'chakujun-2':h.chakujun===3?'chakujun-3':'';const wCls=`waku-${Math.min(Math.max(parseInt(h.wakuBan)||1,1),8)}`;const pCls=paceKey(h.paceType);const mCls=mukaeColor(h.mukaeShoumen),sCls=straightColor(h.shoumenStraight);return`<tr class="horse-row"><td><span class="umano-badge">${h.raceNo}R</span></td><td><span class="chakujun-badge ${cCls}">${h.chakujun}</span></td><td><span class="waku-badge ${wCls}">${h.wakuBan}</span></td><td><span class="umano-badge">${h.umaBan}</span></td><td style="text-align:left;font-weight:700">${h.horseName}</td><td>${h.jockey||'—'}</td><td style="font-family:monospace;font-weight:700">${h.first3f!=null?h.first3f.toFixed(1)+'秒':'—'}</td><td><span class="pace-label pace-label-${pCls}">${h.paceType||'—'}</span></td><td class="${mCls}">${h.mukaeShoumen||'—'}</td><td class="${sCls}">${h.shoumenStraight||'—'}</td><td style="font-family:monospace">${h.time||'—'}</td><td style="font-family:monospace">${h.agari3f||'—'}</td></tr>`;}).join('');if(!sorted.length)tbody.innerHTML='<tr><td colspan="12" class="no-data">好走馬のデータがありません</td></tr>';}
+function renderResultTable(winners,topN){const tbody=document.getElementById('ana-result-tbody');if(!tbody)return;const sorted=[...winners].sort((a,b)=>a.raceNo-b.raceNo||a.chakujun-b.chakujun);tbody.innerHTML=sorted.map(h=>{const cCls=h.chakujun===1?'chakujun-1':h.chakujun===2?'chakujun-2':h.chakujun===3?'chakujun-3':'';const wCls=`waku-${Math.min(Math.max(parseInt(h.wakuBan)||1,1),8)}`;const pCls=paceKey(h.paceType);const mCls=mukaeColor(h.mukaeShoumen),sCls=straightColor(h.shoumenStraight);return`<tr class="horse-row"><td><span class="umano-badge">${escapeHTML(h.raceNo)}R</span></td><td><span class="chakujun-badge ${cCls}">${escapeHTML(h.chakujun)}</span></td><td><span class="waku-badge ${wCls}">${escapeHTML(h.wakuBan)}</span></td><td><span class="umano-badge">${escapeHTML(h.umaBan)}</span></td><td style="text-align:left;font-weight:700">${escapeHTML(h.horseName)}</td><td>${escapeHTML(h.jockey)||'—'}</td><td style="font-family:monospace;font-weight:700">${h.first3f!=null?h.first3f.toFixed(1)+'秒':'—'}</td><td><span class="pace-label pace-label-${pCls}">${escapeHTML(h.paceType)||'—'}</span></td><td class="${mCls}">${escapeHTML(h.mukaeShoumen)||'—'}</td><td class="${sCls}">${escapeHTML(h.shoumenStraight)||'—'}</td><td style="font-family:monospace">${escapeHTML(h.time)||'—'}</td><td style="font-family:monospace">${escapeHTML(h.agari3f)||'—'}</td></tr>`;}).join('');if(!sorted.length)tbody.innerHTML='<tr><td colspan="12" class="no-data">好走馬のデータがありません</td></tr>';}
 
 // ── 凡走馬一覧テーブル ──
 function renderLoserTable(){
@@ -14210,7 +14224,7 @@ function renderLoserTable(){
   tbody.innerHTML=losers.map(h=>{
     const wCls=`waku-${Math.min(Math.max(parseInt(h.wakuBan)||1,1),8)}`;
     const mCls=mukaeColor(h.mukaeShoumen),sCls=straightColor(h.shoumenStraight);
-    return`<tr class="horse-row"><td><span class="umano-badge">${h.raceNo}R</span></td><td><span class="chakujun-badge ${cCls(h.chakujun)}">${h.chakujun}</span></td><td><span class="waku-badge ${wCls}">${h.wakuBan}</span></td><td><span class="umano-badge">${h.umaBan}</span></td><td style="text-align:left;font-weight:700">${h.horseName}</td><td>${h.jockey||'—'}</td><td style="font-family:monospace;font-weight:700">${h.first3f!=null?h.first3f.toFixed(1)+'秒':'—'}</td><td><span class="pace-label pace-label-${pCls(h.paceType)}">${h.paceType||'—'}</span></td><td class="${mCls}">${h.mukaeShoumen||'—'}</td><td class="${sCls}">${h.shoumenStraight||'—'}</td><td style="font-family:monospace">${h.time||'—'}</td><td style="font-family:monospace">${h.agari3f||'—'}</td></tr>`;
+    return`<tr class="horse-row"><td><span class="umano-badge">${escapeHTML(h.raceNo)}R</span></td><td><span class="chakujun-badge ${cCls(h.chakujun)}">${escapeHTML(h.chakujun)}</span></td><td><span class="waku-badge ${wCls}">${escapeHTML(h.wakuBan)}</span></td><td><span class="umano-badge">${escapeHTML(h.umaBan)}</span></td><td style="text-align:left;font-weight:700">${escapeHTML(h.horseName)}</td><td>${escapeHTML(h.jockey)||'—'}</td><td style="font-family:monospace;font-weight:700">${h.first3f!=null?h.first3f.toFixed(1)+'秒':'—'}</td><td><span class="pace-label pace-label-${pCls(h.paceType)}">${escapeHTML(h.paceType)||'—'}</span></td><td class="${mCls}">${escapeHTML(h.mukaeShoumen)||'—'}</td><td class="${sCls}">${escapeHTML(h.shoumenStraight)||'—'}</td><td style="font-family:monospace">${escapeHTML(h.time)||'—'}</td><td style="font-family:monospace">${escapeHTML(h.agari3f)||'—'}</td></tr>`;
   }).join('');
   if(!losers.length)tbody.innerHTML=`<tr><td colspan="12" class="no-data">${fromN}着以下のデータがありません</td></tr>`;
 }
@@ -14268,19 +14282,19 @@ function renderAgariRanking(allHorses){
   if(!display.length){tbody.innerHTML=`<tr><td colspan="10" class="no-data">${filterDist||filterCls?'フィルタ条件に一致する':''}上がり3Fデータがありません</td></tr>`;return;}
   const cCls=c=>c===1?'chakujun-1':c===2?'chakujun-2':c===3?'chakujun-3':'';
   tbody.innerHTML=display.map((h,i)=>{const rank=i+1,isBest=rank===1,wCls=`waku-${Math.min(Math.max(parseInt(h.wakuBan)||1,1),8)}`;
-    const distTag=filterDist?'':(h.distance?`<span style="font-size:9px;color:#6b7280;margin-left:3px">${h.distance}</span>`:'');
+    const distTag=filterDist?'':(h.distance?`<span style="font-size:9px;color:#6b7280;margin-left:3px">${escapeHTML(h.distance)}</span>`:'');
     const f3Cell=h.first3fNum!=null?`<span style="font-family:monospace">${h.first3fNum.toFixed(1)}</span>`:'<span style="color:#d1d5db">—</span>';
     return `<tr class="horse-row${isBest?' agari-rank-1':''}">
       <td><span class="agari-rank-badge${rank<=3?' agari-rank-top':''}">${rank}</span></td>
-      <td><span class="umano-badge">${h.raceNo}R</span></td>
-      <td><span class="chakujun-badge ${cCls(h.chakujun)}">${h.chakujun<900?h.chakujun:'—'}</span></td>
-      <td><span class="waku-badge ${wCls}">${h.wakuBan||'—'}</span></td>
-      <td><span class="umano-badge">${h.umaBan}</span></td>
-      <td style="text-align:left;font-weight:700">${h.horseName}${distTag}</td>
+      <td><span class="umano-badge">${escapeHTML(h.raceNo)}R</span></td>
+      <td><span class="chakujun-badge ${cCls(h.chakujun)}">${h.chakujun<900?escapeHTML(h.chakujun):'—'}</span></td>
+      <td><span class="waku-badge ${wCls}">${escapeHTML(h.wakuBan)||'—'}</span></td>
+      <td><span class="umano-badge">${escapeHTML(h.umaBan)}</span></td>
+      <td style="text-align:left;font-weight:700">${escapeHTML(h.horseName)}${distTag}</td>
       <td style="font-family:monospace;color:#374151">${f3Cell}</td>
       <td style="font-family:monospace;font-weight:800;color:${isBest?'#b8860b':rank<=3?'#1d4ed8':'#111'}">${h.agari3fNum.toFixed(1)}<small>秒</small></td>
-      <td style="font-family:monospace">${h.time||'—'}</td>
-      <td>${h.ninki?h.ninki+'人気':'—'}</td>
+      <td style="font-family:monospace">${escapeHTML(h.time)||'—'}</td>
+      <td>${h.ninki?escapeHTML(h.ninki)+'人気':'—'}</td>
     </tr>`;
   }).join('');
 }
@@ -14512,18 +14526,18 @@ function renderRaceCompare() {
         <td><span class="chakujun-badge ${cCls(h.chakujunNum)}">${h.chakujunNum<900?h.chakujunNum:'—'}</span></td>
         <td><span class="waku-badge ${wCls}">${h.wakuBan||'—'}</span></td>
         <td><span class="umano-badge">${h.umaBan}</span></td>
-        <td style="text-align:left;font-weight:700">${h.horseName||'—'}</td>
+        <td style="text-align:left;font-weight:700">${escapeHTML(h.horseName)||'—'}</td>
         <td class="compare-cell ${isF?'compare-best-f3':''}">${h.first3fNum!==null?h.first3fNum.toFixed(1):'—'}${isF?' 🏇':''}${f3Medal}</td>
         <td class="compare-cell ${isA?'compare-best-agari':''}">${h.agari3fNum!==null?h.agari3fNum.toFixed(1):'—'}${isA?' ⚡':''}${agMedal}</td>
-        <td style="font-family:monospace">${h.time||'—'}${timeMedal}</td>
-        <td>${h.ninkiNum<900?h.ninkiNum+'人気':'—'}</td>
-        <td>${h.jockey||'—'}</td>
+        <td style="font-family:monospace">${escapeHTML(h.time)||'—'}${timeMedal}</td>
+        <td>${h.ninkiNum<900?escapeHTML(h.ninkiNum)+'人気':'—'}</td>
+        <td>${escapeHTML(h.jockey)||'—'}</td>
       </tr>`;
     }).join('');
     const ri = raceInfoMap[raceNo] || {};
-    const cls = ri.raceClass ? `<span class="race-class-badge ${raceClassCssClass(ri.raceClass)}" style="font-size:11px;padding:1px 6px">${ri.raceClass}</span>` : '';
+    const cls = ri.raceClass ? `<span class="race-class-badge ${raceClassCssClass(ri.raceClass)}" style="font-size:11px;padding:1px 6px">${escapeHTML(ri.raceClass)}</span>` : '';
     return `<div class="compare-race-block">
-      <div class="compare-race-header"><span class="compare-race-name">${raceNo}R ${ri.raceName||''}</span><span class="compare-race-meta">${ri.distance||''}</span>${cls}</div>
+      <div class="compare-race-header"><span class="compare-race-name">${raceNo}R ${escapeHTML(ri.raceName)}</span><span class="compare-race-meta">${escapeHTML(ri.distance)}</span>${cls}</div>
       <div class="table-wrapper"><table class="deban-table ana-result-table">
         <thead><tr><th>着順</th><th>枠</th><th>馬番</th><th>馬名</th><th>前半3F 🏇</th><th>上がり3F ⚡</th><th>タイム</th><th>人気</th><th>騎手</th></tr></thead>
         <tbody>${rows}</tbody>
@@ -14611,10 +14625,10 @@ function renderCompareRanking() {
       <td style="font-weight:700;color:${rank<=3?['#d97706','#6b7280','#b45309'][rank-1]:'#374151'};text-align:center;min-width:28px">
         ${rank<=3?['🥇','🥈','🥉'][rank-1]:rank}
       </td>
-      <td style="text-align:center"><span style="display:inline-block;background:${color};color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:700;min-width:28px">${h._raceNo}R</span></td>
-      <td><span class="waku-badge ${wCls}" style="font-size:10px;width:18px;height:18px">${h.wakuBan||'—'}</span></td>
-      <td><span class="umano-badge" style="font-size:10px;width:18px;height:18px">${h.umaBan||'—'}</span></td>
-      <td style="text-align:left;font-weight:700;font-size:12px">${h.horseName||'—'}</td>
+      <td style="text-align:center"><span style="display:inline-block;background:${color};color:#fff;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:700;min-width:28px">${escapeHTML(h._raceNo)}R</span></td>
+      <td><span class="waku-badge ${wCls}" style="font-size:10px;width:18px;height:18px">${escapeHTML(h.wakuBan)||'—'}</span></td>
+      <td><span class="umano-badge" style="font-size:10px;width:18px;height:18px">${escapeHTML(h.umaBan)||'—'}</span></td>
+      <td style="text-align:left;font-weight:700;font-size:12px">${escapeHTML(h.horseName)||'—'}</td>
       <td>
         <div style="display:flex;align-items:center;gap:6px;min-width:140px">
           <span style="font-weight:700;font-size:12px;min-width:52px;text-align:right;${isTop?'color:#d97706':''}">${labelFn(h)}</span>
@@ -14688,7 +14702,7 @@ function horseTagBadgesHtml(horseName) {
       : '';
   }).join('');
   const memoBadge = memo
-    ? `<span style="font-size:8px;padding:1px 5px;border-radius:3px;background:#f1f5f9;color:#475569;white-space:nowrap;" title="${memo}">📝${memo.slice(0,6)}${memo.length>6?'…':''}</span>`
+    ? `<span style="font-size:8px;padding:1px 5px;border-radius:3px;background:#f1f5f9;color:#475569;white-space:nowrap;" title="${escapeHTML(memo)}">📝${escapeHTML(memo.slice(0,6))}${memo.length>6?'…':''}</span>`
     : '';
   return badges + memoBadge;
 }
@@ -14709,11 +14723,11 @@ function showHorseNoteEditor(horseName, btn) {
   popup.style.left = Math.min(rect.left, window.innerWidth - 270) + 'px';
   popup.style.top  = Math.min(rect.bottom + 4, window.innerHeight - 260) + 'px';
   popup.innerHTML = `
-    <div style="font-size:10px;font-weight:800;color:#1e293b;margin-bottom:7px;border-bottom:1px solid #f1f5f9;padding-bottom:5px;">特徴タグ：${horseName}</div>
+    <div style="font-size:10px;font-weight:800;color:#1e293b;margin-bottom:7px;border-bottom:1px solid #f1f5f9;padding-bottom:5px;">特徴タグ：${escapeHTML(horseName)}</div>
     <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">
       ${HORSE_NOTE_TAGS.map(t => {
         const on = tags.includes(t.id);
-        return `<button onclick="toggleHorseTag('${horseName.replace(/'/g,"\\'")}','${t.id}',this)"
+        return `<button onclick="toggleHorseTag('${jsAttrEsc(horseName)}','${t.id}',this)"
           style="font-size:9px;padding:2px 7px;border-radius:4px;cursor:pointer;transition:all .1s;
           border:1.5px solid ${on ? t.color : '#e2e8f0'};background:${on ? t.bg : '#f8fafc'};
           color:${on ? t.color : '#9ca3af'};font-weight:${on ? '700' : '400'};"
@@ -14721,10 +14735,10 @@ function showHorseNoteEditor(horseName, btn) {
       }).join('')}
     </div>
     <div style="font-size:9px;color:#6b7280;margin-bottom:3px;">メモ（自由記入）</div>
-    <input id="horse-memo-input" type="text" value="${memo.replace(/"/g,'&quot;')}"
+    <input id="horse-memo-input" type="text" value="${escapeHTML(memo)}"
       placeholder="例: 内枠は苦手、距離◎"
       style="width:100%;padding:4px 8px;border:1.5px solid #e2e8f0;border-radius:5px;font-size:10px;box-sizing:border-box;outline:none;"
-      oninput="saveHorseTagsFromPopup('${horseName.replace(/'/g,"\\'")}')">
+      oninput="saveHorseTagsFromPopup('${jsAttrEsc(horseName)}')">
     <div style="text-align:right;margin-top:7px;">
       <button onclick="document.getElementById('horse-note-popup')?.remove()"
         style="font-size:10px;padding:3px 10px;border-radius:5px;border:1px solid #e2e8f0;background:#f8fafc;cursor:pointer;color:#374151;">閉じる</button>
@@ -16809,14 +16823,14 @@ function buildEvMonitorHtml(raceNo, selCond) {
     : '';
   const _wLabel = r => r.weightWarn === 'futo' ? `馬体重が普段より+${r.weightDev}kgと重い` : `馬体重が普段より${r.weightDev}kgと軽い`;
   const warnHtml = warned.length
-    ? `<div class="evb-sub">⚖️ 数字はお得でも馬体重が普段と大きく違うため対象外にした馬：${warned.map(r => `<b>${r.name}</b>（${r.odds.toFixed(1)}倍／${_wLabel(r)}）`).join('　')}<br><span style="opacity:.8">こういう馬は過去データで勝率が大きく落ちるため買いから外しています。</span></div>`
+    ? `<div class="evb-sub">⚖️ 数字はお得でも馬体重が普段と大きく違うため対象外にした馬：${warned.map(r => `<b>${escapeHTML(r.name)}</b>（${r.odds.toFixed(1)}倍／${_wLabel(r)}）`).join('　')}<br><span style="opacity:.8">こういう馬は過去データで勝率が大きく落ちるため買いから外しています。</span></div>`
     : '';
 
   if (bets.length) {
     const rows = bets.map(b => `
       <div class="evb-row">
-        <span class="evb-uma">${b.uma}</span>
-        <span class="evb-name">${b.name || '—'}</span>
+        <span class="evb-uma">${escapeHTML(b.uma)}</span>
+        <span class="evb-name">${escapeHTML(b.name) || '—'}</span>
         <span class="evb-metric">単勝${b.odds.toFixed(1)}倍 / AIの見立てでは勝率${(b.pCal * 100).toFixed(1)}% / お得度<b>${b.evCal.toFixed(2)}倍</b></span>
         <span class="evb-stake">${_yen(b.stake)}</span>
       </div>`).join('');
@@ -16831,10 +16845,10 @@ function buildEvMonitorHtml(raceNo, selCond) {
   // 該当なし＝見送り。参考に最上位の馬を1頭示す。
   const top = res.runners[0];
   const refWhy = warned.length
-    ? `候補だった${warned[0].name}は${_wLabel(warned[0])}ため見送り`
+    ? `候補だった${escapeHTML(warned[0].name)}は${_wLabel(warned[0])}ため見送り`
     : top
-      ? (top.odds < M.oddsLo ? `いちばんお得なのは${top.name}ですが単勝${top.odds.toFixed(1)}倍と人気になりすぎ（狙い目は${M.oddsLo}〜${M.oddsHi}倍の中穴）`
-        : top.odds >= M.oddsHi ? `いちばんお得なのは${top.name}ですが単勝${top.odds.toFixed(1)}倍の大穴すぎて対象外（狙い目は${M.oddsLo}〜${M.oddsHi}倍）`
+      ? (top.odds < M.oddsLo ? `いちばんお得なのは${escapeHTML(top.name)}ですが単勝${top.odds.toFixed(1)}倍と人気になりすぎ（狙い目は${M.oddsLo}〜${M.oddsHi}倍の中穴）`
+        : top.odds >= M.oddsHi ? `いちばんお得なのは${escapeHTML(top.name)}ですが単勝${top.odds.toFixed(1)}倍の大穴すぎて対象外（狙い目は${M.oddsLo}〜${M.oddsHi}倍）`
         : `中穴（${M.oddsLo}〜${M.oddsHi}倍）に「オッズが勝率より十分高い馬」がいません`)
       : '';
   return `<div class="ev-monitor-bar skip">${_head('見送り', '#64748b')}
@@ -16860,8 +16874,8 @@ function buildLongshotHtml(scored) {
   if (!mid.length && !big.length) return '';
   const midRows = mid.map(c => `
       <div class="evb-row">
-        <span class="evb-uma">${c.s.horse.umaBan || '—'}</span>
-        <span class="evb-name">${c.s.horse.horseName || '—'}</span>
+        <span class="evb-uma">${escapeHTML(c.s.horse.umaBan) || '—'}</span>
+        <span class="evb-name">${escapeHTML(c.s.horse.horseName) || '—'}</span>
         <span class="evb-metric">単勝${c.odds.toFixed(1)}倍 / オッズの人気度よりAIの評価が${Math.round((c.ratio - 1) * 100)}%高い</span>
       </div>`).join('');
   const midHtml = mid.length ? `
@@ -16869,7 +16883,7 @@ function buildLongshotHtml(scored) {
     ${midRows}
     <div class="evb-sub">過去データの検証（該当231件）では平均回収率 約110%。オッズは発売直後で不安定なことがあるため、締切前にもう一度見直すのがおすすめです。</div>` : '';
   const bigHtml = big.length ? `
-    <div class="evb-sub" style="margin-top:${mid.length ? '8px' : '0'}">🔭 参考：単勝30倍以上でさらにズレが大きい馬＝${big.map(c => `<b>${c.s.horse.horseName}</b>（${c.odds.toFixed(1)}倍）`).join('・')}。傾向は同じ方向ですが該当例がまだ少なく、買い推奨ではなく参考情報です。</div>` : '';
+    <div class="evb-sub" style="margin-top:${mid.length ? '8px' : '0'}">🔭 参考：単勝30倍以上でさらにズレが大きい馬＝${big.map(c => `<b>${escapeHTML(c.s.horse.horseName)}</b>（${c.odds.toFixed(1)}倍）`).join('・')}。傾向は同じ方向ですが該当例がまだ少なく、買い推奨ではなく参考情報です。</div>` : '';
   return `<div class="ev-monitor-bar">${midHtml}${bigHtml}</div>`;
 }
 
@@ -17072,6 +17086,11 @@ var _kvxShown = false, _kvxWired = false, _kvxKey = null;   // _kvxKey=現在kvx
 var _kvxSnap = null, _kvxSnapGen = 0;   // 【Phase3-2d】AI指数内訳snapshot（render同期で確定・immutable・表示用コピーのみ凍結）
 // 共通HTMLエスケープ（テキスト・属性値の両方に安全な最小集合 & < > " '）。既存の_esc(5703)はJS文字列用で別物。
 function escapeHTML(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+// 外部由来の文字列(馬名等)を、二重引用符のHTML属性(onclick="...")内の単一引用符JS文字列リテラル
+// 引数として安全に埋め込むためのエスケープ。バックスラッシュ→クォートの順でJS文字列を守った上で、
+// escapeHTML()で"（属性区切り突破）等をHTMLエンティティ化する。単純な.replace(/'/g,"\\'")だけでは
+// 二重引用符(")によるonclick属性の早期終了・任意属性注入を防げないため必須（P3脆弱性対応）。
+function jsAttrEsc(s){ return escapeHTML(String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'")); }
 function kvxEsc(s){ return escapeHTML(s); }   // kvxも共通escapeHTMLを使う（単一実装）
 function kvxNormDate(d){ return String(d == null ? '' : d).replace(/\//g, '-').trim(); }   // 2026/07/11 と 2026-07-11 を正規化
 // 【一般公開の分離／kill switch】管理者プレビューと一般公開を分離する。
@@ -17420,11 +17439,13 @@ document.addEventListener('DOMContentLoaded', kvxInitToggle);
 function renderPredictionPanel(raceNo) {
   const _rd0 = (allRacesData[raceNo] && allRacesData[raceNo].raceInfo && allRacesData[raceNo].raceInfo.raceDate) || null;   // 【Phase3-1】render開始時の日付context（displayKey用）
   const container = document.getElementById(`yoso-panel-${raceNo}`);
-  if (!container) { if (window.kvxSafeRenderDebanV2) window.kvxSafeRenderDebanV2(raceNo, null, null, _rd0); return; }   // 【Phase3-1 hook】パネル無し経路：現在選択(日付:レース)一致時のみ片付け
+  const pubExtra = document.getElementById(`yoso-public-extra-${raceNo}`);   // 閲覧者にも表示する狙い目/穴馬/買い得チェック/スコア解説
+  if (!container) { if (pubExtra) pubExtra.innerHTML = ''; if (window.kvxSafeRenderDebanV2) window.kvxSafeRenderDebanV2(raceNo, null, null, _rd0); return; }   // 【Phase3-1 hook】パネル無し経路：現在選択(日付:レース)一致時のみ片付け
 
   const data = allRacesData[raceNo];
   if (!data || !data.horses.length) {
     container.innerHTML = '<p style="color:#9ca3af;text-align:center;padding:24px">レースデータがありません</p>';
+    if (pubExtra) pubExtra.innerHTML = '';
     if (window.kvxSafeRenderDebanV2) window.kvxSafeRenderDebanV2(raceNo, null, null, _rd0);   // 【Phase3-1 hook】データなし経路：現在選択一致時のみclear/hide
     return;
   }
@@ -17737,7 +17758,7 @@ function renderPredictionPanel(raceNo) {
           const _favNames = horses
             .filter(h => { const n = parseInt(h.ninki); return !isNaN(n) && h.horseName !== _vh.horseName; })
             .sort((a, b) => parseInt(a.ninki) - parseInt(b.ninki)).slice(0, 2).map(h => h.horseName);
-          if (_favNames.length) _sub = `<span class="vbb-sub">｜馬単 ${escapeHTML(_vh.horseName)}→（${_favNames.join('・')}）も過去の検証では回収率104%（当たり外れの波は大きめ）</span>`;
+          if (_favNames.length) _sub = `<span class="vbb-sub">｜馬単 ${escapeHTML(_vh.horseName)}→（${_favNames.map(escapeHTML).join('・')}）も過去の検証では回収率104%（当たり外れの波は大きめ）</span>`;
         }
         valueBetBadge = `<div class="value-bet-bar">💰 <b>単勝妙味${escapeHTML(_isTop ? 'ゾーン' : '：' + _vh.horseName)}</b>（AIの評価${_isTop ? 'トップ＝◎' : 'は高いが◎とは別の馬'}・単勝${_vod.toFixed(1)}倍）＝AIの評価に対してオッズが高め。過去の同条件では平均より回収率が良い帯です${_sub}</div>`;
         _pickValue = { name: _vh.horseName, odds: _vod, isTop: _isTop };
@@ -17922,16 +17943,41 @@ function renderPredictionPanel(raceNo) {
       try { const _er = computeEvBets(raceNo, container._selCond); if (_er && _er.runners) _evPick = _er.runners.find(r => r.inWindow) || null; } catch (e) {}
       const _row = (label, color, body) => `<div class="ps-row"><span class="ps-tag" style="background:${color}">${label}</span><span class="ps-body">${body}</span></div>`;
       let _rows = _row('本命', '#dc2626', `◎ <b>${escapeHTML(_hm.horse.horseName)}</b> <span class="ps-mut">${_confIcon}${_confTxt}${_g != null ? '（差' + (_g >= 0 ? '+' : '') + _g + '）' : ''}</span>`);
-      if (_evPick) _rows += _row('妙味', '#7c3aed', `中穴 <b>${_evPick.name}</b> <span class="ps-mut">単勝${_evPick.odds.toFixed(1)}倍｜AIの見立てよりオッズが高くお得</span>`);
-      else if (_pickValue) _rows += _row('妙味', '#7c3aed', `<b>${_pickValue.name}</b> <span class="ps-mut">単勝${_pickValue.odds.toFixed(1)}倍・AI評価とオッズのズレ</span>`);
-      if (_pickSleeper) _rows += _row('穴', '#0891b2', `2-3着に <b>${_pickSleeper.name}</b> <span class="ps-mut">${_pickSleeper.idx + 1}番手・${_pickSleeper.why.join('＋')}</span>`);
-      if (_pickDanger) _rows += _row('危険', '#b45309', `⚠️ <b>${_pickDanger.name}</b> <span class="ps-mut">${_pickDanger.reasons.join('・')}</span>`);
+      if (_evPick) _rows += _row('妙味', '#7c3aed', `中穴 <b>${escapeHTML(_evPick.name)}</b> <span class="ps-mut">単勝${_evPick.odds.toFixed(1)}倍｜AIの見立てよりオッズが高くお得</span>`);
+      else if (_pickValue) _rows += _row('妙味', '#7c3aed', `<b>${escapeHTML(_pickValue.name)}</b> <span class="ps-mut">単勝${_pickValue.odds.toFixed(1)}倍・AI評価とオッズのズレ</span>`);
+      if (_pickSleeper) _rows += _row('穴', '#0891b2', `2-3着に <b>${escapeHTML(_pickSleeper.name)}</b> <span class="ps-mut">${_pickSleeper.idx + 1}番手・${escapeHTML(_pickSleeper.why.join('＋'))}</span>`);
+      if (_pickDanger) _rows += _row('危険', '#b45309', `⚠️ <b>${escapeHTML(_pickDanger.name)}</b> <span class="ps-mut">${escapeHTML(_pickDanger.reasons.join('・'))}</span>`);
       const _line = `${_confTxt === '断然' ? '本命◎が抜けています' : _confTxt === '接戦' ? '上位が僅差で頭は割れそう' : '標準的な力関係'}。`
-        + (_evPick ? `中穴妙味は${_evPick.name}（${_evPick.odds.toFixed(1)}倍）。` : _pickValue ? `妙味は${_pickValue.name}。` : '明確な中穴妙味は薄めです。')
-        + (_pickSleeper ? `穴なら${_pickSleeper.name}を2-3着に。` : '')
-        + (_pickDanger ? `人気の${_pickDanger.name}は割引が必要。` : '');
+        + (_evPick ? `中穴妙味は${escapeHTML(_evPick.name)}（${_evPick.odds.toFixed(1)}倍）。` : _pickValue ? `妙味は${escapeHTML(_pickValue.name)}。` : '明確な中穴妙味は薄めです。')
+        + (_pickSleeper ? `穴なら${escapeHTML(_pickSleeper.name)}を2-3着に。` : '')
+        + (_pickDanger ? `人気の${escapeHTML(_pickDanger.name)}は割引が必要。` : '');
       pickSummary = `<div class="pick-summary"><div class="ps-head">🎯 このレースの狙い目<button class="ps-copy" onclick="_copyPickText(this)" title="狙い目をコピー">📋</button></div>${_rows}<div class="ps-line">${_line}</div></div>`;
     }
+  }
+
+  // 閲覧者にも表示する部分（狙い目カード・買い得チェック・穴馬チェック・スコア解説）。
+  // 計算は既存のcomputeYosoScored/computeEvBets/buildEvMonitorHtml/buildLongshotHtmlをそのまま使い、二重計算しない。
+  if (pubExtra) {
+    pubExtra.innerHTML = `
+      ${pickSummary}
+      ${buildEvMonitorHtml(raceNo, container._selCond)}
+      ${buildLongshotHtml(scored)}
+      <details class="yoso-explain">
+        <summary>📖 スコアはこう計算しています（タップで開く）</summary>
+        <div class="ye-body">
+          <b>総合スコア ＝ 基本の走力（走力SI）＋ 6つの加点・減点</b>。点が高いほど「今日のレースで走れそう」という評価です。<br><br>
+          <b>🏃 基本の走力（走力SI）</b> … 過去のタイムを「距離・馬場ごとの平均と比べてどれだけ速いか」で点数化したもの。直近10走を新しいレースほど重視して平均します（今日のレース自体は含めません）。<br>
+          <b>🌧 馬場</b> … 今日と同じ馬場状態（良・重など）で走ったとき、普段より良い成績なら加点、悪ければ減点。<br>
+          <b>📏 距離</b> … 今日と同じくらいの距離（±100m）が得意なら加点。距離が伸びる・縮むのが得意かどうかも見ます。<br>
+          <b>📈 近況</b> … 成績が上向きの馬は加点、下向きは減点（3走以上で判定）。<br>
+          <b>🤝 コンビ</b> … 今日の騎手と厩舎の組み合わせで過去に好成績なら加点。<br>
+          <b>🐎 脚質</b> … 高知は「前に行ける馬」が有利なコース。いつも4コーナーで前にいる馬は加点（最大+1.5）、後ろから追い込む馬は減点（最大-1.2）。実際に4コーナー先頭の馬は6〜7割勝っています。<br>
+          <b>🔧 その他</b> … 細かい加点・減点の合計。出走間隔／クラスが上がった・下がった／馬体重の増減／ゴール前の伸び脚／勝った相手の強さ／騎手の乗り替わり／休み明け何戦目か、などです。<br><br>
+          <span style="color:#b45309">※「騎手」の数字は参考表示で、スコアには足していません</span>（騎手の影響は「コンビ」と「乗り替わり」で反映済み）。<br>
+          印の意味：◎いちばん期待 ○二番手 ▲三番手 △おさえ ×評価低め。「転入」＝他の競馬場から来たばかりで参考値、「推定」＝データが少なくクラスから推定した値です。<br><br>
+          <b>🧭 印の並び順について</b> … 印（◎○▲…）は<b>単勝オッズに関係なく、「総合スコア」の高い順</b>に決まります（オッズ非依存のAI単独評価）。市場のオッズから推定した確率（AI推定確率）は🔭穴馬チェックの妙味判定にのみ使い、印の並び順には影響しません。
+        </div>
+      </details>`;
   }
 
   container.innerHTML = `
@@ -17951,10 +17997,7 @@ function renderPredictionPanel(raceNo) {
       <button type="button" id="yoso-fetch-all-btn-${raceNo}" class="admin-only" onclick="fetchAllByNameForRace(${raceNo})" style="padding:4px 12px;background:#1a56a0;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;"><i class="fas fa-download"></i> データ自動取得</button>
       <span id="yoso-fetch-status-${raceNo}" class="admin-only" style="font-size:11px;color:#6b7280;white-space:nowrap;"></span>
     </div>
-    ${pickSummary}
     ${mlNote}
-    ${buildEvMonitorHtml(raceNo, container._selCond)}
-    ${buildLongshotHtml(scored)}
     ${confidenceBadge}
     ${dangerFavBadge}
     ${legWarnBadge}
@@ -17964,23 +18007,7 @@ function renderPredictionPanel(raceNo) {
     ${paceBiasBadge}
     <div style="overflow-x:auto;">${tableHtml}</div>
     <div id="yoso-backtest-${raceNo}"></div>
-    <div id="yoso-report-${raceNo}"></div>
-    <details class="yoso-explain">
-      <summary>📖 スコアはこう計算しています（タップで開く）</summary>
-      <div class="ye-body">
-        <b>総合スコア ＝ 基本の走力（走力SI）＋ 6つの加点・減点</b>。点が高いほど「今日のレースで走れそう」という評価です。<br><br>
-        <b>🏃 基本の走力（走力SI）</b> … 過去のタイムを「距離・馬場ごとの平均と比べてどれだけ速いか」で点数化したもの。直近10走を新しいレースほど重視して平均します（今日のレース自体は含めません）。<br>
-        <b>🌧 馬場</b> … 今日と同じ馬場状態（良・重など）で走ったとき、普段より良い成績なら加点、悪ければ減点。<br>
-        <b>📏 距離</b> … 今日と同じくらいの距離（±100m）が得意なら加点。距離が伸びる・縮むのが得意かどうかも見ます。<br>
-        <b>📈 近況</b> … 成績が上向きの馬は加点、下向きは減点（3走以上で判定）。<br>
-        <b>🤝 コンビ</b> … 今日の騎手と厩舎の組み合わせで過去に好成績なら加点。<br>
-        <b>🐎 脚質</b> … 高知は「前に行ける馬」が有利なコース。いつも4コーナーで前にいる馬は加点（最大+1.5）、後ろから追い込む馬は減点（最大-1.2）。実際に4コーナー先頭の馬は6〜7割勝っています。<br>
-        <b>🔧 その他</b> … 細かい加点・減点の合計。出走間隔／クラスが上がった・下がった／馬体重の増減／ゴール前の伸び脚／勝った相手の強さ／騎手の乗り替わり／休み明け何戦目か、などです。<br><br>
-        <span style="color:#b45309">※「騎手」の数字は参考表示で、スコアには足していません</span>（騎手の影響は「コンビ」と「乗り替わり」で反映済み）。<br>
-        印の意味：◎いちばん期待 ○二番手 ▲三番手 △おさえ ×評価低め。「転入」＝他の競馬場から来たばかりで参考値、「推定」＝データが少なくクラスから推定した値です。<br><br>
-        <b>🧭 印の並び順について</b> … 印（◎○▲…）は<b>単勝オッズに関係なく、「総合スコア」の高い順</b>に決まります（オッズ非依存のAI単独評価）。市場のオッズから推定した確率（AI推定確率）は🔭穴馬チェックの妙味判定にのみ使い、印の並び順には影響しません。
-      </div>
-    </details>`;
+    <div id="yoso-report-${raceNo}"></div>`;
   // 【Phase3-1 hook・seam A案】確定scored(totalScore降順・sort済)＋既存印マップを、パネルinnerHTML反映直後に
   // 新UIへ1回だけ渡す。既存パネルの出力・状態は不変、二重計算なし（同じscored/horseMarkMapを渡す）。
   // 例外は kvxSafeRenderDebanV2 内部で隔離し、既存renderPredictionPanelを絶対に失敗させない。
