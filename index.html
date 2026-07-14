@@ -2768,6 +2768,7 @@ let currentRaceNo = null;
 let currentDate = '';
 let currentBaba = '31';
 let _commentVisible = true; // レース後コメントの表示フラグ（チェックボックスで制御）
+let _kvLastViewTab = 'deban'; // レース内サブタブ（出馬表/結果/能力表/AI予想/ランキング）の直近選択を記憶（新規レース表示時に復元）
 
 // 馬体重の差分を +/- 表記にフォーマット（例: "475(9)" → "475(+9)"）
 function fmtWeightDiff(w) {
@@ -4472,10 +4473,31 @@ function switchRaceTab(raceNo) {
   const area=document.getElementById('race-content-area');
   area.querySelectorAll('[data-race-section]').forEach(el=>el.style.display='none');
   const existing=document.getElementById(`race-section-${raceNo}`);
-  if(existing){existing.style.display='';updateRaceSummaryBar(raceNo);try{renderDebanBias();}catch(e){}return;}
+  if(existing){
+    existing.style.display='';
+    updateRaceSummaryBar(raceNo);
+    try{renderDebanBias();}catch(e){}
+    // 「AI予想」タブが表示中のレースに戻ってきた場合、共有DOM(AI予想ランキング)を
+    // 他レースの枠へ移動済みのままにしないよう、このレース向けに再配置し直す
+    // （移動済みだと表示が空白になるため）。renderPredictionPanelは再計算のみで
+    // 予測ロジック自体は変更しない。
+    try {
+      const yv = document.getElementById(`view-yoso-${raceNo}`);
+      if (yv && yv.style.display !== 'none') renderPredictionPanel(raceNo);
+    } catch(e){}
+    return;
+  }
   renderRaceContent(raceNo);
   updateRaceSummaryBar(raceNo);
   try{renderDebanBias();}catch(e){}
+  // 新規レースは、直近このセッションで選んでいたサブタブがあればそれを復元する
+  // （出馬表以外を見ていた場合、レースを進めるたびにタブを叩き直さずに済む）。
+  if (_kvLastViewTab && _kvLastViewTab !== 'deban') {
+    try {
+      const btn = document.getElementById(`tab-btn-${_kvLastViewTab}-${raceNo}`);
+      if (btn && getComputedStyle(btn).display !== 'none') switchViewTab(raceNo, _kvLastViewTab);
+    } catch(e){}
+  }
 }
 
 // レース切替時にURLハッシュを更新（replace＝レース切替では履歴を積まない。
@@ -5784,6 +5806,7 @@ function switchViewTab(raceNo, view) {
   const rankingBtn  = document.getElementById(`tab-btn-ranking-${raceNo}`);
   const debanCtrl   = document.getElementById(`deban-controls-${raceNo}`);
   if (!debanView || !abilityView) return;
+  _kvLastViewTab = view; // 直近選択のサブタブを記憶（新規レース表示時にswitchRaceTab/renderRaceContentから復元）
 
   [debanView, kekkaView, abilityView, yosoView, rankingView].forEach(v => { if (v) v.style.display = 'none'; });
   [debanBtn, kekkaBtn, abilityBtn, yosoBtn, rankingBtn].forEach(b => { if (b) b.classList.remove('on'); });
@@ -6966,7 +6989,7 @@ function openCommentSheet(raceNo) {
         <span style="width:52px;flex-shrink:0;font-size:9px;color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-top:1px;" title="${x.jockey||''}">${x.jockey||'—'}</span>
         <span style="width:74px;flex-shrink:0;font-size:9px;color:#94a3b8;white-space:nowrap;padding-top:1px;">${x.raceClass||''}${x.distance?` ${x.distance}`:''}</span>
         ${chBadge}
-        <span style="flex:1;font-size:11px;color:#1e293b;line-height:1.45;">${String(x.postComment).trim()}</span>
+        <span style="flex:1;font-size:11px;color:#1e293b;line-height:1.45;">${escapeHTML(String(x.postComment).trim())}</span>
       </div>`;
     }).join('') : '<div style="font-size:11px;color:#9ca3af;padding:4px 0;">保存済みコメントなし</div>';
     return `<div class="cmt-sheet-card" style="border:1px solid #dde3ef;border-radius:8px;margin-bottom:8px;overflow:hidden;background:#fff;">
@@ -11187,11 +11210,11 @@ function openHorseModal(horseName, raceNo) {
     // コメントセル（コメントがある馬が1頭でもいれば全行に列を出す）
     const commentTxt = h.postComment ? String(h.postComment).trim() : '';
     const commentCell = !_hasComments ? '' : commentTxt
-      ? `<td class="col-comment" style="font-size:9.5px;color:#0e7490;white-space:normal;line-height:1.4;padding:4px 4px;vertical-align:top"><i class="fas fa-comment-dots" style="margin-right:2px;opacity:.7"></i>${commentTxt}</td>`
+      ? `<td class="col-comment" style="font-size:9.5px;color:#0e7490;white-space:normal;line-height:1.4;padding:4px 4px;vertical-align:top"><i class="fas fa-comment-dots" style="margin-right:2px;opacity:.7"></i>${escapeHTML(commentTxt)}</td>`
       : `<td class="col-comment" style="color:#d1d5db;font-size:10px;text-align:center;vertical-align:middle">—</td>`;
     return `<tr class="hm-row ${isWin?'hm-row-win':''}">
       <td class="col-date" style="font-size:9.5px">${h.raceDate}</td>
-      <td class="col-rname" style="text-align:left;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.raceName||'—'}</td>
+      <td class="col-rname" style="text-align:left;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.raceName?escapeHTML(h.raceName):'—'}</td>
       <td class="col-cls"><span class="race-class-badge ${raceClassCssClass(h.raceClass)}" style="font-size:9px;padding:1px 4px">${h.raceClass||'—'}</span></td>
       <td class="col-dist ${sameDist?'hm-match-cell':''}" style="font-size:10px">${h.distance||'—'}</td>
       <td class="col-track" style="font-size:10px">${h.trackCond||'—'}</td>
@@ -11262,8 +11285,8 @@ function openHorseModal(horseName, raceNo) {
     return sl.map(function(h){
       return '<div class="hm-cmt">'
         + '<span class="hm-cmt-meta" style="font-size:10px;color:#0e7490;font-weight:700;white-space:nowrap"><i class="fas fa-comment-dots"></i> '
-        + h.raceDate + (h.raceNo ? ' '+h.raceNo+'R' : '') + (h.raceName ? ' <span style="font-weight:400;color:#64748b">'+h.raceName+'</span>' : '') + '</span>'
-        + '　' + h.postComment
+        + escapeHTML(h.raceDate) + (h.raceNo ? ' '+escapeHTML(String(h.raceNo))+'R' : '') + (h.raceName ? ' <span style="font-weight:400;color:#64748b">'+escapeHTML(h.raceName)+'</span>' : '') + '</span>'
+        + '　' + escapeHTML(h.postComment)
         + '</div>';
     }).join('');
   };
@@ -17262,7 +17285,7 @@ function kvxRenderDebanV2(raceNo, scored, horseMarkMap, renderDate){
     '</article></li>';
   }).join('');
   var aiDesc = 'AI総合指数：走力SIと各種補正を合成した、レース内比較用の指数です。勝率・的中確率・回収率を表す数値ではありません。';
-  var siDesc = '走力SI：過去のタイムを距離・馬場ごとに点数化した基本の走力（baseScore）です。';
+  var siDesc = '走力SI：過去のタイムを距離・馬場ごとに点数化した基本の走力です。';
   c.innerHTML =
     '<div class="kvx-hd">AI予想ランキング</div>' +
     '<div class="kvx-desktop"><div class="kvx-scroll"><table class="kvx-deban">' +
@@ -17274,7 +17297,7 @@ function kvxRenderDebanV2(raceNo, scored, horseMarkMap, renderDate){
         '<th scope="col">前走</th><th scope="col">近5走</th><th scope="col">詳細</th>' +
       '</tr></thead><tbody>' + deskRows + '</tbody></table></div></div>' +
     '<ul class="kvx-mobile" aria-label="出馬表カード">' + cards + '</ul>' +
-    '<div class="kvx-note">' + aiDesc + ' オッズ非依存で、aiProb（市場アンカーモデル）や shadow購入モデルとは別物です。印はAI総合指数の降順、走力SIはbaseScore。オッズ帯はオッズの大きさの区分（価値判断ではありません）。</div>';
+    '<div class="kvx-note">' + aiDesc + ' オッズの高い安いには左右されず算出しています。印(◎○▲△×)はAI総合指数が高い順に付けています。オッズ帯は単にオッズの大きさで分けた目安で、お得・妙味といった意味はありません。</div>';
   c.hidden = false; _kvxShown = true; _kvxKey = renderKey;   // 表示中のdisplayKey(日付:レース)を記録（古い日付/レース混入防止）
   if (!_kvxWired) { c.addEventListener('click', kvxOnClick); _kvxWired = true; }   // 委譲は1回だけ（表/カード共通）
   kvxPlaceInYosoSlot(raceNo, true);   // 「AI予想」サブタブ内へ配置（出馬表タブと縦並びにしない）
