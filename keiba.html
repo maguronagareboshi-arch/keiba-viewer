@@ -1407,7 +1407,14 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   const rk = { comp: rankOf('comp'), si: rankOf('si'), ten: rankOf('ten'), cz: rankOf('cz') };
   // AI予想印: 学習モデルのスコア順（モデル未取得や実績なしは総合スコアで代替）
   const hasV3 = hs.length > 0 && hs.every((r) => r.v3 && Number.isFinite(r.v3.win_probability_raw));
-  hs.forEach((r) => { r.v3Score = hasV3 ? r.v3.win_probability_raw : null; });
+  const marketOverlayApproved = !!(v3Race && v3Race.market_overlay
+    && v3Race.market_overlay.status === 'shadow');
+  const hasMarketOverlay = hasV3 && marketOverlayApproved
+    && hs.every((r) => Number.isFinite(Number(r.v3.pattern_probability)));
+  hs.forEach((r) => {
+    r.v3Score = hasMarketOverlay ? Number(r.v3.pattern_probability)
+      : (hasV3 ? r.v3.win_probability_raw : null);
+  });
   const markKey = hasV3 ? 'v3Score' : (hs.some((r) => r.ai != null) ? 'ai' : 'score');
   const ranked = hs.filter((r) => r[markKey] != null).sort((a, b) => b[markKey] - a[markKey]);
   ranked.forEach((r, i) => { r.mark = MARKS[i] || ''; });
@@ -1419,7 +1426,8 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   const exps = zAi.map((z) => (z != null ? Math.exp((z - zMax) / 0.75) : 0));
   const expSum = exps.reduce((s, v) => s + v, 0) || 1;
   hs.forEach((r, i) => {
-    r.winP = hasV3 ? Number(r.v3.win_probability.mid) : (zAi[i] != null ? exps[i] / expSum : null);
+    r.winP = hasMarketOverlay ? Number(r.v3.pattern_probability)
+      : (hasV3 ? Number(r.v3.win_probability.mid) : (zAi[i] != null ? exps[i] / expSum : null));
     r.top3P = hasV3 ? Number(r.v3.top3_probability) : null;
   });
   const siTop = hs.filter((r) => r.si != null).sort((a, b) => b.si - a.si)[0];
@@ -1452,7 +1460,7 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
       konkyo = nr ? `${state.track}実績なし（前走: ${nouRunHtml(nr).replace(/<[^>]+>/g, '')}）` : (konkyo || '実績なし');
     }
     return `<tr>
-      <td style="font-size:16px">${r.mark || ''}</td>
+      <td style="font-size:16px">${r.mark || ''}${hasMarketOverlay && r.v3.dangerous_favourite ? '<br><span class="badge" style="color:#b42318">人気危険</span>' : ''}</td>
       <td><span class="waku w${e.waku || 1}">${e.waku ?? ''}</span></td>
       <td>${e.umaban ?? ''}</td>
       <td class="l stickyname"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a>${todayBlinkerBadge(e, history)}${kakuBadge(e)}</td>
@@ -1470,16 +1478,16 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
 
   return raceHeaderHtml(raceMeta) + `
   ${danwaCard(entries, danwaByUma)}
-  <div class="note">直近の馬場: ${recentBias || 'データなし'}　印は学習モデル（勝ちやすさ）順。　<span id="oddsUpdated" class="badge"></span></div>
+  <div class="note">直近の馬場: ${recentBias || 'データなし'}　印は${hasMarketOverlay ? 'v3能力と発走10分前市場を統合した補正勝率' : '学習モデル（勝ちやすさ）'}順。　<span id="oddsUpdated" class="badge"></span></div>
   <div id="evMonitor" class="note" hidden></div>
   <div class="card"><div class="tablewrap">
     <table>
-      <tr><th>AI印</th><th>枠</th><th>番</th><th class="stickyname">馬名</th><th>${hasV3 ? 'v3能力%' : 'AI予測'}</th><th>勝率</th><th>3着内</th><th>総合</th><th>SI</th><th>調教</th><th>単勝(人気)</th><th>妙味</th><th>根拠</th></tr>
+      <tr><th>AI印</th><th>枠</th><th>番</th><th class="stickyname">馬名</th><th>${hasV3 ? 'v3能力%' : 'AI予測'}</th><th>${hasMarketOverlay ? '補正勝率(T-10)' : '勝率'}</th><th>3着内</th><th>総合</th><th>SI</th><th>調教</th><th>単勝(人気)</th><th>妙味</th><th>根拠</th></tr>
       ${rows}
     </table>
   </div>
   <div class="legend">${hasV3
-    ? `<b>v3 AI印</b>＝過去結果だけで固定した展開混合・着順分布モデル。勝率はwalk-forward較正中央値、3着内率は同じ着順分布から算出。モデルhash: ${esc((state.v3Predictions.model_hash || '').slice(0, 12))}…。実馬券購入は無効で、利益保証ではありません。`
+    ? `<b>${hasMarketOverlay ? 'v3＋T-10市場 AI印' : 'v3 AI印'}</b>＝${hasMarketOverlay ? '未来情報なしで学習したv3能力に、発走10分前市場の人気過剰・過小評価パターンを重ねた補正勝率。赤い「人気危険」は市場上位で補正確率が市場確率の80%以下。' : '過去結果だけで固定した展開混合・着順分布モデル。勝率はwalk-forward較正中央値、3着内率は同じ着順分布から算出。'}モデルhash: ${esc((state.v3Predictions.model_hash || '').slice(0, 12))}…。実馬券購入は無効で、利益保証ではありません。`
     : `<b>現在のAI印</b>＝旧v2リッジモデルの参考順位です。公開値は単一70/30ホールドアウト由来で、発売時点オッズを固定した収益検証ではありません。<b>参考勝率</b>＝旧v2スコアのソフトマックス値であり、v3のwalk-forward較正区間とは別物です。`} 総合＝指数/SI/調教/テンの加重。</div></div>`;
 }
 
