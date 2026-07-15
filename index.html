@@ -1719,6 +1719,15 @@ const KV_APP_CSS = [
       'body.dark-mode .yoso-explain summary{color:#7dd3fc}',
       'body.dark-mode .yoso-explain[open] summary{border-color:#22344e}',
       'body.dark-mode .yoso-explain b{color:#e2e8f0}',
+      // ── レース後照合モード（閲覧者公開版・大玉②残り） ──
+      '.yoso-public-aftermatch{margin-top:10px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;font-size:11.5px;color:#374151}',
+      '.yoso-public-aftermatch summary{cursor:pointer;padding:8px 12px;font-weight:800;color:#1a56a0;list-style:none}',
+      '.yoso-public-aftermatch summary::-webkit-details-marker{display:none}',
+      '.yoso-public-aftermatch[open] summary{border-bottom:1px dashed #e2e8f0}',
+      '.yoso-public-aftermatch .ya-body{padding:8px 10px 12px;overflow-x:auto}',
+      'body.dark-mode .yoso-public-aftermatch{background:#0d1826;border-color:#22344e;color:#cbd5e1}',
+      'body.dark-mode .yoso-public-aftermatch summary{color:#7dd3fc}',
+      'body.dark-mode .yoso-public-aftermatch[open] summary{border-color:#22344e}',
       // ⑫ 結果タブ（着順・位置取り・払戻金）
       '.kr-section-title{font-size:13px;font-weight:800;color:#1a56a0;margin:16px 0 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
       '.kr-table{width:100%;border-collapse:collapse;font-size:12.5px;white-space:nowrap}',
@@ -1802,6 +1811,7 @@ const KV_APP_CSS = [
       '.kvx-odds{font-variant-numeric:tabular-nums;font-weight:800;font-size:14px}',
       // オッズ帯＝オッズの大きさの区分のみ。良し悪し（買える/妙味等）の色分けは付けない。
       '.kvx-band{display:inline-block;font-size:12px;color:var(--kvx-muted);font-weight:600;margin-left:2px}',
+      '.kvx-odds-move:not(:empty){display:inline-block;margin-left:3px}',
       '.kvx-sc{font-variant-numeric:tabular-nums;font-weight:800;color:var(--kvx-accent);font-size:15px}',
       '.kvx-si{font-variant-numeric:tabular-nums;font-weight:800;font-size:14px}',
       '.kvx-dim{color:var(--kvx-muted)}',
@@ -1919,6 +1929,17 @@ const KV_APP_CSS = [
       'body.kvx-shell-on .yoso-admin-detail{border-color:var(--kvxs-line)!important;background:var(--kvxs-sunken)!important}',
       'body.kvx-shell-on .yoso-admin-detail>summary{color:var(--kvxs-muted)!important}',
       'body.kvx-shell-on .kvx-yoso-empty{color:var(--kvxs-muted)!important}',
+      // ── オッズ推移ミニチャート・急伸/急落バッジ（表示専用・大玉④） ──
+      '.hm-odds-box{margin-top:10px;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px}',
+      '.hm-odds-hd{font-size:12px;font-weight:700;color:#1a1a2e}',
+      '.hm-odds-chart-wrap{height:180px;margin-top:6px}',
+      '.hm-odds-note{font-size:10px;color:#9ca3af;margin-top:4px}',
+      '.hm-odds-move{font-size:11px;padding:1px 7px;border-radius:8px;font-weight:700}',
+      '.hm-odds-move.up{background:#fee2e2;color:#b91c1c}',
+      '.hm-odds-move.down{background:#dbeafe;color:#1d4ed8}',
+      'body.dark-mode .hm-odds-box{background:#0f1b2c;border-color:#1e3048}',
+      'body.dark-mode .hm-odds-hd{color:#e2e8f0}',
+      'body.dark-mode .hm-odds-note{color:#64748b}',
 ];
 (function kvInjectStyles(){
   if (document.getElementById('kv-styles')) return;
@@ -3089,7 +3110,8 @@ function openRaceReplay(raceNo) {
     for (let i = 0; i < r.ranks.length; i++) { let v = r.ranks[i]; if (isNaN(v) || v < 1) v = (i > 0 ? r.ranks[i - 1] : N); r.ranks[i] = Math.min(Math.max(v, 1), Math.max(N, 12)); }
   });
   runners.sort((a, b) => (a.chaku || 99) - (b.chaku || 99));
-  window._rp = { raceNo, runners, N, nStages: segN + 1, segN, progress: 0, playing: false, speed: 1, raf: null, last: 0, duration: 5200 };
+  window._rp = { raceNo, runners, N, nStages: segN + 1, segN, progress: 0, playing: false, speed: 1, raf: null, last: 0, duration: 5200,
+    cornerGroups: (data.raceInfo && data.raceInfo.cornerGroups) || null };
   _rpBuildSvg(); _rpBuildLegend();
   document.getElementById('rp-title').textContent = (data.raceInfo.raceName || ('第' + raceNo + 'レース')) + ' 展開リプレイ';
   document.getElementById('race-replay-modal').classList.remove('hidden');
@@ -3106,6 +3128,22 @@ function _rpBuildSvg() {
   const y = rank => topPad + (rank - 0.5) * rowH;
   const parts = [];
   for (let r = 1; r <= st.N; r++) parts.push(`<line x1="${x0}" y1="${y(r)}" x2="${x1}" y2="${y(r)}" stroke="#16273b" stroke-width="1"/>`);
+  // ── コーナー通過の近接度（corners_*.json由来のcornerPassTableから抽出・表示専用）──
+  // 「馬群密集度」ではなく「このコーナーで隣接して通過した馬同士」の目安。予想ロジックには影響しない。
+  if (st.cornerGroups) {
+    const umaRankAt = (uma, i) => { const rr = st.runners.find(r => r.uma === uma); return rr ? rr.ranks[i] : null; };
+    Object.keys(st.cornerGroups).forEach(cornerNumStr => {
+      const stageIdx = parseInt(cornerNumStr) - 1;
+      if (stageIdx < 0 || stageIdx >= st.segN) return; // ゴール列・レンジ外は対象外
+      const xx = sx(stageIdx);
+      (st.cornerGroups[cornerNumStr] || []).forEach(group => {
+        const ranks = group.map(u => umaRankAt(u, stageIdx)).filter(v => v != null);
+        if (ranks.length < 2) return;
+        const yMin = y(Math.min(...ranks)) - 7, yMax = y(Math.max(...ranks)) + 7;
+        parts.push(`<rect x="${(xx - 5).toFixed(1)}" y="${yMin.toFixed(1)}" width="10" height="${(yMax - yMin).toFixed(1)}" rx="5" fill="#38bdf8" opacity="0.18" stroke="#38bdf8" stroke-width="1" stroke-opacity="0.35"><title>${cornerNumStr}角：${group.join('・')}番が近接して通過</title></rect>`);
+      });
+    });
+  }
   for (let i = 0; i < st.nStages; i++) {
     const xx = sx(i), goal = i === st.nStages - 1;
     parts.push(`<line x1="${xx}" y1="${topPad - 6}" x2="${xx}" y2="${H - botPad}" stroke="${goal ? '#38bdf8' : '#22344e'}" stroke-width="${goal ? 2 : 1}" ${goal ? '' : 'stroke-dasharray="3 4"'}/>`);
@@ -4428,10 +4466,29 @@ function parseRaceMarkTable(html, raceDate, raceNo, babaCode) {
     const winner = horses.find(h => h.chakujun === '1');
     if (winner && winner.agari3f && /^\d{2}\.\d$/.test(winner.agari3f)) { autoAgari3f = winner.agari3f; }
   }
+  // ── コーナー通過順位表（cornerPassTable）から近接度グループを抽出（表示専用・大玉③）──
+  // 例: "3,5,2-9,(4,7),(6,8),1" の丸括弧内＝ほぼ同時通過。1着馬毎行の corner（ハイフン区切り順位）とは別データで、
+  // 展開リプレイに「このコーナーでどの馬が団子だったか」の視覚的ヒントを足すためだけに使う。予想ロジックには使わない。
+  const cornerGroups = {}; // { '1': [[4,7],[6,8]], '2': [...], ... }（キー=角番号・値=同時通過グループの馬番配列）
+  const cpTbl = doc.querySelector('table.cornerPassTable');
+  if (cpTbl) {
+    const zh = s => s.replace(/[０-９（），]/g, c => '0123456789(),'['０１２３４５６７８９（），'.indexOf(c)]);
+    for (const tr of cpTbl.querySelectorAll('tr')) {
+      const cells = Array.from(tr.querySelectorAll('th,td')).map(c => c.textContent.replace(/\s+/g,''));
+      if (cells.length < 2) continue;
+      const stageM = zh(cells[0]).match(/^([1-4])/);
+      if (!stageM) continue;
+      const passStr = zh(cells[1]);
+      const groups = [];
+      passStr.replace(/\(([0-9,]+)\)/g, (_, g) => { const nums = g.split(',').map(n => parseInt(n)).filter(n => !isNaN(n)); if (nums.length >= 2) groups.push(nums); return ''; });
+      if (groups.length) cornerGroups[stageM[1]] = groups;
+    }
+  }
   return { raceInfo: { raceDate, raceNo, babaCode, raceName, distance, raceClass, trackCond,
     first3f: savedRace?.first3f||'', agari4f: savedRace?.agari4f||autoAgari4f||'',
     agari3f_race: savedRace?.agari3f_race||autoAgari3f||'',
-    paceType: savedRace?.paceType||'', manualPace: !!(savedRace?.paceType), memo: savedRace?.memo||'' }, horses };
+    paceType: savedRace?.paceType||'', manualPace: !!(savedRace?.paceType), memo: savedRace?.memo||'',
+    cornerGroups }, horses };
 }
 
 function mergeHorseData(oldH, newH) {
@@ -7347,6 +7404,58 @@ const SUPABASE_HEADERS = {
   'apikey': SUPABASE_KEY,
   'Authorization': `Bearer ${SUPABASE_KEY}`,
 };
+
+// ============================================================
+// オッズ推移（keiba_odds_snapshots・表示専用）
+// 馬モーダル・AI予想タブの両方から利用する共通ヘルパー。
+// computeYosoScored等の予想ロジックは一切参照・変更しない独立関数。
+// ============================================================
+const _oddsHistCache = {};  // race_date__race_no をキーに1レース分をまとめて1回だけ取得
+function fetchRaceOddsHistory(raceDateSlash, raceNo) {
+  const key = `${raceDateSlash}__${raceNo}`;
+  if (_oddsHistCache[key]) return _oddsHistCache[key];
+  const url = `${SUPABASE_URL}/rest/v1/keiba_odds_snapshots?select=captured_at,uma_ban,odds,ninki`
+    + `&race_date=eq.${encodeURIComponent(raceDateSlash)}&race_no=eq.${raceNo}&order=captured_at.asc`;
+  const p = fetch(url, { headers: SUPABASE_HEADERS }).then(r => r.ok ? r.json() : []).catch(() => []);
+  _oddsHistCache[key] = p;
+  return p;
+}
+function oddsMoveBadgeHtml(hist) {
+  // 表示専用・事実の記述のみ（門別の逆/恵バッジと同じ「価値判断語なし」方針）
+  if (!hist || hist.length < 2) return '';
+  const first = hist[0].odds, last = hist[hist.length - 1].odds;
+  if (!first || !last) return '';
+  const ratio = last / first;
+  if (ratio <= 0.7) return ` <span class="hm-odds-move down" title="捕捉開始時点から現在までにオッズが${first}→${last}倍に変動">↓変動</span>`;
+  if (ratio >= 1.4) return ` <span class="hm-odds-move up" title="捕捉開始時点から現在までにオッズが${first}→${last}倍に変動">↑変動</span>`;
+  return '';
+}
+async function renderHorseOddsHistory(containerId, raceDateSlash, raceNo, umaBan, horseName) {
+  if (!document.getElementById(containerId)) return;
+  const rows = (await fetchRaceOddsHistory(raceDateSlash, raceNo)).filter(r => String(r.uma_ban) === String(umaBan));
+  if (rows.length < 2) return;  // データ不足時は無表示
+  // モーダルが別馬に切り替わっていたら描画しない（openHorseModalの再入によるレースコンディション対策）
+  const titleEl = document.getElementById('horse-modal-title');
+  if (titleEl && titleEl.textContent !== `🐴 ${horseName} の過去成績`) return;
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = `<div class="hm-odds-box">
+    <div class="hm-odds-hd">📈 オッズ推移（このレース）${oddsMoveBadgeHtml(rows)}</div>
+    <div class="hm-odds-chart-wrap"><canvas id="hm-odds-canvas-${raceNo}-${umaBan}"></canvas></div>
+    <div class="hm-odds-note">単勝オッズの推移を表示しています。購入判断には使用していません。</div>
+  </div>`;
+  ensureChartJs(() => {
+    const canvas = document.getElementById(`hm-odds-canvas-${raceNo}-${umaBan}`);
+    if (!canvas || !window.Chart) return;
+    const labels = rows.map(r => new Date(r.captured_at).toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'}));
+    new Chart(canvas, { type: 'line',
+      data: { labels, datasets: [{ label: `${horseName} 単勝オッズ`, data: rows.map(r => r.odds),
+        borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,.1)', borderWidth: 2, fill: true, tension: .25, pointRadius: 3 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+        scales: { y: { title: { display: true, text: '倍', font: { size: 10 } } }, x: { ticks: { font: { size: 9 }, maxRotation: 45 } } } }
+    });
+  });
+}
 
 // ============================================================
 // Cloudflare Worker プロキシ（書き込み専用）
@@ -11301,6 +11410,7 @@ function openHorseModal(horseName, raceNo) {
   // 順序: 統計カード（好走時馬体重・距離/馬場適性等）→ レース後コメント → 過去成績テーブル
   content.innerHTML = `
     <div id="hm-top-anchor"></div>
+    <div id="hm-odds-history-${raceNo||currentRaceNo}"></div>
     ${statCardsHtml}
     ${commentSectionHtml}
     <div id="horse-history-capture-area" style="background:#fff;border-radius:8px;padding:4px 0">
@@ -11331,6 +11441,14 @@ function openHorseModal(horseName, raceNo) {
         // 公式成績追加後もスクロール位置を先頭に戻す
         if(content) content.scrollTop = 0;
       });
+    }
+  }
+
+  // ── オッズ推移チャート（Supabase keiba_odds_snapshots・表示専用・非同期）──
+  if (curRaceData && curRaceData.raceInfo && curRaceData.raceInfo.raceDate) {
+    const _oddsHh = curRaceData.horses.find(h=>(h.horseName||'').replace(/\s/g,'')===(horseName||'').replace(/\s/g,''));
+    if (_oddsHh && _oddsHh.umaBan) {
+      renderHorseOddsHistory(`hm-odds-history-${raceNo||currentRaceNo}`, curRaceData.raceInfo.raceDate, raceNo||currentRaceNo, _oddsHh.umaBan, horseName);
     }
   }
 }
@@ -17248,7 +17366,7 @@ function kvxRenderDebanV2(raceNo, scored, horseMarkMap, renderDate){
       '<td class="kvx-c-mark"><span class="kvx-mark' + it.markCls + '" aria-hidden="true">' + it.mark + '</span><span class="sr-only">' + it.markLabel + '</span></td>' +
       '<td class="kvx-c-num">' + (it.waku ? '<span class="kvx-wk">枠' + it.waku + '</span>' : '') + '<span class="kvx-waku kvx-num">' + it.uma + '</span></td>' +
       '<td class="kvx-c-name"><div class="kvx-name">' + it.nameEsc + '</div><div class="kvx-sub">高知 / ' + it.jockey + '</div></td>' +
-      '<td class="kvx-num"><span class="kvx-odds">' + it.odds + '</span> <span class="kvx-band">' + it.band + '</span></td>' +
+      '<td class="kvx-num"><span class="kvx-odds">' + it.odds + '</span> <span class="kvx-band">' + it.band + '</span><span class="kvx-odds-move" data-uma="' + it.uma + '"></span></td>' +
       '<td class="kvx-num">' + it.ninki + '</td>' +
       '<td class="kvx-num"><span class="kvx-sc">' + it.ts + '</span></td>' +
       '<td class="kvx-num"><span class="kvx-si">' + it.bs + '</span></td>' +
@@ -17263,7 +17381,7 @@ function kvxRenderDebanV2(raceNo, scored, horseMarkMap, renderDate){
         '<span class="kvx-mark' + it.markCls + '" aria-hidden="true">' + it.mark + '</span><span class="sr-only">' + it.markLabel + '</span>' +
         '<span class="kvx-waku kvx-num">' + it.uma + '</span>' +
         '<span class="kvx-card-name">' + it.nameEsc + '</span>' +
-        '<span class="kvx-card-odds"><span class="kvx-odds">' + it.odds + '</span><span class="kvx-band">' + it.band + '</span></span>' +
+        '<span class="kvx-card-odds"><span class="kvx-odds">' + it.odds + '</span><span class="kvx-band">' + it.band + '</span><span class="kvx-odds-move" data-uma="' + it.uma + '"></span></span>' +
       '</div>' +
       '<div class="kvx-card-meta">' +
         '<span class="kvx-tag"><span class="kvx-k">騎手</span>' + it.jockey + '</span>' +
@@ -17293,6 +17411,23 @@ function kvxRenderDebanV2(raceNo, scored, horseMarkMap, renderDate){
   if (!_kvxWired) { c.addEventListener('click', kvxOnClick); _kvxWired = true; }   // 委譲は1回だけ（表/カード共通）
   kvxPlaceInYosoSlot(raceNo, true);   // 「AI予想」サブタブ内へ配置（出馬表タブと縦並びにしない）
   kvxSetSticky();
+  kvxAttachOddsMoveBadges(raceNo, raceDate, renderKey);   // オッズ急伸/急落バッジ（非同期・表示専用・大玉④）
+}
+// keiba_odds_snapshotsからオッズ変動を取得し、kvx表の該当セルへ非同期でパッチする（表示専用、予想ロジックは不参照）。
+// renderKeyガードで、描画完了までにレースが切り替わっていた場合は書き込まない（kvxRenderDebanV2と同じ設計）。
+async function kvxAttachOddsMoveBadges(raceNo, raceDateSlash, renderKey) {
+  if (!raceDateSlash) return;
+  try {
+    const rows = await fetchRaceOddsHistory(raceDateSlash, raceNo);
+    if (!rows.length) return;
+    if (renderKey !== _kvxKey) return;   // 描画中にレースが切り替わっていたら何もしない
+    const byUma = {};
+    rows.forEach(r => { (byUma[r.uma_ban] = byUma[r.uma_ban] || []).push(r); });
+    document.querySelectorAll('#kvx-deban-v2 .kvx-odds-move[data-uma]').forEach(span => {
+      const hist = byUma[span.dataset.uma];
+      if (hist && hist.length >= 2) span.innerHTML = oddsMoveBadgeHtml(hist);
+    });
+  } catch (e) {}
 }
 function kvxOnClick(e){
   var b = (e.target && e.target.closest) ? e.target.closest('[data-kvx-detail]') : null;
@@ -17464,6 +17599,57 @@ function kvxInitToggle(){
 }
 document.addEventListener('DOMContentLoaded', kvxInitToggle);
 
+// 【新設】レース後の印×着順照合テーブル生成（管理者パネル・閲覧者公開ブロック共通・二重実装防止）。
+// computeYosoScored/MARKS/ソート順には一切触れない、scored/horsesのみの純粋な表示層関数。
+function buildAfterMatchHtml(scored, horses) {
+  const MARKS = ['◎', '○', '▲', '△', '×', '×'];
+  const markColors = { '◎': '#dc2626', '○': '#2563eb', '▲': '#d97706', '△': '#d97706', '×': '#6b7280' };
+  const horseMarkMap = {};
+  scored.forEach((s, idx) => { horseMarkMap[s.horse.horseName] = MARKS[idx] || ''; });
+  const horseScoreMap = {};
+  scored.forEach(s => { horseScoreMap[s.horse.horseName] = s.totalScore; });
+  const sortedByResult = [...horses]
+    .filter(h => h.chakujun && /^\d+$/.test(String(h.chakujun)))
+    .sort((a, b) => parseInt(a.chakujun) - parseInt(b.chakujun));
+  const honmei = scored.find(s => s.totalScore != null);
+  const honmeiChaku = honmei ? parseInt(honmei.horse.chakujun)||999 : 999;
+  const afterRows = sortedByResult.map(h => {
+    const chaku = parseInt(h.chakujun);
+    const mark  = horseMarkMap[h.horseName] || '';
+    const mCol  = markColors[mark] || '#6b7280';
+    const ts    = horseScoreMap[h.horseName];
+    const hit1  = chaku === 1 && mark === '◎';
+    const hit2  = chaku <= 2 && (mark === '◎' || mark === '○');
+    const hit3  = chaku <= 3 && (mark === '◎' || mark === '○' || mark === '▲');
+    const chakuCol = chaku===1?'#dc2626':chaku===2?'#2563eb':chaku===3?'#d97706':'#374151';
+    const bg = hit1 ? 'rgba(220,38,38,.07)' : hit3 ? 'rgba(217,119,6,.05)' : 'transparent';
+    return `<tr style="border-bottom:1px solid #e2e8f0;background:${bg}">
+      <td style="padding:8px;text-align:center;font-size:17px;font-weight:900;color:${chakuCol}">${chaku}着</td>
+      <td style="padding:8px;text-align:center;font-size:20px;font-weight:900;color:${mCol};line-height:1">${mark}</td>
+      <td style="padding:8px;text-align:center;font-size:12px;color:#6b7280">${h.umaBan||'—'}</td>
+      <td style="padding:8px;font-size:13px;font-weight:700;color:#1a1a2e">${escapeHTML(h.horseName||'—')}</td>
+      <td style="padding:8px;font-size:12px;color:#374151">${escapeHTML((h.jockey||'').trim())}</td>
+      <td style="padding:8px;text-align:center;font-size:12px;font-family:monospace;color:#7c3aed">${ts!=null?ts.toFixed(1):'—'}</td>
+      <td style="padding:8px;text-align:center;font-size:11px;font-weight:700;color:${hit1?'#15803d':hit2?'#2563eb':hit3?'#d97706':'#9ca3af'}">${hit1?'◎的中':hit2?'○的中':hit3?'▲的中':'—'}</td>
+    </tr>`;
+  }).join('');
+  return `<table style="width:100%;border-collapse:collapse;font-size:12px;">
+    <thead><tr style="background:#1a1a2e;color:#fff;font-size:11px;">
+      <th style="padding:6px 8px;text-align:center">着順</th>
+      <th style="padding:6px 8px;text-align:center">予想印</th>
+      <th style="padding:6px 4px;text-align:center">馬番</th>
+      <th style="padding:6px 8px;text-align:left">馬名</th>
+      <th style="padding:6px 8px;text-align:left">騎手</th>
+      <th style="padding:6px 8px;text-align:center">予想<br><span style="font-weight:400;font-size:9px">スコア</span></th>
+      <th style="padding:6px 8px;text-align:center">結果</th>
+    </tr></thead>
+    <tbody>${afterRows}</tbody>
+  </table>
+  <div style="margin-top:8px;font-size:11px;color:#374151">
+    ◎本命：<strong>${escapeHTML(honmei?.horse.horseName||'—')}</strong> → <strong style="color:${honmeiChaku===1?'#15803d':'#dc2626'}">${honmeiChaku===1?'1着的中':honmeiChaku+'着（ハズレ）'}</strong>
+  </div>`;
+}
+
 function renderPredictionPanel(raceNo) {
   const _rd0 = (allRacesData[raceNo] && allRacesData[raceNo].raceInfo && allRacesData[raceNo].raceInfo.raceDate) || null;   // 【Phase3-1】render開始時の日付context（displayKey用）
   const container = document.getElementById(`yoso-panel-${raceNo}`);
@@ -17510,47 +17696,8 @@ function renderPredictionPanel(raceNo) {
   let tableHtml = '';
 
   if (_viewMode === 'after' && raceHasResult) {
-    // ── レース後照合モード ──
-    const sortedByResult = [...horses]
-      .filter(h => h.chakujun && /^\d+$/.test(String(h.chakujun)))
-      .sort((a, b) => parseInt(a.chakujun) - parseInt(b.chakujun));
-    const honmei = scored.find(s => s.totalScore != null);
-    const honmeiChaku = honmei ? parseInt(honmei.horse.chakujun)||999 : 999;
-    const afterRows = sortedByResult.map(h => {
-      const chaku = parseInt(h.chakujun);
-      const mark  = horseMarkMap[h.horseName] || '';
-      const mCol  = markColors[mark] || '#6b7280';
-      const ts    = horseScoreMap[h.horseName];
-      const hit1  = chaku === 1 && mark === '◎';
-      const hit2  = chaku <= 2 && (mark === '◎' || mark === '○');
-      const hit3  = chaku <= 3 && (mark === '◎' || mark === '○' || mark === '▲');
-      const chakuCol = chaku===1?'#dc2626':chaku===2?'#2563eb':chaku===3?'#d97706':'#374151';
-      const bg = hit1 ? 'rgba(220,38,38,.07)' : hit3 ? 'rgba(217,119,6,.05)' : 'transparent';
-      return `<tr style="border-bottom:1px solid #e2e8f0;background:${bg}">
-        <td style="padding:8px;text-align:center;font-size:17px;font-weight:900;color:${chakuCol}">${chaku}着</td>
-        <td style="padding:8px;text-align:center;font-size:20px;font-weight:900;color:${mCol};line-height:1">${mark}</td>
-        <td style="padding:8px;text-align:center;font-size:12px;color:#6b7280">${h.umaBan||'—'}</td>
-        <td style="padding:8px;font-size:13px;font-weight:700;color:#1a1a2e">${escapeHTML(h.horseName||'—')}</td>
-        <td style="padding:8px;font-size:12px;color:#374151">${escapeHTML((h.jockey||'').trim())}</td>
-        <td style="padding:8px;text-align:center;font-size:12px;font-family:monospace;color:#7c3aed">${ts!=null?ts.toFixed(1):'—'}</td>
-        <td style="padding:8px;text-align:center;font-size:11px;font-weight:700;color:${hit1?'#15803d':hit2?'#2563eb':hit3?'#d97706':'#9ca3af'}">${hit1?'◎的中':hit2?'○的中':hit3?'▲的中':'—'}</td>
-      </tr>`;
-    }).join('');
-    tableHtml = `<table style="width:100%;border-collapse:collapse;font-size:12px;">
-      <thead><tr style="background:#1a1a2e;color:#fff;font-size:11px;">
-        <th style="padding:6px 8px;text-align:center">着順</th>
-        <th style="padding:6px 8px;text-align:center">予想印</th>
-        <th style="padding:6px 4px;text-align:center">馬番</th>
-        <th style="padding:6px 8px;text-align:left">馬名</th>
-        <th style="padding:6px 8px;text-align:left">騎手</th>
-        <th style="padding:6px 8px;text-align:center">予想<br><span style="font-weight:400;font-size:9px">スコア</span></th>
-        <th style="padding:6px 8px;text-align:center">結果</th>
-      </tr></thead>
-      <tbody>${afterRows}</tbody>
-    </table>
-    <div style="margin-top:8px;font-size:11px;color:#374151">
-      ◎本命：<strong>${escapeHTML(honmei?.horse.horseName||'—')}</strong> → <strong style="color:${honmeiChaku===1?'#15803d':'#dc2626'}">${honmeiChaku===1?'1着的中':honmeiChaku+'着（ハズレ）'}</strong>
-    </div>`;
+    // ── レース後照合モード(生成は共通関数buildAfterMatchHtmlに委譲。管理者パネル・閲覧者公開ブロック共通) ──
+    tableHtml = buildAfterMatchHtml(scored, horses);
   } else if (_displayMode === 'simple') {
     // ── レース前予想モード（基本表示：印・馬番・馬名・騎手・走力SI・総合スコア） ──
     const simpleRows = scored.map((s, idx) => {
@@ -17990,6 +18137,11 @@ function renderPredictionPanel(raceNo) {
       ${pickSummary}
       ${buildEvMonitorHtml(raceNo, container._selCond)}
       ${buildLongshotHtml(scored)}
+      ${raceHasResult ? `
+      <details class="yoso-public-aftermatch">
+        <summary>📊 結果と照合（AIの印は当たったか）</summary>
+        <div class="ya-body">${buildAfterMatchHtml(scored, horses)}</div>
+      </details>` : ''}
       <details class="yoso-explain">
         <summary>📖 スコアはこう計算しています（タップで開く）</summary>
         <div class="ye-body">
