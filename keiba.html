@@ -2298,17 +2298,25 @@ async function renderCyokyo() {
   const jumpButtons = facilities.length > 1 ? `<div class="controls">拠点
     <div class="racetabs">${facilities.map((f, i) => `<button onclick="document.getElementById('${facAnchor(f, i)}').scrollIntoView({behavior:'smooth',block:'start'})" style="width:auto;padding:6px 10px">${esc(f)} <b>${groups.get(f).length}</b>本</button>`).join('')}</div>
   </div>` : '';
+  // 坂路と本馬場は時計の単位（測る距離）が全く違うため、同じ表で数値順に混ぜない（本馬場が坂路の後ろに埋もれて見えなくなる不具合の修正）。
+  const sortFn = (a, b) => sortBy === '1f'
+    ? (a.t1 == null ? 99 : a.t1) - (b.t1 == null ? 99 : b.t1)
+    : (sortVal(a) == null ? 99 : sortVal(a)) - (sortVal(b) == null ? 99 : sortVal(b));
+  const subTableHtml = (label, list) => !list.length ? '' : `
+    <div class="small" style="margin:8px 0 2px;opacity:.75">${esc(label)}（${list.length}本）</div>
+    <table>
+      <tr><th>#</th><th>馬名</th><th>馬齢</th><th>厩舎</th><th>コース</th><th>馬場</th><th>坂4F/本5F</th><th>坂3F/本4F</th><th>坂2F/本3F</th><th>1F</th><th>ラップ(坂路のみ)</th><th>偏差値</th><th>着順</th><th>最終追い/対象R</th><th>脚色</th><th>短評</th></tr>
+      ${list.map((w, i) => rowHtml(w, i)).join('')}
+    </table>`;
   const facilityBlocks = facilities.map((f, i) => {
-    const list = groups.get(f).slice().sort((a, b) => sortBy === '1f'
-      ? (a.t1 == null ? 99 : a.t1) - (b.t1 == null ? 99 : b.t1)
-      : (sortVal(a) == null ? 99 : sortVal(a)) - (sortVal(b) == null ? 99 : sortVal(b)));
+    const grp = groups.get(f);
+    const hanroList = grp.filter((w) => w.hanro).sort(sortFn);
+    const honbaList = grp.filter((w) => w.honba).sort(sortFn);
     const isHome = f === state.track;
     return `<div class="card tablewrap" id="${facAnchor(f, i)}"${isHome ? ' style="border:1px solid var(--accent)"' : ''}>
-      <b${isHome ? ' style="color:var(--accent)"' : ''}>${isHome ? '🏇 ' : ''}${esc(f)}（${cyokyoState.date}）${list.length}本</b>
-      <table>
-        <tr><th>#</th><th>馬名</th><th>馬齢</th><th>厩舎</th><th>コース</th><th>馬場</th><th>坂4F/本5F</th><th>坂3F/本4F</th><th>坂2F/本3F</th><th>1F</th><th>ラップ(坂路のみ)</th><th>偏差値</th><th>着順</th><th>最終追い/対象R</th><th>脚色</th><th>短評</th></tr>
-        ${list.map((w, i) => rowHtml(w, i)).join('')}
-      </table>
+      <b${isHome ? ' style="color:var(--accent)"' : ''}>${isHome ? '🏇 ' : ''}${esc(f)}（${cyokyoState.date}）${grp.length}本</b>
+      ${subTableHtml('坂路', hanroList)}
+      ${subTableHtml('本馬場', honbaList)}
     </div>`;
   }).join('');
 
