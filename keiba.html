@@ -388,6 +388,13 @@ const providers = {
       } catch (e) { /* 次へ */ }
       return providers.local.loadModel();
     },
+    async loadV3Predictions() {
+      try {
+        const rows = await sbGet(`chihou_meta?key=eq.${trackCfg().prefix}_v3_predictions&select=value`);
+        if (rows.length) return rows[0].value;
+      } catch (e) { /* ローカルへ */ }
+      return providers.local.loadV3Predictions();
+    },
     async loadNoken() {
       try {
         const rows = await sbGet(`chihou_meta?key=eq.${trackCfg().prefix}_noken&select=value`);
@@ -448,6 +455,10 @@ const providers = {
     async loadModel() {
       try { return await jsonGet('data/model.json'); } catch (e) { return null; }
     },
+    async loadV3Predictions() {
+      if (state.track !== '門別') return null;
+      try { return await jsonGet('data/monbetsu_v3_predictions.json'); } catch (e) { return null; }
+    },
     async loadNoken() {
       try { return await jsonGet('data/noken.json'); } catch (e) { return null; }
     },
@@ -457,7 +468,8 @@ const providers = {
 
 const state = { provider: null, dates: {}, month: null, date: null, raceId: null, track: '門別',
   sub: 'seiseki', stats: null, model: null, view: 'race', prevRace: null,
-  noken: null, nokenDate: null, nokenSort: 'race', nokenTwoOnly: false, nokenHist: null, nokenByHorse: null };
+  noken: null, nokenDate: null, nokenSort: 'race', nokenTwoOnly: false, nokenHist: null, nokenByHorse: null,
+  v3Predictions: null };
 
 // ============================================================
 // ユーティリティ
@@ -1358,9 +1370,13 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   for (const c of cyokyo) cyoByUma[c.umaban] = c;
   const nouByUma = {};
   for (const n of (nouryoku || [])) nouByUma[n.umaban] = n;
+  const v3Race = state.v3Predictions && state.v3Predictions.races
+    ? state.v3Predictions.races[raceMeta.race_id || state.raceId] : null;
+  const v3ByUma = new Map((v3Race && v3Race.runners || []).map((r) => [+r.umaban, r]));
 
   const hs = entries.map((e) => ({
     e,
+    v3: v3ByUma.get(+e.umaban) || null,
     ai: modelScore(e, history, raceMeta, cyoZFromWorks(cyoByUma[e.umaban])),
     comp: metricOf(history, e.horse_id, runShisu, 'mean'),
     si: metricOf(history, e.horse_id, runSI, 'mean'),
@@ -1390,23 +1406,28 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   };
   const rk = { comp: rankOf('comp'), si: rankOf('si'), ten: rankOf('ten'), cz: rankOf('cz') };
   // AI予想印: 学習モデルのスコア順（モデル未取得や実績なしは総合スコアで代替）
-  const markKey = hs.some((r) => r.ai != null) ? 'ai' : 'score';
+  const hasV3 = hs.length > 0 && hs.every((r) => r.v3 && Number.isFinite(r.v3.win_probability_raw));
+  hs.forEach((r) => { r.v3Score = hasV3 ? r.v3.win_probability_raw : null; });
+  const markKey = hasV3 ? 'v3Score' : (hs.some((r) => r.ai != null) ? 'ai' : 'score');
   const ranked = hs.filter((r) => r[markKey] != null).sort((a, b) => b[markKey] - a[markKey]);
   ranked.forEach((r, i) => { r.mark = MARKS[i] || ''; });
   const aiVals = hs.map((r) => r.ai).filter((v) => v != null).sort((a, b) => b - a);
   const zAi = zscoresJs(hs.map((r) => r.ai));   // 表示用に偏差値化
-  hs.forEach((r, i) => { r.aiDev = zAi[i] != null ? 50 + zAi[i] * 10 : null; });
+  hs.forEach((r, i) => { r.aiDev = hasV3 ? r.v3.win_probability_raw * 100 : (zAi[i] != null ? 50 + zAi[i] * 10 : null); });
   // 勝率＝レース内で標準化したAIスコア(zAi)のソフトマックス（T=0.75で較正：◎平均勝率≒実測39.8%・スケール不変）
   const zMax = Math.max(...zAi.filter((v) => v != null), 0);
   const exps = zAi.map((z) => (z != null ? Math.exp((z - zMax) / 0.75) : 0));
   const expSum = exps.reduce((s, v) => s + v, 0) || 1;
-  hs.forEach((r, i) => { r.winP = zAi[i] != null ? exps[i] / expSum : null; });
+  hs.forEach((r, i) => {
+    r.winP = hasV3 ? Number(r.v3.win_probability.mid) : (zAi[i] != null ? exps[i] / expSum : null);
+    r.top3P = hasV3 ? Number(r.v3.top3_probability) : null;
+  });
   const siTop = hs.filter((r) => r.si != null).sort((a, b) => b.si - a.si)[0];
   for (const r of hs) r.myomi = siTop && r === siTop && r.e.pop != null && r.e.pop >= 4;
 
   // 旧v2の影運用モニター。利益保証や購入指示には使わず、v3の不変
   // 予想レシート＋発売時点オッズ＋公式払戻が揃うまで候補表示に限定する。
-  const evTop = markKey === 'ai' && ranked.length ? ranked[0] : null;
+  const evTop = !hasV3 && markKey === 'ai' && ranked.length ? ranked[0] : null;
   state.evWatch = (evTop && evTop.winP != null)
     ? { rid: raceMeta.race_id || state.raceId, um: evTop.e.umaban, name: evTop.e.horse_name, p: evTop.winP }
     : null;
@@ -1437,6 +1458,7 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
       <td class="l stickyname"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a>${todayBlinkerBadge(e, history)}${kakuBadge(e)}</td>
       <td class="num ${r.mark === '◎' ? 'best' : ''}">${r.aiDev != null ? r.aiDev.toFixed(1) : '-'}</td>
       <td class="num ${r.mark === '◎' ? 'best' : ''}">${r.winP != null ? (r.winP * 100).toFixed(0) + '%' : '-'}</td>
+      <td class="num">${r.top3P != null ? (r.top3P * 100).toFixed(0) + '%' : '-'}</td>
       <td class="num">${r.score != null ? (50 + r.score * 10).toFixed(1) : '-'}</td>
       <td class="num">${r.si != null ? r.si.toFixed(0) : '-'}</td>
       <td class="num">${r.cz != null ? r.cz.toFixed(1) : '-'}</td>
@@ -1452,11 +1474,13 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   <div id="evMonitor" class="note" hidden></div>
   <div class="card"><div class="tablewrap">
     <table>
-      <tr><th>AI印</th><th>枠</th><th>番</th><th class="stickyname">馬名</th><th>AI予測</th><th>勝率</th><th>総合</th><th>SI</th><th>調教</th><th>単勝(人気)</th><th>妙味</th><th>根拠</th></tr>
+      <tr><th>AI印</th><th>枠</th><th>番</th><th class="stickyname">馬名</th><th>${hasV3 ? 'v3能力%' : 'AI予測'}</th><th>勝率</th><th>3着内</th><th>総合</th><th>SI</th><th>調教</th><th>単勝(人気)</th><th>妙味</th><th>根拠</th></tr>
       ${rows}
     </table>
   </div>
-  <div class="legend"><b>現在のAI印</b>＝旧v2リッジモデルの参考順位です。公開値は単一70/30ホールドアウト由来で、発売時点オッズを固定した収益検証ではありません。<b>参考勝率</b>＝旧v2スコアのソフトマックス値であり、v3のwalk-forward較正区間とは別物です。総合＝指数/SI/調教/テンの加重。🧪表示は影運用の記録対象で、購入指示や利益保証ではありません。</div></div>`;
+  <div class="legend">${hasV3
+    ? `<b>v3 AI印</b>＝過去結果だけで固定した展開混合・着順分布モデル。勝率はwalk-forward較正中央値、3着内率は同じ着順分布から算出。モデルhash: ${esc((state.v3Predictions.model_hash || '').slice(0, 12))}…。実馬券購入は無効で、利益保証ではありません。`
+    : `<b>現在のAI印</b>＝旧v2リッジモデルの参考順位です。公開値は単一70/30ホールドアウト由来で、発売時点オッズを固定した収益検証ではありません。<b>参考勝率</b>＝旧v2スコアのソフトマックス値であり、v3のwalk-forward較正区間とは別物です。`} 総合＝指数/SI/調教/テンの加重。</div></div>`;
 }
 
 // レース単位の調教ビュー（各馬の最新坂路追切・ラップ判定・調教偏差順）
@@ -2800,7 +2824,7 @@ function renderTrackSwitch() {
 async function selectTrack(track) {
   if (track === state.track || !TRACKS[track]) return;
   state.track = track;
-  state.stats = null; state.model = null; state.dates = {}; state.raceId = null; state.prevRace = null;
+  state.stats = null; state.model = null; state.v3Predictions = null; state.dates = {}; state.raceId = null; state.prevRace = null;
   state.noken = null; state.nokenByHorse = null;   // 能検は門別専用＝場切替でクリア
   cyokyoState.data = null; cyokyoState.date = null; cyokyoState.year = null; cyokyoState.byYear = {};
   cyokyoState.years = []; cyokyoState.base = null; cyokyoState.baseHonba = null; cyokyoState.local = null;   // 調教データも場ごとに読み直す
@@ -2814,6 +2838,7 @@ async function selectTrack(track) {
   state.statsPromise = Promise.all([
     state.provider.loadStats().then((s) => { state.stats = s; }),
     state.provider.loadModel().then((mo) => { state.model = mo; }),
+    state.provider.loadV3Predictions().then((v) => { state.v3Predictions = v; }),
     state.provider.loadPoints().then((p) => { state.kakuPoints = p; }),
   ]);
   const ds = Object.keys(state.dates).sort().reverse();
@@ -2861,6 +2886,7 @@ async function init() {
     state.provider.loadPoints().then((p) => { state.kakuPoints = p; }),
     state.provider.loadStats().then((s) => { state.stats = s; }),
     state.provider.loadModel().then((mo) => { state.model = mo; }),
+    state.provider.loadV3Predictions().then((v) => { state.v3Predictions = v; }),
   ]);
 
   $('monthSel').addEventListener('change', (e) => {
