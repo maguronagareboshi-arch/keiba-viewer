@@ -5753,6 +5753,10 @@ function _updateFinishTime(raceNo) {
  */
 function backfillFirst3fFrom1400m() {
   const lsData = lsRead();
+  // 従来はローカルIDBのみ書き込みで、共有DB(Supabase)へは管理者が該当レースを開いて「保存」を
+  // 押すまで反映されなかった（各セッションでは毎回正しく再計算されるが、それが共有DBに永続化される
+  // 保証がなかった）。管理者セッションに限り、計算結果をSupabaseへも自動反映する（2026-07-15追加）。
+  const canWriteServer = typeof isAdminMode === 'function' && isAdminMode();
   // 勝ち馬タイムを一括マップ化（レースごとの全件スキャンを避ける）
   const winTime = {};
   for (const [hk, hv] of Object.entries(lsData)) {
@@ -5795,6 +5799,8 @@ function backfillFirst3fFrom1400m() {
     first3f = +first3f.toFixed(1);
     if (first3f < 33 || first3f > 46) continue;         // 異常値ガード
     lsWrite(k, { ...v, first3f: String(first3f) });
+    // 手動保存を待たずSupabaseへも反映（管理者のみ・ベストエフォート。失敗してもローカル表示には影響しない）
+    if (canWriteServer) apiUpsert('keiba_races', k, { first3f: String(first3f) });
     count[dist]++;
   }
   const total = count[1300] + count[1400] + count[1600];
