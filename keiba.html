@@ -269,10 +269,10 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 // ============================================================
 const TRACKS = {
   '門別': { prefix: 'monbetsu', baba: '36', slug: 'monbetsu', noken: true, sim: true },
-  '大井': { prefix: 'ooi', baba: '44', slug: 'ooi', noken: true, sim: true },
-  '船橋': { prefix: 'funabashi', baba: '43', slug: 'funabashi' },
-  '川崎': { prefix: 'kawasaki', baba: '45', slug: 'kawasaki' },
-  '浦和': { prefix: 'urawa', baba: '42', slug: 'urawa' },
+  '大井': { prefix: 'ooi', baba: '20', slug: 'ooi', noken: true, sim: true },
+  '船橋': { prefix: 'funabashi', baba: '19', slug: 'funabashi' },
+  '川崎': { prefix: 'kawasaki', baba: '21', slug: 'kawasaki' },
+  '浦和': { prefix: 'urawa', baba: '18', slug: 'urawa' },
 };
 const trackCfg = () => TRACKS[state.track] || TRACKS['門別'];
 
@@ -672,7 +672,7 @@ function modelScore(e, history, race, cyoZ) {
 
 // ◎信頼度：レース内で予測1位が2位をどれだけ引き離しているか（レース内stdで正規化）。
 // しきい値は過去4年の時系列5分割CVで検証（高信頼>低信頼＝5/5fold）。複勝率 S81%/A73%/B65%/C62%。
-const CONF_TIERS = { S: '鉄板', A: '有力', B: '標準', C: '波乱' };
+const CONF_TIERS = { S: '順位差大', A: '順位差中', B: '順位差小', C: '接戦' };
 function aiConfidence(scores) {
   const v = scores.filter((x) => x != null);
   if (v.length < 2) return null;
@@ -1346,7 +1346,7 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
       ${rows}
     </table>
   </div>
-  <div class="legend"><span class="sw b"></span> 指数上位3頭（走破50%＋テン25%＋上がり25%、直近5走平均）　<span class="sw f"></span> テン偏差トップ（直近5走最良）　<span class="sw a"></span> 調教偏差トップ（直近追切の坂路3F最速を全期間分布で換算・50が平均）<br>◎の下のバッジ＝AI信頼度（予測1位と2位のスコア差・過去4年CV検証済）：<span class="badge conf-S">鉄板</span>複勝81%　<span class="badge conf-A">有力</span>73%　<span class="badge conf-B">標準</span>65%　<span class="badge conf-C">波乱</span>62%<br>近走の${TRIP_LEGEND}<br>${EQUIP_LEGEND}</div></div>`;
+  <div class="legend"><span class="sw b"></span> 指数上位3頭（走破50%＋テン25%＋上がり25%、直近5走平均）　<span class="sw f"></span> テン偏差トップ（直近5走最良）　<span class="sw a"></span> 調教偏差トップ（直近追切の坂路3F最速を全期間分布で換算・50が平均）<br>◎の下のバッジ＝旧v2の順位差による参考区分。固定的な的中率や利益を保証するものではなく、v3の将来影運用が完了するまで購入判断には使用しません。<br>近走の${TRIP_LEGEND}<br>${EQUIP_LEGEND}</div></div>`;
 }
 
 // ---- 予想サブビュー（A3: 自動印＋根拠＋妙味ゾーン） ----
@@ -1404,7 +1404,8 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   const siTop = hs.filter((r) => r.si != null).sort((a, b) => b.si - a.si)[0];
   for (const r of hs) r.myomi = siTop && r === siTop && r.e.pop != null && r.e.pop >= 4;
 
-  // EVモニター用に保存: AI◎×単勝5-10倍×EV≥1.5（全年WF検証 2024:130%/2025:112%/2026:100%・計119.7%）
+  // 旧v2の影運用モニター。利益保証や購入指示には使わず、v3の不変
+  // 予想レシート＋発売時点オッズ＋公式払戻が揃うまで候補表示に限定する。
   const evTop = markKey === 'ai' && ranked.length ? ranked[0] : null;
   state.evWatch = (evTop && evTop.winP != null)
     ? { rid: raceMeta.race_id || state.raceId, um: evTop.e.umaban, name: evTop.e.horse_name, p: evTop.winP }
@@ -1455,7 +1456,7 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
       ${rows}
     </table>
   </div>
-  <div class="legend"><b>AI印・AI予測</b>＝学習モデル（リッジ回帰・v2馬場差補正）の勝ちやすさ。検証（後半908R）で◎勝率40.6%・複勝率73.5%（従来指数35.8%・67.2%を上回る）。指数も馬場差・斤量・ペース補正済み。<b>勝率</b>＝スコアから推定した各馬の単勝的中確率（過去4年で較正・全馬合計100%）。総合＝指数/SI/調教/テンの加重。💰＝スピード指数1位×4番人気以下（回収率108%）。</div></div>`;
+  <div class="legend"><b>現在のAI印</b>＝旧v2リッジモデルの参考順位です。公開値は単一70/30ホールドアウト由来で、発売時点オッズを固定した収益検証ではありません。<b>参考勝率</b>＝旧v2スコアのソフトマックス値であり、v3のwalk-forward較正区間とは別物です。総合＝指数/SI/調教/テンの加重。🧪表示は影運用の記録対象で、購入指示や利益保証ではありません。</div></div>`;
 }
 
 // レース単位の調教ビュー（各馬の最新坂路追切・ラップ判定・調教偏差順）
@@ -1613,8 +1614,7 @@ function applyLiveOdds(live) {
   updateEvMonitor(live.odds);
 }
 
-// EVモニター: AI◎×単勝5-10倍×EV≥1.5 のみ買い（全年ウォークフォワードで
-// 2024:130.0% / 2025:112.1% / 2026:100.0%・計195賭119.7%。t=1.07なので前向き検証中の扱い）
+// 旧v2の影運用モニター。回収率の点推定だけでは購入ルールを解放しない。
 function updateEvMonitor(oddsMap) {
   const el = $('evMonitor');
   const w = state.evWatch;
@@ -1626,8 +1626,8 @@ function updateEvMonitor(oddsMap) {
   el.hidden = false;
   el.className = hit ? 'note ev-hit' : 'note ev-idle';
   el.innerHTML = hit
-    ? `💰 <b>EV買いシグナル</b>: ◎${w.um}番 ${esc(w.name)}　単勝${o}倍 × AI勝率${(w.p * 100).toFixed(0)}% = <b>EV ${ev.toFixed(2)}</b>　（検証済ゾーン: 5-10倍×EV≥1.5・全年回収100%超）`
-    : `EV監視: ◎${w.um}番 ${esc(w.name)}　現在${o}倍 EV ${ev.toFixed(2)}　→ 買い条件は単勝5-10倍×EV≥1.5${(o < 5 || o >= 10) ? '（オッズ帯外）' : '（EV不足）'}`;
+    ? `🧪 <b>影運用の検証候補</b>: ◎${w.um}番 ${esc(w.name)}　単勝${o}倍 × v2参考勝率${(w.p * 100).toFixed(0)}% = 参考EV ${ev.toFixed(2)}　（購入指示ではありません）`
+    : `影運用監視: ◎${w.um}番 ${esc(w.name)}　現在${o}倍・参考EV ${ev.toFixed(2)}　${(o < 5 || o >= 10) ? '（事前登録帯外）' : '（事前登録閾値未満）'}`;
 }
 
 function recordOdds(rid, live) {
@@ -1645,15 +1645,15 @@ function recordOdds(rid, live) {
 // ---- オッズ推移の永続化（リロードで消える問題の対策） ----
 // localStorage（このブラウザで見ていた分）＋ Supabase記録（5分おきの自動スナップショット）を
 // マージして復元する。日付が変わったら自動破棄。
-const ODDS_STORE_KEY = 'mb_odds_hist_v1';
+const oddsStoreKey = () => `chihou_odds_hist_v2_${trackCfg().prefix}`;
 function saveOddsHist() {
   try {
-    if (state.oddsDate) localStorage.setItem(ODDS_STORE_KEY, JSON.stringify({ d: state.oddsDate, h: state.oddsHist || {} }));
+    if (state.oddsDate) localStorage.setItem(oddsStoreKey(), JSON.stringify({ d: state.oddsDate, h: state.oddsHist || {} }));
   } catch (e) { /* 容量超過等は無視（表示は生きる） */ }
 }
 function loadOddsHist(rd) {
   try {
-    const j = JSON.parse(localStorage.getItem(ODDS_STORE_KEY) || 'null');
+    const j = JSON.parse(localStorage.getItem(oddsStoreKey()) || 'null');
     if (j && j.d === rd && j.h) return j.h;
   } catch (e) { /* 壊れていたら無視 */ }
   return null;
@@ -1675,6 +1675,8 @@ function mergeOddsSeries(a, b) {
 // 記録済みスナップショット（monbetsu_odds・5分おき自動記録）を取り込む。
 // 発走間際に開いても・リロードしても、朝→現在の流れが復元される。未記録なら無害にスキップ。
 async function seedRecordedOdds(rd, raceNo, hist) {
+  // 旧テーブルには場キーが無い。南関データを門別の履歴として誤結合しない。
+  if (state.track !== '門別') return;
   try {
     const rows = await sbGet(`monbetsu_odds?race_date=eq.${rd}&race_no=eq.${raceNo}&order=captured_at.asc&select=uma_ban,odds,captured_at`);
     const srv = {};
@@ -2113,6 +2115,42 @@ function analysisHtml(st) {
       <div class="legend">列は1本目(スタート直後)〜最終本(ゴール前)の区間タイム秒。距離が200mの倍数でない場合、1本目だけ200m未満の端数区間になります。<b>上のクラスほど全区間で一貫して速い</b>傾向（絶対的な速さの差）。ただし前傾/後傾＝ペースの流れ方自体はクラスでほぼ変わらないため（検証済）、この差はモデルの予想指数には使わず<b>クラスごとの流れの目安</b>として表示のみ。n=15未満のクラスは非表示。</div>`;
   }
 
+  // 前半タイムと成績（距離×クラス別・表示専用＝予想指数には使っていない）
+  const pzc = st.pace_zone_class || {};
+  let paceZoneHtml = '';
+  if (Object.keys(pzc).length) {
+    const byDist2 = {};
+    for (const key in pzc) {
+      const us = key.lastIndexOf('_');
+      const dStr = key.slice(0, us), cls = key.slice(us + 1);
+      (byDist2[dStr] = byDist2[dStr] || {})[cls] = pzc[key];
+    }
+    const dists2 = Object.keys(byDist2).map(Number).sort((a, b) => a - b);
+    const clsOrder3 = ['2歳', '3歳', 'C4', 'C3', 'C2', 'C1', 'B', 'A', 'OP'];
+    const placeColor = (p) => p >= 0.4 ? 'var(--accent)' : p < 0.2 ? 'var(--sub)' : 'inherit';
+    const tables2 = dists2.map((d) => {
+      const clsPresent = clsOrder3.filter((c) => byDist2[d][c]);
+      if (!clsPresent.length) return '';
+      const allTimes = [...new Set(clsPresent.flatMap((c) => byDist2[d][c].zones.map((z) => z.t)))].sort((a, b) => a - b);
+      const header = allTimes.map((t) => `<th>${t.toFixed(1)}</th>`).join('');
+      const rows = clsPresent.map((c) => {
+        const e = byDist2[d][c];
+        const byT = new Map(e.zones.map((z) => [z.t, z]));
+        const cells = allTimes.map((t) => {
+          const z = byT.get(t);
+          if (!z) return '<td class="num"></td>';
+          return `<td class="num" style="color:${placeColor(z.place)}" title="勝率${(z.win * 100).toFixed(1)}%・n${z.n}">${(z.place * 100).toFixed(0)}%</td>`;
+        }).join('');
+        return `<tr><td><b>${esc(c)}</b> <span class="small" style="opacity:.6">n${e.n}</span></td>${cells}</tr>`;
+      }).join('');
+      return `<div><h4 class="sec" style="margin:12px 0 4px;font-size:14px">${d}m</h4>
+        <div class="card tablewrap"><table><tr><th>クラス</th>${header}</tr>${rows}</table></div></div>`;
+    }).join('');
+    paceZoneHtml = `<h3 class="sec">前半タイムと成績（距離×クラス別・複勝率・表示専用）</h3>
+      <div class="grid2">${tables2}</div>
+      <div class="legend">列は前半（距離1200m以上は前半3F・1200m未満は距離-600mの前半タイム）の実測タイム(秒・0.5秒刻み)。セルは<b>その前半タイム帯で走った馬の複勝率</b>（カーソルを乗せると勝率とサンプル数）。<span style="color:var(--accent)">水色</span>=複勝率40%以上　<span style="color:var(--sub)">グレー</span>=複勝率20%未満。前半が速い馬は総じて能力も高く人気にもなっているため、これは「儲かる隙間」ではなく<b>このクラス・距離では前半何秒がどのくらいの立ち位置か</b>を読むための目安表です（予想指数には使っていません）。組み合わせ全体でn=150未満・各マスn=15未満は非表示。</div>`;
+  }
+
   // 騎手・厩舎（勝率順）
   const rankTable = (obj, label) => {
     const rows = Object.entries(obj).sort((a, b) => b[1].win_rate - a[1].win_rate).slice(0, 30)
@@ -2137,6 +2175,7 @@ function analysisHtml(st) {
   ${btByClass}
   ${kobaMatrix}
   ${lapClassHtml}
+  ${paceZoneHtml}
   <div class="grid2">${rankTable(st.jockeys, '騎手')}${rankTable(st.trainers, '厩舎')}</div>`;
 }
 
