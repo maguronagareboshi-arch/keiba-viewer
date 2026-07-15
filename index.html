@@ -2984,14 +2984,31 @@ function import3FBulk() {
   ov.innerHTML = `<div class="f3imp-modal">
     <h3>📥 前半3F 一括取込</h3>
     <textarea id="f3imp-text" placeholder="レース\t馬番\t馬名\t前半3F\n1\t7\t(馬名省略可)\t38.9\n1\t9\t\t39.1\n…\n※タブ・カンマ区切りどちらも可。ヘッダ行や空の値は自動スキップ"></textarea>
-    <div class="f3imp-note">計測アプリの出力(kochi_3f_tsv_日付.txt)や「前半3F出力」形式をそのまま貼り付けできます。<br>反映後、<b>保存ボタンを押すまで確定されません</b>。既に手入力済みの値は上書きされます(空の値では上書きしません)。</div>
+    <div class="f3imp-note">計測アプリの出力(kochi_3f_tsv_日付.txt)や「前半3F出力」形式をそのまま貼り付けできます。表示中の日付分がデプロイ済みなら「自動取得」で貼り付け作業を省略できます。<br>反映後、<b>保存ボタンを押すまで確定されません</b>。既に手入力済みの値は上書きされます(空の値では上書きしません)。</div>
     <div class="f3imp-btns">
       <button onclick="document.getElementById('f3imp-overlay').remove()">キャンセル</button>
+      <button onclick="fetchAndImport3FFromDeploy()" title="サイトに同梱された当日分のTSVを取得してここに貼り付けます">📥 自動取得</button>
       <button class="pri" onclick="applyImport3F()">反映する</button>
     </div>
   </div>`;
   document.body.appendChild(ov);
   document.getElementById('f3imp-text').focus();
+}
+// 計測アプリの出力(kochi_3f_tsv_YYYYMMDD.txt)は、keiba-deployリポジトリのdata/3f/配下に
+// 通常のサイトデプロイと一緒にコミット・pushすることで配信する(新規クラウド基盤・書込トークン不要)。
+// 表示中のレース日(currentDate、'YYYY/MM/DD')に対応するファイルを同一オリジンから取得するだけ。
+async function fetchAndImport3FFromDeploy() {
+  if (!isAdminMode()) { alert('この機能は管理者のみ利用できます。'); return; }
+  if (typeof currentDate === 'undefined' || !currentDate) { alert('レースを開いてから実行してください'); return; }
+  const dateStr = currentDate.replace(/\//g, '');
+  const url = `data/3f/kochi_3f_tsv_${dateStr}.txt`;
+  let res;
+  try { res = await fetch(url); }
+  catch (e) { alert('取得に失敗しました: ' + e.message); return; }
+  if (!res.ok) { alert(`この日のTSVはまだサイトに同梱されていません（${url}）。\n計測アプリの出力を貼り付けるか、keiba-deployへ配置してデプロイしてください。`); return; }
+  const txt = await res.text();
+  const ta = document.getElementById('f3imp-text');
+  if (ta) ta.value = txt;
 }
 function applyImport3F() {
   const txt = (document.getElementById('f3imp-text')?.value || '').trim();
@@ -3141,6 +3158,8 @@ function openRaceReplay(raceNo) {
   document.querySelectorAll('.rp-spd').forEach(b => b.classList.toggle('active', b.dataset.s === '1'));
   rpRestart();
   setTimeout(rpTogglePlay, 350);
+  // 実測タイムライン（あれば）で精度を底上げ。無ければ従来のコーナー通過順表示のまま。
+  if (data.raceInfo && data.raceInfo.raceDate) _rpTryUpgradeToTimed(raceNo, data.raceInfo.raceDate);
 }
 function _rpBuildSvg() {
   const st = window._rp, svg = document.getElementById('rp-svg');
@@ -3153,7 +3172,8 @@ function _rpBuildSvg() {
   for (let r = 1; r <= st.N; r++) parts.push(`<line x1="${x0}" y1="${y(r)}" x2="${x1}" y2="${y(r)}" stroke="#16273b" stroke-width="1"/>`);
   // ── コーナー通過の近接度（corners_*.json由来のcornerPassTableから抽出・表示専用）──
   // 「馬群密集度」ではなく「このコーナーで隣接して通過した馬同士」の目安。予想ロジックには影響しない。
-  if (st.cornerGroups) {
+  // 実測タイム駆動モード(st.timed)では区間が角番号と対応しないため対象外。
+  if (st.cornerGroups && !st.timed) {
     const umaRankAt = (uma, i) => { const rr = st.runners.find(r => r.uma === uma); return rr ? rr.ranks[i] : null; };
     Object.keys(st.cornerGroups).forEach(cornerNumStr => {
       const stageIdx = parseInt(cornerNumStr) - 1;
@@ -3170,7 +3190,8 @@ function _rpBuildSvg() {
   for (let i = 0; i < st.nStages; i++) {
     const xx = sx(i), goal = i === st.nStages - 1;
     parts.push(`<line x1="${xx}" y1="${topPad - 6}" x2="${xx}" y2="${H - botPad}" stroke="${goal ? '#38bdf8' : '#22344e'}" stroke-width="${goal ? 2 : 1}" ${goal ? '' : 'stroke-dasharray="3 4"'}/>`);
-    parts.push(`<text x="${xx}" y="${topPad - 12}" fill="#9fb2c8" font-size="10" font-weight="700" text-anchor="middle">${goal ? 'ゴール' : (i + 1) + '角'}</text>`);
+    const _label = st.stageLabels ? st.stageLabels[i] : (goal ? 'ゴール' : (i + 1) + '角');
+    parts.push(`<text x="${xx}" y="${topPad - 12}" fill="#9fb2c8" font-size="10" font-weight="700" text-anchor="middle">${_label}</text>`);
   }
   st.runners.forEach(rr => {
     const pts = []; for (let i = 0; i < st.nStages; i++) pts.push(sx(i) + ',' + y(rr.ranks[i]));
@@ -3188,9 +3209,81 @@ function _rpBuildLegend() {
   el.innerHTML = st.runners.map(rr =>
     `<span class="rp-leg-item"><span class="rp-leg-chip" style="background:${_WAKU_BG[rr.waku]};color:${_WAKU_FG[rr.waku]}">${rr.uma}</span>${rr.name}<span class="rp-leg-rank">${rr.chaku ? rr.chaku + '着' : '—'}</span></span>`).join('');
 }
+
+// ── 展開リプレイの実測タイム駆動化（大玉③①・表示専用）──
+// 01_高知映像計測の計測アプリ出力(tool_json/kochi_{DATE}_R{n}.json)を、通常のサイトデプロイと一緒に
+// keiba-deploy/data/replay/へ同梱配信する（新規クラウド基盤・書込トークン不要。前半3F自動取込と同じ方式）。
+// データが無い/不完全なレースは既存のコーナー通過順(推定)モードのまま・何も変わらない。
+const _replayTimelineCache = {};
+function fetchRaceReplayTimeline(raceDateSlash, raceNo) {
+  const dateStr = String(raceDateSlash).replace(/\//g, '');
+  const key = dateStr + '_' + raceNo;
+  if (_replayTimelineCache[key] !== undefined) return _replayTimelineCache[key];
+  const url = `data/replay/kochi_${dateStr}_R${raceNo}.json`;
+  const p = fetch(url).then(r => r.ok ? r.json() : null).catch(() => null);
+  _replayTimelineCache[key] = p;
+  return p;
+}
+// timeline(meta.markers=距離点配列・records[距離][馬番]={t:絶対秒})から、各走者の実測ランク列と
+// 区間ごとの実経過時間比率(segShare・再生ペースに反映)を組み立てる。出走馬全員が最終計測点に無ければ不採用(null)。
+function _rpBuildTimedState(timeline, runners, N) {
+  const meta = timeline && timeline.meta;
+  const markers = meta && meta.markers;
+  if (!Array.isArray(markers) || markers.length < 2) return null;
+  const recAt = m => timeline.records && timeline.records[String(m)];
+  const finalRec = recAt(markers[markers.length - 1]);
+  if (!finalRec || !runners.every(r => finalRec[String(r.uma)] != null)) return null;  // カバレッジ不足→不採用
+  const ranksByMarker = markers.map(m => {
+    const rec = recAt(m) || {};
+    const arr = Object.keys(rec).map(k => ({ uma: parseInt(k), t: rec[k].t })).filter(o => !isNaN(o.uma) && typeof o.t === 'number');
+    arr.sort((a, b) => a.t - b.t);
+    const rankMap = {}; arr.forEach((o, idx) => { rankMap[o.uma] = idx + 1; });
+    return rankMap;
+  });
+  const ranksByUma = {};
+  runners.forEach(r => {
+    const arr = ranksByMarker.map(rm => rm[r.uma] != null ? rm[r.uma] : null);
+    for (let i = 0; i < arr.length; i++) if (arr[i] == null) arr[i] = i > 0 ? arr[i - 1] : N;
+    ranksByUma[r.uma] = arr;
+  });
+  // 区間ごとの実経過時間（先頭馬到達時刻の差）→ segShareへ正規化（再生時、この比率で区間の長さを決める）
+  const segDur = [];
+  for (let i = 0; i < markers.length - 1; i++) {
+    const t1s = Object.values(recAt(markers[i]) || {}).map(o => o.t).filter(t => typeof t === 'number');
+    const t2s = Object.values(recAt(markers[i + 1]) || {}).map(o => o.t).filter(t => typeof t === 'number');
+    segDur.push((!t1s.length || !t2s.length) ? 1 : Math.max(0.05, Math.min(...t2s) - Math.min(...t1s)));
+  }
+  const totalDur = segDur.reduce((s, v) => s + v, 0) || segDur.length;
+  const segShare = segDur.map(v => v / totalDur);
+  const stageLabels = markers.map((m, i) => i === markers.length - 1 ? 'ゴール' : (m === 0 ? '発走' : m + 'm'));
+  return { nStages: markers.length, segN: markers.length - 1, segShare, stageLabels, ranksByUma };
+}
+// 開いた直後は従来通りの表示（即座に開ける）で、実測データが取得できればその場でランク・ペースを底上げする。
+async function _rpTryUpgradeToTimed(raceNo, raceDateSlash) {
+  const timeline = await fetchRaceReplayTimeline(raceDateSlash, raceNo);
+  const st = window._rp;
+  if (!timeline || !st || st.raceNo !== raceNo) return;  // データ無し／別レースへ切替済み
+  const upgrade = _rpBuildTimedState(timeline, st.runners, st.N);
+  if (!upgrade) return;  // カバレッジ不足等で不採用（既存表示を維持）
+  st.nStages = upgrade.nStages; st.segN = upgrade.segN; st.segShare = upgrade.segShare;
+  st.stageLabels = upgrade.stageLabels; st.timed = true;
+  st.runners.forEach(r => { r.ranks = upgrade.ranksByUma[r.uma]; });
+  const wasPlaying = st.playing;
+  if (wasPlaying) { st.playing = false; if (st.raf) cancelAnimationFrame(st.raf); }
+  _rpBuildSvg();
+  if (wasPlaying) rpTogglePlay(); else rpRender();
+}
 function rpRender() {
   const st = window._rp; if (!st || !st.dims) return; const d = st.dims;
-  const sf = st.progress * (st.nStages - 1); const i = Math.min(Math.floor(sf), st.nStages - 2); const frac = sf - i;
+  let i, frac;
+  if (st.segShare) {
+    // 実測タイム駆動：区間ごとの実経過時間比率(segShare)に沿って非等速に進める
+    let acc = 0; i = 0;
+    for (; i < st.segShare.length - 1; i++) { if (st.progress < acc + st.segShare[i]) break; acc += st.segShare[i]; }
+    frac = st.segShare[i] > 0 ? Math.min(1, Math.max(0, (st.progress - acc) / st.segShare[i])) : 0;
+  } else {
+    const sf = st.progress * (st.nStages - 1); i = Math.min(Math.floor(sf), st.nStages - 2); frac = sf - i;
+  }
   const y = rank => d.topPad + (rank - 0.5) * d.rowH;
   const px = d.x0 + (d.x1 - d.x0) * st.progress;
   st.runners.forEach(rr => {
