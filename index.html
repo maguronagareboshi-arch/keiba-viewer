@@ -7907,17 +7907,25 @@ async function _idbBulkPut(obj) {
 const _IDB_PAGE = 1000;          // 1ページあたり取得件数
 let _bgLoadActive = false;       // 背景読み込み中フラグ
 
-/** Supabase の1ページ分を取得（高知のみ・日付降順） */
-async function _fetchKochiPage(table, offset, limit = _IDB_PAGE) {
-  try {
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/${table}?select=*&baba_code=eq.31&order=race_date.desc&limit=${limit}&offset=${offset}`,
-      { headers: SUPABASE_HEADERS }
-    );
-    if (!res.ok) return null;
-    const rows = await res.json();
-    return Array.isArray(rows) ? rows : null;
-  } catch(e) { return null; }
+/** Supabase の1ページ分を取得（高知のみ・日付降順）。
+ *  深いoffsetの並列取得はサーバー側で一時的な500を返すことがある（2026-07-15実測: 全157ページ中
+ *  offset=22000/24000で500→旧実装はこれを「データ終端」と誤認し2024年以前の全馬データを取り漏らしていた）。
+ *  一時エラーはバックオフ付きでリトライする。全リトライ失敗時のみnull（＝呼び出し元で「失敗」として扱う）。 */
+async function _fetchKochiPage(table, offset, limit = _IDB_PAGE, retries = 3) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/${table}?select=*&baba_code=eq.31&order=race_date.desc&limit=${limit}&offset=${offset}`,
+        { headers: SUPABASE_HEADERS }
+      );
+      if (res.ok) {
+        const rows = await res.json();
+        if (Array.isArray(rows)) return rows;
+      }
+    } catch(e) {}
+    if (attempt >= retries) return null;
+    await new Promise(r => setTimeout(r, 600 * Math.pow(2, attempt)));   // 0.6s → 1.2s → 2.4s
+  }
 }
 
 /**
@@ -7977,22 +7985,51 @@ function _putHorseRow(row) {
   idbPut(key, _newVal);
 }
 
-/** テーブルを startOffset 以降まとめて取得（並列バッチ・背景用） */
-async function _fetchTablePaged(table, startOffset, onRows, onProgress) {
-  const BATCH = 4;
-  let off = startOffset, stop = false, total = 0;
-  while (!stop) {
-    const offsets = Array.from({ length: BATCH }, (_, i) => off + i * _IDB_PAGE);
-    const results = await Promise.all(offsets.map(o => _fetchKochiPage(table, o)));
-    for (const rows of results) {
-      if (!rows) { stop = true; continue; }
-      onRows(rows); total += rows.length;
-      if (rows.length < _IDB_PAGE) stop = true;
-    }
-    off += BATCH * _IDB_PAGE;
-    if (onProgress) onProgress(total);
+/** Phase2用: idカーソル方式で1ページ取得（keyset pagination・リトライ付き）。
+ *  offset方式は深いページほどPostgres側の走査が重く、データが15万行に育った現在は
+ *  サーバーが500を多発する（2026-07-15実測: 全ページ再取得中に500×156回）。idはPK（索引済み）
+ *  なのでカーソル方式なら深さに関係なく1ページ0.2秒前後・サーバー負荷も一定で軽い。 */
+async function _fetchKochiPageAfter(table, afterId, limit = _IDB_PAGE, retries = 3) {
+  const cursor = afterId ? `&id=gt.${encodeURIComponent(afterId)}` : '';
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/${table}?select=*&baba_code=eq.31&order=id.asc&limit=${limit}${cursor}`,
+        { headers: SUPABASE_HEADERS }
+      );
+      if (res.ok) {
+        const rows = await res.json();
+        if (Array.isArray(rows)) return rows;
+      }
+    } catch(e) {}
+    if (attempt >= retries) return null;
+    await new Promise(r => setTimeout(r, 600 * Math.pow(2, attempt)));   // 0.6s → 1.2s → 2.4s
   }
-  return total;
+}
+
+/** テーブル全体をidカーソルで順次取得（背景用）。
+ *  【2026-07-15修正】旧実装（offsetページング×4並列）は
+ *   (1) 取得失敗(null)を「データ終端」と同一視して静かに完了扱い→途中の500エラー1発で
+ *       古いデータが丸ごと欠落（馬場差ー等の症状の根本原因）、
+ *   (2) 同一バッチ内の失敗ページ以降が保存され中抜け（歯抜け）も発生、
+ *   (3) 深いoffsetのクエリ自体がサーバー500の温床、という三重の問題があった。
+ *  現実装はidカーソルの直列取得で(3)を根絶し、失敗は「終端」と区別して
+ *  {incomplete:true, nextCursor} を返す（呼び出し元が失敗地点から再開できる）。 */
+async function _fetchTablePaged(table, afterId, onRows, onProgress) {
+  let cursor = afterId || null, total = 0;
+  while (true) {
+    const rows = await _fetchKochiPageAfter(table, cursor);
+    if (!rows) {
+      console.warn(`[fetchPaged] ${table} cursor=${cursor || '(先頭)'} の取得に失敗（リトライ超過）。ここで打ち切り＝以降のデータは未取得`);
+      return { total, incomplete: true, nextCursor: cursor };
+    }
+    if (!rows.length) break;                       // 真のデータ終端
+    onRows(rows); total += rows.length;
+    cursor = rows[rows.length - 1].id;
+    if (onProgress) onProgress(total);
+    if (rows.length < _IDB_PAGE) break;            // 真のデータ終端（端数ページ）
+  }
+  return { total, incomplete: false, nextCursor: null };
 }
 
 /** 日別設定（メモ・内外バイアス）を取得 */
@@ -8106,15 +8143,37 @@ async function initDB() {
   (async () => {
     _setBgLoadIndicator(true);
     try {
+      // 途中失敗(incomplete)時は失敗地点(nextCursor)から1回だけ自動再開する
+      // （最初から再取得は約90MBの再ダウンロードになるため、失敗地点からの再開に限定）
+      const _pagedWithResume = async (table, onRows, onProgress) => {
+        let r = await _fetchTablePaged(table, null, onRows, onProgress);
+        if (r.incomplete) {
+          console.warn(`[initDB] ${table} が cursor=${r.nextCursor || '(先頭)'} で不完全。10秒後に失敗地点から再開します`);
+          await new Promise(res => setTimeout(res, 10000));
+          const r2 = await _fetchTablePaged(table, r.nextCursor, onRows, onProgress);
+          r = { total: r.total + r2.total, incomplete: r2.incomplete, nextCursor: r2.nextCursor };
+        }
+        return r;
+      };
+      let _anyIncomplete = false;
       if (!p1RaceDone) {
-        await _fetchTablePaged('keiba_races', _IDB_PAGE, rows => rows.forEach(_putRaceRow));
+        const rr = await _pagedWithResume('keiba_races', rows => rows.forEach(_putRaceRow));
+        if (rr.incomplete) _anyIncomplete = true;
       }
       if (!p1HorseDone) {
-        await _fetchTablePaged('keiba_horses', _IDB_PAGE,
+        const hr = await _pagedWithResume('keiba_horses',
           rows => rows.forEach(_putHorseRow),
           () => _refreshSavedDebounced());
+        if (hr.incomplete) _anyIncomplete = true;
       }
-      console.log('[initDB] Phase2 背景読み込み完了');
+      if (_anyIncomplete) {
+        // 「常に完了と報告する」旧動作が症状（過去データの無症状欠落）の温床だったため、不完全は明示する
+        console.warn('[initDB] Phase2 背景読み込みが不完全なまま終了（一部の過去データ未取得）。ページ再読み込みで再試行されます');
+        const _st = document.getElementById('save-status');
+        if (_st) _st.textContent = '⚠️ 過去データの取得が一部失敗しました。ページを再読み込みすると再試行します';
+      } else {
+        console.log('[initDB] Phase2 背景読み込み完了');
+      }
     } catch(e) {
       console.warn('[initDB] Phase2 背景読み込み失敗:', e);
     }
