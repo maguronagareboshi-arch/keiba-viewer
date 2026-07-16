@@ -1409,6 +1409,9 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   const hasV3 = hs.length > 0 && hs.every((r) => r.v3 && Number.isFinite(r.v3.win_probability_raw));
   const marketOverlayApproved = !!(v3Race && v3Race.market_overlay
     && v3Race.market_overlay.status === 'shadow');
+  const formSignalsAvailable = !!(v3Race && v3Race.market_overlay
+    && v3Race.market_overlay.form_reversal_rules
+    && v3Race.market_overlay.form_reversal_rules.status === 'outcome_pattern_validated_shadow');
   const hasMarketOverlay = hasV3 && marketOverlayApproved
     && hs.every((r) => Number.isFinite(Number(r.v3.pattern_probability)));
   hs.forEach((r) => {
@@ -1460,7 +1463,7 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
       konkyo = nr ? `${state.track}実績なし（前走: ${nouRunHtml(nr).replace(/<[^>]+>/g, '')}）` : (konkyo || '実績なし');
     }
     return `<tr>
-      <td style="font-size:16px">${r.mark || ''}${hasMarketOverlay && r.v3.dangerous_favourite ? '<br><span class="badge" style="color:#b42318">人気危険</span>' : ''}</td>
+      <td style="font-size:16px">${r.mark || ''}${hasMarketOverlay && r.v3.dangerous_favourite ? '<br><span class="badge" style="color:#b42318">人気危険</span>' : ''}${formSignalsAvailable && r.v3.rebound_candidate ? '<br><span class="badge" style="color:#116329">反発候補</span>' : ''}${formSignalsAvailable && r.v3.popular_collapse_candidate ? '<br><span class="badge" style="color:#b42318">人気崩れ注意</span>' : ''}</td>
       <td><span class="waku w${e.waku || 1}">${e.waku ?? ''}</span></td>
       <td>${e.umaban ?? ''}</td>
       <td class="l stickyname"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a>${todayBlinkerBadge(e, history)}${kakuBadge(e)}</td>
@@ -1487,7 +1490,7 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
     </table>
   </div>
   <div class="legend">${hasV3
-    ? `<b>${hasMarketOverlay ? 'v3＋T-10市場 AI印' : 'v3 AI印'}</b>＝${hasMarketOverlay ? '未来情報なしで学習したv3能力に、発走10分前市場の人気過剰・過小評価パターンを重ねた補正勝率。赤い「人気危険」は市場上位で補正確率が市場確率の80%以下。' : '過去結果だけで固定した展開混合・着順分布モデル。勝率はwalk-forward較正中央値、3着内率は同じ着順分布から算出。'}モデルhash: ${esc((state.v3Predictions.model_hash || '').slice(0, 12))}…。実馬券購入は無効で、利益保証ではありません。`
+    ? `<b>${hasMarketOverlay ? 'v3＋T-10市場 AI印' : 'v3 AI印'}</b>＝${hasMarketOverlay ? '未来情報なしで学習したv3能力に、発走10分前市場の人気過剰・過小評価パターンを重ねた補正勝率。赤い「人気危険」は市場上位で補正確率が市場確率の80%以下。' : '過去結果だけで固定した展開混合・着順分布モデル。勝率はwalk-forward較正中央値、3着内率は同じ着順分布から算出。'}${formSignalsAvailable ? '「反発候補」「人気崩れ注意」は2024年で条件固定、2025年と2026年前半で方向再現したT-10監視ラベル（購入指示ではありません）。' : ''}モデルhash: ${esc((state.v3Predictions.model_hash || '').slice(0, 12))}…。実馬券購入は無効で、利益保証ではありません。`
     : `<b>現在のAI印</b>＝旧v2リッジモデルの参考順位です。公開値は単一70/30ホールドアウト由来で、発売時点オッズを固定した収益検証ではありません。<b>参考勝率</b>＝旧v2スコアのソフトマックス値であり、v3のwalk-forward較正区間とは別物です。`} 総合＝指数/SI/調教/テンの加重。</div></div>`;
 }
 
