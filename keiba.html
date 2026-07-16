@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>KEIBA PULSE｜地方競馬インテリジェンス</title>
+<title>KEIBA PULSE｜地方競馬ビューア</title>
 <style>
 /* 色は必ずCSS変数で定義する（ダークモード上書き漏れ防止・インライン色禁止） */
 :root {
@@ -671,7 +671,7 @@ main { max-width: 1320px; }
 <header class="appbar">
   <div class="brand" onclick="goHome()" title="今日のレースへ">
     <span class="brand-mark">KP</span>
-    <span class="brand-copy"><h1>KEIBA PULSE</h1><small>地方競馬インテリジェンス</small></span>
+    <span class="brand-copy"><h1>KEIBA PULSE</h1><small>地方競馬を分かりやすく</small></span>
   </div>
   <div class="trackswitch" id="trackSwitch"></div>
   <div class="viewtabs" id="viewTabs"></div>
@@ -1272,7 +1272,7 @@ function deckAiLeader(v3Race) {
   return {
     name: top.horse_name || top.name || `${top.umaban}番`,
     umaban: top.umaban,
-    label: usePattern ? '市場補正評価' : '推定勝率',
+    label: usePattern ? '直前人気を反映' : 'AIが見積もった勝率',
     value: `${(score(top) * 100).toFixed(0)}%`,
   };
 }
@@ -1288,12 +1288,12 @@ function deckArchivedMarks(v3Race) {
     : Number(r.win_probability_raw);
   runners.filter((r) => Number.isFinite(score(r))).sort((a, b) => score(b) - score(a))
     .forEach((r, i) => { if (i < MARKS.length) marks.set(+r.umaban, MARKS[i]); });
-  return { marks, archived: marks.size > 0, label: usePattern ? 'T-10予想印' : '事前予想印' };
+  return { marks, archived: marks.size > 0, label: usePattern ? '発走10分前の予想印' : '事前予想印' };
 }
 
 function deckDecision(v3Race) {
   const shadow = v3Race && v3Race.v5_shadow;
-  if (!shadow) return { kind: 'wait', label: '判定待ち', detail: 'T-10で更新' };
+  if (!shadow) return { kind: 'wait', label: '判定待ち', detail: '発走10分前に更新' };
   const tickets = (Array.isArray(shadow.tickets) ? shadow.tickets : [])
     .slice().sort((a, b) => Number(b.conservative_ev || 0) - Number(a.conservative_ev || 0));
   if (!tickets.length) return { kind: 'pass', label: '見送り', detail: '安全基準未達' };
@@ -1301,7 +1301,7 @@ function deckDecision(v3Race) {
   return {
     kind: 'buy',
     label: `${V5_TICKET_LABELS[t.ticket_type] || t.ticket_type} ${t.combination || ''}`.trim(),
-    detail: Number.isFinite(Number(t.conservative_ev)) ? `保守EV ${Number(t.conservative_ev).toFixed(2)}` : '候補あり',
+    detail: Number.isFinite(Number(t.conservative_ev)) ? `厳しめ期待値 ${Number(t.conservative_ev).toFixed(2)}` : '候補あり',
   };
 }
 
@@ -1336,7 +1336,7 @@ function deckFreshnessText() {
   }
   const created = state.v3Predictions && state.v3Predictions.created_at;
   return created ? `予想データ ${new Date(created).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' })}`
-    : '未来情報を使わない予想レシート';
+    : 'レース前に保存した予想';
 }
 
 function updateDeckFreshness() {
@@ -1452,20 +1452,20 @@ function renderDeck() {
     const time = deckPostTime(state.date, focus);
     return `<section class="deck-hero">
       <div>
-        <div class="deck-kicker">${state.date === today ? 'NEXT RACE' : 'RACE FOCUS'} · ${esc(state.track)}</div>
+        <div class="deck-kicker">${state.date === today ? '次のレース' : '注目レース'} · ${esc(state.track)}</div>
         <h2>${focus.race_no}R ${esc(focus.name || focus.klass || '')}</h2>
         <div class="hero-meta"><span>${esc(focus.hasso_time || '--:--')}発走</span><span>${focus.distance_m || '?'}m</span><span>${esc(focus.klass || '')}</span></div>
         ${time ? `<span class="countdown" data-hasso="${time.toISOString()}"></span>` : ''}
         <div class="hero-actions"><button class="deck-cta" onclick="openDeckRace('${esc(focus.race_id)}','yosou')">予想と根拠を見る →</button><button class="deck-secondary" onclick="openDeckRace('${esc(focus.race_id)}','syutuba')">出馬表</button></div>
       </div>
       <div class="hero-decision">
-        <small>期待値ボード · 影運用</small>
+        <small>買い目候補 · 記録検証中</small>
         <b>${esc(decision.label)}</b>
         <small>${esc(decision.detail)} · 実投資0円</small>
         <div class="hero-ai"><span>AI最上位</span><strong>${ai ? `${ai.umaban}番 ${esc(ai.name)} · ${ai.value}` : '予測データ待ち'}</strong></div>
       </div>
     </section>`;
-  })() : `<section class="deck-ended"><div class="deck-kicker">RACE COMPLETE · ${esc(state.track)}</div><h2>${state.date === today ? '本日の開催は終了しました' : '開催結果を振り返る'}</h2><div class="legend">${resultsFetched ? `${resultRaceCount}/${races.length}Rの公式成績を取得済み。` : '公式成績を読み込み中です。'}各カードから着順とレース詳細を確認できます。</div></section>`;
+  })() : `<section class="deck-ended"><div class="deck-kicker">開催終了 · ${esc(state.track)}</div><h2>${state.date === today ? '本日の開催は終了しました' : '開催結果を振り返る'}</h2><div class="legend">${resultsFetched ? `${resultRaceCount}/${races.length}Rの公式成績を取得済み。` : '公式成績を読み込み中です。'}各カードから着順とレース詳細を確認できます。</div></section>`;
 
   const cards = races.map((r) => {
     const v3 = deckV3Race(r.race_id);
@@ -1479,19 +1479,19 @@ function renderDeck() {
     const decisionBlock = isFinished ? (result.available ? `
         <div class="decision-row">
           <div class="decision-cell result"><span>1着</span><b>${result.winner.umaban != null ? `${result.winner.umaban}番 ` : ''}${esc(result.winner.horse_name || '')}</b></div>
-          <div class="decision-cell ${ai ? '' : 'missing'}"><span>${ai ? '予想最上位' : '予想履歴'}</span><b>${ai ? `${ai.umaban}番 ${esc(ai.name)} · ${ai.value}` : 'レシートなし'}</b></div>
+          <div class="decision-cell ${ai ? '' : 'missing'}"><span>${ai ? '予想最上位' : '事前予想'}</span><b>${ai ? `${ai.umaban}番 ${esc(ai.name)} · ${ai.value}` : '事前予想の保存なし'}</b></div>
         </div>
         <div class="race-card-actions"><small>${result.top3 ? `3着内 ${esc(result.top3)} · ` : ''}${esc(result.detail || '公式成績あり')}</small><button class="race-open" onclick="openDeckRace('${esc(r.race_id)}','seiseki')">結果を見る</button></div>` : `
         <div class="decision-row">
           <div class="decision-cell missing"><span>公式成績</span><b>${resultsFetched ? '結果未取得' : '読み込み中…'}</b></div>
-          <div class="decision-cell missing"><span>予想履歴</span><b>${ai ? `${ai.umaban}番 ${esc(ai.name)}` : 'レシートなし'}</b></div>
+          <div class="decision-cell missing"><span>事前予想</span><b>${ai ? `${ai.umaban}番 ${esc(ai.name)}` : '事前予想の保存なし'}</b></div>
         </div>
         <div class="race-card-actions"><small>${resultsFetched ? '中止・取止めを含め詳細で確認' : '成績データを取得しています'}</small><button class="race-open" onclick="openDeckRace('${esc(r.race_id)}','seiseki')">成績を確認</button></div>`) : `
         <div class="decision-row">
           <div class="decision-cell"><span>AI最上位</span><b>${ai ? `${ai.umaban}番 ${esc(ai.name)} · ${ai.value}` : '予測待ち'}</b></div>
-          <div class="decision-cell ${decision.kind}"><span>期待値判断</span><b>${esc(decision.label)}</b></div>
+          <div class="decision-cell ${decision.kind}"><span>買い目判断</span><b>${esc(decision.label)}</b></div>
         </div>
-        <div class="race-card-actions"><small>${esc(decision.detail)} · 影運用</small><button class="race-open" onclick="openDeckRace('${esc(r.race_id)}','yosou')">予想を見る</button></div>`;
+        <div class="race-card-actions"><small>${esc(decision.detail)} · 実際には購入していません</small><button class="race-open" onclick="openDeckRace('${esc(r.race_id)}','yosou')">予想を見る</button></div>`;
     return `<article class="race-deck-card${r.race_id === focusId ? ' is-next' : ''}${isFinished ? ' is-finished' : ''}">
       <div class="race-time-rail"><b>${esc(r.hasso_time || '--:--')}</b><span>${esc(status)}</span></div>
       <div class="race-card-main">
@@ -1566,13 +1566,13 @@ function raceHeaderHtml(race, extraBits) {
       <div class="race-identity">
         <div class="race-number-orb">${race.race_no ?? '-'}R</div>
         <div class="race-title-block">
-          <div class="race-eyebrow">${esc(race.date || race.race_date)} · ${esc(race.track)} RACE INTELLIGENCE</div>
+          <div class="race-eyebrow">${esc(race.date || race.race_date)} · ${esc(race.track)} レース情報</div>
           <h2>${esc(title)}</h2>
           ${subTitle ? `<p>${esc(subTitle)}</p>` : ''}
         </div>
       </div>
       <div class="race-start-panel">
-        <span>POST TIME</span>
+        <span>発走時刻</span>
         <b>${esc(race.hasso_time || '--:--')}</b>
         ${hassoIso ? `<span class="countdown" data-hasso="${hassoIso}"></span>` : ''}
       </div>
@@ -1749,7 +1749,7 @@ function zenkouhanContainerInner(race, horses, hist) {
     ${zenkouhanBodyHtml(race, horses, hist)}
     <div class="legend">
       <b>上段「前3F-上3F」</b>＝この馬個別の公式前半3F・上り3F実測値。<br>
-      <b>下段「レL（レースラップ）」</b>＝その過去走「全体」のラップから算出した前半3F・上り3F（この馬個別の値ではなく、距離に関わらず常に3F表記で統一。太字H/M/Sはそのレースのペース区分ハイ/ミドル/スロー）。<span style="color:var(--accent)">水色</span>=そのレースの上り3Fが前半3Fより0.3秒以上速い(後傾)　<span style="color:var(--sub)">グレー</span>=前半3Fが上り3Fより0.3秒以上速い(前傾)。<br>
+      <b>下段「レース全体」</b>＝その過去走全体の前半3F・上り3F（この馬個別の値ではありません。「ハイ・標準・スロー」はレース全体の流れ）。<span style="color:var(--accent)">水色</span>=後半の方が速い　<span style="color:var(--sub)">グレー</span>=前半の方が速い。<br>
       日付クリックでそのレースへ移動。
     </div>`;
 }
@@ -2110,11 +2110,11 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
     <table>
       <tr><th>枠</th><th>番</th><th>AI印</th>
       <th class="stickyname">馬名</th><th>性齢</th><th>減</th><th>騎手</th><th>斤量</th><th>厩舎</th><th>馬体重</th><th>単勝(人気)</th>
-      <th>指数</th><th>テン偏差</th><th>調教偏差</th><th>近3走（テン3F/上り3F/脚質）</th><th>調教（最新追切）</th></tr>
+      <th>能力点</th><th>前半の速さ</th><th>調教評価</th><th>近3走（前半3F/上り3F/脚質）</th><th>調教（最新追切）</th></tr>
       ${rows}
     </table>
   </div>
-  <div class="legend"><span class="sw b"></span> 指数上位3頭（走破50%＋テン25%＋上がり25%、直近5走平均）　<span class="sw f"></span> テン偏差トップ（直近5走最良）　<span class="sw a"></span> 調教偏差トップ（直近追切の坂路3F最速を全期間分布で換算・50が平均）<br>◎の下のバッジ＝旧v2の順位差による参考区分。固定的な的中率や利益を保証するものではなく、v3の将来影運用が完了するまで購入判断には使用しません。<br>近走の${TRIP_LEGEND}<br>${EQUIP_LEGEND}</div></div>`;
+  <div class="legend"><span class="sw b"></span> 能力上位3頭（走破50%＋前半25%＋上がり25%、直近5走平均）　<span class="sw f"></span> 前半の速さトップ（直近5走最良）　<span class="sw a"></span> 調教トップ（50が平均）<br>◎の下の表示は順位差の目安です。的中や利益を保証するものではなく、購入判断には使いません。<br>近走の${TRIP_LEGEND}<br>${EQUIP_LEGEND}</div></div>`;
 }
 
 // ---- 予想サブビュー（A3: 自動印＋根拠＋妙味ゾーン） ----
@@ -2147,30 +2147,30 @@ function v5ShadowCardHtml(shadow) {
     <td class="num">${Number.isFinite(+t.conservative_ev) ? (+t.conservative_ev).toFixed(2) : '-'}</td>
     <td class="num">${Number.isFinite(+t.virtual_stake_yen) ? Number(t.virtual_stake_yen).toLocaleString() + '円' : '-'}</td>
     <td class="num">${Number(t.comparison_flat_stake_yen) > 0 ? Number(t.comparison_flat_stake_yen).toLocaleString() + '円' : (comparisonBudget ? '0円' : '旧条件')}</td>
-    <td>${t.status === 'virtual_allocated' ? (t.allocation_basis === 'statistical_canary_floor' ? '検証対象' : 'Kelly配分') : '配分見送り'}</td>
+    <td>${t.status === 'virtual_allocated' ? (t.allocation_basis === 'statistical_canary_floor' ? '少額の記録対象' : '確率に応じた配分') : '配分見送り'}</td>
   </tr>`).join('');
   const mobileRows = tickets.map((t) => `<article class="ev-ticket-card">
     <span class="ev-ticket-type">${esc(V5_TICKET_LABELS[t.ticket_type] || t.ticket_type)}</span>
-    <div><b>${esc(t.combination)}</b><small>下限 ${Number.isFinite(+t.probability_low) ? (+t.probability_low * 100).toFixed(1) + '%' : '-'} · オッズ ${Number.isFinite(+t.odds_low) ? (+t.odds_low).toFixed(1) : '-'}</small><div class="ev-allocation">5,000円検証 ${Number(t.comparison_flat_stake_yen || 0).toLocaleString()}円</div></div>
-    <div class="ev-value">EV ${Number.isFinite(+t.conservative_ev) ? (+t.conservative_ev).toFixed(2) : '-'}</div>
+    <div><b>${esc(t.combination)}</b><small>低めに見た的中率 ${Number.isFinite(+t.probability_low) ? (+t.probability_low * 100).toFixed(1) + '%' : '-'} · オッズ ${Number.isFinite(+t.odds_low) ? (+t.odds_low).toFixed(1) : '-'}</small><div class="ev-allocation">5,000円なら ${Number(t.comparison_flat_stake_yen || 0).toLocaleString()}円</div></div>
+    <div class="ev-value">期待値 ${Number.isFinite(+t.conservative_ev) ? (+t.conservative_ev).toFixed(2) : '-'}</div>
   </article>`).join('');
   const body = rows
-    ? `<div class="tablewrap"><table><tr><th>券種</th><th>組合せ</th><th>下限確率</th><th>下限オッズ</th><th>保守EV</th><th>検証カナリア</th><th>5,000円比較</th><th>資金判定</th></tr>${rows}</table></div>`
-    : '<div class="note"><b>今回は見送り</b> — 確率下限、オッズ余白、データ充足率、人気崩れリスクのいずれかが基準未達です。</div>';
+    ? `<div class="tablewrap"><table><tr><th>券種</th><th>組合せ</th><th>低めに見た的中率</th><th>低めに見たオッズ</th><th>厳しめ期待値</th><th>記録用の仮想購入</th><th>5,000円なら</th><th>配分方法</th></tr>${rows}</table></div>`
+    : '<div class="note"><b>今回は見送り</b> — 的中率を低めに見た場合の期待値、オッズの余裕、データ量、人気馬の危険度のいずれかが基準に届きませんでした。</div>';
   return `<section class="ev-board">
     <div class="ev-board-head">
-      <div class="ev-title"><small>VALUE PORTFOLIO · T-10</small><b>券種横断の期待値候補</b></div>
-      <span class="ev-audit-badge">${checked ? checked.toLocaleString() + '点監査 → ' : ''}${selected}点 · ${typeCount}券種</span>
+      <div class="ev-title"><small>発走10分前のオッズで判定</small><b>券種をまたいだ買い目候補</b></div>
+      <span class="ev-audit-badge">${checked ? checked.toLocaleString() + '通りを確認 → ' : ''}${selected}点 · ${typeCount}券種</span>
     </div>
     <div class="ev-spotlight">
-      <div class="ev-primary"><span>最上位候補</span><b>${top ? `${esc(V5_TICKET_LABELS[top.ticket_type] || top.ticket_type)} ${esc(top.combination)} · EV ${Number.isFinite(+top.conservative_ev) ? (+top.conservative_ev).toFixed(2) : '-'}` : '見送り'}</b></div>
+      <div class="ev-primary"><span>最上位候補</span><b>${top ? `${esc(V5_TICKET_LABELS[top.ticket_type] || top.ticket_type)} ${esc(top.combination)} · 期待値 ${Number.isFinite(+top.conservative_ev) ? (+top.conservative_ev).toFixed(2) : '-'}` : '見送り'}</b></div>
       <div><span>候補構成</span><b>${selected}点 / ${typeCount}券種</b></div>
-      <div><span>5,000円検証</span><b>${Number(shadow.comparison_flat_stake_yen || 0).toLocaleString()}円</b></div>
-      <div><span>実投資</span><b>0円</b></div>
+      <div><span>5,000円なら</span><b>${Number(shadow.comparison_flat_stake_yen || 0).toLocaleString()}円</b></div>
+      <div><span>実際の購入</span><b>0円</b></div>
     </div>
     ${body}
     ${mobileRows ? `<div class="ev-ticket-mobile">${mobileRows}</div>` : ''}
-    <details class="prediction-disclosure"><summary>候補数・検証条件・資金表示について</summary><p>点数を増やすこと自体ではなく、基準を超えた候補だけを券種ごとに拾います。${policy.max_per_ticket_type ? `現行は券種ごと最大${Number(policy.max_per_ticket_type)}点、全体最大${Number(policy.max_total || 0)}点を、券種を一巡してから2点目以降へ進む分散方式です。` : 'このレースは旧ルールで生成されたレシートのため、券種ごと1点上限です。'}実投資額は常に<b>0円</b>。検証カナリアは公式払戻で追跡する記録用配分（合計${Number(shadow.virtual_stake_yen || 0).toLocaleString()}円）。${comparisonBudget ? `5,000円検証は候補全体に固定予算を配分（合計${Number(shadow.comparison_flat_stake_yen || 0).toLocaleString()}円）。` : 'このレシートは5,000円比較の導入前です。'}確定オッズや着順は予想生成に使っていません。</p></details>
+    <details class="prediction-disclosure"><summary>候補数と金額表示について</summary><p>点数を増やすのではなく、基準を超えた候補だけを券種ごとに拾います。${policy.max_per_ticket_type ? `券種ごと最大${Number(policy.max_per_ticket_type)}点、全体最大${Number(policy.max_total || 0)}点です。まず各券種から1点ずつ選び、その後に2点目以降を選びます。` : 'このレースは以前のルールで記録されたため、券種ごと1点までです。'}実際の購入額は常に<b>0円</b>。「記録用の仮想購入」は公式払戻と照合するための金額（合計${Number(shadow.virtual_stake_yen || 0).toLocaleString()}円）です。${comparisonBudget ? `「5,000円なら」は候補全体へ5,000円を配分した比較表示です（合計${Number(shadow.comparison_flat_stake_yen || 0).toLocaleString()}円）。` : 'この予想は5,000円比較を始める前の記録です。'}確定オッズや着順は予想作成に使っていません。</p></details>
   </section>`;
 }
 
@@ -2306,7 +2306,7 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   const horseEvClass = (v) => v != null && Number.isFinite(+v)
     ? (+v >= 1.08 ? 'ev-positive' : (+v >= 1 ? 'ev-watch' : 'ev-negative')) : 'ev-negative';
   const horseEvHtml = (r) => r.winEvLow != null && Number.isFinite(+r.winEvLow)
-    ? `<b>${(+r.winEvLow).toFixed(2)}</b><small>推定 ${Number.isFinite(+r.winEv) ? (+r.winEv).toFixed(2) : '-'}</small>`
+    ? `<b>${(+r.winEvLow).toFixed(2)}</b><small>中心 ${Number.isFinite(+r.winEv) ? (+r.winEv).toFixed(2) : '-'}</small>`
     : '<b>-</b><small>オッズ待ち</small>';
   const leader = disp[0] || null;
   const topTicket = v5Shadow && Array.isArray(v5Shadow.tickets)
@@ -2318,18 +2318,18 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   </article>`).join('');
   const overview = leader ? `<section class="forecast-overview">
     <div class="forecast-leader">
-      <div class="forecast-kicker">AI TOP RATED · ${hasMarketOverlay ? 'T-10 MARKET ADJUSTED' : 'ABILITY MODEL'}</div>
+      <div class="forecast-kicker">${hasMarketOverlay ? '発走10分前の人気を反映したAI評価' : '過去成績から見たAI評価'}</div>
       <span class="forecast-mark">${leader.mark || '◎'}</span>
       <div class="leader-number">${leader.e.umaban}番 · ${leader.e.waku ? `${leader.e.waku}枠` : ''}</div>
       <h3>${esc(leader.e.horse_name)}</h3>
-      <div class="probability-label"><span>${hasMarketOverlay ? '補正後の勝率' : '推定勝率'}</span><b>${pct(leader.winP)}</b></div>
+      <div class="probability-label"><span>${hasMarketOverlay ? '直前人気を反映した勝率' : 'AIが見積もった勝率'}</span><b>${pct(leader.winP)}</b></div>
       <div class="probability-track"><i style="width:${Math.max(2, Math.min(100, Number(leader.winP || 0) * 100))}%"></i></div>
       <div class="leader-foot"><span>3着内 ${pct(leader.top3P)}</span><span>単勝 <b data-live-odds="${leader.e.umaban}">${leader.e.win_odds ?? '-'}${leader.e.pop != null ? `(${leader.e.pop})` : ''}</b></span></div>
     </div>
     <div class="forecast-side">
       <div class="forecast-side-head"><b>上位評価</b><span>数字より先に序列を読む</span></div>
       <div class="contender-grid">${contenderCards}</div>
-      <div class="forecast-insight"><div><span>期待値判断</span><b>${topTicket ? `${esc(V5_TICKET_LABELS[topTicket.ticket_type] || topTicket.ticket_type)} ${esc(topTicket.combination)}` : '今回は見送り、またはT-10判定待ち'}</b></div><div><span>運用</span><b>影運用 · 実投資0円</b></div></div>
+      <div class="forecast-insight"><div><span>買い目判断</span><b>${topTicket ? `${esc(V5_TICKET_LABELS[topTicket.ticket_type] || topTicket.ticket_type)} ${esc(topTicket.combination)}` : '今回は見送り、または発走10分前の判定待ち'}</b></div><div><span>現在の扱い</span><b>成績を記録中 · 実際の購入0円</b></div></div>
     </div>
   </section>` : '';
 
@@ -2358,12 +2358,12 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
         <span class="runner-mark">${r.mark || '・'}</span>
         <span class="runner-number waku w${e.waku || 1}">${e.umaban ?? '-'}</span>
         <div class="runner-name"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a><div class="runner-tags">${signalBadges(r)}${todayBlinkerBadge(e, history)}${kakuBadge(e)}</div></div>
-        <div class="runner-win"><span>${hasMarketOverlay ? '補正勝率' : '勝率'}</span><b>${pct(r.winP)}</b></div>
+        <div class="runner-win"><span>${hasMarketOverlay ? '直前人気反映後' : '勝率'}</span><b>${pct(r.winP)}</b></div>
       </div>
       <div class="runner-prob"><i style="width:${Math.max(1, Math.min(100, Number(r.winP || 0) * 100))}%"></i></div>
       <div class="runner-metrics">
         <span>3着内<b>${pct(r.top3P)}</b></span><span>単勝<b data-live-odds="${e.umaban}">${e.win_odds ?? '-'}${e.pop != null ? `(${e.pop})` : ''}</b></span>
-        <span class="horse-ev ${horseEvClass(r.winEvLow)}" data-horse-ev="${e.umaban}" data-prob-low="${r.winPLow ?? ''}" data-prob-mid="${r.winP ?? ''}">単勝EV${horseEvHtml(r)}</span>
+        <span class="horse-ev ${horseEvClass(r.winEvLow)}" data-horse-ev="${e.umaban}" data-prob-low="${r.winPLow ?? ''}" data-prob-mid="${r.winP ?? ''}">単勝期待値${horseEvHtml(r)}</span>
         <span>総合<b>${r.score != null ? (50 + r.score * 10).toFixed(1) : '-'}</b></span><span>調教<b>${dev(r.cz, 1)}</b></span>
       </div>
       <div class="runner-reason">評価根拠 · ${esc(r.konkyo || 'データ待ち')}</div>
@@ -2371,30 +2371,30 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   }).join('');
 
   const modelExplanation = hasV3
-    ? `<b>${hasMarketOverlay ? 'v3＋T-10市場 AI印' : 'v3 AI印'}</b>＝${hasMarketOverlay ? '未来情報なしで学習した基礎能力に、発走10分前市場の人気過剰・過小評価パターンを重ねた補正勝率です。' : '過去結果だけで固定した展開混合・着順分布モデルです。'}${formSignalsAvailable ? '「反発候補」「人気崩れ注意」は条件固定後に別期間でも方向を確認した監視ラベルです。' : ''}モデルhash: ${esc((state.v3Predictions.model_hash || '').slice(0, 12))}…。`
-    : '<b>現在のAI印</b>は旧モデルの参考順位です。発売時点オッズを固定した収益検証とは分けて表示しています。';
+    ? `<b>${hasMarketOverlay ? '発走10分前の人気を反映したAI印' : '過去成績から見たAI印'}</b>＝${hasMarketOverlay ? '過去成績から見た能力に、発走10分前の「人気になりすぎ・人気がなさすぎ」の傾向を加えた勝率です。' : '過去レースだけで作り、今回の着順を見ずに保存した予想です。'}${formSignalsAvailable ? '「反発候補」「人気崩れ注意」は、別の期間でも同じ傾向が出るか確認した注意表示です。' : ''}`
+    : '<b>現在のAI印</b>は以前の予想方式による参考順位です。購入候補の判定とは分けて表示しています。';
 
   const allHorseCard = `<section class="card forecast-table-card">
-    <div class="forecast-table-head"><b>全馬評価</b><span>AI順 · 単勝EVは保守値 / 推定値</span></div>
+    <div class="forecast-table-head"><b>全馬評価</b><span>AI順 · 単勝期待値は厳しめ / 中心の2通り</span></div>
     <div class="tablewrap">
     <table>
-      <thead><tr><th>評価</th><th>枠</th><th>番</th><th class="stickyname">馬名</th><th>${hasV3 ? '基礎評価' : 'AI予測'}</th><th>${hasMarketOverlay ? '補正勝率' : '勝率'}</th><th>3着内</th><th>総合</th><th>SI</th><th>調教</th><th>単勝(人気)</th><th>単勝EV</th><th>根拠</th></tr></thead>
+      <thead><tr><th>評価</th><th>枠</th><th>番</th><th class="stickyname">馬名</th><th>${hasV3 ? '基礎評価' : 'AI予測'}</th><th>${hasMarketOverlay ? '直前人気反映後の勝率' : '勝率'}</th><th>3着内</th><th>総合</th><th>脚力</th><th>調教</th><th>単勝(人気)</th><th>単勝期待値</th><th>根拠</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     </div>
     <div class="forecast-mobile-list">${mobileRows}</div>
-    <details class="prediction-disclosure"><summary>AI評価・単勝EV・検証状態の読み方</summary><p>${modelExplanation} 単勝EVは「モデル勝率×現在オッズ」。太字は確率下限から計算した保守EV、小字は中心推定EVです。1.00超は理論上の損益分岐超えですが、購入候補は別途T-10の価格・データ充足率・人気崩れ veto を通過したものだけです。利益保証ではありません。</p></details>
+    <details class="prediction-disclosure"><summary>AI評価と単勝期待値の読み方</summary><p>${modelExplanation} 単勝期待値は「AIが見積もった勝率×現在オッズ」です。1.00が長い目で見た損益分岐の目安です。太字は勝率を低めに見た厳しい計算、小字は中心の計算です。1.00を超えても、発走10分前のオッズ・データ量・人気馬の危険条件をすべて通った場合だけ買い目候補にします。利益を保証する数字ではありません。</p></details>
   </section>`;
   const ticketCount = v5Shadow && Array.isArray(v5Shadow.tickets) ? v5Shadow.tickets.length : 0;
   const valueCard = v5ShadowCardHtml(v5Shadow)
-    || '<div class="note"><b>T-10期待値判定待ち</b> — 発走10分前の固定オッズが到着すると、7券種を横断して候補を作ります。</div>';
+    || '<div class="note"><b>発走10分前の判定待ち</b> — その時点のオッズを保存し、7種類の馬券から候補を探します。</div>';
   const workspace = `<section class="forecast-workspace" aria-label="予想分析ワークスペース">
     <input class="forecast-view-toggle" type="radio" name="forecast-view" id="forecast-view-runners" checked>
     <input class="forecast-view-toggle" type="radio" name="forecast-view" id="forecast-view-value">
     <input class="forecast-view-toggle" type="radio" name="forecast-view" id="forecast-view-summary">
     <div class="forecast-view-tabs" role="tablist" aria-label="予想表示切替">
       <label for="forecast-view-runners">全馬評価 <span>${disp.length}頭</span></label>
-      <label for="forecast-view-value">期待値 <span>${ticketCount ? `${ticketCount}点` : 'T-10'}</span></label>
+      <label for="forecast-view-value">買い目候補 <span>${ticketCount ? `${ticketCount}点` : '10分前'}</span></label>
       <label for="forecast-view-summary">AI要約 <span>上位3頭</span></label>
     </div>
     <div class="forecast-panel forecast-panel-runners">${allHorseCard}</div>
@@ -2473,9 +2473,9 @@ function cyokyoRaceHtml(raceMeta, entries, cyokyo, history) {
     </tr>`;
   }).join('');
   return raceHeaderHtml(raceMeta) + `
-  <div class="note">各馬の最新の追切（keibabookの最終追い印☆優先・無ければ直近1本・調教偏差の良い順）。AI印は学習モデル順。馬名クリックで全調教履歴。</div>
+  <div class="note">各馬の最新の追切（最終追いの印☆を優先し、無ければ直近1本。調教評価の良い順）。AI印は過去レースから学習した順です。馬名を押すと全調教履歴を見られます。</div>
   <div class="card tablewrap"><table>
-    <tr><th>AI印</th><th>枠</th><th>番</th><th>馬名</th><th>調教偏差</th><th>追切日</th><th>コース</th><th>坂4F/本5F</th><th>坂3F/本4F</th><th>坂2F/本3F</th><th>1F</th><th>ラップ(200m毎・坂路のみ)</th><th>脚色</th><th>短評</th></tr>
+    <tr><th>AI印</th><th>枠</th><th>番</th><th>馬名</th><th>調教評価</th><th>追切日</th><th>コース</th><th>坂4F/本5F</th><th>坂3F/本4F</th><th>坂2F/本3F</th><th>1F</th><th>200mごとの時計（坂路のみ）</th><th>脚色</th><th>短評</th></tr>
     ${body}
   </table>
   <div class="legend">今回に向けた追切のみ（前走日より後）を表示・過去のレース分は含みません。調教偏差＝拠点別基準（大井の時計は大井、小林の時計は小林…と場所ごとに比較）の坂路3F最速（無ければ本馬場「真の3F」）の偏差値（50が平均）。時計欄は坂路コースなら4F/3F/2F/1F、本馬場コースなら5F/4F/3F/1Fとして読む（終い1Fは本馬場ではほぼ記録なし）。短評の<b>▼中間N本</b>＝最終追いより前に行った今回サイクル分の追切（タップで展開）。ラップ・加速/失速判定は坂路のみ対応：<span class="badge conf-S">加速</span>尻上がり／<span class="badge conf-C">失速</span>終い掛かる／<span class="badge conf-S">🔥好走</span>偏差値60+×加速（実測複勝59%）。</div></div>`;
@@ -2599,8 +2599,8 @@ function updateEvMonitor(oddsMap) {
   el.hidden = false;
   el.className = hit ? 'note ev-hit' : 'note ev-idle';
   el.innerHTML = hit
-    ? `🧪 <b>影運用の検証候補</b>: ◎${w.um}番 ${esc(w.name)}　単勝${o}倍 × v2参考勝率${(w.p * 100).toFixed(0)}% = 参考EV ${ev.toFixed(2)}　（購入指示ではありません）`
-    : `影運用監視: ◎${w.um}番 ${esc(w.name)}　現在${o}倍・参考EV ${ev.toFixed(2)}　${(o < 5 || o >= 10) ? '（事前登録帯外）' : '（事前登録閾値未満）'}`;
+    ? `🧪 <b>記録対象の候補</b>: ◎${w.um}番 ${esc(w.name)}　単勝${o}倍 × 参考勝率${(w.p * 100).toFixed(0)}% = 参考期待値 ${ev.toFixed(2)}　（実際には購入しません）`
+    : `記録中: ◎${w.um}番 ${esc(w.name)}　現在${o}倍・参考期待値 ${ev.toFixed(2)}　${(o < 5 || o >= 10) ? '（対象オッズ外）' : '（候補基準未満）'}`;
 }
 
 function recordOdds(rid, live) {
@@ -2806,7 +2806,7 @@ async function renderRaceView() {
   if (state.sub === 'sim') {   // このレースの展開シミュレータを埋め込み表示
     $('raceView').innerHTML = `<div class="card" style="padding:0;overflow:hidden;border-radius:8px">
       <iframe src="simulator.html?race=${encodeURIComponent(raceId)}&track=${encodeURIComponent(state.track)}&embed=1" style="width:100%;height:920px;border:0;display:block" title="展開シミュレータ" loading="lazy"></iframe></div>
-      <div class="note">このレースの展開シミュレータ（時系列検証済みH/M/S確率・実測脚質を使い、各展開2,000回で隊列と展開耐性を解析）。馬券の勝率・期待値ではありません。全画面は上部の🎲シミュレータから。</div>`;
+      <div class="note">このレースで「ハイ・標準・スロー」の流れがどれくらい起こりそうかを過去レースから推定し、それぞれ2,000回試しています。表示する率は展開との相性を見る比較値で、馬券の的中率や期待値ではありません。全画面は上部のシミュレータから。</div>`;
     return;
   }
   try {
@@ -2821,8 +2821,8 @@ async function renderRaceView() {
       // 区別できないため、予想レシートがない過去開催には表示しない。
       const archived = deckArchivedMarks(deckV3Race(raceId));
       const note = archived.archived
-        ? 'レース前に保存された予想レシートの印です。'
-        : 'この日付の固定予想レシートは保存されていないため、後からAI印を再計算していません。';
+        ? 'レース前に保存された予想の印です。'
+        : 'このレースは事前予想が保存されていません。結果を見た後にAI印を作り直すことはしていません。';
       $('raceView').innerHTML = seisekiHtml(data, archived.marks, archived.label, note);
     } else {
       const meta = (state.dates[state.date] || []).find((r) => r.race_id === raceId) || {};
