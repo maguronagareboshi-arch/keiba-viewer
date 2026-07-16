@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>地方競馬ビューア</title>
+<title>KEIBA PULSE｜地方競馬インテリジェンス</title>
 <style>
 /* 色は必ずCSS変数で定義する（ダークモード上書き漏れ防止・インライン色禁止） */
 :root {
@@ -225,16 +225,159 @@ a.horse-link:hover { text-decoration: underline; }
   border-radius: 6px; padding: 5px 12px; cursor: pointer; font-size: 13px; margin: 6px 0; }
 tr.clickable { cursor: pointer; }
 tr.clickable:hover td { background: var(--chip-bg); }
+
+/* 今日の判断を最短距離で見せるレースデッキ */
+:root {
+  --brand: #2448d8;
+  --brand-deep: #11236f;
+  --brand-soft: #edf1ff;
+  --positive: #07845b;
+  --positive-soft: #e5f7f0;
+  --danger: #c44545;
+  --danger-soft: #fff0ef;
+  --ink-on-dark: #f8faff;
+  --deck-shadow: 0 12px 32px rgba(24, 38, 82, .10);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --brand: #7694ff;
+    --brand-deep: #182759;
+    --brand-soft: #263154;
+    --positive: #58d6aa;
+    --positive-soft: #183b32;
+    --danger: #ff8f8f;
+    --danger-soft: #48282c;
+    --ink-on-dark: #f8faff;
+    --deck-shadow: 0 12px 32px rgba(0, 0, 0, .28);
+  }
+}
+header.appbar {
+  position: sticky; top: 0; z-index: 40; min-height: 64px; padding: 9px max(14px, calc((100vw - 1280px) / 2));
+  background: color-mix(in srgb, var(--panel) 92%, transparent); backdrop-filter: blur(14px);
+  box-shadow: 0 1px 0 var(--border);
+}
+.brand { display: flex; align-items: center; gap: 9px; cursor: pointer; min-width: max-content; }
+.brand:hover { opacity: .88; }
+.brand-mark { display: grid; place-items: center; width: 37px; height: 37px; border-radius: 12px;
+  color: #fff; background: linear-gradient(145deg, #3159f5, #17277c); font-size: 17px; font-weight: 900;
+  box-shadow: 0 7px 18px rgba(39, 73, 213, .27); }
+.brand-copy { display: flex; flex-direction: column; line-height: 1.05; }
+.brand-copy h1 { font-size: 16px; letter-spacing: .06em; }
+.brand-copy small { color: var(--sub); font-size: 9px; letter-spacing: .09em; margin-top: 4px; }
+.deck-shell { padding: 8px 0 30px; }
+.deck-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 2px 0 12px; }
+.deck-date { display: flex; align-items: center; gap: 7px; }
+.deck-date button, .deck-cta, .deck-secondary { border: 0; border-radius: 10px; cursor: pointer; font-weight: 700; }
+.deck-date button { width: 34px; height: 34px; background: var(--chip-bg); color: var(--text); font-size: 18px; }
+.deck-date button:disabled { opacity: .3; cursor: default; }
+.deck-date strong { min-width: 116px; text-align: center; font-size: 14px; }
+.deck-mode { color: var(--sub); font-size: 11px; display: flex; align-items: center; gap: 6px; }
+.deck-mode::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--positive); box-shadow: 0 0 0 4px var(--positive-soft); }
+.deck-hero { position: relative; overflow: hidden; display: grid; grid-template-columns: 1.35fr .65fr; gap: 20px;
+  min-height: 220px; padding: clamp(22px, 4vw, 38px); border-radius: 22px; color: var(--ink-on-dark);
+  background: radial-gradient(circle at 86% 18%, rgba(110, 139, 255, .55), transparent 31%),
+    linear-gradient(135deg, #101a43 0%, #14296e 58%, #234ed1 100%); box-shadow: var(--deck-shadow); }
+.deck-hero::after { content: ''; position: absolute; right: -70px; bottom: -120px; width: 320px; height: 320px;
+  border: 1px solid rgba(255,255,255,.13); border-radius: 50%; box-shadow: 0 0 0 54px rgba(255,255,255,.035), 0 0 0 108px rgba(255,255,255,.025); }
+.deck-kicker { color: #aebeff; font-size: 11px; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; }
+.deck-hero h2 { margin: 11px 0 7px; font-size: clamp(24px, 4vw, 37px); line-height: 1.15; letter-spacing: .01em; }
+.deck-hero .hero-meta { color: rgba(255,255,255,.72); display: flex; gap: 12px; flex-wrap: wrap; }
+.deck-hero .countdown { display: block; color: #fff; margin-top: 13px; min-height: 19px; }
+.deck-hero .countdown:empty { display: none; }
+.hero-actions { margin-top: 22px; display: flex; gap: 8px; flex-wrap: wrap; }
+.deck-cta { padding: 11px 17px; background: #fff; color: #172a74; }
+.deck-secondary { padding: 11px 15px; color: #fff; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2); }
+.hero-decision { position: relative; z-index: 1; align-self: stretch; display: flex; flex-direction: column; justify-content: center;
+  padding: 18px; border: 1px solid rgba(255,255,255,.17); border-radius: 16px; background: rgba(8, 15, 44, .34); backdrop-filter: blur(8px); }
+.hero-decision small { color: rgba(255,255,255,.65); }
+.hero-decision b { margin-top: 8px; font-size: 21px; }
+.hero-decision .hero-ai { margin-top: 15px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,.14); }
+.hero-decision .hero-ai span { display: block; color: rgba(255,255,255,.65); font-size: 11px; }
+.hero-decision .hero-ai strong { display: block; margin-top: 4px; font-size: 15px; }
+.deck-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0 18px; }
+.summary-chip { padding: 11px 13px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); }
+.summary-chip span { display: block; color: var(--sub); font-size: 10px; }
+.summary-chip b { display: block; margin-top: 3px; font-size: 16px; }
+.deck-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 18px 2px 9px; }
+.deck-section-head h3 { margin: 0; font-size: 15px; }
+.deck-section-head span { color: var(--sub); font-size: 11px; }
+.deck-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.race-deck-card { position: relative; overflow: hidden; display: grid; grid-template-columns: 82px 1fr; min-height: 160px;
+  border: 1px solid var(--border); border-radius: 16px; background: var(--panel); box-shadow: 0 4px 15px rgba(30,45,80,.04); }
+.race-deck-card.is-next { border-color: color-mix(in srgb, var(--brand) 60%, var(--border)); box-shadow: 0 8px 25px rgba(43,75,205,.13); }
+.race-deck-card.is-finished { opacity: .72; }
+.race-time-rail { padding: 17px 10px; text-align: center; background: color-mix(in srgb, var(--chip-bg) 66%, transparent); }
+.race-time-rail b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+.race-time-rail span { display: inline-block; margin-top: 5px; color: var(--sub); font-size: 10px; font-weight: 700; }
+.race-deck-card.is-next .race-time-rail { background: var(--brand-soft); color: var(--brand); }
+.race-card-main { min-width: 0; padding: 15px 16px 13px; }
+.race-card-head { display: flex; align-items: center; gap: 7px; }
+.race-card-head h4 { min-width: 0; overflow: hidden; margin: 0; font-size: 14px; white-space: nowrap; text-overflow: ellipsis; }
+.race-no { flex: 0 0 auto; color: var(--brand); font-weight: 900; }
+.race-card-meta { color: var(--sub); font-size: 11px; margin-top: 5px; }
+.decision-row { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 12px; }
+.decision-cell { min-width: 0; padding: 8px 9px; border-radius: 9px; background: var(--chip-bg); }
+.decision-cell span { display: block; color: var(--sub); font-size: 9px; }
+.decision-cell b { display: block; overflow: hidden; margin-top: 3px; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; }
+.decision-cell.buy { background: var(--positive-soft); color: var(--positive); }
+.decision-cell.pass { background: var(--danger-soft); color: var(--danger); }
+.race-card-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 11px; }
+.race-card-actions small { color: var(--sub); font-size: 9px; }
+.race-open { border: 0; padding: 7px 11px; border-radius: 8px; background: var(--brand); color: #fff; font-weight: 700; cursor: pointer; }
+.deck-ended { padding: 27px; border-radius: 18px; color: var(--text); background: var(--panel); border: 1px solid var(--border); }
+.deck-ended h2 { margin: 0 0 6px; }
+
+@media (max-width: 760px) {
+  body { padding-bottom: 72px; }
+  header.appbar { position: sticky; min-height: 54px; padding: 7px 10px; gap: 7px; }
+  .brand-mark { width: 34px; height: 34px; border-radius: 11px; }
+  .brand-copy small { display: none; }
+  .trackswitch { order: 3; width: 100%; margin: 0; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
+  .trackswitch::-webkit-scrollbar, .racetabs::-webkit-scrollbar, .subtabs::-webkit-scrollbar, .viewtabs::-webkit-scrollbar { display: none; }
+  .trackswitch button { flex: 0 0 auto; }
+  .viewtabs { position: fixed; z-index: 60; left: 0; right: 0; bottom: 0; height: 64px; margin: 0; padding: 7px 8px max(7px, env(safe-area-inset-bottom));
+    gap: 3px; overflow-x: auto; background: color-mix(in srgb, var(--panel) 95%, transparent); border-top: 1px solid var(--border); backdrop-filter: blur(14px); }
+  .viewtabs button { flex: 1 0 64px; min-width: 64px; padding: 5px 6px; border: 0; background: transparent; color: var(--sub); font-size: 11px; }
+  .viewtabs button.active { color: var(--brand); background: var(--brand-soft); }
+  main { padding: 8px 10px 25px; }
+  .deck-shell { padding-top: 3px; }
+  .deck-toolbar { margin-bottom: 8px; }
+  .deck-mode { display: none; }
+  .deck-hero { grid-template-columns: 1fr; min-height: 0; padding: 23px 20px; border-radius: 18px; }
+  .deck-hero h2 { font-size: 26px; }
+  .hero-decision { padding: 13px 14px; }
+  .hero-decision b { font-size: 17px; }
+  .hero-decision .hero-ai { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding-top: 10px; gap: 8px; }
+  .hero-decision .hero-ai strong { text-align: right; }
+  .deck-summary { gap: 5px; margin: 8px 0 15px; }
+  .summary-chip { padding: 9px 8px; }
+  .summary-chip b { font-size: 14px; }
+  .deck-grid { grid-template-columns: 1fr; }
+  .race-deck-card { grid-template-columns: 72px 1fr; min-height: 154px; border-radius: 14px; }
+  .race-time-rail b { font-size: 19px; }
+  .race-card-main { padding: 13px 12px 11px; }
+  .controls, .racetabs, .subtabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .controls { padding-bottom: 2px; }
+  .controls label { flex: 0 0 auto; }
+  .racetabs button, .subtabs button { flex: 0 0 auto; }
+  .subtabs { position: sticky; top: 101px; z-index: 25; padding: 6px 0; background: var(--bg); }
+  .card { border-radius: 12px; }
+  .tablewrap { margin-left: -4px; margin-right: -4px; padding: 0 4px; }
+}
 </style>
 </head>
 <body>
-<header>
-  <h1 class="hometitle" onclick="goHome()" title="トップページへ">地方競馬ビューア</h1>
+<header class="appbar">
+  <div class="brand" onclick="goHome()" title="今日のレースへ">
+    <span class="brand-mark">KP</span>
+    <span class="brand-copy"><h1>KEIBA PULSE</h1><small>地方競馬インテリジェンス</small></span>
+  </div>
   <div class="trackswitch" id="trackSwitch"></div>
   <div class="viewtabs" id="viewTabs"></div>
 </header>
 <main>
-  <div id="raceRoot">
+  <div id="deckRoot"><div class="empty">今日のレースを準備中…</div></div>
+  <div id="raceRoot" hidden>
     <div class="controls">
       <label>月 <select id="monthSel"></select></label>
       <label>日 <select id="dateSel"></select></label>
@@ -467,7 +610,7 @@ const providers = {
 };
 
 const state = { provider: null, dates: {}, month: null, date: null, raceId: null, track: '門別',
-  sub: 'seiseki', stats: null, model: null, view: 'race', prevRace: null,
+  sub: 'yosou', stats: null, model: null, view: 'deck', prevRace: null,
   noken: null, nokenDate: null, nokenSort: 'race', nokenTwoOnly: false, nokenHist: null, nokenByHorse: null,
   v3Predictions: null };
 
@@ -781,13 +924,172 @@ function renderTabs() {
   $('raceTabs').innerHTML = races.map((r) =>
     `<button data-id="${r.race_id}" class="${r.race_id === state.raceId ? 'active' : ''}">${r.race_no}R</button>`).join('');
 }
-// 上部ビュータブ（レース/分析/調教＋門別のみ能検・シミュレータ）を場に応じて再構築
+
+// ---- 今日のレースデッキ：情報を探す前に「次・AI最上位・判断」を一画面で示す ----
+function deckPostTime(date, race) {
+  const m = String(race.hasso_time || '').match(/^(\d{1,2}):(\d{2})/);
+  if (!date || !m) return null;
+  return new Date(`${date}T${String(m[1]).padStart(2, '0')}:${m[2]}:00+09:00`);
+}
+
+function deckDateLabel(date) {
+  if (!date) return '-';
+  const d = new Date(`${date}T12:00:00+09:00`);
+  return `${d.getMonth() + 1}月${d.getDate()}日（${'日月火水木金土'[d.getDay()]}）`;
+}
+
+function deckV3Race(raceId) {
+  return state.v3Predictions && state.v3Predictions.races
+    ? state.v3Predictions.races[raceId] : null;
+}
+
+function deckAiLeader(v3Race) {
+  const runners = (v3Race && v3Race.runners || []).filter((r) => r && r.umaban != null);
+  if (!runners.length) return null;
+  const overlay = !!(v3Race.market_overlay && v3Race.market_overlay.status === 'shadow');
+  const usePattern = overlay && runners.every((r) => Number.isFinite(Number(r.pattern_probability)));
+  const score = (r) => usePattern ? Number(r.pattern_probability)
+    : Number.isFinite(Number(r.win_probability && r.win_probability.mid)) ? Number(r.win_probability.mid)
+    : Number(r.win_probability_raw);
+  const top = runners.filter((r) => Number.isFinite(score(r))).sort((a, b) => score(b) - score(a))[0];
+  if (!top) return null;
+  return {
+    name: top.horse_name || top.name || `${top.umaban}番`,
+    umaban: top.umaban,
+    label: usePattern ? '市場補正評価' : '推定勝率',
+    value: `${(score(top) * 100).toFixed(0)}%`,
+  };
+}
+
+function deckDecision(v3Race) {
+  const shadow = v3Race && v3Race.v5_shadow;
+  if (!shadow) return { kind: 'wait', label: '判定待ち', detail: 'T-10で更新' };
+  const tickets = (Array.isArray(shadow.tickets) ? shadow.tickets : [])
+    .slice().sort((a, b) => Number(b.conservative_ev || 0) - Number(a.conservative_ev || 0));
+  if (!tickets.length) return { kind: 'pass', label: '見送り', detail: '安全基準未達' };
+  const t = tickets[0];
+  return {
+    kind: 'buy',
+    label: `${V5_TICKET_LABELS[t.ticket_type] || t.ticket_type} ${t.combination || ''}`.trim(),
+    detail: Number.isFinite(Number(t.conservative_ev)) ? `保守EV ${Number(t.conservative_ev).toFixed(2)}` : '候補あり',
+  };
+}
+
+function deckFocusRace(races, date) {
+  if (!races.length) return null;
+  const now = new Date();
+  const dated = races.map((r) => ({ r, t: deckPostTime(date, r) }));
+  if (date > jstToday()) return dated[0].r;
+  if (date < jstToday()) return null;
+  return (dated.find((x) => x.t && x.t > new Date(now - 5 * 60000)) || {}).r || null;
+}
+
+function setDeckDate(date) {
+  if (!date || !state.dates[date]) return;
+  if (state.date !== date) state.raceId = null;
+  state.date = date;
+  state.month = date.slice(0, 7);
+  try { localStorage.setItem(`nk_last_date_${trackCfg().prefix}`, date); } catch (e) { /* 無視 */ }
+  renderMonths(); renderDates(); renderTabs();
+  renderDeck();
+}
+
+function openDeckRace(raceId, sub = 'yosou') {
+  if (!raceId) return;
+  state.raceId = raceId;
+  switchView('race');
+  selectRace(raceId, sub);
+}
+
+function renderDeck() {
+  const root = $('deckRoot');
+  if (!root) return;
+  const races = (state.dates[state.date] || []).slice().sort((a, b) => Number(a.race_no) - Number(b.race_no));
+  if (!state.date || !races.length) {
+    root.innerHTML = `<div class="deck-ended"><h2>${esc(state.track)}の開催データはありません</h2><div class="legend">別の日付または競馬場を選んでください。</div></div>`;
+    return;
+  }
+  const dates = Object.keys(state.dates).sort();
+  const dateIndex = dates.indexOf(state.date);
+  const now = new Date();
+  const today = jstToday();
+  const focus = deckFocusRace(races, state.date);
+  const focusId = focus && focus.race_id;
+  const finished = races.filter((r) => {
+    const t = deckPostTime(state.date, r);
+    return state.date < today || (t && now > new Date(t.getTime() + 5 * 60000));
+  }).length;
+  const candidates = races.filter((r) => deckDecision(deckV3Race(r.race_id)).kind === 'buy').length;
+  const passes = races.filter((r) => deckDecision(deckV3Race(r.race_id)).kind === 'pass').length;
+
+  const hero = focus ? (() => {
+    const v3 = deckV3Race(focus.race_id);
+    const ai = deckAiLeader(v3);
+    const decision = deckDecision(v3);
+    const time = deckPostTime(state.date, focus);
+    return `<section class="deck-hero">
+      <div>
+        <div class="deck-kicker">${state.date === today ? 'NEXT RACE' : 'RACE FOCUS'} · ${esc(state.track)}</div>
+        <h2>${focus.race_no}R ${esc(focus.name || focus.klass || '')}</h2>
+        <div class="hero-meta"><span>${esc(focus.hasso_time || '--:--')}発走</span><span>${focus.distance_m || '?'}m</span><span>${esc(focus.klass || '')}</span></div>
+        ${time ? `<span class="countdown" data-hasso="${time.toISOString()}"></span>` : ''}
+        <div class="hero-actions"><button class="deck-cta" onclick="openDeckRace('${esc(focus.race_id)}','yosou')">予想と根拠を見る →</button><button class="deck-secondary" onclick="openDeckRace('${esc(focus.race_id)}','syutuba')">出馬表</button></div>
+      </div>
+      <div class="hero-decision">
+        <small>期待値ボード · 影運用</small>
+        <b>${esc(decision.label)}</b>
+        <small>${esc(decision.detail)} · 実投資0円</small>
+        <div class="hero-ai"><span>AI最上位</span><strong>${ai ? `${ai.umaban}番 ${esc(ai.name)} · ${ai.value}` : '予測データ待ち'}</strong></div>
+      </div>
+    </section>`;
+  })() : `<section class="deck-ended"><div class="deck-kicker">RACE COMPLETE · ${esc(state.track)}</div><h2>${state.date === today ? '本日の開催は終了しました' : '開催結果を振り返る'}</h2><div class="legend">各カードから予想時点の判断と結果を確認できます。</div></section>`;
+
+  const cards = races.map((r) => {
+    const v3 = deckV3Race(r.race_id);
+    const ai = deckAiLeader(v3);
+    const decision = deckDecision(v3);
+    const t = deckPostTime(state.date, r);
+    const isFinished = state.date < today || (t && now > new Date(t.getTime() + 5 * 60000));
+    const isLive = state.date === today && t && now >= new Date(t.getTime() - 2 * 60000) && now <= new Date(t.getTime() + 5 * 60000);
+    const status = isFinished ? '終了' : isLive ? '発走間近' : r.race_id === focusId ? '次のレース' : '予定';
+    return `<article class="race-deck-card${r.race_id === focusId ? ' is-next' : ''}${isFinished ? ' is-finished' : ''}">
+      <div class="race-time-rail"><b>${esc(r.hasso_time || '--:--')}</b><span>${esc(status)}</span></div>
+      <div class="race-card-main">
+        <div class="race-card-head"><span class="race-no">${r.race_no}R</span><h4>${esc(r.name || r.klass || '')}</h4></div>
+        <div class="race-card-meta">${r.distance_m || '?'}m · ${esc(r.klass || '')}${r.going ? ` · ${esc(r.going)}` : ''}</div>
+        <div class="decision-row">
+          <div class="decision-cell"><span>AI最上位</span><b>${ai ? `${ai.umaban}番 ${esc(ai.name)} · ${ai.value}` : '予測待ち'}</b></div>
+          <div class="decision-cell ${decision.kind}"><span>期待値判断</span><b>${esc(decision.label)}</b></div>
+        </div>
+        <div class="race-card-actions"><small>${esc(decision.detail)} · 影運用</small><button class="race-open" onclick="openDeckRace('${esc(r.race_id)}','yosou')">予想を見る</button></div>
+      </div>
+    </article>`;
+  }).join('');
+
+  root.innerHTML = `<div class="deck-shell">
+    <div class="deck-toolbar">
+      <div class="deck-date"><button ${dateIndex <= 0 ? 'disabled' : ''} onclick="setDeckDate('${dates[dateIndex - 1] || ''}')" aria-label="前の開催日">‹</button><strong>${deckDateLabel(state.date)}</strong><button ${dateIndex < 0 || dateIndex >= dates.length - 1 ? 'disabled' : ''} onclick="setDeckDate('${dates[dateIndex + 1] || ''}')" aria-label="次の開催日">›</button></div>
+      <div class="deck-mode">未来情報を使わない予想レシート</div>
+    </div>
+    ${hero}
+    <div class="deck-summary">
+      <div class="summary-chip"><span>全レース</span><b>${races.length}R</b></div>
+      <div class="summary-chip"><span>進行</span><b>${finished}/${races.length}</b></div>
+      <div class="summary-chip"><span>候補 / 見送り</span><b>${candidates} / ${passes}</b></div>
+    </div>
+    <div class="deck-section-head"><h3>レースタイムライン</h3><span>AI判断はデータ到着後に自動更新</span></div>
+    <div class="deck-grid">${cards}</div>
+  </div>`;
+  tickCountdowns();
+}
+
+// 上部ビュータブ（今日/レース/分析/調教＋門別のみ能検・シミュレータ）を場に応じて再構築
 function renderViewTabs() {
   const cfg = trackCfg();
-  const tabs = [['race', 'レース'], ['analysis', '分析'], ['cyokyo', '調教']];
-  if (cfg.noken) tabs.push(['noken', '🎓 能検']);
+  const tabs = [['deck', '● 今日'], ['race', 'レース'], ['analysis', '分析'], ['cyokyo', '調教']];
+  if (cfg.noken) tabs.push(['noken', '能検']);
   let html = tabs.map(([v, l]) => `<button data-view="${v}" class="${state.view === v ? 'active' : ''}">${l}</button>`).join('');
-  if (cfg.sim) html += `<button onclick="location.href='simulator.html?track=${encodeURIComponent(state.track)}'">🎲 シミュレータ</button>`;
+  if (cfg.sim) html += `<button onclick="location.href='simulator.html?track=${encodeURIComponent(state.track)}'">シミュレータ</button>`;
   $('viewTabs').innerHTML = html;
 }
 function renderSubTabs() {
@@ -2598,12 +2900,25 @@ function renderHorseModal(results, cyokyo) {
 // ============================================================
 function switchView(v) {
   state.view = v;
+  if (v === 'deck' && location.hash) history.replaceState(null, '', location.pathname + location.search);
   if (v !== 'race') { clearInterval(state.oddsTimer); state.oddsTimer = null; }  // レース以外はライブオッズ停止
+  if (v !== 'deck') { clearInterval(state.deckTimer); state.deckTimer = null; }
+  $('deckRoot').hidden = v !== 'deck';
   $('raceRoot').hidden = v !== 'race';
   $('analysisRoot').hidden = v !== 'analysis';
   $('cyokyoRoot').hidden = v !== 'cyokyo';
   $('nokenRoot').hidden = v !== 'noken';
   renderViewTabs();   // アクティブ状態を反映して再構築（場で能検/シミュレータの有無も変わる）
+  if (v === 'deck') {
+    renderDeck();
+    clearInterval(state.deckTimer);
+    state.deckTimer = setInterval(() => { if (state.view === 'deck') renderDeck(); }, 60000);
+  }
+  if (v === 'race' && !state.raceId) {
+    const races = state.dates[state.date] || [];
+    const target = deckFocusRace(races, state.date) || races[0];
+    if (target) selectRace(target.race_id, 'yosou');
+  }
   if (v === 'analysis') renderAnalysis();
   if (v === 'cyokyo') renderCyokyo();
   if (v === 'noken') renderNoken();
@@ -2811,15 +3126,17 @@ async function selectRace(raceId, sub) {
 }
 
 function goHome() {
-  // ヘッダー「門別ビューア」タップ→トップ（今日の開催、無ければ最新開催日）へ
+  // ブランドタップ→今日のレースデッキ（開催が無ければ最新開催日）へ
   $('horseModal').hidden = true;
   state.prevRace = null;
   const dates = Object.keys(state.dates);
   const today = jstToday();
   const target = state.dates[today] ? today : [...dates].sort().reverse()[0];
   if (!target) return;
-  switchView('race');
-  selectDate(target);
+  history.replaceState(null, '', location.pathname + location.search);
+  state.raceId = null;
+  setDeckDate(target);
+  switchView('deck');
 }
 
 async function openHistoricalRace(raceId, date) {
@@ -2879,7 +3196,7 @@ async function selectTrack(track) {
   state.noken = null; state.nokenByHorse = null;   // 能検は門別専用＝場切替でクリア
   cyokyoState.data = null; cyokyoState.date = null; cyokyoState.year = null; cyokyoState.byYear = {};
   cyokyoState.years = []; cyokyoState.base = null; cyokyoState.baseHonba = null; cyokyoState.local = null;   // 調教データも場ごとに読み直す
-  if (state.view === 'noken') state.view = 'race';  // 南関へ移ったら能検ビューから離脱
+  state.view = 'deck';  // 場を変えたら、その場の今日を起点にする
   if (state.sub === 'sim') state.sub = 'seiseki';   // シミュレータsubからも離脱
   renderTrackSwitch();
   renderViewTabs();
@@ -2892,13 +3209,15 @@ async function selectTrack(track) {
     state.provider.loadV3Predictions().then((v) => { state.v3Predictions = v; }),
     state.provider.loadPoints().then((p) => { state.kakuPoints = p; }),
   ]);
+  state.statsPromise.then(() => { if (state.view === 'deck' && state.track === track) renderDeck(); });
   const ds = Object.keys(state.dates).sort().reverse();
-  if (ds.length) { switchView('race'); selectDate(ds[0]); }
-  else { renderMonths(); renderDates(); renderTabs(); $('raceView').innerHTML = `<div class="empty">${esc(track)}のデータは準備中です</div>`; }
+  const today = jstToday();
+  if (ds.length) { setDeckDate(state.dates[today] ? today : ds[0]); switchView('deck'); }
+  else { renderMonths(); renderDates(); renderTabs(); switchView('deck'); }
   // 全期間分は裏で取得して月/日セレクトへ反映
   if (state.provider === providers.supabase) {
     providers.supabase.listDatesFull().then((full) => {
-      if (full && state.track === track) { state.dates = full; renderMonths(); renderDates(); }
+      if (full && state.track === track) { state.dates = full; renderMonths(); renderDates(); if (state.view === 'deck') renderDeck(); }
     }).catch(() => {});
   }
 }
@@ -2930,6 +3249,7 @@ async function init() {
       if (!full) return;
       state.dates = full;
       renderMonths(); renderDates();
+      if (state.view === 'deck') renderDeck();
     }).catch(() => { /* 直近分のみで継続 */ });
   }
   // 統計は裏で読み込み（指数・テン偏差値に使う）
@@ -2939,6 +3259,7 @@ async function init() {
     state.provider.loadModel().then((mo) => { state.model = mo; }),
     state.provider.loadV3Predictions().then((v) => { state.v3Predictions = v; }),
   ]);
+  state.statsPromise.then(() => { if (state.view === 'deck') renderDeck(); });
 
   $('monthSel').addEventListener('change', (e) => {
     state.month = e.target.value;
@@ -3039,10 +3360,12 @@ async function init() {
     let saved = null;
     try { saved = localStorage.getItem(`nk_last_date_${trackCfg().prefix}`); } catch (e) { /* 無視 */ }
     const today = jstToday();
-    selectDate((saved && state.dates[saved]) ? saved : (state.dates[today] ? today : dates[0]));
+    setDeckDate((saved && state.dates[saved]) ? saved : (state.dates[today] ? today : dates[0]));
+    switchView('deck');
   }
   // ブラウザの戻る/進むボタンでレース間を移動できるように
   window.addEventListener('hashchange', () => {
+    if (!location.hash) { goHome(); return; }
     if (state.view !== 'race') switchView('race');
     applyHash();
   });
@@ -3058,8 +3381,9 @@ async function applyHash() {
   state.month = hd.slice(0, 7);
   renderMonths();
   renderDates();
-  if (hr && state.dates[hd].some((r) => r.race_id === hr)) { renderTabs(); await selectRace(hr); return true; }
-  selectDate(hd);
+  if (hr && state.dates[hd].some((r) => r.race_id === hr)) { switchView('race'); renderTabs(); await selectRace(hr); return true; }
+  setDeckDate(hd);
+  switchView('deck');
   return true;
 }
 init();
