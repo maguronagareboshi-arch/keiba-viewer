@@ -305,7 +305,8 @@ header.appbar {
 .race-deck-card { position: relative; overflow: hidden; display: grid; grid-template-columns: 82px 1fr; min-height: 160px;
   border: 1px solid var(--border); border-radius: 16px; background: var(--panel); box-shadow: 0 4px 15px rgba(30,45,80,.04); }
 .race-deck-card.is-next { border-color: color-mix(in srgb, var(--brand) 60%, var(--border)); box-shadow: 0 8px 25px rgba(43,75,205,.13); }
-.race-deck-card.is-finished { opacity: .72; }
+.race-deck-card.is-finished { opacity: 1; }
+.race-deck-card.is-finished .race-time-rail { color: var(--sub); }
 .race-time-rail { padding: 17px 10px; text-align: center; background: color-mix(in srgb, var(--chip-bg) 66%, transparent); }
 .race-time-rail b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
 .race-time-rail span { display: inline-block; margin-top: 5px; color: var(--sub); font-size: 10px; font-weight: 700; }
@@ -321,6 +322,9 @@ header.appbar {
 .decision-cell b { display: block; overflow: hidden; margin-top: 3px; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; }
 .decision-cell.buy { background: var(--positive-soft); color: var(--positive); }
 .decision-cell.pass { background: var(--danger-soft); color: var(--danger); }
+.decision-cell.result { background: var(--positive-soft); color: var(--positive); }
+.decision-cell.missing { background: var(--note-bg); color: var(--note); }
+.deck-mode.is-error::before { background: var(--danger); box-shadow: 0 0 0 4px var(--danger-soft); }
 .race-card-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 11px; }
 .race-card-actions small { color: var(--sub); font-size: 9px; }
 .race-open { border: 0; padding: 7px 11px; border-radius: 8px; background: var(--brand); color: #fff; font-weight: 700; cursor: pointer; }
@@ -470,6 +474,14 @@ const providers = {
       ]);
       return { race: races[0] || {}, results };
     },
+    async loadDayResults(raceIds) {
+      if (!raceIds.length) return {};
+      const ids = raceIds.map(encodeURIComponent).join(',');
+      const rows = await sbGet(`chihou_results?race_id=in.(${ids})&select=race_id,umaban,horse_name,finish,finish_note,pop,win_odds,time_str&order=race_id.asc,finish.asc.nullslast&limit=1000`);
+      const byRace = {};
+      for (const row of rows) (byRace[row.race_id] = byRace[row.race_id] || []).push(row);
+      return byRace;
+    },
     async loadEntries(raceId) {
       try { return await sbGet(`chihou_entries?race_id=eq.${raceId}&select=*&order=umaban.asc`); }
       catch (e) { return []; }
@@ -561,6 +573,10 @@ const providers = {
       try { return await jsonGet(`data/json/seiseki/${raceId}.json`); }
       catch (e) { return { race: {}, results: [] }; }
     },
+    async loadDayResults(raceIds) {
+      const pairs = await Promise.all(raceIds.map(async (raceId) => [raceId, (await this.loadRace(raceId)).results || []]));
+      return Object.fromEntries(pairs);
+    },
     async loadEntries(raceId) {
       try { return (await jsonGet(`data/json/syutuba/${raceId}.json`)).entries; }
       catch (e) { return []; }
@@ -612,7 +628,8 @@ const providers = {
 const state = { provider: null, dates: {}, month: null, date: null, raceId: null, track: '門別',
   sub: 'yosou', stats: null, model: null, view: 'deck', prevRace: null,
   noken: null, nokenDate: null, nokenSort: 'race', nokenTwoOnly: false, nokenHist: null, nokenByHorse: null,
-  v3Predictions: null };
+  v3Predictions: null, deckDataCheckedAt: null, deckRefreshBusy: false, deckRefreshError: null,
+  dayResults: {}, dayResultsFetchedAt: {}, dayResultsLoading: new Set() };
 
 // ============================================================
 // ユーティリティ
@@ -961,6 +978,20 @@ function deckAiLeader(v3Race) {
   };
 }
 
+function deckArchivedMarks(v3Race) {
+  const marks = new Map();
+  const runners = (v3Race && v3Race.runners || []).filter((r) => r && r.umaban != null);
+  if (!runners.length) return { marks, archived: false, label: '予想履歴' };
+  const overlay = !!(v3Race.market_overlay && v3Race.market_overlay.status === 'shadow');
+  const usePattern = overlay && runners.every((r) => Number.isFinite(Number(r.pattern_probability)));
+  const score = (r) => usePattern ? Number(r.pattern_probability)
+    : Number.isFinite(Number(r.win_probability && r.win_probability.mid)) ? Number(r.win_probability.mid)
+    : Number(r.win_probability_raw);
+  runners.filter((r) => Number.isFinite(score(r))).sort((a, b) => score(b) - score(a))
+    .forEach((r, i) => { if (i < MARKS.length) marks.set(+r.umaban, MARKS[i]); });
+  return { marks, archived: marks.size > 0, label: usePattern ? 'T-10予想印' : '事前予想印' };
+}
+
 function deckDecision(v3Race) {
   const shadow = v3Race && v3Race.v5_shadow;
   if (!shadow) return { kind: 'wait', label: '判定待ち', detail: 'T-10で更新' };
@@ -973,6 +1004,93 @@ function deckDecision(v3Race) {
     label: `${V5_TICKET_LABELS[t.ticket_type] || t.ticket_type} ${t.combination || ''}`.trim(),
     detail: Number.isFinite(Number(t.conservative_ev)) ? `保守EV ${Number(t.conservative_ev).toFixed(2)}` : '候補あり',
   };
+}
+
+const deckDayKey = (track, date) => `${track}|${date}`;
+
+function deckResultSummary(rows) {
+  const finished = (rows || []).filter((r) => Number.isFinite(Number(r.finish)) && Number(r.finish) > 0)
+    .slice().sort((a, b) => Number(a.finish) - Number(b.finish));
+  const winner = finished.find((r) => Number(r.finish) === 1) || null;
+  const top3 = finished.filter((r) => Number(r.finish) <= 3);
+  return {
+    available: finished.length > 0,
+    winner,
+    top3: top3.map((r) => r.umaban).filter((v) => v != null).join('-'),
+    detail: winner ? [
+      winner.pop != null ? `${winner.pop}人気` : null,
+      winner.win_odds != null ? `単勝${winner.win_odds}倍` : null,
+      winner.time_str || null,
+    ].filter(Boolean).join(' · ') : '',
+  };
+}
+
+function deckFreshnessText() {
+  if (state.deckRefreshError) return 'AIデータの再確認に失敗 · 1分後に再試行';
+  const key = deckDayKey(state.track, state.date);
+  const resultAt = state.dayResultsFetchedAt[key];
+  if (state.date < jstToday() && resultAt) {
+    return `結果データ取得 ${new Date(resultAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`;
+  }
+  if (state.deckDataCheckedAt) {
+    return `AIデータ確認 ${state.deckDataCheckedAt.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+  }
+  const created = state.v3Predictions && state.v3Predictions.created_at;
+  return created ? `予想データ ${new Date(created).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' })}`
+    : '未来情報を使わない予想レシート';
+}
+
+function updateDeckFreshness() {
+  const el = $('deckFreshness');
+  if (!el) return;
+  el.textContent = deckFreshnessText();
+  el.classList.toggle('is-error', !!state.deckRefreshError);
+}
+
+async function ensureDayResults(date, races, force = false) {
+  if (!state.provider || !date || !races.length || typeof state.provider.loadDayResults !== 'function') return;
+  const track = state.track;
+  const key = deckDayKey(track, date);
+  const fetchedAt = state.dayResultsFetchedAt[key] || 0;
+  const ttl = date === jstToday() ? 45000 : 86400000;
+  if (state.dayResultsLoading.has(key) || (!force && fetchedAt && Date.now() - fetchedAt < ttl)) return;
+  state.dayResultsLoading.add(key);
+  try {
+    const byRace = await state.provider.loadDayResults(races.map((r) => r.race_id));
+    state.dayResults[key] = byRace || {};
+    state.dayResultsFetchedAt[key] = Date.now();
+    if (state.view === 'deck' && state.track === track && state.date === date) renderDeck();
+  } catch (e) {
+    state.dayResults[key] = state.dayResults[key] || {};
+  } finally {
+    state.dayResultsLoading.delete(key);
+  }
+}
+
+async function refreshDeckData() {
+  if (!state.provider || state.deckRefreshBusy) return;
+  state.deckRefreshBusy = true;
+  const track = state.track;
+  try {
+    const before = state.v3Predictions && (state.v3Predictions.card_hash || state.v3Predictions.created_at);
+    const latest = await state.provider.loadV3Predictions();
+    if (state.track !== track) return;
+    state.v3Predictions = latest;
+    state.deckDataCheckedAt = new Date();
+    state.deckRefreshError = null;
+    const after = latest && (latest.card_hash || latest.created_at);
+    if (state.view === 'deck' && before !== after) renderDeck();
+    else updateDeckFreshness();
+    if (state.view === 'deck') await ensureDayResults(state.date, state.dates[state.date] || [], state.date === jstToday());
+  } catch (e) {
+    if (state.track === track) {
+      state.deckDataCheckedAt = new Date();
+      state.deckRefreshError = String(e && e.message || e);
+      updateDeckFreshness();
+    }
+  } finally {
+    state.deckRefreshBusy = false;
+  }
 }
 
 function deckFocusRace(races, date) {
@@ -1013,6 +1131,11 @@ function renderDeck() {
   const dateIndex = dates.indexOf(state.date);
   const now = new Date();
   const today = jstToday();
+  const isPastDay = state.date < today;
+  const resultKey = deckDayKey(state.track, state.date);
+  const dayResults = state.dayResults[resultKey] || {};
+  const resultsFetched = !!state.dayResultsFetchedAt[resultKey];
+  ensureDayResults(state.date, races);
   const focus = deckFocusRace(races, state.date);
   const focusId = focus && focus.race_id;
   const finished = races.filter((r) => {
@@ -1021,6 +1144,7 @@ function renderDeck() {
   }).length;
   const candidates = races.filter((r) => deckDecision(deckV3Race(r.race_id)).kind === 'buy').length;
   const passes = races.filter((r) => deckDecision(deckV3Race(r.race_id)).kind === 'pass').length;
+  const resultRaceCount = races.filter((r) => deckResultSummary(dayResults[r.race_id]).available).length;
 
   const hero = focus ? (() => {
     const v3 = deckV3Race(focus.race_id);
@@ -1042,7 +1166,7 @@ function renderDeck() {
         <div class="hero-ai"><span>AI最上位</span><strong>${ai ? `${ai.umaban}番 ${esc(ai.name)} · ${ai.value}` : '予測データ待ち'}</strong></div>
       </div>
     </section>`;
-  })() : `<section class="deck-ended"><div class="deck-kicker">RACE COMPLETE · ${esc(state.track)}</div><h2>${state.date === today ? '本日の開催は終了しました' : '開催結果を振り返る'}</h2><div class="legend">各カードから予想時点の判断と結果を確認できます。</div></section>`;
+  })() : `<section class="deck-ended"><div class="deck-kicker">RACE COMPLETE · ${esc(state.track)}</div><h2>${state.date === today ? '本日の開催は終了しました' : '開催結果を振り返る'}</h2><div class="legend">${resultsFetched ? `${resultRaceCount}/${races.length}Rの公式成績を取得済み。` : '公式成績を読み込み中です。'}各カードから着順とレース詳細を確認できます。</div></section>`;
 
   const cards = races.map((r) => {
     const v3 = deckV3Race(r.race_id);
@@ -1052,16 +1176,29 @@ function renderDeck() {
     const isFinished = state.date < today || (t && now > new Date(t.getTime() + 5 * 60000));
     const isLive = state.date === today && t && now >= new Date(t.getTime() - 2 * 60000) && now <= new Date(t.getTime() + 5 * 60000);
     const status = isFinished ? '終了' : isLive ? '発走間近' : r.race_id === focusId ? '次のレース' : '予定';
+    const result = deckResultSummary(dayResults[r.race_id]);
+    const decisionBlock = isFinished ? (result.available ? `
+        <div class="decision-row">
+          <div class="decision-cell result"><span>1着</span><b>${result.winner.umaban != null ? `${result.winner.umaban}番 ` : ''}${esc(result.winner.horse_name || '')}</b></div>
+          <div class="decision-cell ${ai ? '' : 'missing'}"><span>${ai ? '予想最上位' : '予想履歴'}</span><b>${ai ? `${ai.umaban}番 ${esc(ai.name)} · ${ai.value}` : 'レシートなし'}</b></div>
+        </div>
+        <div class="race-card-actions"><small>${result.top3 ? `3着内 ${esc(result.top3)} · ` : ''}${esc(result.detail || '公式成績あり')}</small><button class="race-open" onclick="openDeckRace('${esc(r.race_id)}','seiseki')">結果を見る</button></div>` : `
+        <div class="decision-row">
+          <div class="decision-cell missing"><span>公式成績</span><b>${resultsFetched ? '結果未取得' : '読み込み中…'}</b></div>
+          <div class="decision-cell missing"><span>予想履歴</span><b>${ai ? `${ai.umaban}番 ${esc(ai.name)}` : 'レシートなし'}</b></div>
+        </div>
+        <div class="race-card-actions"><small>${resultsFetched ? '中止・取止めを含め詳細で確認' : '成績データを取得しています'}</small><button class="race-open" onclick="openDeckRace('${esc(r.race_id)}','seiseki')">成績を確認</button></div>`) : `
+        <div class="decision-row">
+          <div class="decision-cell"><span>AI最上位</span><b>${ai ? `${ai.umaban}番 ${esc(ai.name)} · ${ai.value}` : '予測待ち'}</b></div>
+          <div class="decision-cell ${decision.kind}"><span>期待値判断</span><b>${esc(decision.label)}</b></div>
+        </div>
+        <div class="race-card-actions"><small>${esc(decision.detail)} · 影運用</small><button class="race-open" onclick="openDeckRace('${esc(r.race_id)}','yosou')">予想を見る</button></div>`;
     return `<article class="race-deck-card${r.race_id === focusId ? ' is-next' : ''}${isFinished ? ' is-finished' : ''}">
       <div class="race-time-rail"><b>${esc(r.hasso_time || '--:--')}</b><span>${esc(status)}</span></div>
       <div class="race-card-main">
         <div class="race-card-head"><span class="race-no">${r.race_no}R</span><h4>${esc(r.name || r.klass || '')}</h4></div>
         <div class="race-card-meta">${r.distance_m || '?'}m · ${esc(r.klass || '')}${r.going ? ` · ${esc(r.going)}` : ''}</div>
-        <div class="decision-row">
-          <div class="decision-cell"><span>AI最上位</span><b>${ai ? `${ai.umaban}番 ${esc(ai.name)} · ${ai.value}` : '予測待ち'}</b></div>
-          <div class="decision-cell ${decision.kind}"><span>期待値判断</span><b>${esc(decision.label)}</b></div>
-        </div>
-        <div class="race-card-actions"><small>${esc(decision.detail)} · 影運用</small><button class="race-open" onclick="openDeckRace('${esc(r.race_id)}','yosou')">予想を見る</button></div>
+        ${decisionBlock}
       </div>
     </article>`;
   }).join('');
@@ -1069,15 +1206,15 @@ function renderDeck() {
   root.innerHTML = `<div class="deck-shell">
     <div class="deck-toolbar">
       <div class="deck-date"><button ${dateIndex <= 0 ? 'disabled' : ''} onclick="setDeckDate('${dates[dateIndex - 1] || ''}')" aria-label="前の開催日">‹</button><strong>${deckDateLabel(state.date)}</strong><button ${dateIndex < 0 || dateIndex >= dates.length - 1 ? 'disabled' : ''} onclick="setDeckDate('${dates[dateIndex + 1] || ''}')" aria-label="次の開催日">›</button></div>
-      <div class="deck-mode">未来情報を使わない予想レシート</div>
+      <div class="deck-mode${state.deckRefreshError ? ' is-error' : ''}" id="deckFreshness">${esc(deckFreshnessText())}</div>
     </div>
     ${hero}
     <div class="deck-summary">
       <div class="summary-chip"><span>全レース</span><b>${races.length}R</b></div>
       <div class="summary-chip"><span>進行</span><b>${finished}/${races.length}</b></div>
-      <div class="summary-chip"><span>候補 / 見送り</span><b>${candidates} / ${passes}</b></div>
+      ${isPastDay ? `<div class="summary-chip"><span>結果取得</span><b>${resultRaceCount}/${races.length}</b></div>` : `<div class="summary-chip"><span>候補 / 見送り</span><b>${candidates} / ${passes}</b></div>`}
     </div>
-    <div class="deck-section-head"><h3>レースタイムライン</h3><span>AI判断はデータ到着後に自動更新</span></div>
+    <div class="deck-section-head"><h3>レースタイムライン</h3><span>${isPastDay ? '着順・人気・単勝オッズは公式成績から取得' : 'AI判断は最新データを1分ごとに再取得'}</span></div>
     <div class="deck-grid">${cards}</div>
   </div>`;
   tickCountdowns();
@@ -1317,7 +1454,7 @@ function zenkouhanTabHtml(raceMeta, entries, history) {
 }
 
 // ---- 成績サブビュー ----
-function seisekiHtml(data, aiMark) {
+function seisekiHtml(data, aiMark, aiLabel = '予想履歴', aiNote = '') {
   const race = data.race || {};
   const results = (data.results || []).slice();
   if (!results.length) return raceHeaderHtml(race) + '<div class="empty">成績はまだありません（未発走）</div>';
@@ -1354,16 +1491,17 @@ function seisekiHtml(data, aiMark) {
       <td class="num">${r.win_odds ?? ''}</td>
       <td class="num">${r.body_weight ?? ''}${r.weight_diff != null ? `(${fmtDiff(r.weight_diff)})` : ''}</td>
       <td class="l">${esc(r.trainer)}</td>
-      <td style="font-size:15px">${aiMark.get(r.umaban) || ''}</td>
+      <td style="font-size:15px">${aiMark.get(+r.umaban) || '-'}</td>
     </tr>`;
   }).join('');
   return raceHeaderHtml(race) + `
+  ${aiNote ? `<div class="note">${esc(aiNote)}</div>` : ''}
   ${lapChartCard(race, results)}
   ${isShort ? '<div class="note">※1200m未満のため「前半3F」列は 距離−600m の前半タイム（1000mならテン2F相当）</div>' : ''}
   <div class="card"><div class="tablewrap">
     <table>
       <tr><th>着</th><th>枠</th><th>番</th><th class="stickyname">馬名</th><th>脚質</th><th>性齢</th><th>斤</th><th>騎手</th><th>タイム</th><th>着差</th>
-      <th>通過</th><th>4角</th><th>寸評</th><th>前半3F</th><th>上り3F</th><th>人気</th><th>単オッズ</th><th>馬体重</th><th>厩舎</th><th>AI印</th></tr>
+      <th>通過</th><th>4角</th><th>寸評</th><th>前半3F</th><th>上り3F</th><th>人気</th><th>単オッズ</th><th>馬体重</th><th>厩舎</th><th>${esc(aiLabel)}</th></tr>
       ${rows}
     </table>
   </div>
@@ -2220,19 +2358,13 @@ async function renderRaceView() {
         renderSubTabs();
         return renderRaceView();
       }
-      // 成績表にもAI印（レース前情報のみで再現）
-      if (state.statsPromise) await state.statsPromise;
-      const ids = data.results.map((r) => r.horse_id).filter(Boolean);
-      const tgtDate = data.race.race_date || data.race.date || state.date;
-      const raw = await state.provider.loadHistory(ids);
-      const hist = {};
-      for (const id in raw) hist[id] = raw[id].filter((r) => !r.date || !tgtDate || r.date < tgtDate);
-      const scored = data.results.filter((r) => r.horse_id)
-        .map((r) => [r.umaban, modelScore(r, hist, data.race)]).filter(([, v]) => v != null)
-        .sort((a, b) => b[1] - a[1]);
-      const aiMark = new Map();
-      scored.forEach(([um], i) => { if (i < MARKS.length) aiMark.set(um, MARKS[i]); });
-      $('raceView').innerHTML = seisekiHtml(data, aiMark);
+      // 保存された事前予想だけを表示する。現在モデルによる後付け印は答えを見た再計算と
+      // 区別できないため、予想レシートがない過去開催には表示しない。
+      const archived = deckArchivedMarks(deckV3Race(raceId));
+      const note = archived.archived
+        ? 'レース前に保存された予想レシートの印です。'
+        : 'この日付の固定予想レシートは保存されていないため、後からAI印を再計算していません。';
+      $('raceView').innerHTML = seisekiHtml(data, archived.marks, archived.label, note);
     } else {
       const meta = (state.dates[state.date] || []).find((r) => r.race_id === raceId) || {};
       const [raceData, entries, cyokyo, nouryoku, danwa] = await Promise.all([
@@ -2912,7 +3044,7 @@ function switchView(v) {
   if (v === 'deck') {
     renderDeck();
     clearInterval(state.deckTimer);
-    state.deckTimer = setInterval(() => { if (state.view === 'deck') renderDeck(); }, 60000);
+    state.deckTimer = setInterval(() => { if (state.view === 'deck') refreshDeckData(); }, 60000);
   }
   if (v === 'race' && !state.raceId) {
     const races = state.dates[state.date] || [];
@@ -3193,6 +3325,7 @@ async function selectTrack(track) {
   if (track === state.track || !TRACKS[track]) return;
   state.track = track;
   state.stats = null; state.model = null; state.v3Predictions = null; state.dates = {}; state.raceId = null; state.prevRace = null;
+  state.deckDataCheckedAt = null; state.deckRefreshError = null;
   state.noken = null; state.nokenByHorse = null;   // 能検は門別専用＝場切替でクリア
   cyokyoState.data = null; cyokyoState.date = null; cyokyoState.year = null; cyokyoState.byYear = {};
   cyokyoState.years = []; cyokyoState.base = null; cyokyoState.baseHonba = null; cyokyoState.local = null;   // 調教データも場ごとに読み直す
@@ -3206,7 +3339,7 @@ async function selectTrack(track) {
   state.statsPromise = Promise.all([
     state.provider.loadStats().then((s) => { state.stats = s; }),
     state.provider.loadModel().then((mo) => { state.model = mo; }),
-    state.provider.loadV3Predictions().then((v) => { state.v3Predictions = v; }),
+    state.provider.loadV3Predictions().then((v) => { state.v3Predictions = v; state.deckDataCheckedAt = new Date(); }),
     state.provider.loadPoints().then((p) => { state.kakuPoints = p; }),
   ]);
   state.statsPromise.then(() => { if (state.view === 'deck' && state.track === track) renderDeck(); });
@@ -3257,7 +3390,7 @@ async function init() {
     state.provider.loadPoints().then((p) => { state.kakuPoints = p; }),
     state.provider.loadStats().then((s) => { state.stats = s; }),
     state.provider.loadModel().then((mo) => { state.model = mo; }),
-    state.provider.loadV3Predictions().then((v) => { state.v3Predictions = v; }),
+    state.provider.loadV3Predictions().then((v) => { state.v3Predictions = v; state.deckDataCheckedAt = new Date(); }),
   ]);
   state.statsPromise.then(() => { if (state.view === 'deck') renderDeck(); });
 
