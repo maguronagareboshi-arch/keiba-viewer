@@ -2806,7 +2806,7 @@ async function renderRaceView() {
   if (state.sub === 'sim') {   // このレースの展開シミュレータを埋め込み表示
     $('raceView').innerHTML = `<div class="card" style="padding:0;overflow:hidden;border-radius:8px">
       <iframe src="simulator.html?race=${encodeURIComponent(raceId)}&track=${encodeURIComponent(state.track)}&embed=1" style="width:100%;height:920px;border:0;display:block" title="展開シミュレータ" loading="lazy"></iframe></div>
-      <div class="note">このレースの展開シミュレータ（テン3F/上がり実績で隊列・伸びを再現・1000回モンテカルロで勝率/複勝率/EV）。全画面は上部の🎲シミュレータから。</div>`;
+      <div class="note">このレースの展開シミュレータ（時系列検証済みH/M/S確率・実測脚質を使い、各展開2,000回で隊列と展開耐性を解析）。馬券の勝率・期待値ではありません。全画面は上部の🎲シミュレータから。</div>`;
     return;
   }
   try {
