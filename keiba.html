@@ -1364,6 +1364,39 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
 // ---- 予想サブビュー（A3: 自動印＋根拠＋妙味ゾーン） ----
 const MARKS = ['◎', '○', '▲', '△', '△'];
 
+const V5_TICKET_LABELS = {
+  win: '単勝', place: '複勝', quinella: '馬複', exacta: '馬単',
+  wide: 'ワイド', trio: '3連複', trifecta: '3連単',
+};
+const V5_FORM_LABELS = {
+  rising: '上向き', stable: '安定', fatigued: '疲労注意', declining: '下降注意',
+  rebound_ready: '反発準備', layoff: '休み明け',
+};
+
+function v5ShadowCardHtml(shadow) {
+  if (!shadow) return '';
+  const tickets = Array.isArray(shadow.tickets) ? shadow.tickets : [];
+  const rows = tickets.map((t) => `<tr>
+    <td>${esc(V5_TICKET_LABELS[t.ticket_type] || t.ticket_type)}</td>
+    <td><b>${esc(t.combination)}</b></td>
+    <td class="num">${Number.isFinite(+t.probability_low) ? (+t.probability_low * 100).toFixed(1) + '%' : '-'}</td>
+    <td class="num">${Number.isFinite(+t.odds_low) ? (+t.odds_low).toFixed(1) : '-'}</td>
+    <td class="num">${Number.isFinite(+t.conservative_ev) ? (+t.conservative_ev).toFixed(2) : '-'}</td>
+    <td class="num">${Number.isFinite(+t.virtual_stake_yen) ? Number(t.virtual_stake_yen).toLocaleString() + '円' : '-'}</td>
+  </tr>`).join('');
+  const body = rows
+    ? `<div class="tablewrap"><table><tr><th>券種</th><th>組合せ</th><th>下限確率</th><th>下限オッズ</th><th>保守EV</th><th>仮想配分</th></tr>${rows}</table></div>`
+    : '<div class="note"><b>全券種を見送り</b> — 確率下限、オッズ余白、データ充足率、人気馬崩れリスクのいずれかが基準未達です。</div>';
+  return `<div class="card">
+    <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap">
+      <b>AI v5 影運用・7券種期待値ボード</b>
+      <span class="badge">T-${Number(shadow.decision_window_min || 10)}固定</span>
+    </div>
+    ${body}
+    <div class="legend">これは購入指示ではなく将来検証用レシートです。実投資額は常に<b>0円</b>、仮想配分合計は${Number(shadow.virtual_stake_yen || 0).toLocaleString()}円。確定オッズや着順は予想生成に使っていません。</div>
+  </div>`;
+}
+
 function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   if (!entries.length) return raceHeaderHtml(raceMeta) + '<div class="empty">出馬表データがありません</div>';
   const cyoByUma = {};
@@ -1373,10 +1406,13 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   const v3Race = state.v3Predictions && state.v3Predictions.races
     ? state.v3Predictions.races[raceMeta.race_id || state.raceId] : null;
   const v3ByUma = new Map((v3Race && v3Race.runners || []).map((r) => [+r.umaban, r]));
+  const v5Shadow = v3Race && v3Race.v5_shadow;
+  const v5ByUma = new Map((v5Shadow && v5Shadow.runner_signals || []).map((r) => [+r.runner_number, r]));
 
   const hs = entries.map((e) => ({
     e,
     v3: v3ByUma.get(+e.umaban) || null,
+    v5: v5ByUma.get(+e.umaban) || null,
     ai: modelScore(e, history, raceMeta, cyoZFromWorks(cyoByUma[e.umaban])),
     comp: metricOf(history, e.horse_id, runShisu, 'mean'),
     si: metricOf(history, e.horse_id, runSI, 'mean'),
@@ -1462,8 +1498,11 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
       const nr = nouRuns(nouByUma, e.umaban, 1)[0];
       konkyo = nr ? `${state.track}実績なし（前走: ${nouRunHtml(nr).replace(/<[^>]+>/g, '')}）` : (konkyo || '実績なし');
     }
+    const formState = r.v5 && Number(r.v5.form_coverage || 0) >= 0.5 ? r.v5.form_state : null;
+    const formTone = formState === 'rising' || formState === 'rebound_ready' ? '#116329'
+      : (formState === 'fatigued' || formState === 'declining' ? '#b42318' : '#475467');
     return `<tr>
-      <td style="font-size:16px">${r.mark || ''}${hasMarketOverlay && r.v3.dangerous_favourite ? '<br><span class="badge" style="color:#b42318">人気危険</span>' : ''}${formSignalsAvailable && r.v3.rebound_candidate ? '<br><span class="badge" style="color:#116329">反発候補</span>' : ''}${formSignalsAvailable && r.v3.popular_collapse_candidate ? '<br><span class="badge" style="color:#b42318">人気崩れ注意</span>' : ''}</td>
+      <td style="font-size:16px">${r.mark || ''}${hasMarketOverlay && r.v3.dangerous_favourite ? '<br><span class="badge" style="color:#b42318">人気危険</span>' : ''}${formSignalsAvailable && r.v3.rebound_candidate ? '<br><span class="badge" style="color:#116329">反発候補</span>' : ''}${formSignalsAvailable && r.v3.popular_collapse_candidate ? '<br><span class="badge" style="color:#b42318">人気崩れ注意</span>' : ''}${formState ? `<br><span class="badge" style="color:${formTone}">${esc(V5_FORM_LABELS[formState] || formState)}</span>` : ''}</td>
       <td><span class="waku w${e.waku || 1}">${e.waku ?? ''}</span></td>
       <td>${e.umaban ?? ''}</td>
       <td class="l stickyname"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a>${todayBlinkerBadge(e, history)}${kakuBadge(e)}</td>
@@ -1481,6 +1520,7 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
 
   return raceHeaderHtml(raceMeta) + `
   ${danwaCard(entries, danwaByUma)}
+  ${v5ShadowCardHtml(v5Shadow)}
   <div class="note">直近の馬場: ${recentBias || 'データなし'}　印は${hasMarketOverlay ? 'v3能力と発走10分前市場を統合した補正勝率' : '学習モデル（勝ちやすさ）'}順。　<span id="oddsUpdated" class="badge"></span></div>
   <div id="evMonitor" class="note" hidden></div>
   <div class="card"><div class="tablewrap">
