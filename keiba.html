@@ -1816,6 +1816,9 @@ const V5_FORM_LABELS = {
 function v5ShadowCardHtml(shadow) {
   if (!shadow) return '';
   const tickets = Array.isArray(shadow.tickets) ? shadow.tickets : [];
+  const checked = Number(shadow.combinations_checked || 0);
+  const selected = Number(shadow.selected_tickets ?? tickets.length);
+  const comparisonBudget = Number(shadow.comparison_flat_budget_yen || 0);
   const rows = tickets.map((t) => `<tr>
     <td>${esc(V5_TICKET_LABELS[t.ticket_type] || t.ticket_type)}</td>
     <td><b>${esc(t.combination)}</b></td>
@@ -1823,17 +1826,19 @@ function v5ShadowCardHtml(shadow) {
     <td class="num">${Number.isFinite(+t.odds_low) ? (+t.odds_low).toFixed(1) : '-'}</td>
     <td class="num">${Number.isFinite(+t.conservative_ev) ? (+t.conservative_ev).toFixed(2) : '-'}</td>
     <td class="num">${Number.isFinite(+t.virtual_stake_yen) ? Number(t.virtual_stake_yen).toLocaleString() + '円' : '-'}</td>
+    <td class="num">${Number(t.comparison_flat_stake_yen) > 0 ? Number(t.comparison_flat_stake_yen).toLocaleString() + '円' : (comparisonBudget ? '0円' : '旧条件')}</td>
+    <td>${t.status === 'virtual_allocated' ? (t.allocation_basis === 'statistical_canary_floor' ? '検証対象' : 'Kelly配分') : '配分見送り'}</td>
   </tr>`).join('');
   const body = rows
-    ? `<div class="tablewrap"><table><tr><th>券種</th><th>組合せ</th><th>下限確率</th><th>下限オッズ</th><th>保守EV</th><th>仮想配分</th></tr>${rows}</table></div>`
+    ? `<div class="tablewrap"><table><tr><th>券種</th><th>組合せ</th><th>下限確率</th><th>下限オッズ</th><th>保守EV</th><th>検証カナリア</th><th>5,000円比較</th><th>資金判定</th></tr>${rows}</table></div>`
     : '<div class="note"><b>全券種を見送り</b> — 確率下限、オッズ余白、データ充足率、人気馬崩れリスクのいずれかが基準未達です。</div>';
   return `<div class="card">
     <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap">
-      <b>AI v5 影運用・7券種期待値ボード</b>
-      <span class="badge">T-${Number(shadow.decision_window_min || 10)}固定</span>
+      <b>AI v5 影運用・T-10候補抽出（7券種）</b>
+      <span class="badge">${checked ? checked.toLocaleString() + '点検査 → ' : ''}${selected}点通過</span>
     </div>
     ${body}
-    <div class="legend">これは購入指示ではなく将来検証用レシートです。実投資額は常に<b>0円</b>、仮想配分合計は${Number(shadow.virtual_stake_yen || 0).toLocaleString()}円。確定オッズや着順は予想生成に使っていません。</div>
+    <div class="legend">実投資額は常に<b>0円</b>。検証カナリアは基準通過点を精算サンプルに残す100円以上の記録用配分（合計${Number(shadow.virtual_stake_yen || 0).toLocaleString()}円）。${comparisonBudget ? `5,000円比較は同じ候補へ均等配分した損益比較（合計${Number(shadow.comparison_flat_stake_yen || 0).toLocaleString()}円）。` : 'このレシートは5,000円比較の導入前です。'}確定オッズや着順は予想生成に使っていません。</div>
   </div>`;
 }
 
