@@ -548,6 +548,42 @@ main { max-width: 1320px; }
 .state-down { color: var(--danger); }
 .state-flat { color: var(--sub); }
 
+.forecast-workspace { margin: 12px 0; }
+.forecast-view-toggle {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none;
+}
+.forecast-view-tabs {
+  position: sticky; top: 62px; z-index: 8; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px; margin-bottom: 8px; padding: 5px; border: 1px solid var(--hairline); border-radius: 14px;
+  background: color-mix(in srgb, var(--panel) 94%, transparent); box-shadow: 0 8px 24px rgba(17,31,68,.07);
+  backdrop-filter: blur(16px);
+}
+.forecast-view-tabs label {
+  display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; padding: 8px 12px;
+  border-radius: 10px; color: var(--sub); cursor: pointer; font-size: 12px; font-weight: 800; transition: .16s ease;
+}
+.forecast-view-tabs label:hover { color: var(--text); background: var(--surface-2); }
+.forecast-view-tabs label span { padding: 3px 6px; border-radius: 7px; background: var(--surface-3); font-size: 9px; }
+.forecast-panel { display: none; }
+#forecast-view-runners:checked ~ .forecast-view-tabs label[for="forecast-view-runners"],
+#forecast-view-value:checked ~ .forecast-view-tabs label[for="forecast-view-value"],
+#forecast-view-summary:checked ~ .forecast-view-tabs label[for="forecast-view-summary"] {
+  color: #fff; background: linear-gradient(135deg, var(--brand), #526fda); box-shadow: 0 7px 18px var(--glow);
+}
+#forecast-view-runners:checked ~ .forecast-panel-runners,
+#forecast-view-value:checked ~ .forecast-panel-value,
+#forecast-view-summary:checked ~ .forecast-panel-summary { display: block; }
+.forecast-panel .forecast-table-card,
+.forecast-panel .ev-board,
+.forecast-panel .forecast-overview { margin-top: 0; }
+.horse-ev { min-width: 68px; font-variant-numeric: tabular-nums; }
+.horse-ev b { display: block; font-size: 12px; }
+.horse-ev small { display: block; margin-top: 2px; color: var(--sub); font-size: 8px; white-space: nowrap; }
+.horse-ev.ev-positive b { color: var(--positive); }
+.horse-ev.ev-watch b { color: #d8a514; }
+.horse-ev.ev-negative b { color: var(--sub); }
+.ev-ticket-card .ev-allocation { color: var(--sub); font-size: 9px; }
+
 @media (max-width: 760px) {
   main { padding-left: 8px; padding-right: 8px; }
   .race-navigation { margin-top: 3px; padding: 8px; border-radius: 14px; }
@@ -586,6 +622,10 @@ main { max-width: 1320px; }
   .contender-grid { grid-template-columns: repeat(3, minmax(128px, 1fr)); overflow-x: auto; padding: 0 1px 5px; scroll-snap-type: x proximity; scrollbar-width: none; }
   .contender-card { scroll-snap-align: start; }
   .forecast-insight { align-items: flex-start; }
+  .forecast-workspace { margin-top: 8px; }
+  .forecast-view-tabs { top: 54px; gap: 3px; margin: 0 -1px 8px; padding: 4px; border-radius: 12px; }
+  .forecast-view-tabs label { gap: 4px; min-height: 44px; padding: 7px 5px; font-size: 10px; }
+  .forecast-view-tabs label span { padding: 2px 4px; font-size: 8px; }
   .signal-strip { align-items: flex-start; padding: 9px 10px; }
   .signal-strip > span:first-child { line-height: 1.55; }
   .ev-board { padding: 12px 10px; border-radius: 17px; }
@@ -618,7 +658,7 @@ main { max-width: 1320px; }
   .runner-win b { display: block; margin-top: 1px; color: var(--brand); font-size: 18px; }
   .runner-prob { height: 4px; margin: 0 12px; overflow: hidden; border-radius: 99px; background: var(--surface-3); }
   .runner-prob i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--brand), var(--positive)); }
-  .runner-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; margin-top: 10px; border-top: 1px solid var(--hairline); background: var(--hairline); }
+  .runner-metrics { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px; margin-top: 10px; border-top: 1px solid var(--hairline); background: var(--hairline); }
   .runner-metrics span { min-width: 0; padding: 8px 4px; background: var(--surface-2); color: var(--sub); text-align: center; font-size: 8px; }
   .runner-metrics b { display: block; overflow: hidden; margin-top: 2px; color: var(--text); white-space: nowrap; text-overflow: ellipsis; font-size: 11px; }
   .runner-reason { padding: 9px 12px 11px; color: var(--sub); font-size: 10px; line-height: 1.5; }
@@ -2096,6 +2136,8 @@ function v5ShadowCardHtml(shadow) {
   const checked = Number(shadow.combinations_checked || 0);
   const selected = Number(shadow.selected_tickets ?? tickets.length);
   const comparisonBudget = Number(shadow.comparison_flat_budget_yen || 0);
+  const typeCount = new Set(tickets.map((t) => t.ticket_type)).size;
+  const policy = shadow.candidate_policy || {};
   const top = tickets[0] || null;
   const rows = tickets.map((t) => `<tr>
     <td>${esc(V5_TICKET_LABELS[t.ticket_type] || t.ticket_type)}</td>
@@ -2109,7 +2151,7 @@ function v5ShadowCardHtml(shadow) {
   </tr>`).join('');
   const mobileRows = tickets.map((t) => `<article class="ev-ticket-card">
     <span class="ev-ticket-type">${esc(V5_TICKET_LABELS[t.ticket_type] || t.ticket_type)}</span>
-    <div><b>${esc(t.combination)}</b><small>下限 ${Number.isFinite(+t.probability_low) ? (+t.probability_low * 100).toFixed(1) + '%' : '-'} · オッズ ${Number.isFinite(+t.odds_low) ? (+t.odds_low).toFixed(1) : '-'}</small></div>
+    <div><b>${esc(t.combination)}</b><small>下限 ${Number.isFinite(+t.probability_low) ? (+t.probability_low * 100).toFixed(1) + '%' : '-'} · オッズ ${Number.isFinite(+t.odds_low) ? (+t.odds_low).toFixed(1) : '-'}</small><div class="ev-allocation">5,000円検証 ${Number(t.comparison_flat_stake_yen || 0).toLocaleString()}円</div></div>
     <div class="ev-value">EV ${Number.isFinite(+t.conservative_ev) ? (+t.conservative_ev).toFixed(2) : '-'}</div>
   </article>`).join('');
   const body = rows
@@ -2117,18 +2159,18 @@ function v5ShadowCardHtml(shadow) {
     : '<div class="note"><b>今回は見送り</b> — 確率下限、オッズ余白、データ充足率、人気崩れリスクのいずれかが基準未達です。</div>';
   return `<section class="ev-board">
     <div class="ev-board-head">
-      <div class="ev-title"><small>VALUE DETECTOR · T-10</small><b>期待値候補</b></div>
-      <span class="ev-audit-badge">${checked ? checked.toLocaleString() + '点 → ' : ''}${selected}点</span>
+      <div class="ev-title"><small>VALUE PORTFOLIO · T-10</small><b>券種横断の期待値候補</b></div>
+      <span class="ev-audit-badge">${checked ? checked.toLocaleString() + '点監査 → ' : ''}${selected}点 · ${typeCount}券種</span>
     </div>
     <div class="ev-spotlight">
-      <div class="ev-primary"><span>最上位候補</span><b>${top ? `${esc(V5_TICKET_LABELS[top.ticket_type] || top.ticket_type)} ${esc(top.combination)}` : '見送り'}</b></div>
-      <div><span>保守EV</span><b>${top && Number.isFinite(+top.conservative_ev) ? (+top.conservative_ev).toFixed(2) : '-'}</b></div>
-      <div><span>検証配分</span><b>${Number(shadow.virtual_stake_yen || 0).toLocaleString()}円</b></div>
+      <div class="ev-primary"><span>最上位候補</span><b>${top ? `${esc(V5_TICKET_LABELS[top.ticket_type] || top.ticket_type)} ${esc(top.combination)} · EV ${Number.isFinite(+top.conservative_ev) ? (+top.conservative_ev).toFixed(2) : '-'}` : '見送り'}</b></div>
+      <div><span>候補構成</span><b>${selected}点 / ${typeCount}券種</b></div>
+      <div><span>5,000円検証</span><b>${Number(shadow.comparison_flat_stake_yen || 0).toLocaleString()}円</b></div>
       <div><span>実投資</span><b>0円</b></div>
     </div>
     ${body}
     ${mobileRows ? `<div class="ev-ticket-mobile">${mobileRows}</div>` : ''}
-    <details class="prediction-disclosure"><summary>検証条件と資金表示について</summary><p>実投資額は常に<b>0円</b>。検証カナリアは候補を公式払戻で追跡する100円以上の記録用配分（合計${Number(shadow.virtual_stake_yen || 0).toLocaleString()}円）。${comparisonBudget ? `5,000円比較は同じ候補への固定予算比較（合計${Number(shadow.comparison_flat_stake_yen || 0).toLocaleString()}円）。` : 'このレシートは5,000円比較の導入前です。'}確定オッズや着順は予想生成に使っていません。</p></details>
+    <details class="prediction-disclosure"><summary>候補数・検証条件・資金表示について</summary><p>点数を増やすこと自体ではなく、基準を超えた候補だけを券種ごとに拾います。${policy.max_per_ticket_type ? `現行は券種ごと最大${Number(policy.max_per_ticket_type)}点、全体最大${Number(policy.max_total || 0)}点を、券種を一巡してから2点目以降へ進む分散方式です。` : 'このレースは旧ルールで生成されたレシートのため、券種ごと1点上限です。'}実投資額は常に<b>0円</b>。検証カナリアは公式払戻で追跡する記録用配分（合計${Number(shadow.virtual_stake_yen || 0).toLocaleString()}円）。${comparisonBudget ? `5,000円検証は候補全体に固定予算を配分（合計${Number(shadow.comparison_flat_stake_yen || 0).toLocaleString()}円）。` : 'このレシートは5,000円比較の導入前です。'}確定オッズや着順は予想生成に使っていません。</p></details>
   </section>`;
 }
 
@@ -2203,6 +2245,20 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
     r.winP = hasMarketOverlay ? Number(r.v3.pattern_probability)
       : (hasV3 ? Number(r.v3.win_probability.mid) : (zAi[i] != null ? exps[i] / expSum : null));
     r.top3P = hasV3 ? Number(r.v3.top3_probability) : null;
+    const coreMidRaw = hasV3 && r.v3.win_probability ? r.v3.win_probability.mid : null;
+    const coreLowRaw = hasV3 && r.v3.win_probability ? r.v3.win_probability.low : null;
+    const coreMid = coreMidRaw != null && coreMidRaw !== '' ? Number(coreMidRaw) : null;
+    const coreLow = coreLowRaw != null && coreLowRaw !== '' ? Number(coreLowRaw) : null;
+    if (hasMarketOverlay && Number.isFinite(coreLow) && Number.isFinite(coreMid) && coreMid > 0) {
+      // Match the v5 ticket pipeline: preserve the outer-fold lower-bound
+      // shape and add a composition penalty to the market-adjusted head.
+      r.winPLow = r.winP * Math.min(Math.max(coreLow / coreMid, 0), 0.85);
+    } else {
+      r.winPLow = Number.isFinite(coreLow) ? coreLow : null;
+    }
+    const currentOdds = Number(r.e.win_odds);
+    r.winEv = r.winP != null && Number.isFinite(currentOdds) && currentOdds > 0 ? r.winP * currentOdds : null;
+    r.winEvLow = r.winPLow != null && Number.isFinite(currentOdds) && currentOdds > 0 ? r.winPLow * currentOdds : null;
   });
   const siTop = hs.filter((r) => r.si != null).sort((a, b) => b.si - a.si)[0];
   for (const r of hs) r.myomi = siTop && r === siTop && r.e.pop != null && r.e.pop >= 4;
@@ -2247,6 +2303,11 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   };
   const pct = (v, digits = 0) => v != null && Number.isFinite(+v) ? `${(+v * 100).toFixed(digits)}%` : '-';
   const dev = (v, digits = 0) => v != null && Number.isFinite(+v) ? (+v).toFixed(digits) : '-';
+  const horseEvClass = (v) => v != null && Number.isFinite(+v)
+    ? (+v >= 1.08 ? 'ev-positive' : (+v >= 1 ? 'ev-watch' : 'ev-negative')) : 'ev-negative';
+  const horseEvHtml = (r) => r.winEvLow != null && Number.isFinite(+r.winEvLow)
+    ? `<b>${(+r.winEvLow).toFixed(2)}</b><small>推定 ${Number.isFinite(+r.winEv) ? (+r.winEv).toFixed(2) : '-'}</small>`
+    : '<b>-</b><small>オッズ待ち</small>';
   const leader = disp[0] || null;
   const topTicket = v5Shadow && Array.isArray(v5Shadow.tickets)
     ? v5Shadow.tickets.slice().sort((a, b) => Number(b.conservative_ev || 0) - Number(a.conservative_ev || 0))[0] : null;
@@ -2286,7 +2347,7 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
       <td class="num">${r.si != null ? r.si.toFixed(0) : '-'}</td>
       <td class="num">${r.cz != null ? r.cz.toFixed(1) : '-'}</td>
       <td class="num" data-live-odds="${e.umaban}">${e.win_odds ?? '-'}${e.pop != null ? `(${e.pop})` : ''}</td>
-      <td>${r.myomi ? '💰' : ''}</td>
+      <td class="num horse-ev ${horseEvClass(r.winEvLow)}" data-horse-ev="${e.umaban}" data-prob-low="${r.winPLow ?? ''}" data-prob-mid="${r.winP ?? ''}">${horseEvHtml(r)}</td>
       <td class="small fold"><span class="kv">${esc(r.konkyo)}</span></td>
     </tr>`;
   }).join('');
@@ -2302,6 +2363,7 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
       <div class="runner-prob"><i style="width:${Math.max(1, Math.min(100, Number(r.winP || 0) * 100))}%"></i></div>
       <div class="runner-metrics">
         <span>3着内<b>${pct(r.top3P)}</b></span><span>単勝<b data-live-odds="${e.umaban}">${e.win_odds ?? '-'}${e.pop != null ? `(${e.pop})` : ''}</b></span>
+        <span class="horse-ev ${horseEvClass(r.winEvLow)}" data-horse-ev="${e.umaban}" data-prob-low="${r.winPLow ?? ''}" data-prob-mid="${r.winP ?? ''}">単勝EV${horseEvHtml(r)}</span>
         <span>総合<b>${r.score != null ? (50 + r.score * 10).toFixed(1) : '-'}</b></span><span>調教<b>${dev(r.cz, 1)}</b></span>
       </div>
       <div class="runner-reason">評価根拠 · ${esc(r.konkyo || 'データ待ち')}</div>
@@ -2312,25 +2374,39 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
     ? `<b>${hasMarketOverlay ? 'v3＋T-10市場 AI印' : 'v3 AI印'}</b>＝${hasMarketOverlay ? '未来情報なしで学習した基礎能力に、発走10分前市場の人気過剰・過小評価パターンを重ねた補正勝率です。' : '過去結果だけで固定した展開混合・着順分布モデルです。'}${formSignalsAvailable ? '「反発候補」「人気崩れ注意」は条件固定後に別期間でも方向を確認した監視ラベルです。' : ''}モデルhash: ${esc((state.v3Predictions.model_hash || '').slice(0, 12))}…。`
     : '<b>現在のAI印</b>は旧モデルの参考順位です。発売時点オッズを固定した収益検証とは分けて表示しています。';
 
-  return raceHeaderHtml(raceMeta) + `
-  ${overview}
-  ${v5ShadowCardHtml(v5Shadow)}
-  ${danwaCard(entries, danwaByUma)}
-  <div class="signal-strip"><span>直近の馬場 · ${recentBias || 'データなし'}</span><span class="signal-live" id="oddsUpdated">ライブオッズ確認中</span></div>
-  <div id="evMonitor" class="note" hidden></div>
-  <section class="card forecast-table-card">
-    <div class="forecast-table-head"><b>全馬評価</b><span>AI順 · 馬名タップで履歴</span></div>
+  const allHorseCard = `<section class="card forecast-table-card">
+    <div class="forecast-table-head"><b>全馬評価</b><span>AI順 · 単勝EVは保守値 / 推定値</span></div>
     <div class="tablewrap">
     <table>
-      <thead><tr><th>評価</th><th>枠</th><th>番</th><th class="stickyname">馬名</th><th>${hasV3 ? '基礎評価' : 'AI予測'}</th><th>${hasMarketOverlay ? '補正勝率' : '勝率'}</th><th>3着内</th><th>総合</th><th>SI</th><th>調教</th><th>単勝(人気)</th><th>妙味</th><th>根拠</th></tr></thead>
-      <tbody>
-      ${rows}
-      </tbody>
+      <thead><tr><th>評価</th><th>枠</th><th>番</th><th class="stickyname">馬名</th><th>${hasV3 ? '基礎評価' : 'AI予測'}</th><th>${hasMarketOverlay ? '補正勝率' : '勝率'}</th><th>3着内</th><th>総合</th><th>SI</th><th>調教</th><th>単勝(人気)</th><th>単勝EV</th><th>根拠</th></tr></thead>
+      <tbody>${rows}</tbody>
     </table>
     </div>
     <div class="forecast-mobile-list">${mobileRows}</div>
-    <details class="prediction-disclosure"><summary>AI評価の読み方と検証状態</summary><p>${modelExplanation} 総合は指数・SI・調教・テンの加重値です。実馬券購入は無効で、利益保証ではありません。</p></details>
+    <details class="prediction-disclosure"><summary>AI評価・単勝EV・検証状態の読み方</summary><p>${modelExplanation} 単勝EVは「モデル勝率×現在オッズ」。太字は確率下限から計算した保守EV、小字は中心推定EVです。1.00超は理論上の損益分岐超えですが、購入候補は別途T-10の価格・データ充足率・人気崩れ veto を通過したものだけです。利益保証ではありません。</p></details>
   </section>`;
+  const ticketCount = v5Shadow && Array.isArray(v5Shadow.tickets) ? v5Shadow.tickets.length : 0;
+  const valueCard = v5ShadowCardHtml(v5Shadow)
+    || '<div class="note"><b>T-10期待値判定待ち</b> — 発走10分前の固定オッズが到着すると、7券種を横断して候補を作ります。</div>';
+  const workspace = `<section class="forecast-workspace" aria-label="予想分析ワークスペース">
+    <input class="forecast-view-toggle" type="radio" name="forecast-view" id="forecast-view-runners" checked>
+    <input class="forecast-view-toggle" type="radio" name="forecast-view" id="forecast-view-value">
+    <input class="forecast-view-toggle" type="radio" name="forecast-view" id="forecast-view-summary">
+    <div class="forecast-view-tabs" role="tablist" aria-label="予想表示切替">
+      <label for="forecast-view-runners">全馬評価 <span>${disp.length}頭</span></label>
+      <label for="forecast-view-value">期待値 <span>${ticketCount ? `${ticketCount}点` : 'T-10'}</span></label>
+      <label for="forecast-view-summary">AI要約 <span>上位3頭</span></label>
+    </div>
+    <div class="forecast-panel forecast-panel-runners">${allHorseCard}</div>
+    <div class="forecast-panel forecast-panel-value">${valueCard}</div>
+    <div class="forecast-panel forecast-panel-summary">${overview}</div>
+  </section>`;
+
+  return raceHeaderHtml(raceMeta) + `
+  <div class="signal-strip"><span>直近の馬場 · ${recentBias || 'データなし'}</span><span class="signal-live" id="oddsUpdated">ライブオッズ確認中</span></div>
+  ${workspace}
+  <div id="evMonitor" class="note" hidden></div>
+  ${danwaCard(entries, danwaByUma)}`;
 }
 
 // レース単位の調教ビュー（各馬の最新坂路追切・ラップ判定・調教偏差順）
@@ -2477,6 +2553,28 @@ function applyLiveWeights(wts) {
   }
 }
 
+function applyHorseEvs(oddsMap) {
+  for (const el of document.querySelectorAll('#raceView [data-horse-ev]')) {
+    const odds = Number(oddsMap && oddsMap[+el.dataset.horseEv]);
+    const probabilityLow = parseFloat(el.dataset.probLow);
+    const probabilityMid = parseFloat(el.dataset.probMid);
+    const lowNode = el.querySelector('b');
+    const midNode = el.querySelector('small');
+    el.classList.remove('ev-positive', 'ev-watch', 'ev-negative');
+    if (!(odds > 0) || !Number.isFinite(probabilityLow) || !Number.isFinite(probabilityMid)) {
+      el.classList.add('ev-negative');
+      if (lowNode) lowNode.textContent = '-';
+      if (midNode) midNode.textContent = 'オッズ待ち';
+      continue;
+    }
+    const conservativeEv = probabilityLow * odds;
+    const estimatedEv = probabilityMid * odds;
+    el.classList.add(conservativeEv >= 1.08 ? 'ev-positive' : (conservativeEv >= 1 ? 'ev-watch' : 'ev-negative'));
+    if (lowNode) lowNode.textContent = conservativeEv.toFixed(2);
+    if (midNode) midNode.textContent = `推定 ${estimatedEv.toFixed(2)}`;
+  }
+}
+
 function applyLiveOdds(live) {
   if (!live) return;
   for (const td of document.querySelectorAll('#raceView [data-live-odds]')) {
@@ -2485,6 +2583,7 @@ function applyLiveOdds(live) {
   }
   const n = new Date(), badge = $('oddsUpdated');
   if (badge) badge.textContent = `🔴ライブ ${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}更新${live.postTime ? `（発走${live.postTime}）` : ''}`;
+  applyHorseEvs(live.odds);
   updateEvMonitor(live.odds);
 }
 
@@ -2596,6 +2695,7 @@ async function startLiveOdds(raceMeta) {
     const o = parseFloat(td.textContent);
     if (!isNaN(o)) domOdds[td.dataset.liveOdds] = o;
   }
+  applyHorseEvs(domOdds);
   updateEvMonitor(domOdds);
   const run = async () => {
     const live = await fetchLiveOdds(rd, raceMeta.race_no);
