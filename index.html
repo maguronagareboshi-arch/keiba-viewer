@@ -7453,38 +7453,18 @@ function renderAbilityTable(raceNo) {
     if (_dayBiasCache[cacheKey] !== undefined) return _dayBiasCache[cacheKey];
 
     const lsData = lsRead();
-    // その日・その競馬場のレース番号一覧を収集
-    const raceNos = new Set();
-    for (const [k, v] of Object.entries(lsData)) {
-      if (v.type === 'race' && (v.race_date === raceDate || v.raceDate === raceDate)
-          && (v.baba_code === babaCode || v.babaCode === babaCode)) {
-        // race_babaCode_raceDate_raceNo 形式
-        const parts = k.replace(/^race_/, '').split('_');
-        if (parts.length >= 3) raceNos.add(parseInt(parts[2]));
-      }
-    }
-    // レースキーが見つからない場合はhorseキーから日付+競馬場でレースNoを収集
-    if (!raceNos.size) {
-      for (const [k, v] of Object.entries(lsData)) {
-        if (v.type !== 'horse') continue;
-        // key: {babaCode}_{raceDate}_{raceNo}_{umaBan}
-        if (!k.startsWith(`${babaCode}_${raceDate}_`)) continue;
-        const parts = k.split('_');
-        if (parts.length >= 3) raceNos.add(parseInt(parts[2]));
-      }
-    }
+    // 起動時に構築済みの開催日索引を使う。従来のObject.entries全件走査は
+    // 「出走馬×過去開催日×15万件」になり、馬比較7〜9秒の主因だった。
+    const dayIndex = _raceDayIndex?.get(`${babaCode}|${raceDate}`) || null;
+    const raceNos = dayIndex ? [...dayIndex.keys()] : [];
 
     // 各レースの基準差を計算
     const diffs = [];
     for (const rno of raceNos) {
       // そのレースのraceInfo（distance, raceClass, trackCond）を取得
       const raceKey  = `race_${babaCode}_${raceDate}_${rno}`;
-      const raceInfo = lsData[raceKey]
-        || Object.values(lsData).find(v => v.type === 'race'
-            && (v.race_date === raceDate || v.raceDate === raceDate)
-            && (v.baba_code === babaCode || v.babaCode === babaCode)
-            && (v.race_no === rno || v.raceNo === rno))
-        || null;
+      const entry = dayIndex?.get(Number(rno));
+      const raceInfo = entry?.raceVal || lsData[raceKey] || null;
       if (!raceInfo) continue;
 
       const dist    = getDistNum(raceInfo.distance);
@@ -7494,9 +7474,10 @@ function renderAbilityTable(raceNo) {
       if (!stdTime) continue;
 
       // 同レースの1〜3着タイム
-      const top3 = Object.entries(lsData)
-        .filter(([k2, v2]) => v2.type === 'horse' && k2.startsWith(`${babaCode}_${raceDate}_${rno}_`))
-        .map(([, v2]) => ({ chaku: parseInt(v2.chakujun) || 999, time: raceTimeToSec(v2.time) }))
+      const top3 = [...(entry?.horseKeys || [])]
+        .map(k2 => lsData[k2])
+        .filter(Boolean)
+        .map(v2 => ({ chaku: parseInt(v2.chakujun) || 999, time: raceTimeToSec(v2.time) }))
         .filter(h => h.chaku >= 1 && h.chaku <= 3 && h.time != null)
         .sort((a, b) => a.chaku - b.chaku)
         .slice(0, 3);
