@@ -5,7 +5,11 @@
 
   const PRECALC_SCHEMA = 'ai_prediction_precalc/v1';
   const PRECALC_PREFIX = 'aiPrecalc_v1';
+  const SERVER_TABLE = 'keiba_ai_predictions';
   const MARKS = ['◎', '○', '▲', '△', '×', '×'];
+  const serverCache = new Map();
+  const serverLoads = new Map();
+  const serverPublishes = new Set();
   const INSIGHTS = Object.freeze({
     schema:'ai_insights_shipped/v1',source:'complete-v3 legacy_v2_anchor.score_approx + final market',rankingLabel:'現行AI近似順位',marketLabel:'確定単勝人気・最終単勝オッズ（事後監査専用）',startDate:'2025/01/01',endDate:'2026/07/11',raceCount:1241,choiceSetSha256:'699f63e95dfa47f1fdc5f6ff0c0db8fa5d005f11c11a012a2df9e75b89bbc0ec',marketSha256:'16406e68cf41e3b372bc36a4736b24270afcef8d0e6f022b79e8938e8c43b3ec',excluded:{incompleteScore:560,invalidTop3:13,missingMarket:0},
     confidence:{'全体':{n:1241,win:520,top3:900,oddsN:1239,winReturn:1099.7},'1人気':{n:835,win:418,top3:675,oddsN:834,winReturn:678.5},'2-3人気':{n:304,win:86,top3:190,oddsN:303,winReturn:299.0},'4-6人気':{n:83,win:15,top3:30,oddsN:83,winReturn:109.2},'7人気以下':{n:19,win:1,top3:5,oddsN:19,winReturn:13.0},'4人気以下':{n:102,win:16,top3:35,oddsN:102,winReturn:122.2}},
@@ -20,6 +24,12 @@
   function racePrefix(date) { return `${PRECALC_PREFIX}|31|${dateKey(date)}|`; }
   function cacheKey(date, raceNo, fingerprint) {
     return `${racePrefix(date)}${String(parseInt(raceNo, 10)).padStart(2, '0')}|${fingerprint}`;
+  }
+  function serverKey(date, raceNo, fingerprint) {
+    return `${dateKey(date)}|${String(parseInt(raceNo, 10)).padStart(2, '0')}|${fingerprint}`;
+  }
+  function serverId(snapshot) {
+    return `ai_31_${dateKey(snapshot.raceDate)}_${String(parseInt(snapshot.raceNo, 10)).padStart(2, '0')}_${String(snapshot.modelFingerprint || '').replace(/[^0-9A-Za-z_-]/g, '')}`;
   }
   function popularityBand(value) {
     const rank = parseInt(value, 10);
@@ -56,22 +66,18 @@
     return typeof _aiFingerprint === 'function' ? _aiFingerprint(rows) : JSON.stringify(rows);
   }
   function findValuePick(raceNo, result, scored) {
-    const used = new Set(scored.slice(0, 4).map(s => s.horse && s.horse.horseName).filter(Boolean));
     try {
       if (typeof computeEvBets === 'function') {
         const ev = computeEvBets(raceNo, result && result.selCond);
-        const pick = ev && ev.runners && ev.runners.find(r => r.inWindow && !used.has(r.name));
+        const pick = ev && ev.runners && ev.runners.filter(r => r.inWindow)
+          .sort((a, b) => Number(b.evCal || 0) - Number(a.evCal || 0))[0];
         const row = pick && scored.find(s => s.horse && s.horse.horseName === pick.name);
-        if (row) return { u:parseInt(row.horse.umaBan, 10) || null, kind:'ev', note:`お得度 ${Number(pick.evCal || 0).toFixed(2)}倍` };
+        if (row) return { u:parseInt(row.horse.umaBan, 10) || null, kind:'ev', note:`推定期待値 ${Number(pick.evCal || 0).toFixed(2)}` };
       }
     } catch (_) {}
-    const candidates = scored.slice(2).map((row, index) => {
-      const popularity = parseInt(row.horse && row.horse.ninki, 10), aiRank = index + 3;
-      return { row, gap:Number.isFinite(popularity) ? popularity - aiRank : -99, odds:parseFloat(row.horse && row.horse.odds) || 0 };
-    }).filter(x => !used.has(x.row.horse.horseName) && x.gap >= 2 && x.odds >= 5)
-      .sort((a, b) => b.gap - a.gap || b.odds - a.odds);
-    const row = candidates[0] && candidates[0].row;
-    return row ? { u:parseInt(row.horse.umaBan, 10) || null, kind:'gap', note:'AI評価が人気を上回る' } : null;
+    // AI順位が人気を上回るだけでは期待値とは呼ばない。較正済み勝率×現在オッズで
+    // EV条件を満たした馬だけを「☆期待値候補」として出す。
+    return null;
   }
 
   function cachePrediction(raceNo, computed) {
@@ -100,11 +106,71 @@
       const key = cacheKey(raceDate, raceNo, model.fingerprint);
       const prior = lsRead()[key];
       if (!prior || prior.outputFingerprint !== snapshot.outputFingerprint || prior.runnerSignature !== snapshot.runnerSignature) lsWrite(key, snapshot);
+      publishServerPrediction(snapshot);
       return snapshot;
     } catch (error) {
       console.warn('[ai precalc cache]', error);
       return null;
     }
+  }
+
+  function isUsableSnapshot(row, data, model) {
+    return !!(row && row.schema === PRECALC_SCHEMA && row.modelFingerprint === model.fingerprint &&
+      row.runnerSignature === runnerSignature(data) && Array.isArray(row.runners) && row.runners.length >= 4);
+  }
+
+  function publishServerPrediction(snapshot) {
+    try {
+      if (!snapshot || typeof apiUpsert !== 'function' || typeof isAdminMode !== 'function' || !isAdminMode() ||
+          typeof getWriteToken !== 'function' || !getWriteToken()) return;
+      const id = serverId(snapshot);
+      const signature = `${id}|${snapshot.runnerSignature}|${snapshot.outputFingerprint}`;
+      if (serverPublishes.has(signature)) return;
+      serverPublishes.add(signature);
+      Promise.resolve(apiUpsert(SERVER_TABLE, id, {
+        baba_code:'31', race_date:snapshot.raceDate, race_no:parseInt(snapshot.raceNo, 10),
+        model_fingerprint:snapshot.modelFingerprint, runner_signature:snapshot.runnerSignature,
+        output_fingerprint:snapshot.outputFingerprint || '', computed_at:snapshot.computedAt,
+        payload:snapshot,
+      })).catch(error => {
+        serverPublishes.delete(signature);
+        console.warn('[ai server cache publish]', error);
+      });
+    } catch (error) {
+      console.warn('[ai server cache publish]', error);
+    }
+  }
+
+  async function hydrateServerDay(date) {
+    const wanted = String(date || currentDate || '');
+    if (!wanted || typeof fetch !== 'function' || typeof SUPABASE_URL === 'undefined' || typeof SUPABASE_HEADERS === 'undefined') return [];
+    if (serverLoads.has(wanted)) return serverLoads.get(wanted);
+    const job = (async () => {
+      try {
+        const url = `${SUPABASE_URL}/rest/v1/${SERVER_TABLE}?select=race_date,race_no,model_fingerprint,runner_signature,output_fingerprint,computed_at,payload&baba_code=eq.31&race_date=eq.${encodeURIComponent(wanted)}&order=race_no.asc&limit=24`;
+        const response = await fetch(url, { headers:SUPABASE_HEADERS, cache:'no-store' });
+        if (!response.ok) {
+          if (response.status !== 404) console.warn('[ai server cache load]', response.status);
+          return [];
+        }
+        const rows = await response.json();
+        if (!Array.isArray(rows)) return [];
+        rows.forEach(dbRow => {
+          const payload = dbRow && dbRow.payload;
+          if (!payload || payload.schema !== PRECALC_SCHEMA || !dbRow.model_fingerprint) return;
+          const snapshot = { ...payload, cacheSource:'server' };
+          const sk = serverKey(dbRow.race_date || payload.raceDate, dbRow.race_no || payload.raceNo, dbRow.model_fingerprint);
+          serverCache.set(sk, snapshot);
+          if (typeof lsWrite === 'function') lsWrite(cacheKey(payload.raceDate, payload.raceNo, payload.modelFingerprint), snapshot);
+        });
+        return rows;
+      } catch (error) {
+        console.warn('[ai server cache load]', error);
+        return [];
+      }
+    })();
+    serverLoads.set(wanted, job);
+    return job;
   }
 
   function getCachedPrediction(raceNo) {
@@ -113,10 +179,11 @@
       const data = allRacesData && allRacesData[raceNo];
       if (!data || !data.raceInfo) return null;
       const model = buildRankingModelIdentity();
-      const row = lsRead()[cacheKey(data.raceInfo.raceDate || currentDate, raceNo, model.fingerprint)];
-      if (!row || row.schema !== PRECALC_SCHEMA || row.modelFingerprint !== model.fingerprint) return null;
-      if (row.runnerSignature !== runnerSignature(data) || !Array.isArray(row.runners) || row.runners.length < 4) return null;
-      return row;
+      const raceDate = data.raceInfo.raceDate || currentDate;
+      const local = lsRead()[cacheKey(raceDate, raceNo, model.fingerprint)];
+      if (isUsableSnapshot(local, data, model)) return local;
+      const shared = serverCache.get(serverKey(raceDate, raceNo, model.fingerprint));
+      return isUsableSnapshot(shared, data, model) ? shared : null;
     } catch (_) { return null; }
   }
   function marketText(row, live) {
@@ -151,7 +218,8 @@
     if (panel) {
       const time = new Date(snapshot.computedAt), stamp = Number.isNaN(time.getTime()) ? '' : time.toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
       const tableRows = rows.slice(0, 6).map(row => `<tr class="cockpit-rank-row"><td><div class="cockpit-horse"><span class="cockpit-rank-mark">${row.mark}</span><span class="cockpit-uma">${esc(row.u)}</span><span><b>${esc(row.name)}</b><small>AI ${row.rank}位</small></span></div></td><td class="cockpit-market">${esc(marketText(row, liveByU.get(row.u)))}</td><td><i class="fas fa-layer-group"></i> ${esc(row.reason)}</td></tr>`).join('');
-      panel.innerHTML = `<div class="cockpit-panel-head"><div><h3>AI予想</h3><p>保存済みの事前計算を先に表示。最新値は裏で照合します</p></div><span><i class="fas fa-bolt"></i> 事前計算 ${esc(stamp)}</span></div><div class="table-wrapper"><table class="cockpit-table"><thead><tr><th>印・馬</th><th>市場</th><th>判断材料</th></tr></thead><tbody>${tableRows}</tbody></table></div>`;
+      const sourceLabel = snapshot.cacheSource === 'server' ? '共有事前計算' : '端末の事前計算';
+      panel.innerHTML = `<div class="cockpit-panel-head"><div><h3>AI予想</h3><p>保存済みの事前計算を先に表示。最新値は裏で照合します</p></div><span><i class="fas fa-bolt"></i> ${sourceLabel} ${esc(stamp)}</span></div><div class="table-wrapper"><table class="cockpit-table"><thead><tr><th>印・馬</th><th>市場</th><th>判断材料</th></tr></thead><tbody>${tableRows}</tbody></table></div>`;
     }
     return true;
   }
@@ -200,6 +268,7 @@
   global.kvAiCachePrediction = cachePrediction;
   global.kvAiGetCachedPrediction = getCachedPrediction;
   global.kvAiRenderCachedPrediction = renderCachedPrediction;
+  global.kvAiHydrateServerDay = hydrateServerDay;
   global.kvAiScheduleDayPrecompute = scheduleDayPrecompute;
   global.kvAiRenderOpponentAudit = renderOpponentAudit;
   global.kvAiInsightsReady = true;

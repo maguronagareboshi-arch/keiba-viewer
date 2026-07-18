@@ -5613,7 +5613,8 @@ function renderRaceContent(raceNo) {
   });
   renderHorseRows(raceNo, sortedHorses);
   // 保存済みの軽量予想があれば、全履歴（約15万件）を展開する前に先行表示する。
-  setTimeout(() => _ensureAiInsightsModule().then(() => {
+  setTimeout(() => _ensureAiInsightsModule().then(async () => {
+    if (window.kvAiHydrateServerDay) await window.kvAiHydrateServerDay(raceInfo.raceDate);
     if (window.kvAiRenderCachedPrediction) window.kvAiRenderCachedPrediction(raceNo);
   }).catch(() => {}), 0);
   updateRacePace(raceNo);
@@ -6321,7 +6322,7 @@ function renderHorseRows(raceNo, horses) {
       _aiMap[s.horse.horseName] = { mark: _AI_MARKS[i] || '', rank: s.totalScore != null ? i + 1 : null, score: s.totalScore };
     });
   }
-  // 💎PSF妙味：位置構造モデル(PSF)の1位が現行AI◎と不一致なら表示（検証：意見割れ635RでROI112.9%）
+  // 💎PSF参考：位置構造モデル(PSF)の1位が現行AI◎と不一致なら表示（補助統計as-of・期待値再検証待ち）
   const _psfTop = (_aiReady && typeof computePsfScores === 'function') ? (computePsfScores(raceNo)?.top ?? null) : null;
   const _aiTopName = (_cy && _cy.scored[0] && _cy.scored[0].totalScore != null) ? _cy.scored[0].horse.horseName : null;
   const _psfValueName = (_psfTop && _psfTop !== _aiTopName) ? _psfTop : null;
@@ -6346,7 +6347,7 @@ function renderHorseRows(raceNo, horses) {
         return `<span class="rf-chip ${cls}" title="${escapeHTML(tip)}">${isNaN(ch)?'－':ch}</span>`;
       }).join('');
     })();
-    const _psfGem=_psfValueName===horse.horseName?`<span class="psf-badge" title="PSF妙味：位置構造モデルの単独推し。オッズ3〜10倍が本域">💎</span>`:'';
+    const _psfGem=_psfValueName===horse.horseName?`<span class="psf-badge" title="PSF参考：位置構造モデルの単独推し。期待値は再検証中">💎</span>`:'';
     // 外部由来(スクレイピング/入力)文字列の表示・属性エスケープ（jsAttrEsc=onclick内JS文字列用・escapeHTML=通常表示/属性用）
     const _nameEsc=jsAttrEsc(horse.horseName);
     const _nameHtml=escapeHTML(horse.horseName);
@@ -6989,6 +6990,7 @@ async function switchViewTab(raceNo, view) {
     let showedCached = false;
     try {
       await _ensureAiInsightsModule();
+      if (window.kvAiHydrateServerDay) await window.kvAiHydrateServerDay(allRacesData[raceNo]?.raceInfo?.raceDate);
       showedCached = !!window.kvAiRenderCachedPrediction?.(raceNo);
     } catch (e) {}
     if (target && !_idbFullReady && !showedCached) target.innerHTML = _kvAsyncStateHtml('ai', 'AI予想を計算中', '過去走・馬場・騎手・厩舎を統合しています');
@@ -8953,6 +8955,7 @@ function idbPut(key, val) {
       window._f3BenchCache = null;
       window._evMapsCache = null;
       window._asOfComboCache = null;
+      window._asOfAgariCache = null;
       window._asOfF3BenchCache = null;
     }, 150);
   }
@@ -8974,6 +8977,7 @@ function idbDelete(key) {
   window._comboStatsAllCache = null;
   window._evMapsCache = null;
   window._asOfComboCache = null;
+  window._asOfAgariCache = null;
   window._asOfF3BenchCache = null;
   openIDB().then(db => {
     const tx = db.transaction(IDB_STORE, 'readwrite');
@@ -9104,6 +9108,7 @@ async function _idbBulkPut(obj) {
   window._f3BenchCache = null;
   window._evMapsCache = null;
   window._asOfComboCache = null;
+  window._asOfAgariCache = null;
   window._asOfF3BenchCache = null;
 }
 
@@ -10030,7 +10035,7 @@ async function _bulkFetchRun(monthsList, label) {
     }
     // first3f・ペース自動補完（今回保存分に効く）＋基準タイム系のキャッシュ無効化（データ増を反映）
     try { backfillFirst3fFrom1400m(); backfillPaceLabels(); backfillPaceType(); } catch(e) {}
-    window._f3BenchCache = null; window._leadFrontBench = null; window._frontBaseCache = null; window._comboStatsCache = null; window._jcMapsCache = null; window._evMapsCache = null; window._asOfComboCache = null; window._asOfF3BenchCache = null;
+    window._f3BenchCache = null; window._leadFrontBench = null; window._frontBaseCache = null; window._comboStatsCache = null; window._jcMapsCache = null; window._evMapsCache = null; window._asOfComboCache = null; window._asOfAgariCache = null; window._asOfF3BenchCache = null;
     loadSavedData();
     if (typeof initAnalysisDateSelect === 'function') initAnalysisDateSelect();
     _bulkLog(`${_bulkCancel ? '⏹ 中止しました。' : '✅ 完了！'} ${label}：<b>${savedR}レース・${savedH}頭</b>を保存${withComments?`（コメント${cmt}件）`:''}${err?`／エラー${err}`:''}`);
@@ -10669,7 +10674,7 @@ function saveMlLiveWeights(payload) {
 // 予想順位そのものは変更しない。現行totalScoreの「実際に解決された実効倍率」と計算契約を
 // 決定論的fingerprintにし、モデル変更後の成績キャッシュ混在と事後再計算だけの評価を防ぐ。
 const KV_RANKING_SCORE_CONTRACT_VERSION = 'totalScore-v1-20260713';
-const KV_RANKING_FEATURE_PIPELINE_VERSION = 'kochi-live-features-v1-20260717';
+const KV_RANKING_FEATURE_PIPELINE_VERSION = 'kochi-live-features-v2-asof-20260719';
 const KV_RANKING_MODEL_FAMILY = 'market-free-additive';
 const KV_RANKING_EFF_KEYS = [
   'condNew','distNew','rotN','clsN','cornN','trendN','weightN','agariN','comboN',
@@ -10714,6 +10719,7 @@ function buildRankingModelIdentity() {
     baseCoefficient: 1,
     relativeSI: '(baseScore-raceMean)*0.05',
     paceCornScaling: 'cornMod*paceFactor before relSI',
+    jockeyChangePolicy: typeof KV_JOCKEY_CHANGE_POLICY === 'string' ? KV_JOCKEY_CHANGE_POLICY : 'disabled-until-asof-retrained',
     rounding: 'score-to-2dp after base sum, pace scaling and relSI',
     missingEffFallback: 'YOSO_FACTOR_SCALE then 1',
     sort: 'totalScore-desc; stable source order on exact tie',

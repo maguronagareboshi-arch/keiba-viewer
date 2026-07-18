@@ -1636,6 +1636,64 @@ function getComboStatsAsOf(jockey, trainer, raceDate, raceNo) {
   return ans >= 0 ? { place: arr[ans].place, total: arr[ans].total } : null;
 }
 
+// 上がり3F基準を対象レースより前の結果だけで引く。EV・バックテストの補助特徴用。
+function _buildAsOfAgariIndex() {
+  if (window._asOfAgariCache) return window._asOfAgariCache;
+  const ls = lsRead(), events = [];
+  for (const [k, v] of Object.entries(ls)) {
+    if (!v || v.type !== 'horse') continue;
+    const p = k.split('_');
+    if (p.length < 4 || !/^\d{8}$/.test(String(p[1] || '').replace(/\D/g, ''))) continue;
+    const a = parseFloat(v.agari3f);
+    if (!Number.isFinite(a) || a < 30 || a > 50) continue;
+    const race = ls[`race_${p[0]}_${p[1]}_${parseInt(p[2])}`] || {};
+    const dist = getDistNum(v.distance || race.distance);
+    if (!dist) continue;
+    events.push({ d:p[1], n:parseInt(p[2]), dist, a });
+  }
+  events.sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : a.n - b.n);
+  const perDist = new Map(), running = new Map();
+  for (const e of events) {
+    const cur = running.get(e.dist) || { sum:0, count:0 };
+    const next = { sum:cur.sum + e.a, count:cur.count + 1 };
+    running.set(e.dist, next);
+    let arr = perDist.get(e.dist);
+    if (!arr) { arr = []; perDist.set(e.dist, arr); }
+    arr.push({ d:e.d, n:e.n, sum:next.sum, count:next.count });
+  }
+  return (window._asOfAgariCache = { perDist });
+}
+function _agariStatAsOf(distance, raceDate, raceNo) {
+  const arr = _buildAsOfAgariIndex().perDist.get(Number(distance));
+  if (!arr || !arr.length) return null;
+  let lo = 0, hi = arr.length - 1, ans = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1, e = arr[mid];
+    if (e.d < raceDate || (e.d === raceDate && e.n < raceNo)) { ans = mid; lo = mid + 1; } else hi = mid - 1;
+  }
+  return ans >= 0 ? arr[ans] : null;
+}
+function getAgariRefAsOf(distance, raceDate, raceNo) {
+  const exact = _agariStatAsOf(distance, raceDate, raceNo);
+  if (exact && exact.count >= 10) return exact.sum / exact.count;
+  const candidates = [];
+  for (const dist of _buildAsOfAgariIndex().perDist.keys()) {
+    const stat = _agariStatAsOf(dist, raceDate, raceNo);
+    if (stat && stat.count >= 10) candidates.push({ dist:Number(dist), stat });
+  }
+  candidates.sort((a, b) => Math.abs(a.dist - distance) - Math.abs(b.dist - distance));
+  return candidates.length ? candidates[0].stat.sum / candidates[0].stat.count : 38.5;
+}
+
+// 固定全期間騎手表は過去評価へ未来情報を混ぜる。as-of特徴を再学習するまでは中立値に固定する。
+const KV_JOCKEY_CHANGE_POLICY = 'disabled-until-asof-retrained';
+function jockeyChangeModAsOfSafe() { return 0; }
+
+function psfComboAsOf(jockey, trainer, raceDate, raceNo) {
+  const cs = getComboStatsAsOf(jockey, trainer, raceDate, raceNo);
+  return cs ? (cs.place + 0.33 * 10) / (cs.total + 10) - 0.33 : 0;
+}
+
 // ── 騎手×厩舎コンボ統計（高知のみ・全期間）──
 // 全IDBエントリのスキャンはデータ増加に比例して遅くなるため、
 // 結果をキャッシュしデータ書き込み/削除時（idbPut/idbDelete/_idbBulkPut）に無効化する。
@@ -1990,13 +2048,13 @@ function computeHorseSI(h, useAnchor, auditCtx) {
   return si != null ? si + getPositionAdvantage(h.babaCode, h.raceDate, h.mukaeShoumen, h.shoumenStraight) : null;
 }
 
-// ══ PSF指数（Claude設計・仕様書v1.0凍結）══
+// ══ PSF指数（補助統計as-of版）══
 // 位置取り予測(1C)を主役に、位置条件付き地力を掛け合わせる構造モデル。
 // 定数は2026-07-02の実測から凍結（fitではなく測定）：
 //   PSF_WIN[p] = 1C位置p番手の実測勝率（N=1,200超/セル・pos4-5のみ単調化平滑）
 //   PSF_POSEXP[p] = 1C位置p番手の勝ち馬比時計コスト中央値（秒）
-// 検証（公式払戻・1,071R・352的中）：単勝ROI 109.2%／現行と◎不一致の635RではROI 112.9%。
-// 精度は現行に劣るため印は現行のまま、💎妙味バッジ（表示のみ）に使う。
+// 旧全期間コンボを使ったROIは未来情報を含むため根拠にしない。現在は対象レース直前までの
+// コンボ統計に統一し、印には入れず参考バッジだけに使う（期待値の再検証待ち）。
 const PSF_WIN    = [null, .311, .187, .135, .087, .087, .066, .045, .033, .017];
 const PSF_POSEXP = [null, 0.4, 1.0, 1.1, 1.3, 1.4, 1.5, 1.6, 1.8, 1.9];
 const PSF_BETA = 0.8, PSF_G_COMBO = 2.0, PSF_G_KIN = -0.05, PSF_G_WC = 0.5; // 事前決め打ち
@@ -2033,7 +2091,6 @@ function computePsfScores(raceNo) {
   if (!data || !data.horses.length) return null;
   const raceDate = data.raceInfo.raceDate || '';
   const thisNo = parseInt(raceNo);
-  const comboAll = getComboStatsAll();
   const ls = lsRead();
   const anchBias = (babaCode, d) => {
     const hb = getHorseAnchoredBias(babaCode, d);
@@ -2061,8 +2118,7 @@ function computePsfScores(raceNo) {
     }
     let g = null;
     if (perfs.length >= 2) { perfs.sort((a, b) => a - b); g = perfs[Math.floor(perfs.length / 2)]; }
-    const cs = comboAll[`${(horse.jockey || '').trim()}_${(horse.trainer || '').trim()}`];
-    const combo = cs ? (cs.place + 0.33 * 10) / (cs.total + 10) - 0.33 : 0;
+    const combo = psfComboAsOf((horse.jockey || '').trim(), (horse.trainer || '').trim(), raceDate, thisNo);
     const kinV = parseFloat(horse.kinryo);
     return { name, es, g, combo, kin: isNaN(kinV) ? null : kinV, wcM: Yoso.weightMod(Yoso.weightChange(horse.weight, preHist[0]?.weight)) };
   });
@@ -2253,11 +2309,10 @@ function computeYosoScored(raceNo, selCondOverride) {
     }
 
     // ── ⑮ 乗り替わり補正（格上/格下騎手への変更シグナル） ──
-    const _getJWR = name => { const s = lookupJockeyStats(name); if (!s) return FIELD_AVG_WR; const src = (s.recent?.n >= 30 ? s.recent : null) || s.all; return src?.wr ?? FIELD_AVG_WR; };
     let jockeyChgMod = 0;
     if (histEx.length >= 1 && jockey) {
       const _prevJ = (histEx[0].jockey || '').trim();
-      if (_prevJ && _prevJ !== jockey) jockeyChgMod = Yoso.jockeyChgMod(_getJWR(jockey) - _getJWR(_prevJ));
+      if (_prevJ && _prevJ !== jockey) jockeyChgMod = jockeyChangeModAsOfSafe(jockey, _prevJ, thisRaceDate, thisRaceNo);
     }
 
     // ── ⑯ 叩き効果（休み明け2走目・フィットネス向上補正） ──
@@ -2527,13 +2582,12 @@ function _calibrateEvP(p) {
 function _evGetMaps() {
   if (window._evMapsCache) return window._evMapsCache;
   const lsData = lsRead();
-  const agariByDist = {}, winnerSIMap = {}, officialByHorse = new Map();
+  const winnerSIMap = {}, officialByHorse = new Map();
   for (const k in lsData) {
     const v = lsData[k];
     if (!v) continue;
     if (k.startsWith('official_') && v.type === 'official' && v.horseName && v.races && v.races.length) officialByHorse.set(v.horseName, v.races);
     if (v.type !== 'horse') continue;
-    if (v.agari3f) { const a = parseFloat(v.agari3f); if (!(isNaN(a) || a < 30 || a > 50)) { const d = getDistNum(v.distance); if (d) { (agariByDist[d] || (agariByDist[d] = { s: 0, n: 0 })); agariByDist[d].s += a; agariByDist[d].n++; } } }
     if (parseInt(v.chakujun) === 1 && v.time) {
       const wp = k.split('_');
       if (wp.length >= 4 && wp[0] === '31') {
@@ -2547,11 +2601,7 @@ function _evGetMaps() {
       }
     }
   }
-  const getAgRef = d => {
-    if (agariByDist[d] && agariByDist[d].n >= 10) return agariByDist[d].s / agariByDist[d].n;
-    const ns = Object.entries(agariByDist).filter(([, x]) => x.n >= 10).sort((a, b) => Math.abs(+a[0] - d) - Math.abs(+b[0] - d));
-    return ns.length ? ns[0][1].s / ns[0][1].n : 38.5;
-  };
+  const getAgRef = (d, raceDate, raceNo) => getAgariRefAsOf(d, raceDate, raceNo);
   return (window._evMapsCache = { getAgRef, winnerSIMap, officialByHorse });
 }
 
@@ -2585,8 +2635,8 @@ function _evHorseFeatures(hName, entry, ctx, maps) {
   const cornN = Yoso.cornMod(_a4cB.avg, _a4cB.count);           // ペース伸縮前の生値（scanData準拠）
   const trendN = Yoso.trendMod(siList);
   const weightN = Yoso.weightMod(Yoso.weightChange(entry.weight, preHist[0]?.weight));
-  const agariN = Yoso.agariMod(maps.getAgRef(rdistNum), Yoso.agariAvg(preHist, rdistNum));
-  const comboN = Yoso.comboMod(getComboStatsAll()[`${(entry.jockey || '').trim()}_${(entry.trainer || '').trim()}`], ctx.fieldSize);
+  const agariN = Yoso.agariMod(maps.getAgRef(rdistNum, raceDate, rNo), Yoso.agariAvg(preHist, rdistNum));
+  const comboN = Yoso.comboMod(getComboStatsAsOf((entry.jockey || '').trim(), (entry.trainer || '').trim(), raceDate, rNo), ctx.fieldSize);
   const marginN = Yoso.marginMod(Yoso.marginAvgGap(preHist));
 
   let winStrN = 0;
@@ -2596,11 +2646,10 @@ function _evHorseFeatures(hName, entry, ctx, maps) {
     if (_wSI != null && siList.length >= 2) winStrN = Yoso.winStrMod(_wSI - siList.reduce((s, v) => s + v, 0) / siList.length);
   }
 
-  const _getJWRbt = name => { const s = lookupJockeyStats(name); if (!s) return 12; const src = (s.recent?.n >= 30 ? s.recent : null) || s.all; return src?.wr ?? 12; };
   let jockeyChgN = 0;
   if (entry.jockey && preHist.length >= 1) {
     const _pj = (preHist[0].jockey || '').trim(), _cj = (entry.jockey || '').trim();
-    if (_pj && _pj !== _cj) jockeyChgN = Yoso.jockeyChgMod(_getJWRbt(_cj) - _getJWRbt(_pj));
+    if (_pj && _pj !== _cj) jockeyChgN = jockeyChangeModAsOfSafe(_cj, _pj, raceDate, rNo);
   }
   const takiN = preHist.length >= 2 ? Yoso.takiMod(raceDate, preHist[0].raceDate, preHist[1].raceDate) : 0;
   const cornConsistN = Yoso.cornConsistMod(Yoso.cornConsistAvg(preHist));
@@ -3781,7 +3830,6 @@ function renderPredictionPanel(raceNo) {
   //    指数への組み込みはWFで正味+63頭/7909Rと微小のため、印は汚さずライン構築の人間支援に使う。
   let anaBadge = '';
   if (scored.length >= 7) {
-    const _allCombo = getComboStatsAll();
     // 前走展開文脈（backtest paceCtxN と同一定義・直近3走のうち高知走のみ）
     const _paceCtxLive = hName => {
       let tough = false, gifted = false, excused = false;
@@ -3790,7 +3838,7 @@ function renderPredictionPanel(raceNo) {
         if (h.babaCode !== '31') continue;
         const rrec = _ld[`race_31_${escapeHTML(h.raceDate)}_${h.raceNo}`];
         if (!rrec || !rrec.first3f) continue;
-        const pd = getPaceDevLabel(rrec.distance, rrec.race_class, rrec.track_cond, rrec.first3f);
+        const pd = getPaceDevLabelAsOf(rrec.distance, rrec.race_class, rrec.track_cond, rrec.first3f, h.raceDate, parseInt(h.raceNo));
         if (!pd) continue;
         const c1 = parseInt(String(h.corner || '').split('-')[0]);
         const ch = parseInt(h.chakujun);
@@ -3805,7 +3853,7 @@ function renderPredictionPanel(raceNo) {
     scored.forEach((s, idx) => {
       if (idx < 5 || s.totalScore == null) return;   // 指数6番手以下のみ
       const why = [];
-      const cm = Yoso.comboMod(_allCombo[`${escapeHTML(s.jockey)}_${escapeHTML(s.trainer)}`], scored.length);
+      const cm = Yoso.comboMod(getComboStatsAsOf(s.jockey, s.trainer, raceInfo.raceDate, parseInt(raceNo)), scored.length);
       if (cm >= 0.5) why.push('厩舎コンボ好調');
       if (s.cornMod >= 1) why.push('逃げ先行型');
       let pcv = 0;
@@ -3818,7 +3866,7 @@ function renderPredictionPanel(raceNo) {
       _pickSleeper = { name: _anaHits[0].s.horse.horseName, idx: _anaHits[0].idx, why: _anaHits[0].why.slice() };
       const _items = _anaHits.slice(0, 3).map(x =>
         `<b>${escapeHTML(x.s.horse.horseName)}</b>（${x.idx + 1}番手・${x.why.join('＋')}）`).join('　');
-      anaBadge = `<div class="ana-run-bar">⚡ <b>穴馬激走注意</b>：${_items}<button type="button" class="kvi-info" onclick="this.closest('.ana-run-bar').classList.toggle('kvi-open')" title="説明を表示">?</button><span class="arb-sub kvi-hidden">｜こういう特徴のある評価下位馬は、普通の下位馬（3着以内11%）の約2倍＝20〜24%の確率で馬券に絡みます。ワイドや3連系の相手候補に</span></div>`;
+      anaBadge = `<div class="ana-run-bar">⚡ <b>穴馬の条件一致</b>：${_items}<button type="button" class="kvi-info" onclick="this.closest('.ana-run-bar').classList.toggle('kvi-open')" title="説明を表示">?</button><span class="arb-sub kvi-hidden">｜対象レースより前のデータだけで特徴を照合した参考候補です。オッズとの比較前なので、期待値ありとはまだ判定しません。</span></div>`;
     }
   }
 
@@ -3990,33 +4038,7 @@ function runYosoBacktest(raceNo) {
         raceGroups[raceKey].push({ ...v, _key: k, babaCode: parts[0], raceDate: parts[1], raceNo: parseInt(parts[2]), _scratched });
       }
 
-      // 上がり3F距離別平均をIDB全データから集計（ルックアヘッド最小・平均なので問題なし）
-      const _agariByDist = {};
-      for (const [k, v] of Object.entries(lsData)) {
-        if (!v.agari3f) continue;
-        const a = parseFloat(v.agari3f);
-        if (isNaN(a) || a < 30 || a > 50) continue;
-        const d = getDistNum(v.distance);
-        if (!d) continue;
-        if (!_agariByDist[d]) _agariByDist[d] = {s:0,n:0};
-        _agariByDist[d].s += a; _agariByDist[d].n++;
-      }
-      const _getAgRefBT = d => {
-        if (_agariByDist[d]?.n >= 10) return _agariByDist[d].s / _agariByDist[d].n;
-        const ns = Object.entries(_agariByDist).filter(([,x])=>x.n>=10).sort((a,b)=>Math.abs(+a[0]-d)-Math.abs(+b[0]-d));
-        return ns.length ? ns[0][1].s/ns[0][1].n : 38.5;
-      };
-      // 騎手×厩舎コンボ複勝率（全IDBデータから）
-      const _btComboStats = {};
-      for (const [k, v] of Object.entries(lsData)) {
-        if (!v.jockey || !v.trainer) continue;
-        const chaku2 = parseInt(v.chakujun);
-        if (isNaN(chaku2)) continue;
-        const ck = `${(v.jockey||'').trim()}_${(v.trainer||'').trim()}`;
-        if (!_btComboStats[ck]) _btComboStats[ck] = {place:0,total:0};
-        _btComboStats[ck].total++;
-        if (chaku2 <= 3) _btComboStats[ck].place++;
-      }
+      // 上がり基準・騎手×厩舎コンボは各対象レース直前までのas-of索引を共用する。
 
       // JRA転入馬フォールバック用: official_* キャッシュを馬名でインデックス化（ライブモデルと同じ）
       const _officialByHorseBT = new Map();
@@ -4161,10 +4183,10 @@ function runYosoBacktest(raceNo) {
           const trainerN = Yoso.trainerMod(lookupTrainerStats((entry.trainer||'').trim()));
 
           // 新: agariMod（基準値はデータ駆動・ライブは固定表＝仕様差）
-          const agariN = Yoso.agariMod(_getAgRefBT(rdistNum), Yoso.agariAvg(preHist, rdistNum));
+          const agariN = Yoso.agariMod(getAgariRefAsOf(rdistNum, raceDate, rNo), Yoso.agariAvg(preHist, rdistNum));
 
           // 新: comboN（検証版は全馬場集計・ライブは高知のみ＝仕様差）
-          // 【2026-07-10】未来情報混入対策：_btComboStats(全期間集計)ではなくこのレースより前だけの
+          // 未来情報混入対策：全期間集計ではなくこのレースより前だけの
           // コンボ統計を使う。これがコード監査②の核心（過去レースを未来の結果込みで評価していた）。
           const comboN = Yoso.comboMod(getComboStatsAsOf((entry.jockey||'').trim(), (entry.trainer||'').trim(), raceDate, rNo), _fieldSizeBT);
 
@@ -4182,7 +4204,6 @@ function runYosoBacktest(raceNo) {
           }
 
           // jockeyChgN（乗り替わり補正）
-          const _getJWRbt = name => { const s = lookupJockeyStats(name); if (!s) return 12; const src = (s.recent?.n >= 30 ? s.recent : null) || s.all; return src?.wr ?? 12; };
           let jockeyChgN = 0;
           if (!entry.jockey) {
             _jcDiag.noJockey++;
@@ -4192,7 +4213,7 @@ function runYosoBacktest(raceNo) {
             if (!_pj || _pj === _cj) {
               _jcDiag.sameJockey++;
             } else {
-              jockeyChgN = Yoso.jockeyChgMod(_getJWRbt(_cj) - _getJWRbt(_pj));
+              jockeyChgN = jockeyChangeModAsOfSafe(_cj, _pj, raceDate, rNo);
               if (jockeyChgN !== 0) _jcDiag.fired++; else _jcDiag.smallDiff++;
             }
           }
@@ -4254,8 +4275,7 @@ function runYosoBacktest(raceNo) {
             }
             if (_perfs.length >= 2) { _perfs.sort((a, b) => a - b); psfG = _perfs[Math.floor(_perfs.length / 2)]; }
           }
-          const _psfCs = _btComboStats[`${(entry.jockey || '').trim()}_${(entry.trainer || '').trim()}`];
-          const psfCombo = _psfCs ? (_psfCs.place + 0.33 * 10) / (_psfCs.total + 10) - 0.33 : 0;
+          const psfCombo = psfComboAsOf((entry.jockey || '').trim(), (entry.trainer || '').trim(), raceDate, rNo);
           const _psfKinV = parseFloat(entry.kinryo);
           const psfKin = isNaN(_psfKinV) ? null : _psfKinV;
           const psfWcM = Yoso.weightMod(Yoso.weightChange(entry.weight, preHist[0]?.weight));
