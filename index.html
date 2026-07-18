@@ -11282,13 +11282,18 @@ function renderF3Averages() {
 // restoreFromSaved(10290行付近)と同じ組み立てロジックをDOM操作なしで再利用。
 // JSはシングルスレッドで、この関数内にawait/setTimeout等の一時停止点が無いため、
 // 差し替え中の状態を他の処理（ライブ更新タイマー等）が観測することはない。
-function computeYosoScoredArchived(babaCode, raceDate, raceNo) {
+function computeYosoScoredArchived(babaCode, raceDate, raceNo, horseKeys) {
   const lsData = lsRead();
   const raceVal = lsData[`race_${babaCode}_${raceDate}_${raceNo}`];
   if (!raceVal) return null;
   const hp = `${babaCode}_${raceDate}_${raceNo}_`;
-  const horses = Object.entries(lsData)
-    .filter(([k, v]) => v.type === 'horse' && k.startsWith(hp))
+  // AI成績の集計時は一覧構築で得たキーを再利用する。
+  // 毎レース Object.entries(lsData) すると「全保存件数 × 対象レース数」の走査になり、
+  // 全履歴を持つ端末では画面が長時間「集計中」のままになる。
+  const horseEntries = Array.isArray(horseKeys)
+    ? horseKeys.map(k => [k, lsData[k]]).filter(([, v]) => v && v.type === 'horse')
+    : Object.entries(lsData).filter(([k, v]) => v.type === 'horse' && k.startsWith(hp));
+  const horses = horseEntries
     .sort((a, b) => (parseInt(a[0].replace(hp, '')) || 0) - (parseInt(b[0].replace(hp, '')) || 0))
     .map(([k, v]) => {
       const umaBan = parseInt(k.replace(hp, ''));
@@ -11307,13 +11312,17 @@ function computeYosoScoredArchived(babaCode, raceDate, raceNo) {
   allRacesData[raceNo] = { raceInfo, horses };       // 一時差し替え
   let result = null;
   try { result = computeYosoScored(raceNo, null); }  // 同期実行（途中でawait/setTimeoutを挟まない）
-  finally { allRacesData[raceNo] = _saved; }         // 必ず元に戻す
+  finally {
+    if (_saved === undefined) delete allRacesData[raceNo];
+    else allRacesData[raceNo] = _saved;
+  }                                                  // 必ず元に戻す
   return result;
 }
 
 const AI_SEISEKI_CACHE_SCHEMA = 'ai_seiseki_cache/v2';
 const AI_SEISEKI_CACHE_PREFIX = 'aiSeisekiCache_v2';
 const AI_SEISEKI_MARKS = ['◎', '○', '▲', '△', '×', '×'];  // computeYosoScored系と同一定義（値は変更しない）
+const AI_SEISEKI_MAX_RACES = 600;                    // 直近約50開催日。画面内の再計算を有限時間に保つ
 function _aiSeisekiEmptyAgg() {
   const byMark = {}; ['◎', '○', '▲', '△', '×'].forEach(m => byMark[m] = { n: 0, win: 0, top2: 0, top3: 0 });
   return byMark;
@@ -11341,25 +11350,34 @@ function _aiSeisekiListFinishedRaces() {
     const raceNo = parseInt(parts[2]); if (isNaN(raceNo)) continue;
     const umaBan = parseInt(parts[3]);
     const key = parts[1] + '|' + raceNo;
-    if (!raceMap[key]) raceMap[key] = { key, raceDate: parts[1], raceNo, hasWinner: false, n: 0, resultRows: [] };
+    if (!raceMap[key]) raceMap[key] = { key, raceDate: parts[1], raceNo, hasWinner: false, n: 0, resultRows: [], horseKeys: [] };
+    raceMap[key].horseKeys.push(k);
     raceMap[key].resultRows.push([isNaN(umaBan) ? null : umaBan, String(v.chakujun || '')]);
     const c = parseInt(v.chakujun);
     if (isNaN(c) || c < 1) continue;
     raceMap[key].n++;
     if (c === 1) raceMap[key].hasWinner = true;
   }
-  return Object.values(raceMap).filter(r => r.hasWinner && r.n >= 4)
+  const allFinished = Object.values(raceMap).filter(r => r.hasWinner && r.n >= 4)
     .sort((a, b) => a.raceDate === b.raceDate ? a.raceNo - b.raceNo : (a.raceDate < b.raceDate ? -1 : 1))
     .map(r => ({ key: r.key, raceDate: r.raceDate, raceNo: r.raceNo,
+      horseKeys: r.horseKeys,
       resultSignature: _aiFingerprint(r.resultRows.sort((a,b) => (a[0]||0)-(b[0]||0))) }));
+  const selected = allFinished.slice(-AI_SEISEKI_MAX_RACES);
+  // 配列の列挙要素には含めず、画面の集計範囲表示だけに使う。
+  Object.defineProperty(selected, 'totalAvailable', { value: allFinished.length, enumerable: false });
+  return selected;
 }
 function _aiSeisekiMonthKey(dateSlash) { return dateSlash.slice(0, 7).replace('/', '-'); }  // "2026/07/13" → "2026-07"
-// 全期間集計（差分マージ・分割実行でUIブロック回避）。完了時にcbへ{byMonth,cumulative}を渡す。
-function _aiSeisekiBuildOrUpdate(cb) {
+// 直近最大AI_SEISEKI_MAX_RACES件を集計（差分マージ・分割実行でUIブロック回避）。
+// 完了・部分失敗・致命的失敗のいずれでも必ずcbを呼び、画面を「集計中」のまま残さない。
+function _aiSeisekiBuildOrUpdate(cb, onProgress) {
+  const notify = info => { try { if (typeof onProgress === 'function') onProgress(info); } catch (e) {} };
   const model = buildRankingModelIdentity();
   const ctx = _aiSeisekiCacheContext(model);
   const cache = _aiSeisekiReadCache(ctx);
   const races = _aiSeisekiListFinishedRaces();
+  const totalAvailable = Number(races.totalAvailable) || races.length;
   const raceSig = Object.fromEntries(races.map(r => [r.key, r.resultSignature]));
   let reusable = !!(cache && cache.byMonth && cache.cumulative && cache.processed);
   if (reusable) {
@@ -11369,64 +11387,124 @@ function _aiSeisekiBuildOrUpdate(cb) {
   let byMonth = reusable ? JSON.parse(JSON.stringify(cache.byMonth)) : {};
   let cumulative = reusable ? JSON.parse(JSON.stringify(cache.cumulative)) : _aiSeisekiEmptyAgg();
   let processed = reusable ? { ...cache.processed } : {};
-  const targets = races.filter(r => !processed[r.key]);
+  let failed = reusable && cache.failed ? { ...cache.failed } : {};
+  const targets = races.filter(r => !processed[r.key] && failed[r.key] !== r.resultSignature);
   const inputDataFingerprint = _aiFingerprint(races.map(r => [r.key, r.resultSignature]));
+  const firstDate = races[0]?.raceDate || '';
+  const lastDate = races[races.length - 1]?.raceDate || '';
+  const baseMeta = { totalAvailable, selectedRaceCount: races.length, targetCount: targets.length,
+    reusedRaceCount: Object.keys(processed).length, firstDate, lastDate, maxRaces: AI_SEISEKI_MAX_RACES };
   let i = 0;
-  const BATCH = 40;
+  let skipped = 0;
+  const BATCH = 8;
+  notify({ ...baseMeta, done: 0, total: targets.length });
+  const finish = payload => {
+    try { cb(payload); }
+    catch (e) { console.error('[AI成績] 完了表示に失敗', e); }
+  };
   function step() {
-    targets.slice(i, i + BATCH).forEach(r => {
-      const result = computeYosoScoredArchived('31', r.raceDate, r.raceNo);
-      if (!result || !result.scored || !result.scored.length) return;
-      const mk = _aiSeisekiMonthKey(r.raceDate);
-      if (!byMonth[mk]) byMonth[mk] = _aiSeisekiEmptyAgg();
-      result.scored.forEach((s, idx) => {
-        if (s.totalScore == null) return;  // null馬に印なし（他画面と同じ規約）
-        const mark = AI_SEISEKI_MARKS[idx]; if (!mark) return;
-        const c = parseInt(s.horse.chakujun); if (isNaN(c) || c < 1) return;
-        [byMonth[mk][mark], cumulative[mark]].forEach(a => {
-          a.n++; if (c === 1) a.win++; if (c <= 2) a.top2++; if (c <= 3) a.top3++;
-        });
+    try {
+      targets.slice(i, i + BATCH).forEach(r => {
+        try {
+          const result = computeYosoScoredArchived('31', r.raceDate, r.raceNo, r.horseKeys);
+          if (!result || !result.scored || !result.scored.length) throw new Error('予想スコアなし');
+          const mk = _aiSeisekiMonthKey(r.raceDate);
+          if (!byMonth[mk]) byMonth[mk] = _aiSeisekiEmptyAgg();
+          result.scored.forEach((s, idx) => {
+            if (s.totalScore == null) return;  // null馬に印なし（他画面と同じ規約）
+            const mark = AI_SEISEKI_MARKS[idx]; if (!mark) return;
+            const c = parseInt(s.horse.chakujun); if (isNaN(c) || c < 1) return;
+            [byMonth[mk][mark], cumulative[mark]].forEach(a => {
+              a.n++; if (c === 1) a.win++; if (c <= 2) a.top2++; if (c <= 3) a.top3++;
+            });
+          });
+          processed[r.key] = r.resultSignature;
+          delete failed[r.key];
+        } catch (e) {
+          skipped++;
+          failed[r.key] = r.resultSignature;
+          console.warn('[AI成績] レース集計をスキップ', r.key, e);
+        }
       });
-      processed[r.key] = r.resultSignature;
-    });
-    i += BATCH;
-    if (i < targets.length) { setTimeout(step, 0); return; }
-    // 集計中に係数または結果データが変わった場合、混在キャッシュを保存せず新条件で再実行。
-    const modelNow = buildRankingModelIdentity();
-    const dataNow = _aiFingerprint(_aiSeisekiListFinishedRaces().map(r => [r.key, r.resultSignature]));
-    if (modelNow.fingerprint !== model.fingerprint || dataNow !== inputDataFingerprint) {
-      window._aiSeisekiLastRestart = { at: new Date().toISOString(),
-        modelBefore: model.fingerprint, modelAfter: modelNow.fingerprint,
-        dataBefore: inputDataFingerprint, dataAfter: dataNow };
-      setTimeout(() => _aiSeisekiBuildOrUpdate(cb), 0); return;
+      i += BATCH;
+      notify({ ...baseMeta, done: Math.min(i, targets.length), total: targets.length, skipped });
+      if (i < targets.length) { setTimeout(step, 0); return; }
+
+      const modelNow = buildRankingModelIdentity();
+      const dataNow = _aiFingerprint(_aiSeisekiListFinishedRaces().map(r => [r.key, r.resultSignature]));
+      const modelChanged = modelNow.fingerprint !== model.fingerprint;
+      const dataChanged = dataNow !== inputDataFingerprint;
+      if (modelChanged || dataChanged) {
+        // 背景同期の完了まで自動再開を続けると、永遠に完了しない。今回は暫定値を表示し、
+        // 次回表示時に安定した入力で再集計する（混在した結果はキャッシュへ保存しない）。
+        window._aiSeisekiLastRestart = { at: new Date().toISOString(), action: 'deferred',
+          modelBefore: model.fingerprint, modelAfter: modelNow.fingerprint,
+          dataBefore: inputDataFingerprint, dataAfter: dataNow };
+        finish({ byMonth, cumulative, model,
+          error: modelChanged ? '集計中にAIモデルが更新されました。もう一度集計してください。' : '',
+          meta: { ...baseMeta, skipped, dataChanged, modelChanged, cached: false } });
+        return;
+      }
+      _aiSeisekiWriteCache(ctx, {
+        type: 'aiSeisekiCache', schema: AI_SEISEKI_CACHE_SCHEMA, modelFingerprint: model.fingerprint,
+        scoreContractVersion: model.scoreContractVersion, featurePipelineVersion: model.featurePipelineVersion,
+        modelSource: model.source, modelSourceKey: model.sourceKey, processed, failed,
+        finishedRaceCount: races.length, totalAvailableRaceCount: totalAvailable,
+        scopeMaxRaces: AI_SEISEKI_MAX_RACES, byMonth, cumulative, builtAt: new Date().toISOString(),
+      });
+      finish({ byMonth, cumulative, model,
+        meta: { ...baseMeta, skipped, dataChanged: false, modelChanged: false, cached: true } });
+    } catch (e) {
+      console.error('[AI成績] 集計を継続できません', e);
+      finish({ byMonth, cumulative, model, error: e?.message || String(e),
+        meta: { ...baseMeta, skipped, cached: false } });
     }
-    _aiSeisekiWriteCache(ctx, {
-      type: 'aiSeisekiCache', schema: AI_SEISEKI_CACHE_SCHEMA, modelFingerprint: model.fingerprint,
-      scoreContractVersion: model.scoreContractVersion, featurePipelineVersion: model.featurePipelineVersion,
-      modelSource: model.source, modelSourceKey: model.sourceKey, processed, finishedRaceCount: races.length,
-      byMonth, cumulative, builtAt: new Date().toISOString(),
-    });
-    cb({ byMonth, cumulative, model });
   }
-  if (targets.length) step(); else cb({ byMonth, cumulative, model });
+  if (targets.length) step();
+  else finish({ byMonth, cumulative, model,
+    meta: { ...baseMeta, skipped: Object.keys(failed).length, dataChanged: false, modelChanged: false, cached: true } });
 }
 function renderAiSeisekiPage() {
   const el = document.getElementById('aiseiseki-body');
   if (!el) return;
   const prevSel = document.getElementById('aiseiseki-month-sel')?.value || 'cumulative';
-  el.innerHTML = '<p style="color:#9ca3af;font-size:13px">集計中...</p>';
-  _aiSeisekiBuildOrUpdate(({ byMonth, cumulative, model }) => {
+  el.innerHTML = `<div id="aiseiseki-loading" style="padding:4px 0 2px">
+    <div id="aiseiseki-progress-label" style="color:#94a3b8;font-size:13px;margin-bottom:8px">集計対象を確認中...</div>
+    <div style="height:4px;background:#1e293b;border-radius:999px;overflow:hidden"><div id="aiseiseki-progress-bar" style="height:100%;width:4%;background:linear-gradient(90deg,#22d3ee,#8b5cf6);transition:width .18s"></div></div>
+  </div>`;
+  _aiSeisekiBuildOrUpdate(({ byMonth, cumulative, model, error, meta }) => {
+    byMonth = byMonth || {};
+    cumulative = cumulative || _aiSeisekiEmptyAgg();
+    meta = meta || {};
+    const hasRows = Object.values(cumulative).some(a => a && a.n > 0);
+    if (error && !hasRows) {
+      el.innerHTML = `<div style="padding:12px 14px;border:1px solid #7f1d1d;background:#2a1118;border-radius:8px;color:#fecaca;font-size:13px;line-height:1.7">
+        <strong>AI成績を集計できませんでした</strong><br>${escapeHTML(error)}<br>
+        <button type="button" onclick="renderAiSeisekiPage()" style="margin-top:10px;padding:7px 12px;border:1px solid #38bdf8;border-radius:6px;background:#0c4a6e;color:#e0f2fe;cursor:pointer">再集計する</button>
+      </div>`;
+      return;
+    }
     const months = Object.keys(byMonth).sort((a, b) => b.localeCompare(a));
     const curSel = months.includes(prevSel) || prevSel === 'cumulative' ? prevSel : 'cumulative';
-    const monthOptions = ['<option value="cumulative">累計</option>']
+    const monthOptions = ['<option value="cumulative">対象期間の累計</option>']
       .concat(months.map(m => `<option value="${m}">${m.replace('-', '年')}月</option>`)).join('');
     const agg = curSel === 'cumulative' ? cumulative : (byMonth[curSel] || _aiSeisekiEmptyAgg());
     const pct = (num, den) => den > 0 ? (num / den * 100).toFixed(1) + '%' : '—';
     const rows = ['◎', '○', '▲', '△', '×'].map(mark => {
-      const a = agg[mark];
+      const a = agg[mark] || { n: 0, win: 0, top2: 0, top3: 0 };
       return `<tr><td class="ais-mark">${mark}</td><td>${a.n}</td><td>${pct(a.win, a.n)}</td><td>${pct(a.top2, a.n)}</td><td>${pct(a.top3, a.n)}</td></tr>`;
     }).join('');
+    const scope = meta.selectedRaceCount
+      ? `${escapeHTML(meta.firstDate || '')}〜${escapeHTML(meta.lastDate || '')}の直近${meta.selectedRaceCount}R`
+      : '保存済みの確定レースなし';
+    const totalNote = meta.totalAvailable > meta.selectedRaceCount ? `（保存済み全${meta.totalAvailable}Rから抽出）` : '';
+    const warn = [
+      error ? `⚠ ${escapeHTML(error)}` : '',
+      meta.dataChanged ? '⚠ 過去データの同期中に内容が変わったため、今回は暫定値です。次回表示時に更新します。' : '',
+      meta.skipped ? `⚠ データ不足または例外のある${meta.skipped}Rを除外しました。` : ''
+    ].filter(Boolean).join('<br>');
     el.innerHTML = `
+      ${warn ? `<div style="margin-bottom:10px;padding:8px 10px;border:1px solid #854d0e;background:#2b2109;border-radius:7px;color:#fde68a;font-size:12px;line-height:1.6">${warn}</div>` : ''}
       <div class="ais-controls">
         <label>集計期間：<select id="aiseiseki-month-sel" onchange="renderAiSeisekiPage()">${monthOptions}</select></label>
       </div>
@@ -11434,10 +11512,23 @@ function renderAiSeisekiPage() {
         <thead><tr><th>印</th><th>対象R数</th><th>1着率</th><th>連対率</th><th>複勝率</th></tr></thead>
         <tbody>${rows}</tbody>
       </table></div>
-      <div class="ais-note">この成績は、今のAIをそのまま過去のレースに当てはめ直した参考値です。実際にその時見せていた印ではありません。<br>
+      <div class="ais-note"><strong>集計範囲:</strong> ${scope}${totalNote}。端末での再計算を短時間で完了させ、現在の傾向を確認しやすくするため直近最大${AI_SEISEKI_MAX_RACES}Rを対象にしています。<br>
+      この成績は、今のAIを過去のレースに当てはめ直した参考値です。実際にその時見せていた印ではありません。<br>
       集計モデル: <code>${escapeHTML(model?.fingerprint || '不明')}</code>／${escapeHTML(model?.source || '不明')}。係数や計算契約が変わると別キャッシュで再集計します。</div>`;
     const sel2 = document.getElementById('aiseiseki-month-sel');
     if (sel2) sel2.value = curSel;
+  }, progress => {
+    const label = document.getElementById('aiseiseki-progress-label');
+    const bar = document.getElementById('aiseiseki-progress-bar');
+    if (!label || !bar) return;
+    const total = Number(progress.total) || 0;
+    const done = Math.min(Number(progress.done) || 0, total);
+    const pct = total ? Math.round(done / total * 100) : 100;
+    const reused = Number(progress.reusedRaceCount) || 0;
+    label.textContent = total
+      ? `AI成績を集計中 ${done}/${total}R${reused ? `（${reused}Rはキャッシュ済み）` : ''}`
+      : '保存済みの集計結果を表示しています...';
+    bar.style.width = `${Math.max(4, pct)}%`;
   });
 }
 
