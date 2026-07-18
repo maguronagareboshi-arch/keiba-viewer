@@ -11323,6 +11323,23 @@ const AI_SEISEKI_CACHE_SCHEMA = 'ai_seiseki_cache/v2';
 const AI_SEISEKI_CACHE_PREFIX = 'aiSeisekiCache_v2';
 const AI_SEISEKI_MARKS = ['◎', '○', '▲', '△', '×', '×'];  // computeYosoScored系と同一定義（値は変更しない）
 const AI_SEISEKI_MAX_RACES = 600;                    // 直近約50開催日。画面内の再計算を有限時間に保つ
+// complete-v3（2026-07-11凍結）からリリース時に生成した軽量集計。
+// legacy_v2_anchor.score_approx は現行AIの順位近似であり、実印・完全なlive scoreとは表示しない。
+// 画面を開くだけでは重い過去再採点をせず、この監査済み参考値を即時表示する。
+const AI_SEISEKI_SHIPPED = Object.freeze({
+  schema: 'ai_seiseki_shipped/v1', rankingLabel: '現行AI近似順位',
+  startDate: '2025/01/01', endDate: '2026/07/11', raceCount: 1241,
+  excludedIncompleteScore: 560, excludedInvalidTop3: 13,
+  datasetSha256: '699f63e95dfa47f1fdc5f6ff0c0db8fa5d005f11c11a012a2df9e75b89bbc0ec',
+  cumulative: {
+    '◎': { n: 1241, win: 520, top2: 767, top3: 900 },
+    '○': { n: 1241, win: 250, top2: 519, top3: 696 },
+    '▲': { n: 1241, win: 140, top2: 354, top3: 574 },
+    '△': { n: 1241, win: 89, top2: 240, top3: 439 },
+    '×': { n: 2473, win: 122, top2: 317, top3: 602 },
+  },
+});
+let _aiSeisekiVisibleResult = null;
 function _aiSeisekiEmptyAgg() {
   const byMark = {}; ['◎', '○', '▲', '△', '×'].forEach(m => byMark[m] = { n: 0, win: 0, top2: 0, top3: 0 });
   return byMark;
@@ -11464,71 +11481,115 @@ function _aiSeisekiBuildOrUpdate(cb, onProgress) {
   else finish({ byMonth, cumulative, model,
     meta: { ...baseMeta, skipped: Object.keys(failed).length, dataChanged: false, modelChanged: false, cached: true } });
 }
+function _aiSeisekiInitialResult() {
+  const model = buildRankingModelIdentity();
+  const cache = _aiSeisekiReadCache(_aiSeisekiCacheContext(model));
+  // 一度完了した端末集計は再計算せず即時利用する。旧仕様の全期間キャッシュは混ぜない。
+  if (cache && cache.scopeMaxRaces === AI_SEISEKI_MAX_RACES && cache.byMonth && cache.cumulative) {
+    const dates = Object.keys(cache.byMonth).sort();
+    return { byMonth: cache.byMonth, cumulative: cache.cumulative, model,
+      meta: { sourceKind: 'device_cache', selectedRaceCount: cache.finishedRaceCount || 0,
+        totalAvailable: cache.totalAvailableRaceCount || cache.finishedRaceCount || 0,
+        firstDate: dates[0] ? dates[0].replace('-', '/') + '/01' : '',
+        lastDate: dates.length ? dates[dates.length - 1].replace('-', '/') : '',
+        skipped: Object.keys(cache.failed || {}).length, cached: true } };
+  }
+  return { byMonth: {}, cumulative: AI_SEISEKI_SHIPPED.cumulative, model: null,
+    meta: { sourceKind: 'shipped_audit', selectedRaceCount: AI_SEISEKI_SHIPPED.raceCount,
+      firstDate: AI_SEISEKI_SHIPPED.startDate, lastDate: AI_SEISEKI_SHIPPED.endDate,
+      skipped: 0, cached: true } };
+}
+
+function _renderAiSeisekiResult(el, result, prevSel) {
+  const byMonth = result.byMonth || {};
+  const cumulative = result.cumulative || _aiSeisekiEmptyAgg();
+  const model = result.model;
+  const error = result.error || '';
+  const meta = result.meta || {};
+  const hasRows = Object.values(cumulative).some(a => a && a.n > 0);
+  if (error && !hasRows) {
+    el.innerHTML = `<div style="padding:12px 14px;border:1px solid #7f1d1d;background:#2a1118;border-radius:8px;color:#fecaca;font-size:13px;line-height:1.7">
+      <strong>端末データで再集計できませんでした</strong><br>${escapeHTML(error)}<br>
+      <button type="button" onclick="_aiSeisekiVisibleResult=null;renderAiSeisekiPage()" style="margin-top:10px;padding:7px 12px;border:1px solid #38bdf8;border-radius:6px;background:#0c4a6e;color:#e0f2fe;cursor:pointer">固定評価に戻る</button>
+    </div>`;
+    return;
+  }
+  const months = Object.keys(byMonth).sort((a, b) => b.localeCompare(a));
+  const curSel = months.includes(prevSel) || prevSel === 'cumulative' ? prevSel : 'cumulative';
+  const monthOptions = ['<option value="cumulative">対象期間の累計</option>']
+    .concat(months.map(m => `<option value="${m}">${m.replace('-', '年')}月</option>`)).join('');
+  const agg = curSel === 'cumulative' ? cumulative : (byMonth[curSel] || _aiSeisekiEmptyAgg());
+  const pct = (num, den) => den > 0 ? (num / den * 100).toFixed(1) + '%' : '—';
+  const rows = ['◎', '○', '▲', '△', '×'].map(mark => {
+    const a = agg[mark] || { n: 0, win: 0, top2: 0, top3: 0 };
+    return `<tr><td class="ais-mark">${mark}</td><td>${a.n}</td><td>${pct(a.win, a.n)}</td><td>${pct(a.top2, a.n)}</td><td>${pct(a.top3, a.n)}</td></tr>`;
+  }).join('');
+  const isShipped = meta.sourceKind === 'shipped_audit';
+  const scope = isShipped
+    ? `${AI_SEISEKI_SHIPPED.startDate}〜${AI_SEISEKI_SHIPPED.endDate}の${AI_SEISEKI_SHIPPED.raceCount}R`
+    : `${escapeHTML(meta.firstDate || '')}〜${escapeHTML(meta.lastDate || '')}の直近${meta.selectedRaceCount || 0}R`;
+  const totalNote = !isShipped && meta.totalAvailable > meta.selectedRaceCount ? `（保存済み全${meta.totalAvailable}Rから抽出）` : '';
+  const warn = [
+    error ? `⚠ ${escapeHTML(error)}` : '',
+    meta.dataChanged ? '⚠ 過去データの同期中に内容が変わったため、今回は暫定値です。' : '',
+    meta.skipped ? `⚠ データ不足または例外のある${meta.skipped}Rを除外しました。` : ''
+  ].filter(Boolean).join('<br>');
+  const controls = months.length
+    ? `<label>集計期間：<select id="aiseiseki-month-sel" onchange="renderAiSeisekiPage()">${monthOptions}</select></label>`
+    : `<span style="font-size:12px;color:#bae6fd;font-weight:700">監査済み固定評価・2025〜2026</span>`;
+  const note = isShipped
+    ? `<strong>集計範囲:</strong> ${scope}。完全な出走馬集合のうち、現行AI近似スコアが全頭揃い1〜3着が一意のレースです。スコア欠損${AI_SEISEKI_SHIPPED.excludedIncompleteScore}R・同着等${AI_SEISEKI_SHIPPED.excludedInvalidTop3}Rは除外しています。<br>
+       <strong>評価方法:</strong> ${AI_SEISEKI_SHIPPED.rankingLabel}による監査用の固定参考値です。当時表示した実印でも、端末の現在係数による完全な再計算でもありません。`
+    : `<strong>集計範囲:</strong> ${scope}${totalNote}。この端末の現在AIを過去へ当てはめ直した参考値で、当時表示した実印ではありません。<br>
+       集計モデル: <code>${escapeHTML(model?.fingerprint || '不明')}</code>／${escapeHTML(model?.source || '不明')}。`;
+  el.innerHTML = `
+    ${warn ? `<div style="margin-bottom:10px;padding:8px 10px;border:1px solid #854d0e;background:#2b2109;border-radius:7px;color:#fde68a;font-size:12px;line-height:1.6">${warn}</div>` : ''}
+    <div class="ais-controls" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+      ${controls}
+      <button type="button" onclick="rebuildAiSeisekiFromDevice()" style="padding:6px 10px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#cbd5e1;font-size:11px;cursor:pointer" title="現在の端末データを最大${AI_SEISEKI_MAX_RACES}R再計算します。完了まで時間がかかる場合があります。">端末データで再集計</button>
+    </div>
+    <div style="overflow-x:auto"><table class="ais-table">
+      <thead><tr><th>印</th><th>対象頭数</th><th>1着率</th><th>連対率</th><th>複勝率</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <div class="ais-note">${note}</div>`;
+  const sel = document.getElementById('aiseiseki-month-sel');
+  if (sel) sel.value = curSel;
+}
+
 function renderAiSeisekiPage() {
   const el = document.getElementById('aiseiseki-body');
   if (!el) return;
   const prevSel = document.getElementById('aiseiseki-month-sel')?.value || 'cumulative';
+  if (!_aiSeisekiVisibleResult) _aiSeisekiVisibleResult = _aiSeisekiInitialResult();
+  _renderAiSeisekiResult(el, _aiSeisekiVisibleResult, prevSel);
+}
+
+// 重い過去再採点は明示操作時だけ実行する。ページを開くだけでは呼ばない。
+function rebuildAiSeisekiFromDevice() {
+  const el = document.getElementById('aiseiseki-body');
+  if (!el) return;
   el.innerHTML = `<div id="aiseiseki-loading" style="padding:4px 0 2px">
-    <div id="aiseiseki-progress-label" style="color:#94a3b8;font-size:13px;margin-bottom:8px">集計対象を確認中...</div>
+    <div id="aiseiseki-progress-label" style="color:#94a3b8;font-size:13px;margin-bottom:8px">端末データの集計対象を確認中...</div>
     <div style="height:4px;background:#1e293b;border-radius:999px;overflow:hidden"><div id="aiseiseki-progress-bar" style="height:100%;width:4%;background:linear-gradient(90deg,#22d3ee,#8b5cf6);transition:width .18s"></div></div>
+    <button type="button" onclick="renderAiSeisekiPage()" style="margin-top:12px;padding:6px 10px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#cbd5e1;font-size:11px;cursor:pointer">固定評価を表示</button>
   </div>`;
-  _aiSeisekiBuildOrUpdate(({ byMonth, cumulative, model, error, meta }) => {
-    byMonth = byMonth || {};
-    cumulative = cumulative || _aiSeisekiEmptyAgg();
-    meta = meta || {};
-    const hasRows = Object.values(cumulative).some(a => a && a.n > 0);
-    if (error && !hasRows) {
-      el.innerHTML = `<div style="padding:12px 14px;border:1px solid #7f1d1d;background:#2a1118;border-radius:8px;color:#fecaca;font-size:13px;line-height:1.7">
-        <strong>AI成績を集計できませんでした</strong><br>${escapeHTML(error)}<br>
-        <button type="button" onclick="renderAiSeisekiPage()" style="margin-top:10px;padding:7px 12px;border:1px solid #38bdf8;border-radius:6px;background:#0c4a6e;color:#e0f2fe;cursor:pointer">再集計する</button>
-      </div>`;
-      return;
-    }
-    const months = Object.keys(byMonth).sort((a, b) => b.localeCompare(a));
-    const curSel = months.includes(prevSel) || prevSel === 'cumulative' ? prevSel : 'cumulative';
-    const monthOptions = ['<option value="cumulative">対象期間の累計</option>']
-      .concat(months.map(m => `<option value="${m}">${m.replace('-', '年')}月</option>`)).join('');
-    const agg = curSel === 'cumulative' ? cumulative : (byMonth[curSel] || _aiSeisekiEmptyAgg());
-    const pct = (num, den) => den > 0 ? (num / den * 100).toFixed(1) + '%' : '—';
-    const rows = ['◎', '○', '▲', '△', '×'].map(mark => {
-      const a = agg[mark] || { n: 0, win: 0, top2: 0, top3: 0 };
-      return `<tr><td class="ais-mark">${mark}</td><td>${a.n}</td><td>${pct(a.win, a.n)}</td><td>${pct(a.top2, a.n)}</td><td>${pct(a.top3, a.n)}</td></tr>`;
-    }).join('');
-    const scope = meta.selectedRaceCount
-      ? `${escapeHTML(meta.firstDate || '')}〜${escapeHTML(meta.lastDate || '')}の直近${meta.selectedRaceCount}R`
-      : '保存済みの確定レースなし';
-    const totalNote = meta.totalAvailable > meta.selectedRaceCount ? `（保存済み全${meta.totalAvailable}Rから抽出）` : '';
-    const warn = [
-      error ? `⚠ ${escapeHTML(error)}` : '',
-      meta.dataChanged ? '⚠ 過去データの同期中に内容が変わったため、今回は暫定値です。次回表示時に更新します。' : '',
-      meta.skipped ? `⚠ データ不足または例外のある${meta.skipped}Rを除外しました。` : ''
-    ].filter(Boolean).join('<br>');
-    el.innerHTML = `
-      ${warn ? `<div style="margin-bottom:10px;padding:8px 10px;border:1px solid #854d0e;background:#2b2109;border-radius:7px;color:#fde68a;font-size:12px;line-height:1.6">${warn}</div>` : ''}
-      <div class="ais-controls">
-        <label>集計期間：<select id="aiseiseki-month-sel" onchange="renderAiSeisekiPage()">${monthOptions}</select></label>
-      </div>
-      <div style="overflow-x:auto"><table class="ais-table">
-        <thead><tr><th>印</th><th>対象R数</th><th>1着率</th><th>連対率</th><th>複勝率</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table></div>
-      <div class="ais-note"><strong>集計範囲:</strong> ${scope}${totalNote}。端末での再計算を短時間で完了させ、現在の傾向を確認しやすくするため直近最大${AI_SEISEKI_MAX_RACES}Rを対象にしています。<br>
-      この成績は、今のAIを過去のレースに当てはめ直した参考値です。実際にその時見せていた印ではありません。<br>
-      集計モデル: <code>${escapeHTML(model?.fingerprint || '不明')}</code>／${escapeHTML(model?.source || '不明')}。係数や計算契約が変わると別キャッシュで再集計します。</div>`;
-    const sel2 = document.getElementById('aiseiseki-month-sel');
-    if (sel2) sel2.value = curSel;
+  _aiSeisekiBuildOrUpdate(result => {
+    result.meta = { ...(result.meta || {}), sourceKind: 'device_live' };
+    _aiSeisekiVisibleResult = result;
+    renderAiSeisekiPage();
   }, progress => {
     const label = document.getElementById('aiseiseki-progress-label');
     const bar = document.getElementById('aiseiseki-progress-bar');
     if (!label || !bar) return;
     const total = Number(progress.total) || 0;
     const done = Math.min(Number(progress.done) || 0, total);
-    const pct = total ? Math.round(done / total * 100) : 100;
+    const progressPct = total ? Math.round(done / total * 100) : 100;
     const reused = Number(progress.reusedRaceCount) || 0;
     label.textContent = total
-      ? `AI成績を集計中 ${done}/${total}R${reused ? `（${reused}Rはキャッシュ済み）` : ''}`
-      : '保存済みの集計結果を表示しています...';
-    bar.style.width = `${Math.max(4, pct)}%`;
+      ? `端末データを再集計中 ${done}/${total}R${reused ? `（${reused}Rはキャッシュ済み）` : ''}`
+      : '端末の保存済み集計を確認しています...';
+    bar.style.width = `${Math.max(4, progressPct)}%`;
   });
 }
 
