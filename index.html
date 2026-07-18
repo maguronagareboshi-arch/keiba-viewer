@@ -2971,6 +2971,10 @@ const _kvLibSpecs = {
     src: 'modules/ai-analysis.js',
     ready: () => typeof window.computeYosoScored === 'function' && typeof window.renderPredictionPanel === 'function' && typeof window.renderAnalysis === 'function',
   },
+  aiInsights: {
+    src: 'modules/ai-insights.js',
+    ready: () => window.kvAiInsightsReady === true,
+  },
 };
 
 function _kvLoadLibrary(key) {
@@ -3034,6 +3038,8 @@ function _ensureAiAnalysisModule() {
     }
   });
 }
+
+function _ensureAiInsightsModule() { return _kvLoadLibrary('aiInsights'); }
 
 function _ensureRaceIntelligence() {
   return Promise.all([_ensureFullIDBCache(), _ensureAiAnalysisModule()]);
@@ -3200,7 +3206,14 @@ function switchPage(pageId, _fromPop) {
     _renderPageWithHistory(pageId, refreshOpponentShadowCollectionStatus);
   }
   if (pageId === 'f3avg')   { _renderPageWithHistory(pageId, renderF3Averages); }
-  if (pageId === 'aiseiseki') { _renderPageWithHistory(pageId, renderAiSeisekiPage, true); }
+  if (pageId === 'aiseiseki') {
+    setTimeout(() => _ensureAiInsightsModule().then(() => {
+      if (_currentPage === pageId) renderAiSeisekiPage();
+    }).catch(() => {
+      const el = document.getElementById('aiseiseki-body');
+      if (el) el.innerHTML = _kvAsyncStateHtml('error','AI成績の表示に失敗しました','監査データを読み込めませんでした',"switchPage('aiseiseki')");
+    }), 0);
+  }
   if (pageId === 'psfhist') { _renderPageWithHistory(pageId, renderPsfHistory, true); }
   if (pageId === 'bets')    { _renderPageWithHistory(pageId, renderBetsPage); }
 }
@@ -5598,6 +5611,10 @@ function renderRaceContent(raceNo) {
     return ca!==cb?ca-cb:(parseInt(a.umaBan)||0)-(parseInt(b.umaBan)||0);
   });
   renderHorseRows(raceNo, sortedHorses);
+  // 保存済みの軽量予想があれば、全履歴（約15万件）を展開する前に先行表示する。
+  setTimeout(() => _ensureAiInsightsModule().then(() => {
+    if (window.kvAiRenderCachedPrediction) window.kvAiRenderCachedPrediction(raceNo);
+  }).catch(() => {}), 0);
   updateRacePace(raceNo);
   renderPaceDistChart(raceNo);
   renderLapInputs(raceNo, raceInfo.distance, raceInfo.lapTimes || null);
@@ -5654,6 +5671,9 @@ function _renderRaceHistoryPanels(raceNo) {
   setTimeout(() => renderDebanExtra(raceNo), 0);
   setTimeout(() => renderCockpitSummary(raceNo), 0);
   setTimeout(() => renderOddsPanel(raceNo), 0);
+  setTimeout(() => {
+    if (window.kvAiScheduleDayPrecompute) window.kvAiScheduleDayPrecompute(allRacesData[raceNo]?.raceInfo?.raceDate);
+  }, 0);
 }
 
 function _cockpitDateLabel(raw) {
@@ -5757,8 +5777,10 @@ function renderCockpitSummary(raceNo) {
   </button>` : '<div class="cockpit-pick is-empty"><span class="cockpit-mark is-second">○</span><div class="cockpit-pick-copy"><strong>相手候補なし</strong><small>○▲△を判定できません</small></div></div>';
   const scoreGap = main && scored[1] ? Number(main.totalScore) - Number(scored[1].totalScore) : 0;
   const oddsReady = scored.filter(s => parseFloat(s.horse?.odds) > 0).length;
-  const confidence = scoreGap >= 4 && oddsReady >= Math.ceil(scored.length * .7) ? '高' : scoreGap >= 2 ? '中' : '慎重';
-  const confidenceCls = confidence === '高' ? 'high' : confidence === '中' ? 'mid' : 'low';
+  const calibrated = typeof window !== 'undefined' && window.kvAiGetCalibratedConfidence
+    ? window.kvAiGetCalibratedConfidence(main?.horse?.ninki) : null;
+  const confidence = calibrated?.label || (scoreGap >= 4 && oddsReady >= Math.ceil(scored.length * .7) ? '高' : scoreGap >= 2 ? '中' : '慎重');
+  const confidenceCls = calibrated?.className || (confidence === '高' ? 'high' : confidence === '中' ? 'mid' : 'low');
   const risks = [];
   if (scoreGap < 2) risks.push('上位評価が接近');
   if (main && parseFloat(main.horse?.odds) > 0 && parseFloat(main.horse.odds) < 2) risks.push('本命に人気集中');
@@ -5766,7 +5788,9 @@ function renderCockpitSummary(raceNo) {
   if (!value) risks.push('明確な妙味なし');
   if (!risks.length) risks.push('大きな不安材料なし');
   const action = valueKind === 'ev' && value ? '買い候補あり' : confidence === '高' ? '軸＋相手を検討' : confidence === '中' ? '相手を絞って検討' : '見送り寄り';
-  const decisionHtml = `<div class="cockpit-decision"><span class="decision-chip is-${confidenceCls}"><i class="fas fa-shield-alt"></i> 信頼度 ${confidence}</span><span class="decision-action"><i class="fas fa-gavel"></i> ${escapeHTML(action)}</span><span class="decision-risk"><b>不安材料:</b> ${escapeHTML(risks.join('・'))}</span><button type="button" class="btn btn-secondary btn-sm" onclick="switchViewTab(${raceNo},'yoso')">全印を見る</button></div>`;
+  const confidenceEvidence = calibrated
+    ? `<b>◎1着 ${(calibrated.winRate * 100).toFixed(1)}%・3着内 ${(calibrated.top3Rate * 100).toFixed(1)}%</b>（${escapeHTML(calibrated.band)} n=${calibrated.n}）<br>` : '';
+  const decisionHtml = `<div class="cockpit-decision"><span class="decision-chip is-${confidenceCls}" title="${escapeHTML(calibrated?.source || 'スコア差による暫定判定')}"><i class="fas fa-shield-alt"></i> 信頼度 ${confidence}</span><span class="decision-action"><i class="fas fa-gavel"></i> ${escapeHTML(action)}</span><span class="decision-risk">${confidenceEvidence}<b>不安材料:</b> ${escapeHTML(risks.join('・'))}</span><button type="button" class="btn btn-secondary btn-sm" onclick="switchViewTab(${raceNo},'yoso')">全印を見る</button></div>`;
   if (dock) dock.innerHTML = cardHtml(picks.main) + opponentHtml + cardHtml(picks.value) + decisionHtml;
 
   if (panel) {
@@ -6277,6 +6301,9 @@ function renderHorseRows(raceNo, horses) {
   // computeYosoScored内部では呼ばないため、過去成績の再計算や仮想馬場選択は記録されない。
   if (_cy && typeof recordForwardRankingSnapshot === 'function') {
     try { recordForwardRankingSnapshot(raceNo, _cy); } catch (e) { console.warn('[aiPredictionSnapshot hook]', e); }
+  }
+  if (_cy && window.kvAiCachePrediction) {
+    try { window.kvAiCachePrediction(raceNo, _cy); } catch (e) { console.warn('[aiPrecalc hook]', e); }
   }
   // 相手選びは別モデル・別台帳。候補登録＋管理者shadow flagの両方が有効な時だけ、
   // 既定馬場の前向き結果を記録する（主印scoredはコピー入力のため変更されない）。
@@ -6939,7 +6966,12 @@ async function switchViewTab(raceNo, view) {
     if (yosoView) yosoView.style.display = '';
     if (yosoBtn) yosoBtn.classList.add('on');
     const target = document.getElementById(`cockpit-ai-panel-${raceNo}`);
-    if (target && !_idbFullReady) target.innerHTML = _kvAsyncStateHtml('ai', 'AI予想を計算中', '過去走・馬場・騎手・厩舎を統合しています');
+    let showedCached = false;
+    try {
+      await _ensureAiInsightsModule();
+      showedCached = !!window.kvAiRenderCachedPrediction?.(raceNo);
+    } catch (e) {}
+    if (target && !_idbFullReady && !showedCached) target.innerHTML = _kvAsyncStateHtml('ai', 'AI予想を計算中', '過去走・馬場・騎手・厩舎を統合しています');
     try { await _ensureRaceIntelligence(); }
     catch (e) { if (target) target.innerHTML = _kvAsyncStateHtml('error','AI計算に失敗しました','過去データを準備できませんでした',`switchViewTab(${raceNo},'yoso')`); return; }
     if (yosoView && yosoView.style.display === 'none') return;
@@ -8673,6 +8705,7 @@ async function _ensureDayCacheLoaded(baba, date) {
     _readIDBPrefix(`race_${baba}_${date}_`),
     _readIDBPrefix(`${baba}_${date}_`),
     _readIDBPrefix(`payout_${baba}_${date}_`),
+    _readIDBPrefix(`aiPrecalc_v1|${baba}|${String(date).replace(/\D/g,'')}|`),
   ]);
   chunks.forEach(_mergeIDBCachePairs);
   _idbLoadedDays.add(dayKey);
@@ -8796,6 +8829,7 @@ async function loadIDBCache() {
       _idbPrefixRange('race_'),
       _idbPrefixRange(`31_${startupDate}_`),
       _idbPrefixRange(`payout_31_${startupDate}_`),
+      _idbPrefixRange(`aiPrecalc_v1|31|${String(startupDate).replace(/\D/g,'')}|`),
     ];
     const chunkPromises = ranges.map(async range => {
       const [keys, values] = await Promise.all([
@@ -12275,9 +12309,11 @@ function _renderAiSeisekiResult(el, result, prevSel) {
       <thead><tr><th>印</th><th>対象頭数</th><th>1着率</th><th>連対率</th><th>複勝率</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
-    <div class="ais-note">${note}</div>`;
+    <div class="ais-note">${note}</div>
+    <div id="ai-opponent-audit"></div>`;
   const sel = document.getElementById('aiseiseki-month-sel');
   if (sel) sel.value = curSel;
+  if (window.kvAiRenderOpponentAudit) window.kvAiRenderOpponentAudit('ai-opponent-audit');
 }
 
 function renderAiSeisekiPage() {
@@ -12297,7 +12333,7 @@ function rebuildAiSeisekiFromDevice() {
     <div style="height:4px;background:#1e293b;border-radius:999px;overflow:hidden"><div id="aiseiseki-progress-bar" style="height:100%;width:4%;background:linear-gradient(90deg,#22d3ee,#8b5cf6);transition:width .18s"></div></div>
     <button type="button" onclick="renderAiSeisekiPage()" style="margin-top:12px;padding:6px 10px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#cbd5e1;font-size:11px;cursor:pointer">固定評価を表示</button>
   </div>`;
-  _aiSeisekiBuildOrUpdate(result => {
+  const startBuild = () => _aiSeisekiBuildOrUpdate(result => {
     result.meta = { ...(result.meta || {}), sourceKind: 'device_live' };
     _aiSeisekiVisibleResult = result;
     renderAiSeisekiPage();
@@ -12313,6 +12349,9 @@ function rebuildAiSeisekiFromDevice() {
       ? `端末データを再集計中 ${done}/${total}R${reused ? `（${reused}Rはキャッシュ済み）` : ''}`
       : '端末の保存済み集計を確認しています...';
     bar.style.width = `${Math.max(4, progressPct)}%`;
+  });
+  _ensureRaceIntelligence().then(startBuild).catch(() => {
+    el.innerHTML = _kvAsyncStateHtml('error','端末データを再集計できません','過去データを準備できませんでした','rebuildAiSeisekiFromDevice()');
   });
 }
 
