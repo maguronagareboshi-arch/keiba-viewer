@@ -2979,6 +2979,18 @@ function ensureCaptureLibs(withPdf) {
   return Promise.all(jobs);
 }
 
+/** 外部データをHTMLへ描画する全画面共通のエスケープ。初期出馬表でも使うため遅延分離しない。 */
+function escapeHTML(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+    return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c];
+  });
+}
+
+/** onclick属性内の単一引用符つきJavaScript文字列用。 */
+function jsAttrEsc(s) {
+  return escapeHTML(String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+}
+
 function _ensureAiAnalysisModule() {
   return _kvLoadLibrary('aiAnalysis').then(() => {
     if (window._kvAnalysisModuleInitialized) return;
@@ -4577,6 +4589,12 @@ async function _loadWeeklyJockeyChanges(ymd, raceCount, targetEl) {
   if (!targetEl || targetEl.dataset.loaded) return;
   targetEl.dataset.loaded = '1';
   targetEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 出馬表を確認中...';
+
+  // 騎手統計はAI・分析モジュール側にある。ユーザーが詳細を開いた時だけ全履歴と一緒に準備する。
+  try { await _ensureRaceIntelligence(); } catch (e) {
+    targetEl.innerHTML = '騎手統計を準備できませんでした。';
+    return;
+  }
 
   const targets = Array.from({ length: Math.min(raceCount, 12) }, (_, i) => i + 1);
   const found = [];
@@ -6775,7 +6793,8 @@ async function switchViewTab(raceNo, view) {
   } else if (view === 'ability') {
     abilityView.style.display = '';
     if (abilityBtn) abilityBtn.classList.add('on');
-    if (!_idbFullReady) { try { await _ensureFullIDBCache(); } catch (e) { return; } }
+    // 能力表は共通の日付計算・馬タグ機能を使うため、遅延モジュールも明示的に準備する。
+    try { await _ensureRaceIntelligence(); } catch (e) { return; }
     renderAbilityTable(raceNo);
   } else if (view === 'yoso') {
     if (yosoView) yosoView.style.display = '';
@@ -13324,9 +13343,8 @@ function _hmToggleTrackScope(btn) {
 }
 
 async function openHorseModal(horseName, raceNo) {
-  if (!_idbFullReady) {
-    try { await _ensureFullIDBCache(); } catch (e) { return; }
-  }
+  // モーダル内の特徴タグ・画像保存は遅延モジュール側。開く操作を起点に確実に準備する。
+  try { await _ensureRaceIntelligence(); } catch (e) { return; }
   // 表示中レースより後の結果は「過去成績」に含めない（未来の結果混入バグ対策）。
   // レース文脈が取れない場合（保存データ経由等）は従来通り全履歴を表示する。
   const _modalRaceData = allRacesData[raceNo||currentRaceNo];

@@ -2993,13 +2993,6 @@ function renderYosoReport(raceNo) {
 // AI総合指数=totalScore（オッズ非依存・aiProb/市場アンカー/shadow購入モデルとは別）。走力SI=baseScore。印=既存horseMarkMap。
 var _kvxShown = false, _kvxWired = false, _kvxKey = null;   // _kvxKey=現在kvxで表示中のdisplayKey(正規化日付:レース番号)
 var _kvxSnap = null, _kvxSnapGen = 0;   // 【Phase3-2d】AI指数内訳snapshot（render同期で確定・immutable・表示用コピーのみ凍結）
-// 共通HTMLエスケープ（テキスト・属性値の両方に安全な最小集合 & < > " '）。既存の_esc(5703)はJS文字列用で別物。
-function escapeHTML(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
-// 外部由来の文字列(馬名等)を、二重引用符のHTML属性(onclick="...")内の単一引用符JS文字列リテラル
-// 引数として安全に埋め込むためのエスケープ。バックスラッシュ→クォートの順でJS文字列を守った上で、
-// escapeHTML()で"（属性区切り突破）等をHTMLエンティティ化する。単純な.replace(/'/g,"\\'")だけでは
-// 二重引用符(")によるonclick属性の早期終了・任意属性注入を防げないため必須（P3脆弱性対応）。
-function jsAttrEsc(s){ return escapeHTML(String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'")); }
 function kvxEsc(s){ return escapeHTML(s); }   // kvxも共通escapeHTMLを使う（単一実装）
 function kvxNormDate(d){ return String(d == null ? '' : d).replace(/\//g, '-').trim(); }   // 2026/07/11 と 2026-07-11 を正規化
 // 【一般公開の分離／kill switch】管理者プレビューと一般公開を分離する。
