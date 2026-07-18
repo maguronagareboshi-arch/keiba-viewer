@@ -2131,11 +2131,30 @@ const KV_APP_CSS = [
       'body.kv-cockpit .cockpit-value-note small{margin-left:auto;color:var(--kc-muted);white-space:nowrap}',
       'body.kv-cockpit .cockpit-market{white-space:nowrap}',
       'body.kv-cockpit .cockpit-odds-value{font-size:15px;font-weight:900;color:var(--kc-primary)}',
+      'body.kv-cockpit .cockpit-decision{grid-column:1/-1;display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;align-items:center;gap:8px;padding:9px 11px;border:1px solid var(--kc-border);border-radius:8px;background:var(--kc-surface);color:var(--kc-text)}',
+      'body.kv-cockpit .decision-chip{display:inline-flex;align-items:center;gap:4px;padding:4px 7px;border-radius:999px;background:var(--kc-surface-3);font-size:10px;font-weight:800;white-space:nowrap}',
+      'body.kv-cockpit .decision-chip.is-high{background:rgba(22,163,74,.13);color:#16a34a}body.kv-cockpit .decision-chip.is-mid{background:rgba(217,119,6,.13);color:#d97706}body.kv-cockpit .decision-chip.is-low{background:rgba(100,116,139,.14);color:var(--kc-muted)}',
+      'body.kv-cockpit .decision-risk{min-width:0;color:var(--kc-muted);font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      'body.kv-cockpit .decision-action{font-size:11px;font-weight:900;color:var(--kc-primary);white-space:nowrap}',
+      '.kv-async-state{display:flex;align-items:center;gap:11px;min-height:74px;padding:14px;border:1px solid var(--kc-border,#dbe3ef);border-radius:9px;background:var(--kc-surface-2,#f8fafc);color:var(--kc-text,#1e293b)}',
+      '.kv-async-state i{font-size:18px;color:var(--kc-primary,#1a56a0)}.kv-async-state strong{display:block;font-size:13px}.kv-async-state small{display:block;margin-top:3px;color:var(--kc-muted,#64748b);font-size:10px}.kv-async-state.is-error i{color:#dc2626}.kv-async-state .btn{margin-left:auto;white-space:nowrap}',
+      '.kv-route-status{margin:0 0 10px}.kv-route-status.hidden{display:none}',
+      'body.public-mode.kv-cockpit .kv-vtabs{grid-template-columns:repeat(4,minmax(0,1fr))}',
+      'body.kv-cockpit .kv-vtabs-more{position:relative;min-width:0}',
+      'body.kv-cockpit .kv-vtabs-more>.kv-vtab{display:flex!important}',
+      'body.kv-cockpit .kv-vtabs-more-menu{position:absolute;right:0;top:43px;z-index:70;min-width:150px;padding:5px;border:1px solid var(--kc-border);border-radius:8px;background:var(--kc-surface);box-shadow:0 10px 28px rgba(15,23,42,.2)}',
+      'body.kv-cockpit .kv-vtabs-more-menu.hidden{display:none}body.kv-cockpit .kv-vtabs-more-menu .kv-vtab{display:flex!important;width:100%;margin:2px 0!important;justify-content:flex-start!important}',
+      'body.kv-cockpit .odds-freshness{display:inline-flex;align-items:center;gap:5px;padding:3px 7px;border-radius:999px;background:rgba(22,163,74,.12);color:#16a34a;font-size:10px;font-weight:800}body.kv-cockpit .odds-freshness.is-stale{background:rgba(217,119,6,.13);color:#d97706}body.kv-cockpit .odds-freshness.is-saved{background:var(--kc-surface-3);color:var(--kc-muted)}',
+      'body.kv-cockpit .odds-warning{margin:0 0 9px;padding:7px 9px;border-radius:7px;background:rgba(217,119,6,.1);color:#d97706;font-size:10px;font-weight:700}',
+      'body.kv-cockpit .odds-move{display:block;margin-top:2px;font-size:9px;font-weight:800}.odds-move.is-shorter{color:#16a34a}.odds-move.is-longer{color:#dc2626}.odds-move.is-flat{color:var(--kc-muted,#64748b)}',
+      '.kv-fav-btn{display:inline-grid;place-items:center;width:30px;height:30px;flex:0 0 auto;border:0;border-radius:50%;background:transparent;color:#94a3b8;cursor:pointer;font-size:15px}.kv-fav-btn:hover{background:#fef3c7;color:#d97706}.kv-fav-btn.is-on{color:#f59e0b;background:#fef3c7}',
+      '.kv-favorite-list{display:grid;gap:7px}.kv-favorite-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--kc-border,#e2e8f0);border-radius:8px}.kv-favorite-item strong{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.kv-favorite-empty{color:#94a3b8;font-size:12px}',
+      '.spr-more{margin-top:6px;border-top:1px solid #eef2f7}.spr-more>summary{padding:7px 0 2px;list-style:none;color:#1a56a0;font-size:11px;font-weight:800;cursor:pointer}.spr-more>summary::-webkit-details-marker{display:none}.spr-more-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px 10px;padding:6px 0 3px;color:#64748b;font-size:10px}.spr-more-grid b{display:block;color:#374151;font-size:11px}',
       'body.kv-cockpit .cockpit-ai-details{margin-top:10px;border:1px solid var(--kc-border);border-radius:7px;background:var(--kc-surface-2);overflow:hidden}',
       'body.kv-cockpit .cockpit-ai-details>summary{padding:9px 11px;color:var(--kc-muted);font-size:11px;font-weight:700;cursor:pointer;list-style:none}',
       'body.kv-cockpit .cockpit-ai-details>summary::-webkit-details-marker{display:none}',
       'body.kv-cockpit .cockpit-ai-details-body{padding:10px;border-top:1px solid var(--kc-border)}',
-      '@media(max-width:640px){body.kv-cockpit .header-sub{display:block!important;margin-left:32px!important}body.kv-cockpit .cockpit-live-status{flex-direction:column;align-items:flex-end;gap:3px}body.kv-cockpit .cockpit-live-status span{padding:2px 5px;font-size:8px}body.kv-cockpit #cockpit-global-odds i{display:none}body.kv-cockpit #race-tabs-section.sidebar-mode .race-tabs{grid-template-columns:repeat(6,minmax(0,1fr))!important}body.kv-cockpit .cockpit-race-heading{align-items:flex-start}body.kv-cockpit .race-name{font-size:16px!important}body.kv-cockpit .cockpit-race-time>strong{font-size:12px}body.kv-cockpit .cockpit-race-meta{font-size:10px}body.kv-cockpit .cockpit-picks{grid-template-columns:1fr;gap:6px}body.kv-cockpit .cockpit-pick{min-height:64px;padding:9px 10px}body.public-mode.kv-cockpit .kv-vtabs{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}body.public-mode.kv-cockpit .kv-vtab{height:36px!important;padding:0 5px!important}body.kv-cockpit .cockpit-panel-head{align-items:flex-start}body.kv-cockpit .cockpit-table{min-width:620px}body.kv-cockpit .cockpit-value-note{align-items:flex-start;flex-wrap:wrap}body.kv-cockpit .cockpit-value-note small{width:100%;margin-left:36px}}',
+      '@media(max-width:640px){body.kv-cockpit .header-sub{display:block!important;margin-left:32px!important}body.kv-cockpit .cockpit-live-status{flex-direction:column;align-items:flex-end;gap:3px}body.kv-cockpit .cockpit-live-status span{padding:2px 5px;font-size:8px}body.kv-cockpit #cockpit-global-odds i{display:none}body.kv-cockpit #race-tabs-section.sidebar-mode .race-tabs{grid-template-columns:repeat(6,minmax(0,1fr))!important}body.kv-cockpit .cockpit-race-heading{align-items:flex-start}body.kv-cockpit .race-name{font-size:16px!important}body.kv-cockpit .cockpit-race-time>strong{font-size:12px}body.kv-cockpit .cockpit-race-meta{font-size:10px}body.kv-cockpit .cockpit-picks{grid-template-columns:1fr;gap:6px}body.kv-cockpit .cockpit-pick{min-height:64px;padding:9px 10px}body.public-mode.kv-cockpit .kv-vtabs{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}body.public-mode.kv-cockpit .kv-vtab{height:36px!important;padding:0 5px!important}body.kv-cockpit .cockpit-decision{grid-template-columns:1fr 1fr;gap:6px}.decision-risk{grid-column:1/-1;grid-row:2}.decision-action{text-align:right}body.kv-cockpit .cockpit-panel-head{align-items:flex-start}body.kv-cockpit .cockpit-table{min-width:620px}body.kv-cockpit .cockpit-value-note{align-items:flex-start;flex-wrap:wrap}body.kv-cockpit .cockpit-value-note small{width:100%;margin-left:36px}.kv-async-state{align-items:flex-start;flex-wrap:wrap}.kv-async-state .btn{width:100%;margin-left:0}.kv-fav-btn{width:38px;height:38px}.spr-l1{min-height:44px}.spr-more>summary{min-height:36px;display:flex;align-items:center}}',
 ];
 (function kvInjectStyles(){
   if (document.getElementById('kv-styles')) return;
@@ -2261,6 +2280,14 @@ const KV_APP_CSS = [
     </div>
   </section>
 
+  <!-- 端末内に保存するお気に入り馬 -->
+  <section class="search-card" id="favorite-horses-card">
+    <h2 class="section-title"><i class="fas fa-star" style="color:#f59e0b"></i> お気に入り馬
+      <span style="margin-left:auto;font-size:10px;font-weight:400;color:#9ca3af">この端末に保存</span>
+    </h2>
+    <div id="favorite-horses-list" class="kv-favorite-list"><p class="kv-favorite-empty">出馬表の☆を押すと、ここから出走履歴へすぐ移動できます。</p></div>
+  </section>
+
   <!-- 検索フォーム -->
   <section class="search-section">
     <div class="search-card">
@@ -2331,9 +2358,8 @@ const KV_APP_CSS = [
   </div>
 
   <!-- ローディング -->
-  <div id="loading" class="loading-area hidden">
-    <div class="spinner"></div>
-    <p>出馬表を読み込み中...</p>
+  <div id="loading" class="loading-area hidden" role="status" aria-live="polite">
+    <div id="loading-state-body" class="kv-async-state" data-state="data"><i class="fas fa-cloud-download-alt fa-pulse"></i><span><strong>出馬表データを取得中</strong><small>公式サイトからレース情報を読み込んでいます</small></span></div>
     <div id="proxy-status" class="proxy-status"></div>
   </div>
 
@@ -2352,6 +2378,8 @@ const KV_APP_CSS = [
 
 <!-- ページ: 出馬表 -->
 <div id="page-deban" class="page-section page-hidden">
+
+  <div id="kv-route-status" class="kv-route-status hidden" role="status" aria-live="polite"></div>
 
   <!-- 保存データの日付リスト（レース未読込時に表示・タップで開く） -->
   <section class="search-card" id="deban-date-list-card">
@@ -3009,6 +3037,23 @@ function _ensureAiAnalysisModule() {
 
 function _ensureRaceIntelligence() {
   return Promise.all([_ensureFullIDBCache(), _ensureAiAnalysisModule()]);
+}
+
+/** 通信・AI計算・失敗を同じスピナー文言にせず、利用者が待つ理由と次の操作を判断できる状態表示。 */
+function _kvAsyncStateHtml(kind, title, detail, retryJs) {
+  const isError = kind === 'error';
+  const icon = isError ? 'fa-exclamation-triangle' : (kind === 'ai' ? 'fa-brain fa-pulse' : 'fa-cloud-download-alt fa-pulse');
+  const retry = isError && retryJs
+    ? `<button type="button" class="btn btn-primary btn-sm" onclick="${escapeHTML(retryJs)}"><i class="fas fa-redo"></i> 再試行</button>` : '';
+  return `<div class="kv-async-state${isError ? ' is-error' : ''}" data-state="${escapeHTML(kind)}"><i class="fas ${icon}"></i><span><strong>${escapeHTML(title)}</strong><small>${escapeHTML(detail || '')}</small></span>${retry}</div>`;
+}
+
+function _kvSetRouteState(kind, title, detail) {
+  const el = document.getElementById('kv-route-status');
+  if (!el) return;
+  if (!kind) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+  el.classList.remove('hidden');
+  el.innerHTML = _kvAsyncStateHtml(kind, title, detail, kind === 'error' ? 'location.reload()' : '');
 }
 
 /** 重要でない処理を最初の描画後へ回す（未対応ブラウザは短いタイマーで代替）。 */
@@ -4062,6 +4107,7 @@ document.addEventListener('DOMContentLoaded', () => {
   try { window._kvDeepLink = _kvParseHash(); } catch(e) { window._kvDeepLink = null; }
   _initNavHistory();
   _kvStartTickers();   // 発走カウントダウン＆当日オッズの5分毎自動更新
+  renderFavoriteHorsesPanel();
   initDB().catch(e => console.warn('[initDB]', e));
 });
 
@@ -5404,31 +5450,28 @@ function renderRaceContent(raceNo) {
          style="position:relative;background:#f8fafc;border-bottom:2px solid #e2e8f0;height:44px;width:100%;box-sizing:border-box;overflow:hidden;">
       <!-- 左：タブボタン群（padding-rightでボタン領域を確保） -->
       <div class="kv-vtabs">
-        <button id="tab-btn-deban-${raceNo}" class="kv-vtab on" data-view="deban"
-                onclick="switchViewTab(${raceNo},'deban')">
-          <i class="fas fa-table"></i>
-          <span>出馬表</span>
-        </button>
-        <button id="tab-btn-yoso-${raceNo}" class="kv-vtab" data-view="yoso"
+        <button id="tab-btn-yoso-${raceNo}" class="kv-vtab on" data-view="yoso"
                 onclick="switchViewTab(${raceNo},'yoso')">
           <i class="fas fa-star"></i>
           <span>AI予想</span>
         </button>
-        <button id="tab-btn-ability-${raceNo}" class="kv-vtab" data-view="ability"
-                onclick="switchViewTab(${raceNo},'ability')">
-          <i class="fas fa-columns"></i>
-          <span>馬比較</span>
+        <button id="tab-btn-deban-${raceNo}" class="kv-vtab" data-view="deban"
+                onclick="switchViewTab(${raceNo},'deban')">
+          <i class="fas fa-table"></i>
+          <span>出馬表</span>
         </button>
         <button id="tab-btn-odds-${raceNo}" class="kv-vtab" data-view="odds"
                 onclick="switchViewTab(${raceNo},'odds')">
           <i class="fas fa-chart-line"></i>
           <span>オッズ</span>
         </button>
-        <button id="tab-btn-kekka-${raceNo}" class="kv-vtab" data-view="kekka" disabled
-                onclick="switchViewTab(${raceNo},'kekka')">
-          <i class="fas fa-flag-checkered"></i>
-          <span>結果</span>
-        </button>
+        <div class="kv-vtabs-more">
+          <button id="tab-btn-more-${raceNo}" class="kv-vtab" type="button" aria-expanded="false" onclick="toggleRaceMoreTabs(${raceNo})"><i class="fas fa-ellipsis-h"></i><span>詳しく</span></button>
+          <div id="tab-more-menu-${raceNo}" class="kv-vtabs-more-menu hidden">
+            <button id="tab-btn-ability-${raceNo}" class="kv-vtab" data-view="ability" onclick="switchViewTab(${raceNo},'ability')"><i class="fas fa-columns"></i><span>馬比較</span></button>
+            <button id="tab-btn-kekka-${raceNo}" class="kv-vtab" data-view="kekka" disabled onclick="switchViewTab(${raceNo},'kekka')"><i class="fas fa-flag-checkered"></i><span>結果</span></button>
+          </div>
+        </div>
       </div>
       <!-- 右：コメント操作 — 絶対配置で右端に固定 -->
       <div id="deban-controls-${raceNo}" class="kv-vctrl">
@@ -5561,6 +5604,10 @@ function renderRaceContent(raceNo) {
   _updateTrackBiasInline(raceNo);  // ペースパネル内インライン馬場差
   // 決着時計を1着馬から自動設定
   _updateFinishTime(raceNo);
+  // 近5走と馬比較は、全履歴より先にこのレースの出走馬だけを索引読込する。
+  if (!_idbFullReady) {
+    _ensureRaceHorseHistory(raceNo).catch(e => console.warn('[race horse history]', e));
+  }
   // AI・分析用の全履歴は出馬表を先に描画した後で準備する。
   // 履歴未準備のまま暫定スコアを表示せず、完了後に正しい印と近5走へ差し替える。
   if (_idbFullReady && typeof window.computeYosoScored === 'function') {
@@ -5630,7 +5677,10 @@ function _updateCockpitRaceStatus(raceNo) {
     let label = '未取得';
     if (data._liveOddsObservedAt) {
       const t = new Date(data._liveOddsObservedAt);
-      if (!isNaN(t.getTime())) label = `${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+      if (!isNaN(t.getTime())) {
+        const age = Math.max(0, Math.floor((Date.now() - t.getTime()) / 60000));
+        label = `${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}${age >= 10 ? '・古い' : ''}`;
+      }
     } else if ((data.horses || []).some(h => parseFloat(h.odds) > 0)) label = '保存値';
     oddsEl.innerHTML = `<i class="fas fa-sync-alt"></i> オッズ ${label}`;
   }
@@ -5705,7 +5755,19 @@ function renderCockpitSummary(raceNo) {
       return `<span class="cockpit-opponent-line"><span class="cockpit-opponent-mark">${mark}</span><b>${escapeHTML(h.umaBan || '—')}番 ${escapeHTML(h.horseName) || '—'}</b><small>${escapeHTML(market)}</small></span>`;
     }).join('')}</span>
   </button>` : '<div class="cockpit-pick is-empty"><span class="cockpit-mark is-second">○</span><div class="cockpit-pick-copy"><strong>相手候補なし</strong><small>○▲△を判定できません</small></div></div>';
-  if (dock) dock.innerHTML = cardHtml(picks.main) + opponentHtml + cardHtml(picks.value);
+  const scoreGap = main && scored[1] ? Number(main.totalScore) - Number(scored[1].totalScore) : 0;
+  const oddsReady = scored.filter(s => parseFloat(s.horse?.odds) > 0).length;
+  const confidence = scoreGap >= 4 && oddsReady >= Math.ceil(scored.length * .7) ? '高' : scoreGap >= 2 ? '中' : '慎重';
+  const confidenceCls = confidence === '高' ? 'high' : confidence === '中' ? 'mid' : 'low';
+  const risks = [];
+  if (scoreGap < 2) risks.push('上位評価が接近');
+  if (main && parseFloat(main.horse?.odds) > 0 && parseFloat(main.horse.odds) < 2) risks.push('本命に人気集中');
+  if (!oddsReady) risks.push('オッズ未取得');
+  if (!value) risks.push('明確な妙味なし');
+  if (!risks.length) risks.push('大きな不安材料なし');
+  const action = valueKind === 'ev' && value ? '買い候補あり' : confidence === '高' ? '軸＋相手を検討' : confidence === '中' ? '相手を絞って検討' : '見送り寄り';
+  const decisionHtml = `<div class="cockpit-decision"><span class="decision-chip is-${confidenceCls}"><i class="fas fa-shield-alt"></i> 信頼度 ${confidence}</span><span class="decision-action"><i class="fas fa-gavel"></i> ${escapeHTML(action)}</span><span class="decision-risk"><b>不安材料:</b> ${escapeHTML(risks.join('・'))}</span><button type="button" class="btn btn-secondary btn-sm" onclick="switchViewTab(${raceNo},'yoso')">全印を見る</button></div>`;
+  if (dock) dock.innerHTML = cardHtml(picks.main) + opponentHtml + cardHtml(picks.value) + decisionHtml;
 
   if (panel) {
     const fullMarks = ['◎', '○', '▲', '△', '×', '×'];
@@ -5755,13 +5817,23 @@ function renderOddsPanel(raceNo) {
   });
   const valid = horses.filter(h => parseFloat(h.odds) > 0).length;
   const observed = data._liveOddsObservedAt ? new Date(data._liveOddsObservedAt) : null;
-  const stamp = observed && !isNaN(observed.getTime()) ? `${String(observed.getHours()).padStart(2,'0')}:${String(observed.getMinutes()).padStart(2,'0')}現在` : (valid ? '保存オッズ' : '未取得');
+  const observedOk = observed && !isNaN(observed.getTime());
+  const ageMin = observedOk ? Math.max(0, Math.floor((Date.now() - observed.getTime()) / 60000)) : null;
+  const stale = ageMin != null && ageMin >= 10;
+  const stamp = observedOk ? `${String(observed.getHours()).padStart(2,'0')}:${String(observed.getMinutes()).padStart(2,'0')}現在` : (valid ? '保存オッズ' : '未取得');
+  const freshness = observedOk
+    ? `<span class="odds-freshness${stale ? ' is-stale' : ''}"><i class="fas ${stale ? 'fa-exclamation-circle' : 'fa-check-circle'}"></i> ${stale ? `${ageMin}分前・要更新` : ageMin === 0 ? '最新' : `${ageMin}分前`}</span>`
+    : `<span class="odds-freshness is-saved"><i class="fas fa-database"></i> ${valid ? '保存値' : '未取得'}</span>`;
   const rows = horses.map(h => {
     const odds = parseFloat(h.odds), ninki = parseInt(h.ninki), aiRank = rankMap.get(h.horseName);
     const ai = aiRank === 1 ? '◎' : aiRank === 2 ? '○' : aiRank === 3 ? '▲' : '';
-    return `<tr><td><span class="cockpit-uma">${escapeHTML(h.umaBan || '—')}</span></td><td><b>${ai} ${escapeHTML(h.horseName) || '—'}</b></td><td>${Number.isFinite(ninki) ? ninki + '人気' : '—'}</td><td class="cockpit-odds-value">${Number.isFinite(odds) ? odds.toFixed(1) : '—'}</td><td>${aiRank ? `AI ${aiRank}位` : '—'}</td></tr>`;
+    const move = h._oddsMove;
+    const moveHtml = move && Number.isFinite(move.previous) && Number.isFinite(move.current)
+      ? `<span class="odds-move ${move.direction === 'shorter' ? 'is-shorter' : move.direction === 'longer' ? 'is-longer' : 'is-flat'}">${move.previous.toFixed(1)} → ${move.current.toFixed(1)} ${move.direction === 'shorter' ? '↓' : move.direction === 'longer' ? '↑' : '→'}${move.percent ? ` ${Math.abs(move.percent).toFixed(0)}%` : ''}</span>` : '';
+    return `<tr><td><span class="cockpit-uma">${escapeHTML(h.umaBan || '—')}</span></td><td><b>${ai} ${escapeHTML(h.horseName) || '—'}</b></td><td>${Number.isFinite(ninki) ? ninki + '人気' : '—'}</td><td class="cockpit-odds-value">${Number.isFinite(odds) ? odds.toFixed(1) : '—'}${moveHtml}</td><td>${aiRank ? `AI ${aiRank}位` : '—'}</td></tr>`;
   }).join('');
-  panel.innerHTML = `<div class="cockpit-panel-head"><div><h3>単勝オッズ</h3><p>${escapeHTML(stamp)}・取得 ${valid}/${horses.length}頭</p></div><button type="button" class="btn btn-secondary viewer-ok" onclick="fetchLiveOddsBtn(${raceNo})"><i class="fas fa-sync-alt"></i> 最新に更新</button></div>
+  const warning = stale ? `<div class="odds-warning"><i class="fas fa-exclamation-triangle"></i> ${ageMin}分前のオッズです。購入判断の前に更新してください。</div>` : (!observedOk && valid ? '<div class="odds-warning"><i class="fas fa-info-circle"></i> 保存時のオッズです。現在値とは異なる場合があります。</div>' : '');
+  panel.innerHTML = `<div class="cockpit-panel-head"><div><h3>単勝オッズ</h3><p>${escapeHTML(stamp)}・取得 ${valid}/${horses.length}頭</p></div><span style="display:flex;align-items:center;gap:7px">${freshness}<button type="button" class="btn btn-secondary viewer-ok" onclick="fetchLiveOddsBtn(${raceNo})"><i class="fas fa-sync-alt"></i> 最新に更新</button></span></div>${warning}
     <div class="table-wrapper"><table class="cockpit-table cockpit-odds-table"><thead><tr><th>馬番</th><th>馬名</th><th>人気</th><th>単勝</th><th>AI</th></tr></thead><tbody>${rows || '<tr><td colspan="5">出走馬データがありません</td></tr>'}</tbody></table></div>`;
 }
 
@@ -5796,6 +5868,8 @@ async function fetchLiveOdds(raceNo) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const table = [...doc.querySelectorAll('table')].find(t => t.textContent.includes('単勝オッズ'));
   if (!table) throw new Error('オッズ未発売');
+  const previousOdds = new Map(data.horses.map(h => [parseInt(h.umaBan), parseFloat(h.odds)]));
+  const previousObservedAt = data._liveOddsObservedAt || null;
   // 行構成: [0]枠 [1]馬番 [2]馬名 [3]単勝 [4-5]複勝 [6]性齢 [7]馬体重 [8]斤量 ...
   let hit = 0;
   for (const tr of [...table.querySelectorAll('tr')].slice(1)) {
@@ -5806,7 +5880,14 @@ async function fetchLiveOdds(raceNo) {
     const h = data.horses.find(x => parseInt(x.umaBan) === uma);
     if (!h) continue;
     const odds = parseFloat(c[3]);
-    if (!isNaN(odds) && odds > 0) { h.odds = String(odds); hit++; }
+    if (!isNaN(odds) && odds > 0) {
+      const prev = previousOdds.get(uma);
+      h.odds = String(odds); hit++;
+      if (Number.isFinite(prev) && prev > 0) {
+        const pct = ((odds - prev) / prev) * 100;
+        h._oddsMove = { previous:prev, current:odds, percent:pct, direction:odds < prev ? 'shorter' : odds > prev ? 'longer' : 'flat' };
+      }
+    }
     const wt = (c[7] || '').split(/\s/)[0];
     if (wt && /^\d{3}/.test(wt) && !h.weight) h.weight = _sanDeep(wt);
   }
@@ -5817,6 +5898,7 @@ async function fetchLiveOdds(raceNo) {
     // 相手shadowは「いま取得した公式オッズ」だけを前向き評価へ使う。保存値や朝オッズを
     // T10市場と誤認しないよう、race objectへ取得元・観測時刻・取得頭数を別メタとして残す。
     data._liveOddsObservedAt = new Date().toISOString();
+    data._previousOddsObservedAt = previousObservedAt;
     data._liveOddsSource = 'keiba.go.jp/OddsTanFuku';
     data._liveOddsRunnerCount = hit;
   }
@@ -6147,12 +6229,50 @@ function kvToggleHist(ev, raceNo, umaBan, horseName) {
   anchor.after(tr);
 }
 
+const KV_FAVORITE_KEY = 'kv_favorite_horses_v1';
+function kvFavoriteHorses() {
+  try {
+    const rows = JSON.parse(localStorage.getItem(KV_FAVORITE_KEY) || '[]');
+    return Array.isArray(rows) ? rows.filter(x => x && typeof x.name === 'string').slice(0, 50) : [];
+  } catch(e) { return []; }
+}
+function kvIsFavoriteHorse(name) { return kvFavoriteHorses().some(x => x.name === name); }
+function kvFavoriteButtonHtml(name, compact) {
+  const on = kvIsFavoriteHorse(name), esc = jsAttrEsc(name);
+  return `<button type="button" class="kv-fav-btn${on ? ' is-on' : ''}" data-favorite-horse="${escapeHTML(name)}" onclick="event.stopPropagation();kvToggleFavoriteHorse('${esc}')" aria-label="${on ? 'お気に入りから外す' : 'お気に入りに追加'}" title="${on ? 'お気に入りから外す' : 'お気に入りに追加'}">${on ? '★' : '☆'}</button>`;
+}
+function kvToggleFavoriteHorse(name) {
+  const rows = kvFavoriteHorses(), idx = rows.findIndex(x => x.name === name);
+  if (idx >= 0) rows.splice(idx, 1); else rows.unshift({ name, addedAt: new Date().toISOString() });
+  try { localStorage.setItem(KV_FAVORITE_KEY, JSON.stringify(rows.slice(0, 50))); } catch(e) {}
+  document.querySelectorAll('[data-favorite-horse]').forEach(btn => {
+    if (btn.dataset.favoriteHorse !== name) return;
+    const on = idx < 0; btn.classList.toggle('is-on', on); btn.textContent = on ? '★' : '☆';
+    const label = on ? 'お気に入りから外す' : 'お気に入りに追加';
+    btn.setAttribute('aria-label', label); btn.title = label;
+  });
+  renderFavoriteHorsesPanel();
+}
+function kvOpenFavoriteHistory(name) {
+  switchPage('search');
+  const input = document.getElementById('xs-input');
+  if (input) { input.value = name; input.focus(); }
+  if (typeof kvCrossSearch === 'function') kvCrossSearch();
+}
+function renderFavoriteHorsesPanel() {
+  const el = document.getElementById('favorite-horses-list'); if (!el) return;
+  const rows = kvFavoriteHorses();
+  if (!rows.length) { el.innerHTML = '<p class="kv-favorite-empty">出馬表の☆を押すと、ここから出走履歴へすぐ移動できます。</p>'; return; }
+  el.innerHTML = rows.map(x => `<div class="kv-favorite-item"><span style="color:#f59e0b">★</span><strong>${escapeHTML(x.name)}</strong><button type="button" class="btn btn-secondary btn-sm" onclick="kvOpenFavoriteHistory('${jsAttrEsc(x.name)}')"><i class="fas fa-history"></i> 出走履歴</button><button type="button" class="kv-fav-btn is-on" data-favorite-horse="${escapeHTML(x.name)}" onclick="kvToggleFavoriteHorse('${jsAttrEsc(x.name)}')" aria-label="お気に入りから外す">★</button></div>`).join('');
+}
+
 function renderHorseRows(raceNo, horses) {
   const tbody=document.getElementById(`tbody-${raceNo}`); if(!tbody)return;
   const _isAdminView = (typeof isAdminMode === 'function' && isAdminMode());
-  const _historyReady = _idbFullReady;
+  const _historyReady = _idbFullReady || !!allRacesData[raceNo]?._raceHistoryReady;
+  const _aiReady = _idbFullReady;
   // AI印・スコア（予想AIパネルと同じ共通コアで算出）
-  const _cy = (_historyReady && typeof computeYosoScored === 'function') ? computeYosoScored(raceNo, null) : null;
+  const _cy = (_aiReady && typeof computeYosoScored === 'function') ? computeYosoScored(raceNo, null) : null;
   // 実際に表示する既定馬場の予想だけを、管理者端末へ発走前スナップショットとして追記保存。
   // computeYosoScored内部では呼ばないため、過去成績の再計算や仮想馬場選択は記録されない。
   if (_cy && typeof recordForwardRankingSnapshot === 'function') {
@@ -6174,7 +6294,7 @@ function renderHorseRows(raceNo, horses) {
     });
   }
   // 💎PSF妙味：位置構造モデル(PSF)の1位が現行AI◎と不一致なら表示（検証：意見割れ635RでROI112.9%）
-  const _psfTop = (_historyReady && typeof computePsfScores === 'function') ? (computePsfScores(raceNo)?.top ?? null) : null;
+  const _psfTop = (_aiReady && typeof computePsfScores === 'function') ? (computePsfScores(raceNo)?.top ?? null) : null;
   const _aiTopName = (_cy && _cy.scored[0] && _cy.scored[0].totalScore != null) ? _cy.scored[0].horse.horseName : null;
   const _psfValueName = (_psfTop && _psfTop !== _aiTopName) ? _psfTop : null;
   // 全行を一括innerHTML（12回のappendChildを1回に削減）
@@ -6219,7 +6339,7 @@ function renderHorseRows(raceNo, horses) {
       <td class="col-umano"><span class="umano-badge">${horse.umaBan}</span></td>
       <td class="col-ai">${_ai.mark?`<span class="ai-mark ${_aiCls}">${_ai.mark}</span>`:'<span class="data-empty">—</span>'}${_psfGem}</td>
       <td class="col-mymark">${kvMyMarkHtml(allRacesData[raceNo]?.raceInfo?.raceDate||'',raceNo,horse.umaBan,false)}</td>
-      <td class="col-umaname"><span class="horse-name horse-name-link" onclick="openHorseModal('${_nameEsc}',${raceNo})"><i class="fas fa-history horse-hist-icon"></i>${_nameHtml}</span></td>
+      <td class="col-umaname">${kvFavoriteButtonHtml(horse.horseName,false)}<span class="horse-name horse-name-link" onclick="openHorseModal('${_nameEsc}',${raceNo})"><i class="fas fa-history horse-hist-icon"></i>${_nameHtml}</span></td>
       <td class="col-recent" title="クリックで近5走の詳細をこの場に展開" onclick="kvToggleHist(event,${raceNo},${horse.umaBan},'${_nameEsc}')">${_rfHtml}</td>
       <td class="col-belong">${_belongHtml||'－'}</td>
       <td class="col-sexage">${_sexAgeHtml||'－'}</td>
@@ -6244,6 +6364,7 @@ function renderHorseRows(raceNo, horses) {
           <span class="umano-badge">${horse.umaBan}</span>
           ${_ai.mark?`<span class="ai-mark ${_aiCls}">${_ai.mark}</span>`:''}${_psfGem}
           ${kvMyMarkHtml(allRacesData[raceNo]?.raceInfo?.raceDate||'',raceNo,horse.umaBan,true)}
+          ${kvFavoriteButtonHtml(horse.horseName,true)}
           <span class="spr-name" onclick="openHorseModal('${_nameEsc}',${raceNo})">${_nameHtml}</span>
           ${(!isNaN(_oddsV)&&_oddsV>0)?`<span class="spr-odds">${_oddsV.toFixed(1)}<small>倍</small></span>`:''}
           ${horse.ninki?ninkiBadge(horse.ninki):''}
@@ -6260,6 +6381,7 @@ function renderHorseRows(raceNo, horses) {
           ${horse.first3f?`<span>前半 ${_first3fHtml}</span>`:''}
           ${horse.paceType?`<span class="spr-pace">${_paceTypeHtml}</span>`:''}
         </div>`:`<div class="spr-l3" onclick="kvToggleHist(event,${raceNo},${horse.umaBan},'${_nameEsc}')">${_rfHtml}</div>`}
+        <details class="spr-more"><summary>詳しい情報を開く</summary><div class="spr-more-grid"><span>厩舎<b>${_trainerHtml||'—'}</b></span><span>所属<b>${_belongHtml||'—'}</b></span><span>性齢・斤量<b>${_sexAgeHtml||'—'} ${escapeHTML(horse.kinryo||'—')}</b></span><span>馬体重<b>${escapeHTML(horse.weight||'—')}</b></span></div></details>
       </td>
     </tr>`;
   }).join('');
@@ -6762,6 +6884,13 @@ function toggleCollapse(type, raceNo) {
 // ============================================================
 // タブ切替（出馬表 / 能力表）
 // ============================================================
+function toggleRaceMoreTabs(raceNo, force) {
+  const menu = document.getElementById(`tab-more-menu-${raceNo}`), btn = document.getElementById(`tab-btn-more-${raceNo}`);
+  if (!menu || !btn) return;
+  const open = typeof force === 'boolean' ? force : menu.classList.contains('hidden');
+  menu.classList.toggle('hidden', !open); btn.setAttribute('aria-expanded', String(open));
+}
+
 async function switchViewTab(raceNo, view) {
   const debanView   = document.getElementById(`view-deban-${raceNo}`);
   const kekkaView   = document.getElementById(`view-kekka-${raceNo}`);
@@ -6773,13 +6902,15 @@ async function switchViewTab(raceNo, view) {
   const abilityBtn  = document.getElementById(`tab-btn-ability-${raceNo}`);
   const yosoBtn     = document.getElementById(`tab-btn-yoso-${raceNo}`);
   const oddsBtn     = document.getElementById(`tab-btn-odds-${raceNo}`);
+  const moreBtn     = document.getElementById(`tab-btn-more-${raceNo}`);
   const debanCtrl   = document.getElementById(`deban-controls-${raceNo}`);
   if (!debanView || !abilityView) return;
   _kvLastViewTab = view; // 直近選択のサブタブを記憶（新規レース表示時にswitchRaceTab/renderRaceContentから復元）
 
   [debanView, kekkaView, abilityView, yosoView, oddsView].forEach(v => { if (v) v.style.display = 'none'; });
-  [debanBtn, kekkaBtn, abilityBtn, yosoBtn, oddsBtn].forEach(b => { if (b) b.classList.remove('on'); });
+  [debanBtn, kekkaBtn, abilityBtn, yosoBtn, oddsBtn, moreBtn].forEach(b => { if (b) b.classList.remove('on'); });
   if (debanCtrl) debanCtrl.style.display = 'none';
+  toggleRaceMoreTabs(raceNo, false);
 
   if (view === 'deban') {
     debanView.style.display = '';
@@ -6788,18 +6919,29 @@ async function switchViewTab(raceNo, view) {
   } else if (view === 'kekka') {
     if (kekkaView) kekkaView.style.display = '';
     if (kekkaBtn) kekkaBtn.classList.add('on');
-    try { await _ensureRaceIntelligence(); } catch (e) { return; }
+    if (moreBtn) moreBtn.classList.add('on');
+    const target = document.getElementById(`kekka-panel-${raceNo}`);
+    if (target) target.innerHTML = _kvAsyncStateHtml('ai', '結果とAI印を照合中', '確定着順とレース前の評価を計算しています');
+    try { await _ensureRaceIntelligence(); } catch (e) { if (target) target.innerHTML = _kvAsyncStateHtml('error','結果表示に失敗しました','通信状態を確認して再試行してください',`switchViewTab(${raceNo},'kekka')`); return; }
     renderResultView(raceNo);
   } else if (view === 'ability') {
     abilityView.style.display = '';
     if (abilityBtn) abilityBtn.classList.add('on');
+    if (moreBtn) moreBtn.classList.add('on');
+    const target = document.getElementById(`ability-table-${raceNo}`);
+    if (target) target.innerHTML = _kvAsyncStateHtml('data', '出走馬の履歴を取得中', `${allRacesData[raceNo]?.horses?.length || 0}頭分だけを優先して準備しています`);
     // 能力表は共通の日付計算・馬タグ機能を使うため、遅延モジュールも明示的に準備する。
-    try { await _ensureRaceIntelligence(); } catch (e) { return; }
+    // 全15万件の展開は待たず、出走馬の履歴だけを先に準備する。
+    try { await Promise.all([_ensureAiAnalysisModule(), _ensureRaceHorseHistory(raceNo)]); }
+    catch (e) { if (target) target.innerHTML = _kvAsyncStateHtml('error','馬比較の取得に失敗しました','対象馬の履歴を取得できませんでした',`switchViewTab(${raceNo},'ability')`); return; }
     renderAbilityTable(raceNo);
   } else if (view === 'yoso') {
     if (yosoView) yosoView.style.display = '';
     if (yosoBtn) yosoBtn.classList.add('on');
-    try { await _ensureRaceIntelligence(); } catch (e) { return; }
+    const target = document.getElementById(`cockpit-ai-panel-${raceNo}`);
+    if (target && !_idbFullReady) target.innerHTML = _kvAsyncStateHtml('ai', 'AI予想を計算中', '過去走・馬場・騎手・厩舎を統合しています');
+    try { await _ensureRaceIntelligence(); }
+    catch (e) { if (target) target.innerHTML = _kvAsyncStateHtml('error','AI計算に失敗しました','過去データを準備できませんでした',`switchViewTab(${raceNo},'yoso')`); return; }
     if (yosoView && yosoView.style.display === 'none') return;
     renderPredictionPanel(raceNo);
   } else if (view === 'odds') {
@@ -8423,8 +8565,10 @@ let _savedGroupsDirty = true; // buildSavedGroups 再計算フラグ
 let _cacheInvalidateTimer = null; // idbPut キャッシュ無効化デバウンス用
 
 const IDB_NAME    = 'keibaviewer';
-const IDB_VERSION = 1;
+const IDB_VERSION = 2;
 const IDB_STORE   = 'kv';
+const IDB_HORSE_INDEX = 'horseName';
+const _raceHorseHistoryPromises = new Map();
 
 function _raceDayIndexEntry(baba, date, raceNo, create) {
   if (!baba || !date || !Number.isFinite(Number(raceNo))) return null;
@@ -8583,6 +8727,56 @@ async function _ensureFullIDBCache() {
   return _idbFullLoadPromise;
 }
 
+/** 馬名索引から必要な馬だけを読み、全履歴getAll（約15万件）を避ける。 */
+async function _readIndexedHorsePairs(names) {
+  const db = await openIDB(), tx = db.transaction(IDB_STORE, 'readonly'), store = tx.objectStore(IDB_STORE);
+  if (!store.indexNames.contains(IDB_HORSE_INDEX)) return [];
+  const idx = store.index(IDB_HORSE_INDEX);
+  const read = req => new Promise((resolve, reject) => { req.onsuccess = () => resolve(req.result || []); req.onerror = e => reject(e.target.error); });
+  const chunks = await Promise.all([...new Set(names.filter(Boolean))].map(async name => {
+    const range = IDBKeyRange.only(name);
+    const [keys, values] = await Promise.all([read(idx.getAllKeys(range)), read(idx.getAll(range))]);
+    return keys.map((key, i) => [key, values[i]]);
+  }));
+  return chunks.flat();
+}
+
+async function _fetchKochiHorseNames(names) {
+  const unique = [...new Set(names.map(x => String(x || '').trim()).filter(Boolean))];
+  if (!unique.length) return [];
+  const url = new URL(`${SUPABASE_URL}/rest/v1/keiba_horses`);
+  url.searchParams.set('select', '*'); url.searchParams.set('baba_code', 'eq.31');
+  const quoted = unique.map(n => `"${n.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',');
+  url.searchParams.set('horse_name', `in.(${quoted})`);
+  url.searchParams.set('order', 'race_date.desc'); url.searchParams.set('limit', '3000');
+  const res = await fetch(url, { headers: SUPABASE_HEADERS });
+  if (!res.ok) throw new Error(`馬履歴 HTTP ${res.status}`);
+  const rows = await res.json(); return Array.isArray(rows) ? rows : [];
+}
+
+/** 現在レースの出走馬だけをIndexedDB→不足時Supabaseの順で準備する。 */
+function _ensureRaceHorseHistory(raceNo) {
+  const data = allRacesData[raceNo];
+  if (!data?.horses?.length || data._raceHistoryReady || _idbFullReady) return Promise.resolve();
+  const key = `${data.raceInfo?.raceDate || currentDate}|${raceNo}`;
+  if (_raceHorseHistoryPromises.has(key)) return _raceHorseHistoryPromises.get(key);
+  const p = (async () => {
+    const names = data.horses.map(h => h.horseName).filter(Boolean);
+    const localPairs = await _readIndexedHorsePairs(names);
+    if (localPairs.length) { _mergeIDBCachePairs(localPairs); _horseHistCache.clear(); }
+    const date = data.raceInfo?.raceDate || currentDate;
+    const sparse = names.filter(n => getHorseHistoryBefore(n, date, raceNo).length < 2);
+    if (sparse.length) {
+      const rows = await _fetchKochiHorseNames(names);
+      if (rows.length) await _putHorseRowsBatch(rows, true);
+    }
+    data._raceHistoryReady = true;
+    const fresh = [...data.horses].sort((a,b) => (parseInt(a.chakujun)||999)-(parseInt(b.chakujun)||999) || (parseInt(a.umaBan)||0)-(parseInt(b.umaBan)||0));
+    renderHorseRows(raceNo, fresh);
+  })().catch(e => { _raceHorseHistoryPromises.delete(key); throw e; });
+  _raceHorseHistoryPromises.set(key, p); return p;
+}
+
 /** IndexedDB を開く（初回のみ） */
 function openIDB() {
   return new Promise((resolve, reject) => {
@@ -8590,9 +8784,10 @@ function openIDB() {
     const req = indexedDB.open(IDB_NAME, IDB_VERSION);
     req.onupgradeneeded = e => {
       const db = e.target.result;
-      if (!db.objectStoreNames.contains(IDB_STORE)) {
-        db.createObjectStore(IDB_STORE); // keyPath なし・外部キー使用
-      }
+      const store = db.objectStoreNames.contains(IDB_STORE)
+        ? e.target.transaction.objectStore(IDB_STORE)
+        : db.createObjectStore(IDB_STORE); // keyPath なし・外部キー使用
+      if (!store.indexNames.contains(IDB_HORSE_INDEX)) store.createIndex(IDB_HORSE_INDEX, 'horseName', { unique:false });
     };
     req.onsuccess = e => { _idb = e.target.result; resolve(_idb); };
     req.onerror   = e => reject(e.target.error);
@@ -8903,6 +9098,21 @@ async function _fetchKochiPage(table, offset, limit = _IDB_PAGE, retries = 3) {
   }
 }
 
+/** 直接リンクの日付を最優先で取得する小さいクエリ。新着1000件の走査完了を待たない。 */
+async function _fetchKochiDay(table, date, retries = 2) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const url = new URL(`${SUPABASE_URL}/rest/v1/${table}`);
+      url.searchParams.set('select', '*'); url.searchParams.set('baba_code', 'eq.31');
+      url.searchParams.set('race_date', `eq.${date}`); url.searchParams.set('order', 'race_no.asc'); url.searchParams.set('limit', '500');
+      const res = await fetch(url, { headers: SUPABASE_HEADERS });
+      if (res.ok) { const rows = await res.json(); if (Array.isArray(rows)) return rows; }
+    } catch(e) {}
+    if (attempt >= retries) return null;
+    await new Promise(r => setTimeout(r, 350 * Math.pow(2, attempt)));
+  }
+}
+
 /**
  * 既存キャッシュ値と新しい値の中身が同じかを判定（savedAtは除く）。
  * 同じなら idbPut（＝IndexedDB書き込みトランザクション）自体を省略し、
@@ -9128,6 +9338,27 @@ async function initDB() {
     }
   } catch (e) {
     console.warn('[initDB] ローカル先行表示に失敗:', e);
+  }
+
+  // キャッシュにない直接リンク／本日の開催日は、全体の新着ページより小さい日付指定クエリを先行。
+  const _priorityDate = window._kvDeepLink?.date || _kvTodayYmd();
+  if (!_openedCachedDeepLink) {
+    _kvSetRouteState('data', '出馬表データを取得中', `${_priorityDate} の開催データを優先して読み込んでいます`);
+    try {
+      const [dayRaces, dayHorses] = await Promise.all([
+        _fetchKochiDay('keiba_races', _priorityDate),
+        _fetchKochiDay('keiba_horses', _priorityDate),
+      ]);
+      if (dayRaces) dayRaces.forEach(_putRaceRow);
+      if (dayHorses) await _putHorseRowsBatch(dayHorses, true);
+      loadSavedData();
+      const opened = window._kvDeepLink ? await _kvTryDeepLink() : false;
+      if (opened || dayRaces?.length) _kvSetRouteState(null);
+      else if (window._kvDeepLink) _kvSetRouteState('error', '出馬表の取得に失敗しました', '通信状態を確認して再試行してください');
+    } catch(e) {
+      console.warn('[initDB] 対象日先行取得失敗:', e);
+      if (window._kvDeepLink) _kvSetRouteState('error', '出馬表の取得に失敗しました', '通信状態を確認して再試行してください');
+    }
   }
 
   // ── 段階的読み込み ──────────────────────────────────────
@@ -12721,7 +12952,11 @@ async function deleteSavedDay(event, date, baba) {
 function showProgress(show){document.getElementById('progress-section').classList.toggle('hidden',!show);if(show)document.getElementById('progress-race-status').innerHTML='';}
 function updateProgress(done,total,rn){document.getElementById('progress-bar').style.width=Math.round((done/total)*100)+'%';document.getElementById('progress-count').textContent=`${done} / ${total}`;document.getElementById('progress-label').textContent=rn?`${rn}R を取得中...`:`完了（${Object.keys(allRacesData).length}R取得）`;}
 function updateProgressStatus(rn,ok){const tag=document.createElement('span');tag.className=`progress-race-tag ${ok?'tag-ok':'tag-fail'}`;tag.textContent=`${rn}R`;document.getElementById('progress-race-status').appendChild(tag);}
-function showLoading(show){document.getElementById('loading').classList.toggle('hidden',!show);}
+function showLoading(show, kind, detail){
+  const area=document.getElementById('loading'); if(!area)return;
+  area.classList.toggle('hidden',!show);
+  if(show){const body=document.getElementById('loading-state-body');if(body)body.outerHTML=_kvAsyncStateHtml(kind==='ai'?'ai':'data',kind==='ai'?'AI予想を計算中':'出馬表データを取得中',detail||(kind==='ai'?'過去走と当日の条件を統合しています':'公式サイトからレース情報を読み込んでいます')).replace('class="kv-async-state"', 'id="loading-state-body" class="kv-async-state"');}
+}
 function showError(msg, isCalendarHint){
   const el = document.getElementById('error-msg');
   if(el) el.textContent = msg;
