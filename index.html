@@ -13,11 +13,11 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="高知競馬">
   <meta name="theme-color" content="#1a56a0">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <!-- PDF出力ライブラリ -->
-  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style id="dark-mode-css">
 /* ===== DARK MODE ===== */
 /* 背景に奥行き（左上からのラジアルグラデ） */
@@ -1482,7 +1482,7 @@ const KV_APP_CSS = [
       '.pf-note{margin-top:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:10.5px;color:#475569;line-height:1.6}',
       '.pf-note b{color:#0f172a;font-weight:800}',
       '.jc-hot{color:#16a34a}','.jc-cold{color:#dc2626}','.jcs-bl{color:#1e40af}',
-      /* 厳密検証：判定サマリーカード（常時表示）＋実験ごとの折りたたみ見出し */
+      /* 旧5分割参考検証：判定サマリーカード（常時表示）＋実験ごとの折りたたみ見出し */
       '.cv-verdict-card{margin-top:8px;background:#eef6ff;border:1.5px solid #93c5fd;border-radius:8px;padding:8px 12px;font-size:11px;color:#1e3a5f;line-height:1.9}',
       '.cv-verdict-card .cv-verdict-title{font-weight:800;color:#0369a1;margin-bottom:2px;font-size:12px}',
       '.cv-verdict-card .cv-verdict-note{font-size:10px;color:#64748b}',
@@ -2571,17 +2571,7 @@ const KV_APP_CSS = [
         <h2 class="section-title" style="margin-bottom:0"><i class="fas fa-database"></i> 保存済みデータ</h2>
         <span id="saved-total-badge" style="font-size:12px;background:#e8f0fb;color:#1a56a0;padding:2px 10px;border-radius:20px;font-weight:700"></span>
         <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <select id="saved-baba-filter" onchange="renderSavedList()" style="padding:5px 10px;border:1.5px solid #e2e8f0;border-radius:6px;font-size:13px">
-            <option value="">全競馬場</option>
-            <option value="31" selected>高知</option>
-            <option value="01">帯広</option><option value="06">盛岡</option>
-            <option value="07">水沢</option><option value="09">浦和</option>
-            <option value="10">船橋</option><option value="11">大井</option>
-            <option value="12">川崎</option><option value="13">金沢</option>
-            <option value="14">笠松</option><option value="15">名古屋</option>
-            <option value="16">園田</option><option value="17">姫路</option>
-            <option value="21">佐賀</option>
-          </select>
+          <span style="padding:5px 10px;border:1.5px solid #cbd5e1;border-radius:6px;font-size:13px;font-weight:700;color:#1a56a0;background:#e8f0fb">高知のみ</span>
           <input type="text" id="saved-search" placeholder="日付で絞り込み..." oninput="renderSavedList()" style="padding:5px 10px;border:1.5px solid #e2e8f0;border-radius:6px;font-size:13px;width:160px">
           <button class="btn btn-secondary btn-sm" onclick="document.getElementById('saved-search').value='';renderSavedList()"><i class="fas fa-times"></i> クリア</button>
           <button class="btn btn-secondary btn-sm" onclick="toggleAllSavedMonths(true)"><i class="fas fa-chevron-down"></i> 全展開</button>
@@ -2593,7 +2583,13 @@ const KV_APP_CSS = [
         <button class="btn btn-secondary btn-sm" onclick="exportAllData()"><i class="fas fa-download"></i> 全データをダウンロード</button>
         <button class="btn btn-secondary btn-sm" onclick="document.getElementById('backup-file-input').click()"><i class="fas fa-upload"></i> JSONから復元</button>
         <input type="file" id="backup-file-input" accept=".json,application/json" style="display:none" onchange="importBackupFile(this)">
+        <button class="btn btn-secondary btn-sm admin-only" onclick="forceHistoricalResync()" title="直近データは毎回更新されます。古い修正も今すぐ反映したい場合のみ使用します"><i class="fas fa-rotate"></i> 過去データを全再同期</button>
         <span id="backup-status" style="font-size:11px;color:#6b7280"></span>
+      </div>
+      <div class="admin-only" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;padding:8px 12px;background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px">
+        <span style="font-size:12px;font-weight:700;color:#6d28d9">🧪 相手AI前向き収集</span>
+        <button class="btn btn-secondary btn-sm" onclick="refreshOpponentShadowCollectionStatus()">状況を更新</button>
+        <span id="opponent-shadow-collection-status" style="font-size:11px;color:#6b7280">未確認</span>
       </div>
       <div id="saved-list" class="saved-list">
         <p class="no-data">読み込み中...</p>
@@ -2738,11 +2734,78 @@ const KV_APP_CSS = [
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" integrity="sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g" crossorigin="anonymous"></script>
 <script>
 // ============================================================
 // 高知競馬ビューア - メインスクリプト v5 (インライン版)
 // ============================================================
+
+// 初回表示では不要な大容量ライブラリを、機能を使った時だけ読み込む。
+// 同時に複数箇所から要求されても同じscriptを二重追加しない。
+const _kvLibPromises = Object.create(null);
+const _kvLibSpecs = {
+  chart: {
+    src: 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js',
+    integrity: 'sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g',
+    ready: () => !!window.Chart,
+  },
+  html2canvas: {
+    src: 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js',
+    ready: () => !!window.html2canvas,
+  },
+  jspdf: {
+    src: 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js',
+    ready: () => !!window.jspdf?.jsPDF,
+  },
+};
+
+function _kvLoadLibrary(key) {
+  const spec = _kvLibSpecs[key];
+  if (!spec) return Promise.reject(new Error(`未定義のライブラリ: ${key}`));
+  if (spec.ready()) return Promise.resolve();
+  if (_kvLibPromises[key]) return _kvLibPromises[key];
+
+  _kvLibPromises[key] = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = spec.src;
+    script.async = true;
+    script.dataset.kvLib = key;
+    if (spec.integrity) {
+      script.integrity = spec.integrity;
+      script.crossOrigin = 'anonymous';
+    }
+    script.onload = () => spec.ready()
+      ? resolve()
+      : reject(new Error(`${key} の初期化に失敗しました`));
+    script.onerror = () => reject(new Error(`${key} の読み込みに失敗しました`));
+    document.head.appendChild(script);
+  }).catch(err => {
+    delete _kvLibPromises[key];
+    document.querySelector(`script[data-kv-lib="${key}"]`)?.remove();
+    throw err;
+  });
+  return _kvLibPromises[key];
+}
+
+function ensureCaptureLibs(withPdf) {
+  const jobs = [_kvLoadLibrary('html2canvas')];
+  if (withPdf) jobs.push(_kvLoadLibrary('jspdf'));
+  return Promise.all(jobs);
+}
+
+/** 重要でない処理を最初の描画後へ回す（未対応ブラウザは短いタイマーで代替）。 */
+function _kvScheduleIdle(task, timeout = 4000) {
+  let done = false;
+  const run = () => {
+    if (done) return;
+    done = true;
+    try {
+      const result = task();
+      if (result?.catch) result.catch(e => console.warn('[idle task]', e));
+    } catch (e) { console.warn('[idle task]', e); }
+  };
+  if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout });
+  else setTimeout(run, Math.min(timeout, 1500));
+}
 const CORS_PROXIES = [
   (url) => `https://keiba-proxydeploy.maguronagareboshi.workers.dev/?url=${encodeURIComponent(url)}`,
   (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
@@ -2847,7 +2910,7 @@ function switchPage(pageId, _fromPop) {
   if (pageId === 'jchg')    { setTimeout(() => { try { renderJockeyChangeAnalysis(); } catch(e){} }, 0); }
   if (pageId === 'deban')   { setTimeout(() => { try { (Object.keys(allRacesData).length ? showDebanRaceView : showDebanDateList)(); } catch(e){} }, 0); }
   if (pageId === 'baba')    { setTimeout(() => { try { renderTrackTrend(); } catch(e){} }, 0); }
-  if (pageId === 'saved')   { setTimeout(() => { try { renderSavedList(); } catch(e){} }, 0); }
+  if (pageId === 'saved')   { setTimeout(() => { try { renderSavedList(); refreshOpponentShadowCollectionStatus(); } catch(e){} }, 0); }
   if (pageId === 'f3avg')   { setTimeout(() => { try { renderF3Averages(); } catch(e){} }, 0); }
   if (pageId === 'aiseiseki') { setTimeout(() => { try { renderAiSeisekiPage(); } catch(e){} }, 0); }
   if (pageId === 'psfhist') { setTimeout(() => { try { renderPsfHistory(); } catch(e){} }, 0); }
@@ -2984,7 +3047,7 @@ function import3FBulk() {
   ov.innerHTML = `<div class="f3imp-modal">
     <h3>📥 前半3F 一括取込</h3>
     <textarea id="f3imp-text" placeholder="レース\t馬番\t馬名\t前半3F\n1\t7\t(馬名省略可)\t38.9\n1\t9\t\t39.1\n…\n※タブ・カンマ区切りどちらも可。ヘッダ行や空の値は自動スキップ"></textarea>
-    <div class="f3imp-note">計測アプリの出力(kochi_3f_tsv_日付.txt)や「前半3F出力」形式をそのまま貼り付けできます。表示中の日付分がデプロイ済みなら「自動取得」で貼り付け作業を省略できます。<br>反映後、<b>保存ボタンを押すまで確定されません</b>。既に手入力済みの値は上書きされます(空の値では上書きしません)。</div>
+    <div class="f3imp-note">計測アプリの出力(kochi_3f_tsv_日付.txt)や「前半3F出力」形式をそのまま貼り付けできます。表示中の日付分がデプロイ済みなら「自動取得」で貼り付け作業を省略できます。<br>末尾に向正面ラベル列(最内/内/外2/外3/大外)がある新形式なら<b>向正面(内外)も同時反映</b>されます(自動推定のため<b>手入力済みの欄は上書きしません</b>)。<br>反映後、<b>保存ボタンを押すまで確定されません</b>。既に手入力済みの値は上書きされます(空の値では上書きしません)。</div>
     <div class="f3imp-btns">
       <button onclick="document.getElementById('f3imp-overlay').remove()">キャンセル</button>
       <button onclick="fetchAndImport3FFromDeploy()" title="サイトに同梱された当日分のTSVを取得してここに貼り付けます">📥 自動取得</button>
@@ -3013,31 +3076,53 @@ async function fetchAndImport3FFromDeploy() {
 function applyImport3F() {
   const txt = (document.getElementById('f3imp-text')?.value || '').trim();
   if (!txt) { alert('テキストが空です'); return; }
-  let applied = 0, noRace = new Set(), noHorse = 0, skipped = 0;
+  const MUKAE_LABELS = ['最内', '内', '外2', '外3', '大外'];
+  let applied = 0, appliedPos = 0, noRace = new Set(), noHorse = 0, skipped = 0;
   for (const line of txt.split(/\r?\n/)) {
     const s = line.trim();
     if (!s || /レース|馬番|race/i.test(s)) continue;   // ヘッダ行
     const cols = s.split(/\t|,/).map(c => c.trim());
     if (cols.length < 2) { skipped++; continue; }
     const raceNo = parseInt(cols[0]), umaBan = parseInt(cols[1]);
-    const val = parseFloat(cols[cols.length - 1]);      // 最終列=前半3F(3列・4列どちらも対応)
-    if (!raceNo || !umaBan || !isFinite(val) || val < 25 || val > 60) { skipped++; continue; }
+    // 3F=馬番より後ろの「最後の数値列」(3〜5列形式対応)。向正面ラベル列(最内/内/外2/外3/大外)が
+    // あれば内外も反映(計測アプリのポジション自動出力対応・2026-07-15拡張)
+    let val = NaN, mukae = '';
+    for (let ci = 2; ci < cols.length; ci++) {
+      const f = parseFloat(cols[ci]);
+      if (isFinite(f) && f >= 25 && f <= 60) val = f;
+      if (MUKAE_LABELS.includes(cols[ci])) mukae = cols[ci];
+    }
+    if (!raceNo || !umaBan || (!isFinite(val) && !mukae)) { skipped++; continue; }
     const data = allRacesData[raceNo];
     if (!data || !data.horses) { noRace.add(raceNo); continue; }
     const horse = data.horses.find(h => parseInt(h.umaBan) === umaBan);
     if (!horse) { noHorse++; continue; }
-    const v = (Math.round(val * 10) / 10).toFixed(1);
-    horse.first3f = v;
-    const inp = document.querySelector(`input.threef-input[oninput="onHorse3FInput(this,${raceNo},${umaBan})"]`);
-    if (inp) {
-      inp.value = v;
-      const vw = inp.closest('td')?.querySelector('.vw-val');
-      if (vw) vw.textContent = v + '秒';
+    if (isFinite(val)) {
+      const v = (Math.round(val * 10) / 10).toFixed(1);
+      horse.first3f = v;
+      const inp = document.querySelector(`input.threef-input[oninput="onHorse3FInput(this,${raceNo},${umaBan})"]`);
+      if (inp) {
+        inp.value = v;
+        const vw = inp.closest('td')?.querySelector('.vw-val');
+        if (vw) vw.textContent = v + '秒';
+      }
+      applied++;
     }
-    applied++;
+    if (mukae && !horse.mukaeShoumen) {
+      // 自動ラベルは±1ビン82%精度の推定値のため、手入力済みの値は上書きしない(空欄のみ埋める)
+      horse.mukaeShoumen = mukae;
+      const sel = document.querySelector(`select.pos-select[onchange="onHorsePosChange(this,${raceNo},${umaBan},'mukaeShoumen')"]`);
+      if (sel) {
+        sel.value = mukae;
+        const vw = sel.closest('td')?.querySelector('.vw-val');
+        if (vw) vw.textContent = mukae;
+      }
+      appliedPos++;
+    }
   }
   document.getElementById('f3imp-overlay')?.remove();
   let msg = `前半3Fを ${applied}件 反映しました。\n※「保存」ボタンを押すと確定されます。`;
+  if (appliedPos) msg += `\n向正面(内外)も ${appliedPos}件 反映しました。`;
   if (noRace.size) msg += `\n未読込のレース(スキップ): R${[...noRace].join(', R')} — 対象日の出馬表を読み込んでから取込してください`;
   if (noHorse) msg += `\n馬番不一致スキップ: ${noHorse}件`;
   if (skipped) msg += `\n書式スキップ: ${skipped}行`;
@@ -3427,7 +3512,8 @@ async function _bnFetchPayouts() {
 function _bnDelete(id) { if (!confirm('この記録を削除しますか？')) return; _betsWrite(_betsRead().filter(b => b.id !== id)); renderBetsPage(); }
 function _bnSetPayout(id, val) { const p = parseInt(val); if (isNaN(p) || p < 0) return; const bets = _betsRead(); const b = bets.find(x => x.id === id); if (b) { b.payout = p; _betsWrite(bets); renderBetsPage(); } }
 function _bnRenderChart(labels, pts) {
-  const cv = document.getElementById('bn-chart'); if (!cv || typeof Chart === 'undefined') return;
+  const cv = document.getElementById('bn-chart'); if (!cv) return;
+  if (typeof Chart === 'undefined') { ensureChartJs(() => _bnRenderChart(labels, pts)); return; }
   if (window._bnChart) { try { window._bnChart.destroy(); } catch (e) {} window._bnChart = null; }
   const ctx = cv.getContext('2d');
   if (!pts.length) { ctx.clearRect(0, 0, cv.width, cv.height); return; }
@@ -3574,22 +3660,22 @@ document.addEventListener('DOMContentLoaded', () => {
   _setHeaderHVar();
   // sim内（プレビューiframe）では入れ子防止のためスマホ表示ボタンを隠す
   if (KV_IS_SIM) document.getElementById('sim-mode-btn')?.classList.add('hidden');
-  // アクセスカウンター：訪問を加算（1端末1日1回）＋管理者なら表示
-  try { _bumpAccessCounter(); } catch (e) {}
-  // resizeイベントが飛ばない環境（エミュレーション・アプリ内ブラウザ等）でも
-  // 折返しによる高さ変化を確実に拾う（ResizeObserver＋変化時のみ書き込む軽量ポーリング）
+  // アクセスカウンターは表示・操作に不要なので、最初の描画後に送信する
+  _kvScheduleIdle(() => _bumpAccessCounter(), 3000);
+  // 折返しによる高さ変化を拾う。ResizeObserver対応環境ではポーリングを動かさない。
+  const _hdr = document.querySelector('.app-header');
   if (window.ResizeObserver) {
-    const _hdr = document.querySelector('.app-header');
     if (_hdr) new ResizeObserver(_setHeaderHVar).observe(_hdr);
+  } else {
+    // 古いアプリ内ブラウザ向けのフォールバック
+    setInterval(() => {
+      if (!_hdr) return;
+      const v = _hdr.offsetHeight + 'px';
+      if (document.documentElement.style.getPropertyValue('--kv-header-h') !== v) {
+        document.documentElement.style.setProperty('--kv-header-h', v);
+      }
+    }, 1500);
   }
-  setInterval(() => {
-    const h = document.querySelector('.app-header');
-    if (!h) return;
-    const v = h.offsetHeight + 'px';
-    if (document.documentElement.style.getPropertyValue('--kv-header-h') !== v) {
-      document.documentElement.style.setProperty('--kv-header-h', v);
-    }
-  }, 800);
 
   const t = new Date();
   document.getElementById('race-date').value =
@@ -3598,8 +3684,7 @@ document.addEventListener('DOMContentLoaded', () => {
   try { window._kvDeepLink = _kvParseHash(); } catch(e) { window._kvDeepLink = null; }
   _initNavHistory();
   _kvStartTickers();   // 発走カウントダウン＆当日オッズの5分毎自動更新
-  initDB();
-  loadWeeklySchedule();
+  initDB().catch(e => console.warn('[initDB]', e));
 });
 
 /** ディープリンクの消費を試みる。データ未到着ならfalse（Phase2完了後に再試行される）。 */
@@ -5130,6 +5215,13 @@ async function fetchLiveOdds(raceNo) {
   // 人気をオッズ昇順から導出（公式の確定人気が既にあれば触らない）
   const _byOdds = data.horses.filter(h => parseFloat(h.odds) > 0).sort((a, b) => parseFloat(a.odds) - parseFloat(b.odds));
   _byOdds.forEach((h, i) => { if (!h.ninki) h.ninki = String(i + 1); });
+  if (hit > 0) {
+    // 相手shadowは「いま取得した公式オッズ」だけを前向き評価へ使う。保存値や朝オッズを
+    // T10市場と誤認しないよう、race objectへ取得元・観測時刻・取得頭数を別メタとして残す。
+    data._liveOddsObservedAt = new Date().toISOString();
+    data._liveOddsSource = 'keiba.go.jp/OddsTanFuku';
+    data._liveOddsRunnerCount = hit;
+  }
   return hit;
 }
 async function fetchLiveOddsBtn(raceNo) {
@@ -5162,7 +5254,9 @@ function _kvStartTickers() {
   _kvTickersStarted = true;
   setInterval(_kvTickCountdown, 15000);
   setInterval(_kvTickOddsAuto, 30000);
+  setInterval(_kvTickOpponentShadowCapture, 30000);
   setTimeout(_kvTickCountdown, 500);
+  setTimeout(_kvTickOpponentShadowCapture, 2500);
 }
 function _kvTodaySlash() {
   const t = new Date();
@@ -5200,6 +5294,78 @@ function _kvSetOddsAutoNote(raceNo, how) {
 }
 // レース確定後の「確定取り直し」を1レース1回だけ行った記録（重複フェッチ防止）
 const _kvSettledFetched = {};
+let _kvOpponentCaptureBusy = false;
+const _kvOpponentCaptureRetryAt = {};
+
+function _kvOpponentCaptureSlot(minutesBeforeStart) {
+  const m = Number(minutesBeforeStart);
+  if (Number.isFinite(m) && m >= 10 && m <= 10.9) return 't10';
+  if (Number.isFinite(m) && m >= 14.5 && m <= 15.5) return 't15';
+  return null;
+}
+
+/**
+ * 管理者が各レースを開くかどうかに依存せず、ロード済み当日高知の全レースをT15/T10で捕捉する。
+ * 1枠6試行・30秒間隔・同時1通信。公開利用者ではopponentShadowEnabled()がfalseなので通信もしない。
+ */
+async function _kvTickOpponentShadowCapture() {
+  if (_kvOpponentCaptureBusy || typeof opponentShadowEnabled !== 'function' || !opponentShadowEnabled()) return;
+  if (String(currentBaba || '') !== '31' || currentDate !== _kvTodaySlash()) return;
+  if (typeof computeYosoScored !== 'function' || typeof computeOpponentShadow !== 'function' ||
+      typeof recordForwardOpponentShadowSnapshot !== 'function') return;
+  const candidates = Object.keys(allRacesData).map(Number).filter(Number.isFinite).map(raceNo => {
+    const data = allRacesData[raceNo];
+    if (!data || !data.raceInfo || data.raceInfo.raceDate !== currentDate || !Array.isArray(data.horses)) return null;
+    const tm = _aiPredictionTimeMeta(currentDate, raceNo);
+    const slot = tm && _kvOpponentCaptureSlot(tm.minutesBeforeStart);
+    return slot ? { raceNo, data, tm, slot } : null;
+  }).filter(Boolean).sort((a,b) => Number(a.tm.minutesBeforeStart) - Number(b.tm.minutesBeforeStart));
+
+  const target = candidates.find(c => {
+    const audit = typeof getOpponentShadowCaptureAudit === 'function'
+      ? getOpponentShadowCaptureAudit(currentDate, c.raceNo, c.slot) : null;
+    const retryKey = `${currentDate}|${c.raceNo}|${c.slot}`;
+    return !(audit && audit.saved) && Number(audit && audit.attemptCount || 0) < 6 &&
+      Date.now() >= Number(_kvOpponentCaptureRetryAt[retryKey] || 0);
+  });
+  if (!target) return;
+
+  const retryKey = `${currentDate}|${target.raceNo}|${target.slot}`;
+  _kvOpponentCaptureRetryAt[retryKey] = Date.now() + 30000;
+  _kvOpponentCaptureBusy = true;
+  let outcome = { saved:false, reason:'UNKNOWN' };
+  try {
+    const fetched = await fetchLiveOdds(target.raceNo);
+    _kvOddsAutoLast[target.raceNo] = Date.now();
+    if (fetched !== target.data.horses.length) {
+      outcome = { saved:false, reason:'INCOMPLETE_OFFICIAL_ODDS', fetchedRunnerCount:fetched };
+    } else {
+      const computed = computeYosoScored(target.raceNo, null);
+      if (!computed || !Array.isArray(computed.scored)) {
+        outcome = { saved:false, reason:'SCORING_UNAVAILABLE', fetchedRunnerCount:fetched };
+      } else {
+        const shadow = computeOpponentShadow(target.raceNo, computed.scored);
+        if (!shadow) {
+          outcome = { saved:false, reason:'MODEL_GATE_REJECTED', fetchedRunnerCount:fetched };
+        } else {
+          const recorded = recordForwardOpponentShadowSnapshot(target.raceNo, shadow);
+          outcome = { ...recorded, saved:recorded.saved || recorded.reason === 'DUPLICATE',
+            fetchedRunnerCount:fetched };
+        }
+      }
+    }
+  } catch (e) {
+    outcome = { saved:false, reason:'OFFICIAL_ODDS_FETCH_FAILED' };
+  } finally {
+    try {
+      if (typeof recordOpponentShadowCaptureAudit === 'function') {
+        recordOpponentShadowCaptureAudit(target.raceNo, target.slot, target.tm, outcome);
+      }
+    } catch (e) { console.warn('[opponentShadowCaptureAudit]', e); }
+    _kvOpponentCaptureBusy = false;
+  }
+}
+
 async function _kvTickOddsAuto() {
   try {
     if (typeof _currentPage === 'undefined' || _currentPage !== 'deban') return;
@@ -5383,6 +5549,19 @@ function renderHorseRows(raceNo, horses) {
   const _isAdminView = (typeof isAdminMode === 'function' && isAdminMode());
   // AI印・スコア（予想AIパネルと同じ共通コアで算出）
   const _cy = (typeof computeYosoScored === 'function') ? computeYosoScored(raceNo, null) : null;
+  // 実際に表示する既定馬場の予想だけを、管理者端末へ発走前スナップショットとして追記保存。
+  // computeYosoScored内部では呼ばないため、過去成績の再計算や仮想馬場選択は記録されない。
+  if (_cy && typeof recordForwardRankingSnapshot === 'function') {
+    try { recordForwardRankingSnapshot(raceNo, _cy); } catch (e) { console.warn('[aiPredictionSnapshot hook]', e); }
+  }
+  // 相手選びは別モデル・別台帳。候補登録＋管理者shadow flagの両方が有効な時だけ、
+  // 既定馬場の前向き結果を記録する（主印scoredはコピー入力のため変更されない）。
+  if (_cy && typeof computeOpponentShadow === 'function' && typeof recordForwardOpponentShadowSnapshot === 'function') {
+    try {
+      const _opShadow = computeOpponentShadow(raceNo, _cy.scored);
+      if (_opShadow) recordForwardOpponentShadowSnapshot(raceNo, _opShadow);
+    } catch (e) { console.warn('[opponentShadowSnapshot hook]', e); }
+  }
   const _AI_MARKS = ['◎', '○', '▲', '△', '×', '×'];
   const _aiMap = {};
   if (_cy) {
@@ -7013,6 +7192,7 @@ function renderAbilityTable(raceNo) {
  * 能力表を画像キャプチャして返す共通処理
  */
 async function _captureAbilityCanvas(raceNo) {
+  await ensureCaptureLibs(false);
   const target = document.getElementById(`ability-table-${raceNo}`);
   if (!target) throw new Error('能力表が見つかりません');
 
@@ -7043,6 +7223,7 @@ async function exportAbilityPDF(raceNo) {
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 生成中...'; }
 
   try {
+    await ensureCaptureLibs(true);
     const canvas  = await _captureAbilityCanvas(raceNo);
     const imgData = canvas.toDataURL('image/jpeg', 0.92);
 
@@ -7207,6 +7388,7 @@ function closeCommentSheet() {
 
 /** コメントシートをキャプチャ（共通） */
 async function _captureCommentCanvas(raceNo, scale) {
+  await ensureCaptureLibs(false);
   const target = document.getElementById(`comment-sheet-${raceNo}`);
   if (!target) throw new Error('コメント一覧が見つかりません');
   const canvas = await html2canvas(target, { scale: scale || 2, useCORS: true, backgroundColor: '#ffffff', logging: false, scrollY: -window.scrollY });
@@ -7279,6 +7461,7 @@ async function exportCommentPDF(raceNo) {
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 生成中...'; }
   try {
+    await ensureCaptureLibs(true);
     const { canvas, target } = await _captureCommentCanvas(raceNo);
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -7763,6 +7946,8 @@ function idbDelete(key) {
   }
   _savedGroupsDirty = true;
   window._comboStatsCache = null;
+  window._comboStatsAllCache = null;
+  window._evMapsCache = null;
   window._asOfComboCache = null;
   window._asOfF3BenchCache = null;
   openIDB().then(db => {
@@ -7906,6 +8091,8 @@ async function _idbBulkPut(obj) {
 // ============================================================
 const _IDB_PAGE = 1000;          // 1ページあたり取得件数
 let _bgLoadActive = false;       // 背景読み込み中フラグ
+const _KV_FULL_SYNC_META_KEY = 'kv_full_sync_meta_v1';
+const _KV_FULL_SYNC_MAX_AGE = 12 * 60 * 60 * 1000; // 全履歴の再走査は最大でも12時間に1回
 
 /** Supabase の1ページ分を取得（高知のみ・日付降順）。
  *  深いoffsetの並列取得はサーバー側で一時的な500を返すことがある（2026-07-15実測: 全157ページ中
@@ -8028,6 +8215,8 @@ async function _fetchTablePaged(table, afterId, onRows, onProgress) {
     cursor = rows[rows.length - 1].id;
     if (onProgress) onProgress(total);
     if (rows.length < _IDB_PAGE) break;            // 真のデータ終端（端数ページ）
+    // 1000行の変換・IndexedDB投入後にメインスレッドを一度返し、操作の引っ掛かりを抑える
+    await new Promise(resolve => setTimeout(resolve, 0));
   }
   return { total, incomplete: false, nextCursor: null };
 }
@@ -8083,6 +8272,7 @@ function _refreshSavedDebounced() {
 async function initDB() {
   // まず IndexedDB キャッシュをロード（LocalStorage 移行も含む）
   await loadIDBCache();
+  const _cacheSizeAtStart = Object.keys(_idbCache || {}).length;
 
   // ── 高知以外（babaCode≠'31'）のキャッシュを削除 ──
   if (_idbCache) {
@@ -8107,6 +8297,7 @@ async function initDB() {
     loadSavedData();
     if (typeof initAnalysisDateSelect === 'function') initAnalysisDateSelect();
     setTimeout(() => { try { _simRestoreState(); } catch (e) {} }, 0);
+    _kvScheduleIdle(() => loadWeeklySchedule(), 2500);
     return;
   }
 
@@ -8139,8 +8330,25 @@ async function initDB() {
     } catch (e) { console.warn('[kvTodayMode/deepLink]', e); }
   }, 0);
 
-  // ── Phase 2: 残りを背景で取得（await しない＝UIをブロックしない） ──
-  (async () => {
+  // 全履歴同期は約90MBになるため、完全同期済みキャッシュが新しければ省略する。
+  // 直近1000件は上のPhase1で毎回更新するので、当日データの鮮度は落とさない。
+  let _fullSyncMeta = null;
+  try { _fullSyncMeta = JSON.parse(localStorage.getItem(_KV_FULL_SYNC_META_KEY) || 'null'); } catch(e) {}
+  const _fullSyncFresh = !!(
+    _fullSyncMeta?.at && _fullSyncMeta?.cacheSize > 0 &&
+    Date.now() - _fullSyncMeta.at < _KV_FULL_SYNC_MAX_AGE &&
+    _cacheSizeAtStart >= _fullSyncMeta.cacheSize * 0.9
+  );
+  if (_fullSyncFresh) {
+    console.log(`[initDB] Phase2 省略（全履歴同期から${Math.round((Date.now() - _fullSyncMeta.at) / 60000)}分）`);
+    _kvScheduleIdle(() => loadWeeklySchedule(), 2500);
+    return;
+  }
+
+  // ── Phase 2: 残りを最初の描画後に取得（UIと当日レース取得を優先） ──
+  _kvScheduleIdle(async () => {
+    // 先に軽い週間予定を表示し、その後で大きい全履歴同期へ進む
+    try { await loadWeeklySchedule(); } catch(e) { console.warn('[weekly schedule]', e); }
     _setBgLoadIndicator(true);
     try {
       // 途中失敗(incomplete)時は失敗地点(nextCursor)から1回だけ自動再開する
@@ -8173,6 +8381,12 @@ async function initDB() {
         if (_st) _st.textContent = '⚠️ 過去データの取得が一部失敗しました。ページを再読み込みすると再試行します';
       } else {
         console.log('[initDB] Phase2 背景読み込み完了');
+        try {
+          localStorage.setItem(_KV_FULL_SYNC_META_KEY, JSON.stringify({
+            at: Date.now(),
+            cacheSize: Object.keys(_idbCache || {}).length,
+          }));
+        } catch(e) {}
       }
     } catch(e) {
       console.warn('[initDB] Phase2 背景読み込み失敗:', e);
@@ -8190,7 +8404,15 @@ async function initDB() {
     if (_bfCount > 0 && typeof renderTrackTrend === 'function') {
       try { renderTrackTrend(); } catch(e) {}
     }
-  })();
+  }, 5000);
+}
+
+/** 管理者が古い修正も含めて全履歴を取り直したい時の明示操作。 */
+function forceHistoricalResync() {
+  if (!isAdminMode()) return;
+  if (!confirm('過去データを全件再同期しますか？\n通信量が大きいため、必要な場合だけ実行してください。')) return;
+  localStorage.removeItem(_KV_FULL_SYNC_META_KEY);
+  location.reload();
 }
 
 async function saveAllData() {
@@ -9303,22 +9525,755 @@ const KV_ML_WEIGHTS_DEFAULT = {
     jockeyChgN: 0.239, takiN: 0.147, cornConsistN: -0.877 },
   tiers: { c1: 3.19, c2: 7.8, fukuTight: 60, fukuMid: 73, fukuStrong: 82.9, n: 3462 }
 };
-function getMlLiveWeights() {
+// 係数だけでなく「どこから読み込んだか」も同時に解決する。従来のgetMlLiveWeights()は
+// payloadだけを返す互換APIとして残す。端末IDBの上書きが他端末との差を静かに生むため、
+// 予想スナップショットとAI成績キャッシュでは必ずこのprovenanceも保存する。
+function resolveMlLiveWeightsWithProvenance() {
   try {
     const ls = lsRead();
-    for (const rec of [ls['ml_weights_31'], ls['daySettings_31_ml-weights']]) {
+    const candidates = [
+      { rec: ls['ml_weights_31'], source: 'device_override', sourceKey: 'ml_weights_31' },
+      { rec: ls['daySettings_31_ml-weights'], source: 'server_sentinel', sourceKey: 'daySettings_31_ml-weights' },
+    ];
+    for (const c of candidates) {
+      const rec = c.rec;
       if (!rec || !rec.memo) continue;
       const p = JSON.parse(rec.memo);
-      if (p && p.fullAdopt && p.eff) return p;
+      if (p && p.fullAdopt && p.eff) return { payload: p, source: c.source, sourceKey: c.sourceKey };
     }
   } catch(e) {}
-  return KV_ML_WEIGHTS_DEFAULT;
+  return { payload: KV_ML_WEIGHTS_DEFAULT, source: 'shipped_default', sourceKey: null };
+}
+function getMlLiveWeights() {
+  return resolveMlLiveWeightsWithProvenance().payload;
 }
 function saveMlLiveWeights(payload) {
   const memo = JSON.stringify(payload);
   lsWrite('ml_weights_31', { type: 'mlWeights', memo });
   // keiba_day_settingsテーブルは現状Supabaseに未作成（upsertは無害に失敗）。作成すれば閲覧者へ自動配布になる。
   apiUpsert('keiba_day_settings', '31_ml-weights', { baba_code: '31', race_date: 'ml-weights', memo }).catch(() => {});
+}
+
+// ══════════════ ランキングモデルの版管理・前向き予想台帳（2026-07-17）══════════════
+// 予想順位そのものは変更しない。現行totalScoreの「実際に解決された実効倍率」と計算契約を
+// 決定論的fingerprintにし、モデル変更後の成績キャッシュ混在と事後再計算だけの評価を防ぐ。
+const KV_RANKING_SCORE_CONTRACT_VERSION = 'totalScore-v1-20260713';
+const KV_RANKING_FEATURE_PIPELINE_VERSION = 'kochi-live-features-v1-20260717';
+const KV_RANKING_MODEL_FAMILY = 'market-free-additive';
+const KV_RANKING_EFF_KEYS = [
+  'condNew','distNew','rotN','clsN','cornN','trendN','weightN','agariN','comboN',
+  'marginN','winStrN','jockeyChgN','takiN','cornConsistN','rakuN','paceCtxN'
+];
+const AI_PREDICTION_SNAPSHOT_SCHEMA = 'ai_prediction_snapshot/v1';
+
+function _aiStableStringify(v) {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v);
+  if (Array.isArray(v)) return '[' + v.map(_aiStableStringify).join(',') + ']';
+  return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + _aiStableStringify(v[k])).join(',') + '}';
+}
+// 同期キー生成用のFNV-1a 64bit。暗号用途ではなく、同一計算契約の識別用。
+function _aiFingerprint(v) {
+  const text = typeof v === 'string' ? v : _aiStableStringify(v);
+  try {
+    let h = 0xcbf29ce484222325n;
+    for (let i = 0; i < text.length; i++) {
+      h ^= BigInt(text.charCodeAt(i));
+      h = BigInt.asUintN(64, h * 0x100000001b3n);
+    }
+    return h.toString(16).padStart(16, '0');
+  } catch (e) {
+    let h = 2166136261;
+    for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return (h >>> 0).toString(16).padStart(8, '0');
+  }
+}
+function buildRankingModelIdentity() {
+  const resolved = resolveMlLiveWeightsWithProvenance();
+  const p = resolved.payload || KV_ML_WEIGHTS_DEFAULT;
+  const materializedEff = {};
+  KV_RANKING_EFF_KEYS.forEach(k => {
+    const raw = p.eff && p.eff[k] != null ? p.eff[k]
+      : (typeof YOSO_FACTOR_SCALE !== 'undefined' && YOSO_FACTOR_SCALE[k] != null ? YOSO_FACTOR_SCALE[k] : 1);
+    materializedEff[k] = Number(raw);
+  });
+  const contract = {
+    family: KV_RANKING_MODEL_FAMILY,
+    scoreContractVersion: KV_RANKING_SCORE_CONTRACT_VERSION,
+    featurePipelineVersion: KV_RANKING_FEATURE_PIPELINE_VERSION,
+    baseCoefficient: 1,
+    relativeSI: '(baseScore-raceMean)*0.05',
+    paceCornScaling: 'cornMod*paceFactor before relSI',
+    rounding: 'score-to-2dp after base sum, pace scaling and relSI',
+    missingEffFallback: 'YOSO_FACTOR_SCALE then 1',
+    sort: 'totalScore-desc; stable source order on exact tie',
+    eff: materializedEff,
+  };
+  return {
+    version: `ranking_${String(p.trainedAt || 'unknown').replace(/[^0-9A-Za-z]/g, '')}`,
+    fingerprint: _aiFingerprint(contract),
+    fingerprintAlgorithm: 'fnv1a64-utf16',
+    family: contract.family,
+    scoreContractVersion: contract.scoreContractVersion,
+    featurePipelineVersion: contract.featurePipelineVersion,
+    trainedAt: p.trainedAt || null,
+    races: Number.isFinite(Number(p.races)) ? Number(p.races) : null,
+    source: resolved.source,
+    sourceKey: resolved.sourceKey,
+    contract,
+  };
+}
+
+function _aiPredictionTimeMeta(raceDate, raceNo) {
+  const today = (typeof _kvTodayYmd === 'function') ? _kvTodayYmd() : '';
+  if (!raceDate || (today && raceDate < today)) return null;
+  const hhmm = (typeof _kvGetRaceTime === 'function') ? _kvGetRaceTime(raceDate, raceNo) : '';
+  const post = hhmm && typeof _kvPostDate === 'function' ? _kvPostDate(raceDate, hhmm) : null;
+  if (post && post.getTime() <= Date.now()) return null; // 発走後は「予想時点」として保存しない
+  return {
+    scheduledStartAt: post ? post.toISOString() : null,
+    minutesBeforeStart: post ? +((post.getTime() - Date.now()) / 60000).toFixed(2) : null,
+    timing: post ? 'verified_prestart' : 'unverified_prestart',
+  };
+}
+
+/**
+ * 管理者端末のIndexedDBへ、現行ランキングを追記専用で保存する。
+ * computeYosoScored()内部からは呼ばない（過去再計算を当時予想と誤記録しないため）。
+ * 同じ入力・同じモデルの再描画は同一キーとなり、異なる入力だけが別revisionとして残る。
+ */
+function recordForwardRankingSnapshot(raceNo, computed) {
+  try {
+    if (typeof isAdminMode !== 'function' || !isAdminMode()) return { saved: false, reason: 'NOT_ADMIN' };
+    const data = allRacesData[raceNo];
+    if (!data || !data.raceInfo || !Array.isArray(data.horses)) return { saved: false, reason: 'NO_RACE' };
+    const baba = String(data.raceInfo.babaCode || currentBaba || '31');
+    const raceDate = data.raceInfo.raceDate || currentDate || '';
+    if (baba !== '31' || currentDate !== raceDate) return { saved: false, reason: 'NOT_CURRENT_KOCHI' };
+    const hasLoadedResult = data.horses.some(h => /^\d+$/.test(String(h.chakujun || '')));
+    const hp = `${baba}_${raceDate}_${parseInt(raceNo)}_`;
+    const hasSavedResult = Object.entries(lsRead()).some(([k, v]) => k.startsWith(hp) && v && v.type === 'horse' && /^\d+$/.test(String(v.chakujun || '')));
+    if (hasLoadedResult || hasSavedResult) return { saved: false, reason: 'HAS_RESULT' };
+    const tm = _aiPredictionTimeMeta(raceDate, raceNo);
+    if (!tm) return { saved: false, reason: 'NOT_PRESTART' };
+    const scored = computed && computed.scored;
+    if (!Array.isArray(scored) || scored.length < 4) return { saved: false, reason: 'TOO_FEW_RUNNERS' };
+
+    const model = buildRankingModelIdentity();
+    const marks = ['◎','○','▲','△','×','×'];
+    const runners = scored.map((s, idx) => ({
+      u: parseInt(s.horse && s.horse.umaBan) || null,
+      rank: s.totalScore == null ? null : idx + 1,
+      mark: s.totalScore == null ? '' : (marks[idx] || ''),
+      totalScore: s.totalScore == null ? null : Number(s.totalScore),
+      x: [s.baseScore,s.condMod,s.distMod,s.rotMod,s.classMod,s._cornModRaw,s.cornMod,s.trendMod,
+        s.weightMod,s.agariMod,s.comboMod,s.marginMod,s.winStrMod,s.jockeyChgMod,s.takiMod,
+        s.cornConsistMod,s.rakuMod,s.paceCtxMod,s.relSIMod]
+        .map(v => v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null),
+    }));
+    const runnerSetFingerprint = _aiFingerprint(runners.map(r => r.u).slice().sort((a,b) => (a||0)-(b||0)));
+    const inputFingerprint = _aiFingerprint({ runnerSetFingerprint, runners });
+    const dateKey = raceDate.replace(/\D/g, '');
+    const key = `aiPred_v1|${baba}|${dateKey}|${String(parseInt(raceNo)).padStart(2,'0')}|${model.fingerprint}|${inputFingerprint}`;
+    if (lsRead()[key]) return { saved: false, reason: 'DUPLICATE', key };
+
+    const registryKey = `aiModelRegistry_v1|${model.fingerprint}`;
+    if (!lsRead()[registryKey]) {
+      lsWrite(registryKey, { type: 'aiModelRegistry', schemaVersion: 1, savedAt: new Date().toISOString(), model });
+    }
+    lsWrite(key, {
+      type: 'aiPredictionSnapshot', schema: AI_PREDICTION_SNAPSHOT_SCHEMA, capturePolicy: 'distinct-input-prestart',
+      babaCode: baba, raceDate, raceNo: parseInt(raceNo), capturedAt: new Date().toISOString(),
+      scheduledStartAt: tm.scheduledStartAt, minutesBeforeStart: tm.minutesBeforeStart, timing: tm.timing,
+      model: { version: model.version, fingerprint: model.fingerprint, source: model.source, sourceKey: model.sourceKey },
+      runnerSetFingerprint, inputFingerprint, completeScores: runners.every(r => r.totalScore != null), runners,
+    });
+    return { saved: true, key };
+  } catch (e) {
+    console.warn('[aiPredictionSnapshot]', e);
+    return { saved: false, reason: 'WRITE_ERROR' };
+  }
+}
+function listForwardRankingSnapshots() {
+  return Object.entries(lsRead()).filter(([,v]) => v && v.type === 'aiPredictionSnapshot')
+    .map(([key,v]) => ({ key, ...v })).sort((a,b) => String(a.capturedAt).localeCompare(String(b.capturedAt)));
+}
+
+// ══════════════ 相手選びシャドーモデル（管理者限定・未採用）══════════════
+// 主印（computeYosoScored / totalScore / sort）から完全に分離した実験用の受け口。
+// 2026-07-18以降は、実UI◎を固定して「T10単勝市場の上位2頭」と現行○▲を前向き比較する。
+// 公開利用者はisAdminMode()で必ず遮断され、◎○▲△の計算・sortには一切関与しない。
+// 単勝オッズ・人気は「穴相手」の過小評価検証に必要だが、オッズ非依存の主印台帳へ混ぜず、
+// opponentShadowSnapshot の marketAtCapture に予想時点値として分離保存する。
+var KV_OPPONENT_SHADOW_DEFAULT = true;
+try {
+  if (typeof window.KV_OPPONENT_SHADOW_ENABLED !== 'boolean') {
+    window.KV_OPPONENT_SHADOW_ENABLED = KV_OPPONENT_SHADOW_DEFAULT;
+  }
+} catch (e) {}
+const OPPONENT_SHADOW_RESULT_SCHEMA = 'opponent_shadow_result/v1';
+const OPPONENT_SHADOW_SNAPSHOT_SCHEMA = 'opponent_shadow_snapshot/v1';
+const _opponentShadowModels = new Map();
+const _opponentShadowResultCache = new Map();
+let _activeOpponentShadowModelId = null;
+
+function opponentShadowEnabled() {
+  try {
+    return window.KV_OPPONENT_SHADOW_ENABLED === true &&
+      typeof isAdminMode === 'function' && isAdminMode();
+  } catch (e) { return false; }
+}
+
+/**
+ * 実験モデルを登録する。descriptor は計算契約だけを持ち、関数本体や端末状態はfingerprintに含めない。
+ * descriptor.activate=true の候補だけが有効になる。登録だけでは主印・公開画面へ一切影響しない。
+ */
+function registerOpponentShadowModel(descriptor, predictor) {
+  if (!descriptor || typeof descriptor !== 'object' || !descriptor.id || !descriptor.version) {
+    throw new Error('opponent shadow descriptor requires id and version');
+  }
+  if (typeof predictor !== 'function') throw new Error('opponent shadow predictor must be a function');
+  const id = String(descriptor.id);
+  const contract = {
+    id,
+    version: String(descriptor.version),
+    family: String(descriptor.family || 'opponent-ranking-shadow'),
+    target: String(descriptor.target || 'anchor-conditioned-top3'),
+    featurePipelineVersion: String(descriptor.featurePipelineVersion || 'unspecified'),
+    marketInputs: Array.isArray(descriptor.marketInputs) ? descriptor.marketInputs.map(String).sort() : [],
+    config: descriptor.config && typeof descriptor.config === 'object'
+      ? JSON.parse(JSON.stringify(descriptor.config)) : {},
+  };
+  const model = { ...contract, fingerprint: _aiFingerprint(contract), status: 'shadow_unadopted' };
+  _opponentShadowModels.set(id, { model, predictor });
+  // 同じIDのpredictor差し替え時に旧結果を再利用しない。
+  for (const k of _opponentShadowResultCache.keys()) if (k.startsWith(model.fingerprint + '|')) _opponentShadowResultCache.delete(k);
+  if (descriptor.activate === true) _activeOpponentShadowModelId = id;
+  return model;
+}
+function activateOpponentShadowModel(id) {
+  const key = String(id || '');
+  if (!_opponentShadowModels.has(key)) return false;
+  _activeOpponentShadowModelId = key;
+  return true;
+}
+function clearOpponentShadowModels() {
+  _opponentShadowModels.clear();
+  _opponentShadowResultCache.clear();
+  _activeOpponentShadowModelId = null;
+}
+function getActiveOpponentShadowModel() {
+  return _activeOpponentShadowModelId ? (_opponentShadowModels.get(_activeOpponentShadowModelId) || null) : null;
+}
+
+function _opponentShadowInput(raceNo, scored) {
+  const data = allRacesData[raceNo];
+  if (!data || !data.raceInfo || !Array.isArray(scored)) return null;
+  // predictorへ原配列・horse参照を渡さない。候補側のバグで主印の順や値を変えられない契約。
+  const runners = scored.map((s, idx) => ({
+    u: parseInt(s.horse && s.horse.umaBan) || null,
+    name: String((s.horse && s.horse.horseName) || ''),
+    currentRank: s.totalScore == null ? null : idx + 1,
+    totalScore: s.totalScore == null ? null : Number(s.totalScore),
+    odds: Number.isFinite(Number(s.horse && s.horse.odds)) && Number(s.horse.odds) > 0 ? Number(s.horse.odds) : null,
+    ninki: Number.isFinite(Number(s.horse && s.horse.ninki)) && Number(s.horse.ninki) > 0 ? Number(s.horse.ninki) : null,
+    aiProb: s.aiProb == null || !Number.isFinite(Number(s.aiProb)) ? null : Number(s.aiProb),
+    marketProb: s.marketProb == null || !Number.isFinite(Number(s.marketProb)) ? null : Number(s.marketProb),
+    x: {
+      baseScore: s.baseScore, condMod: s.condMod, distMod: s.distMod, rotMod: s.rotMod,
+      classMod: s.classMod, cornModRaw: s._cornModRaw, cornMod: s.cornMod, trendMod: s.trendMod,
+      weightMod: s.weightMod, agariMod: s.agariMod, comboMod: s.comboMod, marginMod: s.marginMod,
+      winStrMod: s.winStrMod, jockeyChgMod: s.jockeyChgMod, takiMod: s.takiMod,
+      cornConsistMod: s.cornConsistMod, rakuMod: s.rakuMod, paceCtxMod: s.paceCtxMod,
+      relSIMod: s.relSIMod,
+    },
+  }));
+  const clean = JSON.parse(JSON.stringify({
+    raceNo: parseInt(raceNo),
+    raceInfo: {
+      babaCode: String(data.raceInfo.babaCode || currentBaba || '31'),
+      raceDate: String(data.raceInfo.raceDate || currentDate || ''),
+      distance: String(data.raceInfo.distance || ''),
+      raceClass: String(data.raceInfo.raceClass || data.raceInfo.race_class || ''),
+      trackCond: String(data.raceInfo.trackCond || data.raceInfo.track_cond || ''),
+    },
+    market: {
+      observedAt: data._liveOddsObservedAt || null,
+      source: data._liveOddsSource || null,
+      fetchedRunnerCount: Number.isFinite(Number(data._liveOddsRunnerCount)) ? Number(data._liveOddsRunnerCount) : null,
+    },
+    anchor: runners[0] || null,
+    runners,
+  }));
+  try {
+    Object.freeze(clean.raceInfo); Object.freeze(clean.market);
+    clean.runners.forEach(r => { Object.freeze(r.x); Object.freeze(r); });
+    Object.freeze(clean.runners); if (clean.anchor) Object.freeze(clean.anchor); Object.freeze(clean);
+  } catch (e) {}
+  return clean;
+}
+
+function _normalizeOpponentShadowPicks(raw, role, byUma, used) {
+  const src = Array.isArray(raw) ? raw : [];
+  const out = [];
+  for (const item0 of src) {
+    const item = (item0 && typeof item0 === 'object') ? item0 : { u: item0 };
+    const u = parseInt(item.u != null ? item.u : item.umaBan);
+    const runner = byUma.get(u);
+    if (!runner || used.has(u)) continue;
+    used.add(u);
+    const score = Number(item.score);
+    const probability = Number(item.probability != null ? item.probability : item.prob);
+    const reasons = (Array.isArray(item.reasons) ? item.reasons : (item.reason ? [item.reason] : []))
+      .slice(0, 4).map(x => String(x).slice(0, 100));
+    out.push({
+      role, u, name: runner.name, currentRank: runner.currentRank,
+      score: Number.isFinite(score) ? score : null,
+      probability: Number.isFinite(probability) && probability >= 0 && probability <= 1 ? probability : null,
+      reasons,
+    });
+    if (out.length >= 3) break;
+  }
+  return out;
+}
+
+function computeOpponentShadow(raceNo, scored) {
+  if (!opponentShadowEnabled()) return null;
+  const registered = getActiveOpponentShadowModel();
+  if (!registered) return null;
+  const input = _opponentShadowInput(raceNo, scored);
+  if (!input || !input.anchor || input.runners.length < 4) return null;
+  const cfg = registered.model.config || {};
+  const cutoff = Number(cfg.captureCutoffMinutes);
+  if (Number.isFinite(cutoff) && cutoff > 0) {
+    const tm = _aiPredictionTimeMeta(input.raceInfo.raceDate, raceNo);
+    if (!tm || tm.timing !== 'verified_prestart' || !Number.isFinite(Number(tm.minutesBeforeStart)) ||
+        Number(tm.minutesBeforeStart) < cutoff) return null;
+  }
+  if (cfg.requiresFreshMarket === true) {
+    const observedMs = Date.parse(input.market && input.market.observedAt);
+    const ageMinutes = (Date.now() - observedMs) / 60000;
+    const maxAge = Number(cfg.maxMarketAgeMinutes);
+    if (!Number.isFinite(observedMs) || !Number.isFinite(ageMinutes) || ageMinutes < -0.1 ||
+        !Number.isFinite(maxAge) || ageMinutes > maxAge) return null;
+  }
+  // renderHorseRows（前向き保存）とrenderPredictionPanel（shadow表示）は同じ入力で連続して呼ばれる。
+  // 入力fingerprint単位で結果を固定し、候補predictorの二重実行・状態依存で表示と保存がずれるのを防ぐ。
+  const predictionInputFingerprint = _aiFingerprint(input);
+  const cacheKey = `${registered.model.fingerprint}|${predictionInputFingerprint}`;
+  if (_opponentShadowResultCache.has(cacheKey)) {
+    return JSON.parse(JSON.stringify(_opponentShadowResultCache.get(cacheKey)));
+  }
+  try {
+    const raw = registered.predictor(input) || {};
+    const byUma = new Map(input.runners.map(r => [r.u, r]));
+    const used = new Set([input.anchor.u]); // ◎自身を「相手」に混ぜない
+    const mainlineRaw = raw.mainline || (raw.picks && raw.picks.mainline) || [];
+    const longshotRaw = raw.longshot || (raw.picks && raw.picks.longshot) || [];
+    const mainline = _normalizeOpponentShadowPicks(mainlineRaw, 'mainline', byUma, used);
+    const longshot = _normalizeOpponentShadowPicks(longshotRaw, 'longshot', byUma, used);
+    const result = {
+      schema: OPPONENT_SHADOW_RESULT_SCHEMA,
+      status: 'shadow_unadopted', exactEv: false,
+      predictionInputFingerprint,
+      model: registered.model,
+      target: registered.model.target,
+      anchor: { u: input.anchor.u, name: input.anchor.name, currentRank: input.anchor.currentRank },
+      baselineMainline: input.runners.filter(r => r.u !== input.anchor.u).slice(0, 2)
+        .map(r => ({ u: r.u, name: r.name, currentRank: r.currentRank })),
+      marketMeta: input.market,
+      mainline, longshot,
+    };
+    _opponentShadowResultCache.set(cacheKey, JSON.parse(JSON.stringify(result)));
+    return JSON.parse(JSON.stringify(result));
+  } catch (e) {
+    console.warn('[opponentShadow]', e);
+    return null;
+  }
+}
+
+function buildOpponentShadowHtml(raceNo, shadow) {
+  if (!opponentShadowEnabled() || !shadow || shadow.schema !== OPPONENT_SHADOW_RESULT_SCHEMA) return '';
+  const fmt = arr => arr.length ? arr.map(p => {
+    const why = p.reasons.length ? ` <span style="color:#64748b">${escapeHTML(p.reasons.join('・'))}</span>` : '';
+    const prob = p.probability != null ? ` <span style="color:#475569">${(p.probability * 100).toFixed(1)}%</span>` : '';
+    return `<span style="display:inline-block;margin-right:10px"><b>${escapeHTML(p.u)} ${escapeHTML(p.name)}</b>${prob}${why}</span>`;
+  }).join('') : '<span style="color:#94a3b8">該当なし</span>';
+  return `<div id="opponent-shadow-${parseInt(raceNo)}" data-model-fingerprint="${escapeHTML(shadow.model.fingerprint)}"
+    style="margin-bottom:10px;padding:10px 12px;border:1.5px dashed #7c3aed;border-radius:9px;background:#faf5ff;color:#4c1d95;font-size:12px">
+    <div style="font-weight:800;margin-bottom:6px">🧪 相手選び shadow <span style="font-size:10px;color:#7c3aed">管理者限定・未採用</span></div>
+    <div style="margin:4px 0"><b>軸：</b>◎ ${escapeHTML(shadow.anchor.u)} ${escapeHTML(shadow.anchor.name)}</div>
+    <div style="margin:4px 0"><b>相手本線：</b>${fmt(shadow.mainline)}</div>
+    <div style="margin:4px 0"><b>穴相手：</b>${fmt(shadow.longshot)}</div>
+    <div style="margin-top:6px;font-size:10px;color:#6b7280">主印には未反映。組合せオッズ未使用のため、穴相手は厳密な馬券期待値ではなく過小評価候補です。model ${escapeHTML(shadow.model.id)} / ${escapeHTML(shadow.model.fingerprint)}</div>
+  </div>`;
+}
+
+function recordForwardOpponentShadowSnapshot(raceNo, shadow) {
+  try {
+    if (!opponentShadowEnabled()) return { saved: false, reason: 'NOT_ENABLED_OR_ADMIN' };
+    if (!shadow || shadow.schema !== OPPONENT_SHADOW_RESULT_SCHEMA) return { saved: false, reason: 'NO_SHADOW' };
+    const data = allRacesData[raceNo];
+    if (!data || !data.raceInfo || !Array.isArray(data.horses)) return { saved: false, reason: 'NO_RACE' };
+    const baba = String(data.raceInfo.babaCode || currentBaba || '31');
+    const raceDate = data.raceInfo.raceDate || currentDate || '';
+    if (baba !== '31' || currentDate !== raceDate) return { saved: false, reason: 'NOT_CURRENT_KOCHI' };
+    const hasLoadedResult = data.horses.some(h => /^\d+$/.test(String(h.chakujun || '')));
+    const hp = `${baba}_${raceDate}_${parseInt(raceNo)}_`;
+    const hasSavedResult = Object.entries(lsRead()).some(([k, v]) => k.startsWith(hp) && v && v.type === 'horse' && /^\d+$/.test(String(v.chakujun || '')));
+    if (hasLoadedResult || hasSavedResult) return { saved: false, reason: 'HAS_RESULT' };
+    const tm = _aiPredictionTimeMeta(raceDate, raceNo);
+    if (!tm) return { saved: false, reason: 'NOT_PRESTART' };
+    const cfg = shadow.model && shadow.model.config && typeof shadow.model.config === 'object'
+      ? shadow.model.config : {};
+    const cutoff = Number(cfg.captureCutoffMinutes);
+    if (Number.isFinite(cutoff) && cutoff > 0) {
+      if (tm.timing !== 'verified_prestart' || !Number.isFinite(Number(tm.minutesBeforeStart))) {
+        return { saved: false, reason: 'UNVERIFIED_START_TIME' };
+      }
+      if (Number(tm.minutesBeforeStart) < cutoff) return { saved: false, reason: 'TOO_LATE_FOR_MODEL_CUTOFF' };
+    }
+    if (cfg.requiresFreshMarket === true) {
+      const observedMs = Date.parse(shadow.marketMeta && shadow.marketMeta.observedAt);
+      const ageMinutes = (Date.now() - observedMs) / 60000;
+      const maxAge = Number(cfg.maxMarketAgeMinutes);
+      if (!Number.isFinite(observedMs) || !Number.isFinite(ageMinutes) || ageMinutes < -0.1 ||
+          !Number.isFinite(maxAge) || ageMinutes > maxAge) {
+        return { saved: false, reason: 'STALE_OR_UNVERIFIED_MARKET' };
+      }
+    }
+    const requiredMainline = Number(cfg.requiredMainlinePicks);
+    if (Number.isFinite(requiredMainline) && requiredMainline > 0 && shadow.mainline.length < requiredMainline) {
+      return { saved: false, reason: 'INCOMPLETE_MODEL_PICKS' };
+    }
+    if (cfg.requiresCompleteBaseline === true) {
+      const baselineRanks = (shadow.baselineMainline || []).map(p => Number(p.currentRank));
+      if (baselineRanks.length < 2 || baselineRanks[0] !== 2 || baselineRanks[1] !== 3) {
+        return { saved: false, reason: 'INCOMPLETE_CURRENT_BASELINE' };
+      }
+    }
+    const rankingModel = buildRankingModelIdentity();
+    const _marketRows = data.horses.map(h => ({
+      u: parseInt(h.umaBan) || null,
+      odds: Number.isFinite(Number(h.odds)) && Number(h.odds) > 0 ? Number(h.odds) : null,
+      ninki: Number.isFinite(Number(h.ninki)) && Number(h.ninki) > 0 ? Number(h.ninki) : null,
+    })).sort((a,b) => (a.u||0) - (b.u||0));
+    const _rankedMarket = _marketRows.filter(r => r.odds != null)
+      .slice().sort((a,b) => a.odds - b.odds || (a.u||0) - (b.u||0));
+    const _oddsRank = new Map(_rankedMarket.map((r, i) => [r.u, i + 1]));
+    const marketAtCapture = _marketRows.map(r => ({ ...r, oddsRank: _oddsRank.get(r.u) || null }));
+    const pickData = {
+      anchor: shadow.anchor.u,
+      baselineMainline: (shadow.baselineMainline || []).map(p => ({ u: p.u, currentRank: p.currentRank })),
+      // lsWrite/_sanDeepは保存値をin-place sanitiseするため、shadow結果の配列参照を渡さない。
+      // ここを共有すると初回保存後に表示結果が変わり、同一入力が別revisionになる。
+      mainline: shadow.mainline.map(p => ({ u: p.u, score: p.score, probability: p.probability, reasons: p.reasons.slice() })),
+      longshot: shadow.longshot.map(p => ({ u: p.u, score: p.score, probability: p.probability, reasons: p.reasons.slice() })),
+    };
+    const inputFingerprint = _aiFingerprint({
+      rankingModel: rankingModel.fingerprint, opponentModel: shadow.model.fingerprint,
+      predictionInputFingerprint: shadow.predictionInputFingerprint || null, pickData, marketAtCapture,
+    });
+    const dateKey = raceDate.replace(/\D/g, '');
+    const key = `aiOpponentShadow_v1|${baba}|${dateKey}|${String(parseInt(raceNo)).padStart(2,'0')}|${shadow.model.fingerprint}|${inputFingerprint}`;
+    if (lsRead()[key]) return { saved: false, reason: 'DUPLICATE', key };
+    const registryKey = `aiOpponentModelRegistry_v1|${shadow.model.fingerprint}`;
+    if (!lsRead()[registryKey]) {
+      lsWrite(registryKey, { type: 'aiOpponentModelRegistry', schemaVersion: 1, savedAt: new Date().toISOString(), model: JSON.parse(JSON.stringify(shadow.model)) });
+    }
+    lsWrite(key, {
+      type: 'opponentShadowSnapshot', schema: OPPONENT_SHADOW_SNAPSHOT_SCHEMA,
+      capturePolicy: 'verified-live-market-at-or-before-model-cutoff', status: 'shadow_unadopted', exactEv: false,
+      babaCode: baba, raceDate, raceNo: parseInt(raceNo), capturedAt: new Date().toISOString(),
+      scheduledStartAt: tm.scheduledStartAt, minutesBeforeStart: tm.minutesBeforeStart, timing: tm.timing,
+      rankingModelFingerprint: rankingModel.fingerprint,
+      opponentModel: { id: shadow.model.id, version: shadow.model.version, fingerprint: shadow.model.fingerprint,
+        target: shadow.model.target, config: JSON.parse(JSON.stringify(shadow.model.config || {})) },
+      predictionInputFingerprint: shadow.predictionInputFingerprint || null,
+      inputFingerprint, ...pickData, marketObservedAt: shadow.marketMeta && shadow.marketMeta.observedAt || null,
+      marketSource: shadow.marketMeta && shadow.marketMeta.source || null, marketAtCapture,
+    });
+    return { saved: true, key };
+  } catch (e) {
+    console.warn('[opponentShadowSnapshot]', e);
+    return { saved: false, reason: 'WRITE_ERROR' };
+  }
+}
+function listForwardOpponentShadowSnapshots() {
+  return Object.entries(lsRead()).filter(([,v]) => v && v.type === 'opponentShadowSnapshot')
+    .map(([key,v]) => ({ key, ...v })).sort((a,b) => String(a.capturedAt).localeCompare(String(b.capturedAt)));
+}
+
+const OPPONENT_SHADOW_CAPTURE_AUDIT_SCHEMA = 'opponent_shadow_capture_audit/v1';
+function _opponentShadowCaptureAuditKey(raceDate, raceNo, slot) {
+  return `aiOpponentCaptureAudit_v1|31|${String(raceDate || '').replace(/\D/g,'')}|${String(parseInt(raceNo)).padStart(2,'0')}|${String(slot || '')}`;
+}
+function getOpponentShadowCaptureAudit(raceDate, raceNo, slot) {
+  return lsRead()[_opponentShadowCaptureAuditKey(raceDate, raceNo, slot)] || null;
+}
+
+/** 保存の成否だけをレース×捕捉枠で更新する運用監査。着順・払戻は一切入れない。 */
+function recordOpponentShadowCaptureAudit(raceNo, slot, timingMeta, outcome) {
+  try {
+    if (!opponentShadowEnabled()) return { saved:false, reason:'NOT_ENABLED_OR_ADMIN' };
+    const data = allRacesData[raceNo];
+    const raceDate = data && data.raceInfo && data.raceInfo.raceDate || currentDate || '';
+    if (!data || String(data.raceInfo && data.raceInfo.babaCode || currentBaba || '') !== '31' ||
+        raceDate !== currentDate || !['t10','t15'].includes(String(slot))) {
+      return { saved:false, reason:'INVALID_AUDIT_SCOPE' };
+    }
+    const key = _opponentShadowCaptureAuditKey(raceDate, raceNo, slot);
+    const prior = lsRead()[key] && typeof lsRead()[key] === 'object' ? lsRead()[key] : {};
+    const active = getActiveOpponentShadowModel();
+    const model = active && active.model || null;
+    const ranking = buildRankingModelIdentity();
+    const now = new Date().toISOString();
+    const ok = !!(outcome && outcome.saved);
+    const reason = ok ? 'SAVED' : String(outcome && outcome.reason || 'UNKNOWN').slice(0,80);
+    const attemptsByReason = { ...(prior.attemptsByReason || {}) };
+    attemptsByReason[reason] = Number(attemptsByReason[reason] || 0) + 1;
+    const record = {
+      type:'opponentShadowCaptureAudit', schema:OPPONENT_SHADOW_CAPTURE_AUDIT_SCHEMA,
+      babaCode:'31', raceDate, raceNo:parseInt(raceNo), slot:String(slot),
+      captureWindow:String(slot) === 't10' ? '10.00-10.90 minutes before start' : '14.50-15.50 minutes before start',
+      firstAttemptAt:prior.firstAttemptAt || now, lastAttemptAt:now,
+      attemptCount:Number(prior.attemptCount || 0) + 1, attemptsByReason,
+      saved:!!(prior.saved || ok), lastReason:reason,
+      snapshotKey:(outcome && outcome.key) || prior.snapshotKey || null,
+      scheduledStartAt:timingMeta && timingMeta.scheduledStartAt || prior.scheduledStartAt || null,
+      lastMinutesBeforeStart:timingMeta && Number.isFinite(Number(timingMeta.minutesBeforeStart))
+        ? Number(timingMeta.minutesBeforeStart) : null,
+      marketObservedAt:data._liveOddsObservedAt || null,
+      marketSource:data._liveOddsSource || null,
+      fetchedRunnerCount:Number.isFinite(Number(outcome && outcome.fetchedRunnerCount))
+        ? Number(outcome.fetchedRunnerCount) : null,
+      modelId:model && model.id || KV_FORWARD_OPPONENT_MODEL_ID,
+      modelFingerprint:model && model.fingerprint || null,
+      rankingModelFingerprint:ranking.fingerprint,
+    };
+    lsWrite(key, record);
+    return { saved:true, key, audit:record };
+  } catch (e) {
+    console.warn('[recordOpponentShadowCaptureAudit]', e);
+    return { saved:false, reason:'WRITE_ERROR' };
+  }
+}
+function listOpponentShadowCaptureAudits() {
+  return Object.entries(lsRead()).filter(([,v]) => v && v.type === 'opponentShadowCaptureAudit')
+    .map(([key,v]) => ({ key, ...v })).sort((a,b) => String(a.lastAttemptAt).localeCompare(String(b.lastAttemptAt)));
+}
+function summarizeOpponentShadowCollection(raceDate) {
+  const wantedDate = String(raceDate || currentDate || (typeof _kvTodaySlash === 'function' ? _kvTodaySlash() : ''));
+  const rows = listOpponentShadowCaptureAudits().filter(r => r.raceDate === wantedDate && r.slot === 't10');
+  const reasons = {};
+  rows.forEach(r => { reasons[r.lastReason || 'UNKNOWN'] = Number(reasons[r.lastReason || 'UNKNOWN'] || 0) + 1; });
+  const snapshots = listForwardOpponentShadowSnapshots().filter(s => s.raceDate === wantedDate &&
+    s.opponentModel && s.opponentModel.id === KV_FORWARD_OPPONENT_MODEL_ID);
+  return { schema:'opponent_shadow_collection_summary/v1', raceDate:wantedDate,
+    t10Attempted:rows.length, t10Saved:rows.filter(r => r.saved).length,
+    t10Failed:rows.filter(r => !r.saved).length, reasons, snapshots:snapshots.length,
+    appMustRemainOpen:true };
+}
+function refreshOpponentShadowCollectionStatus(raceDate) {
+  const el = document.getElementById('opponent-shadow-collection-status');
+  const summary = summarizeOpponentShadowCollection(raceDate);
+  const failures = Object.entries(summary.reasons || {}).filter(([reason]) => reason !== 'SAVED')
+    .map(([reason,n]) => `${reason}:${n}`).join(' / ');
+  if (el) el.textContent = `${summary.raceDate || '日付未選択'} T10保存 ${summary.t10Saved}/${summary.t10Attempted}` +
+    (summary.t10Failed ? `・失敗 ${summary.t10Failed}${failures ? `（${failures}）` : ''}` : '') +
+    `・snapshot ${summary.snapshots}`;
+  return summary;
+}
+
+// ── 前向き相手本線v1：実UI◎は固定し、T10単勝市場の上位2頭だけを比較候補にする ──
+// complete-v3で market_10m はhistory-proxy baselineを明確に上回ったが、実UI◎との比較ではない。
+// その差を事後解釈せずに確認するための「新しい前向き仮説」であり、本番印・購入推奨ではない。
+const KV_FORWARD_OPPONENT_MODEL_ID = 'kochi-t10-market-mainline-v1';
+const KV_FORWARD_OPPONENT_MODEL_DESCRIPTOR = {
+  id: KV_FORWARD_OPPONENT_MODEL_ID,
+  version: '1.0.0',
+  family: 'forward-market-mainline-shadow',
+  target: 'actual-ui-anchor-conditioned-top3',
+  featurePipelineVersion: 'live-odds-complete-v1',
+  marketInputs: ['odds'],
+  config: {
+    captureCutoffMinutes: 10,
+    requiresVerifiedStart: true,
+    requiresFreshMarket: true,
+    maxMarketAgeMinutes: 2,
+    requiredMainlinePicks: 2,
+    requiresCompleteBaseline: true,
+    selection: 'lowest-live-win-odds-excluding-actual-ui-anchor; tie=umaBan-asc',
+    baseline: 'actual-ui-current-rank-2-and-3',
+    lateExclusionPolicy: 'exclude-whole-race-from-market-evaluation',
+    longshot: 'disabled-until-forward-evidence',
+    primaryMetric: 'both2-top3-given-actual-ui-anchor-top3',
+    firstComparisonAtSettled: 200,
+    continuationLimitSettled: 400,
+  },
+  activate: true,
+};
+function predictForwardT10MarketMainline(input) {
+  if (!input || !Array.isArray(input.runners) || !input.anchor) return { mainline: [], longshot: [] };
+  if (!input.market || input.market.source !== 'keiba.go.jp/OddsTanFuku' ||
+      Number(input.market.fetchedRunnerCount) !== input.runners.length ||
+      input.runners.some(r => !Number.isFinite(Number(r.odds)) || Number(r.odds) <= 0)) {
+    return { mainline: [], longshot: [] };
+  }
+  const ranked = input.runners.filter(r => r.u !== input.anchor.u)
+    .slice().sort((a,b) => Number(a.odds) - Number(b.odds) || (a.u||0) - (b.u||0));
+  return {
+    mainline: ranked.slice(0, 2).map((r, idx) => ({
+      u: r.u, score: -Number(r.odds),
+      reasons: [`単勝市場${idx + 1}位（◎除外）`, `単勝${Number(r.odds).toFixed(1)}倍`],
+    })),
+    longshot: [],
+  };
+}
+registerOpponentShadowModel(KV_FORWARD_OPPONENT_MODEL_DESCRIPTOR, predictForwardT10MarketMainline);
+
+function _opponentForwardResultStatus(row) {
+  if (!row || typeof row !== 'object') return { settled: false, status: 'missing', top3: false };
+  const finish = parseInt(row.chakujun);
+  if (Number.isFinite(finish) && finish >= 1 && finish <= 20) {
+    return { settled: true, status: 'finished', top3: finish <= 3, finish };
+  }
+  const text = `${row.chakujun || ''} ${row.diff || ''}`;
+  if (/中止/.test(text)) return { settled: true, status: 'dnc', top3: false };
+  if (/失格/.test(text)) return { settled: true, status: 'dq', top3: false };
+  if (/取消/.test(text)) return { settled: true, status: 'withdrawn', top3: false };
+  if (/除外/.test(text)) return { settled: true, status: 'excluded', top3: false };
+  return { settled: false, status: 'pending', top3: false };
+}
+function _opponentForwardRate(n, d) { return d > 0 ? n / d : null; }
+
+/**
+ * 保存済みshadowを、確定結果とread-onlyで突合する。
+ * 同一レースの複数revisionは「10分前以上で最も10分に近い」1件だけを採用する。
+ * T10時点にいた取消・除外馬が結果時点で消えたレースは、市場順位の後知恵を避けるため丸ごと除外する。
+ */
+function evaluateForwardOpponentShadowSnapshots(modelId) {
+  const wanted = String(modelId || KV_FORWARD_OPPONENT_MODEL_ID);
+  const db = lsRead();
+  const all = listForwardOpponentShadowSnapshots().filter(s => s.opponentModel && s.opponentModel.id === wanted);
+  const modelFingerprints = [...new Set(all.map(s => String(s.opponentModel && s.opponentModel.fingerprint || '')))];
+  const rankingFingerprints = [...new Set(all.map(s => String(s.rankingModelFingerprint || '')))];
+  if (modelFingerprints.length > 1 || rankingFingerprints.length > 1) {
+    return { schema:'opponent_shadow_forward_evaluation/v1', modelId:wanted,
+      status:'fingerprint_selection_required', error:'MULTIPLE_MODEL_FINGERPRINTS',
+      modelFingerprints, rankingFingerprints, counts:{ snapshots:all.length, selected:0, settled:0 },
+      reviewGate:{ auditAtSettled:100, firstComparisonAtSettled:200, readyForAudit:false,
+        primaryMetric:'both2Difference', readyForFirstComparison:false, productionEligible:false }, rows:[] };
+  }
+  const selected = new Map();
+  let rejectedTiming = 0, rejectedMarketProvenance = 0;
+  all.forEach(s => {
+    const cfg = s.opponentModel.config || {};
+    // 組み込み候補の評価規則はsnapshot内configを信頼せず、事前登録値を独立適用する。
+    const cutoff = wanted === KV_FORWARD_OPPONENT_MODEL_ID ? 10 : (Number(cfg.captureCutoffMinutes) || 0);
+    const mb = Number(s.minutesBeforeStart);
+    if (s.timing !== 'verified_prestart' || !Number.isFinite(mb) || mb < cutoff) { rejectedTiming++; return; }
+    if (wanted === KV_FORWARD_OPPONENT_MODEL_ID) {
+      const capturedMs = Date.parse(s.capturedAt), observedMs = Date.parse(s.marketObservedAt);
+      const ageMinutes = (capturedMs - observedMs) / 60000;
+      if (s.marketSource !== 'keiba.go.jp/OddsTanFuku' || !Number.isFinite(capturedMs) ||
+          !Number.isFinite(observedMs) || ageMinutes < -0.1 || ageMinutes > 2) {
+        rejectedMarketProvenance++; return;
+      }
+    }
+    const group = [s.babaCode,s.raceDate,s.raceNo,s.opponentModel.fingerprint,s.rankingModelFingerprint].join('|');
+    const prev = selected.get(group);
+    if (!prev || mb < Number(prev.minutesBeforeStart) ||
+        (mb === Number(prev.minutesBeforeStart) && String(s.capturedAt) > String(prev.capturedAt))) selected.set(group, s);
+  });
+
+  const counts = { snapshots: all.length, selected: selected.size, settled: 0, pending: 0,
+    lateExclusion: 0, invalid: 0, rejectedTiming, rejectedMarketProvenance };
+  const acc = {
+    anchorTop3: 0,
+    conditional: 0,
+    baselinePartner1Top3: 0, candidatePartner1Top3: 0,
+    baselineAny2Top3: 0, candidateAny2Top3: 0,
+    baselineBoth2Top3: 0, candidateBoth2Top3: 0,
+  };
+  const rows = [];
+  selected.forEach(s => {
+    const marketRows = Array.isArray(s.marketAtCapture) ? s.marketAtCapture : [];
+    const universe = marketRows.map(r => parseInt(r.u)).filter(Boolean);
+    const completeMarket = universe.length === marketRows.length && new Set(universe).size === universe.length &&
+      marketRows.every(r => Number.isFinite(Number(r.odds)) && Number(r.odds) > 0);
+    if (!completeMarket) { counts.invalid++; return; }
+    const statuses = new Map();
+    universe.forEach(u => {
+      const key = `${s.babaCode}_${s.raceDate}_${parseInt(s.raceNo)}_${u}`;
+      statuses.set(u, _opponentForwardResultStatus(db[key]));
+    });
+    if (!universe.length || [...statuses.values()].some(v => !v.settled)) { counts.pending++; return; }
+    if ([...statuses.values()].some(v => v.status === 'withdrawn' || v.status === 'excluded')) {
+      counts.lateExclusion++; return;
+    }
+    const baseline = (s.baselineMainline || []).map(p => parseInt(p.u)).filter(Boolean).slice(0,2);
+    const candidate = (s.mainline || []).map(p => parseInt(p.u)).filter(Boolean).slice(0,2);
+    const anchor = parseInt(s.anchor);
+    const baselineRanks = (s.baselineMainline || []).map(p => Number(p.currentRank)).slice(0,2);
+    const expectedCandidate = marketRows.filter(r => parseInt(r.u) !== anchor && Number.isFinite(Number(r.odds)) && Number(r.odds) > 0)
+      .slice().sort((a,b) => Number(a.odds) - Number(b.odds) || parseInt(a.u) - parseInt(b.u))
+      .slice(0,2).map(r => parseInt(r.u));
+    if (!anchor || baseline.length !== 2 || candidate.length !== 2 ||
+        baselineRanks[0] !== 2 || baselineRanks[1] !== 3 ||
+        candidate.join(',') !== expectedCandidate.join(',') ||
+        !statuses.has(anchor) || baseline.some(u => !statuses.has(u)) || candidate.some(u => !statuses.has(u))) {
+      counts.invalid++; return;
+    }
+    const top3 = u => !!(statuses.get(u) && statuses.get(u).top3);
+    const anchorTop3 = top3(anchor);
+    const b = baseline.map(top3), c = candidate.map(top3);
+    counts.settled++;
+    if (anchorTop3) {
+      acc.anchorTop3++; acc.conditional++;
+      if (b[0]) acc.baselinePartner1Top3++;
+      if (c[0]) acc.candidatePartner1Top3++;
+      if (b.some(Boolean)) acc.baselineAny2Top3++;
+      if (c.some(Boolean)) acc.candidateAny2Top3++;
+      if (b.every(Boolean)) acc.baselineBoth2Top3++;
+      if (c.every(Boolean)) acc.candidateBoth2Top3++;
+    }
+    rows.push({ raceDate:s.raceDate, raceNo:s.raceNo, minutesBeforeStart:s.minutesBeforeStart,
+      anchorTop3, baselinePartner1Top3:b[0], candidatePartner1Top3:c[0],
+      baselineAny2Top3:b.some(Boolean), candidateAny2Top3:c.some(Boolean),
+      baselineBoth2Top3:b.every(Boolean), candidateBoth2Top3:c.every(Boolean) });
+  });
+  const d = acc.conditional;
+  const metrics = {
+    anchorTop3Rate: _opponentForwardRate(acc.anchorTop3, counts.settled),
+    baselinePartner1Top3GivenAnchor: _opponentForwardRate(acc.baselinePartner1Top3, d),
+    candidatePartner1Top3GivenAnchor: _opponentForwardRate(acc.candidatePartner1Top3, d),
+    baselineAny2Top3GivenAnchor: _opponentForwardRate(acc.baselineAny2Top3, d),
+    candidateAny2Top3GivenAnchor: _opponentForwardRate(acc.candidateAny2Top3, d),
+    baselineBoth2Top3GivenAnchor: _opponentForwardRate(acc.baselineBoth2Top3, d),
+    candidateBoth2Top3GivenAnchor: _opponentForwardRate(acc.candidateBoth2Top3, d),
+  };
+  metrics.partner1Difference = metrics.candidatePartner1Top3GivenAnchor == null ? null
+    : metrics.candidatePartner1Top3GivenAnchor - metrics.baselinePartner1Top3GivenAnchor;
+  metrics.any2Difference = metrics.candidateAny2Top3GivenAnchor == null ? null
+    : metrics.candidateAny2Top3GivenAnchor - metrics.baselineAny2Top3GivenAnchor;
+  metrics.both2Difference = metrics.candidateBoth2Top3GivenAnchor == null ? null
+    : metrics.candidateBoth2Top3GivenAnchor - metrics.baselineBoth2Top3GivenAnchor;
+  const auditRows = (typeof listOpponentShadowCaptureAudits === 'function' ? listOpponentShadowCaptureAudits() : [])
+    .filter(a => a.slot === 't10' && a.modelId === wanted &&
+      (!modelFingerprints.length || a.modelFingerprint === modelFingerprints[0]) &&
+      (!rankingFingerprints.length || a.rankingModelFingerprint === rankingFingerprints[0]));
+  const auditReasons = {};
+  auditRows.forEach(a => { auditReasons[a.lastReason || 'UNKNOWN'] = Number(auditReasons[a.lastReason || 'UNKNOWN'] || 0) + 1; });
+  return { schema:'opponent_shadow_forward_evaluation/v1', modelId:wanted,
+    policy:'closest verified snapshot with minutesBeforeStart >= model cutoff; late exclusion removes whole race',
+    generatedAt:new Date().toISOString(), counts, conditionalDenominator:d, metrics,
+    captureAudit:{ t10SlotsAttempted:auditRows.length, t10SlotsSaved:auditRows.filter(a=>a.saved).length,
+      t10SlotsFailed:auditRows.filter(a=>!a.saved).length,
+      attempts:auditRows.reduce((n,a)=>n+Number(a.attemptCount||0),0), lastReasonCounts:auditReasons,
+      appMustRemainOpen:true },
+    reviewGate:{ auditAtSettled:100, firstComparisonAtSettled:200, readyForAudit:counts.settled>=100,
+      primaryMetric:'both2Difference', continueWithoutRuleChangeUntilSettled:400,
+      readyForFirstComparison:counts.settled>=200, productionEligible:false }, rows };
 }
 
 // ══════════════ 市場アンカー・オフセットロジットモデル（2026-07-10 本採用）══════════════
@@ -10022,14 +10977,24 @@ function computeYosoScoredArchived(babaCode, raceDate, raceNo) {
   return result;
 }
 
-const AI_SEISEKI_CACHE_KEY = 'ai_seiseki_cache_v1';
+const AI_SEISEKI_CACHE_SCHEMA = 'ai_seiseki_cache/v2';
+const AI_SEISEKI_CACHE_PREFIX = 'aiSeisekiCache_v2';
 const AI_SEISEKI_MARKS = ['◎', '○', '▲', '△', '×', '×'];  // computeYosoScored系と同一定義（値は変更しない）
 function _aiSeisekiEmptyAgg() {
   const byMark = {}; ['◎', '○', '▲', '△', '×'].forEach(m => byMark[m] = { n: 0, win: 0, top2: 0, top3: 0 });
   return byMark;
 }
-function _aiSeisekiReadCache() { try { return JSON.parse(localStorage.getItem(AI_SEISEKI_CACHE_KEY) || 'null'); } catch (e) { return null; } }
-function _aiSeisekiWriteCache(c) { try { localStorage.setItem(AI_SEISEKI_CACHE_KEY, JSON.stringify(c)); } catch (e) {} }
+function _aiSeisekiCacheContext(model) {
+  model = model || buildRankingModelIdentity();
+  return { key: `${AI_SEISEKI_CACHE_PREFIX}|${model.fingerprint}`, model };
+}
+function _aiSeisekiReadCache(ctx) {
+  try {
+    const c = lsRead()[ctx.key];
+    return c && c.schema === AI_SEISEKI_CACHE_SCHEMA && c.modelFingerprint === ctx.model.fingerprint ? c : null;
+  } catch (e) { return null; }
+}
+function _aiSeisekiWriteCache(ctx, c) { lsWrite(ctx.key, c); }
 // 高知(baba=31)・着順確定済み(1着馬あり・出走4頭以上)のレース一覧を日付昇順で構築（runYosoBacktestと同じ判定基準）
 function _aiSeisekiListFinishedRaces() {
   const lsData = lsRead();
@@ -10040,30 +11005,38 @@ function _aiSeisekiListFinishedRaces() {
     const parts = k.split('_');
     if (parts.length < 4 || parts[0] !== '31') continue;
     const raceNo = parseInt(parts[2]); if (isNaN(raceNo)) continue;
+    const umaBan = parseInt(parts[3]);
+    const key = parts[1] + '|' + raceNo;
+    if (!raceMap[key]) raceMap[key] = { key, raceDate: parts[1], raceNo, hasWinner: false, n: 0, resultRows: [] };
+    raceMap[key].resultRows.push([isNaN(umaBan) ? null : umaBan, String(v.chakujun || '')]);
     const c = parseInt(v.chakujun);
     if (isNaN(c) || c < 1) continue;
-    const key = parts[1] + '|' + raceNo;
-    if (!raceMap[key]) raceMap[key] = { raceDate: parts[1], raceNo, hasWinner: false, n: 0 };
     raceMap[key].n++;
     if (c === 1) raceMap[key].hasWinner = true;
   }
   return Object.values(raceMap).filter(r => r.hasWinner && r.n >= 4)
     .sort((a, b) => a.raceDate === b.raceDate ? a.raceNo - b.raceNo : (a.raceDate < b.raceDate ? -1 : 1))
-    .map(r => ({ raceDate: r.raceDate, raceNo: r.raceNo }));
+    .map(r => ({ key: r.key, raceDate: r.raceDate, raceNo: r.raceNo,
+      resultSignature: _aiFingerprint(r.resultRows.sort((a,b) => (a[0]||0)-(b[0]||0))) }));
 }
 function _aiSeisekiMonthKey(dateSlash) { return dateSlash.slice(0, 7).replace('/', '-'); }  // "2026/07/13" → "2026-07"
 // 全期間集計（差分マージ・分割実行でUIブロック回避）。完了時にcbへ{byMonth,cumulative}を渡す。
 function _aiSeisekiBuildOrUpdate(cb) {
-  const cache = _aiSeisekiReadCache();
+  const model = buildRankingModelIdentity();
+  const ctx = _aiSeisekiCacheContext(model);
+  const cache = _aiSeisekiReadCache(ctx);
   const races = _aiSeisekiListFinishedRaces();
-  let byMonth = {}, cumulative = _aiSeisekiEmptyAgg(), startIdx = 0;
-  // finishedRaceCountが保存時より減っていたら（データ入れ直し等）フルリビルドにフォールバック
-  if (cache && cache.finishedRaceCount != null && cache.finishedRaceCount <= races.length && cache.byMonth && cache.cumulative) {
-    byMonth = cache.byMonth; cumulative = cache.cumulative;
-    startIdx = races.findIndex(r => r.raceDate > cache.lastDate);
-    if (startIdx === -1) startIdx = races.length;  // 追加レースなし
+  const raceSig = Object.fromEntries(races.map(r => [r.key, r.resultSignature]));
+  let reusable = !!(cache && cache.byMonth && cache.cumulative && cache.processed);
+  if (reusable) {
+    // 同日後続レースは追加できる一方、既存結果の訂正・削除を検知したら全再構築する。
+    reusable = Object.entries(cache.processed).every(([key, sig]) => raceSig[key] === sig);
   }
-  const targets = races.slice(startIdx);
+  let byMonth = reusable ? JSON.parse(JSON.stringify(cache.byMonth)) : {};
+  let cumulative = reusable ? JSON.parse(JSON.stringify(cache.cumulative)) : _aiSeisekiEmptyAgg();
+  let processed = reusable ? { ...cache.processed } : {};
+  const targets = races.filter(r => !processed[r.key]);
+  const inputDataFingerprint = _aiFingerprint(races.map(r => [r.key, r.resultSignature]));
   let i = 0;
   const BATCH = 40;
   function step() {
@@ -10080,20 +11053,35 @@ function _aiSeisekiBuildOrUpdate(cb) {
           a.n++; if (c === 1) a.win++; if (c <= 2) a.top2++; if (c <= 3) a.top3++;
         });
       });
+      processed[r.key] = r.resultSignature;
     });
     i += BATCH;
     if (i < targets.length) { setTimeout(step, 0); return; }
-    _aiSeisekiWriteCache({ lastDate: races.length ? races[races.length - 1].raceDate : (cache?.lastDate || ''), finishedRaceCount: races.length, byMonth, cumulative });
-    cb({ byMonth, cumulative });
+    // 集計中に係数または結果データが変わった場合、混在キャッシュを保存せず新条件で再実行。
+    const modelNow = buildRankingModelIdentity();
+    const dataNow = _aiFingerprint(_aiSeisekiListFinishedRaces().map(r => [r.key, r.resultSignature]));
+    if (modelNow.fingerprint !== model.fingerprint || dataNow !== inputDataFingerprint) {
+      window._aiSeisekiLastRestart = { at: new Date().toISOString(),
+        modelBefore: model.fingerprint, modelAfter: modelNow.fingerprint,
+        dataBefore: inputDataFingerprint, dataAfter: dataNow };
+      setTimeout(() => _aiSeisekiBuildOrUpdate(cb), 0); return;
+    }
+    _aiSeisekiWriteCache(ctx, {
+      type: 'aiSeisekiCache', schema: AI_SEISEKI_CACHE_SCHEMA, modelFingerprint: model.fingerprint,
+      scoreContractVersion: model.scoreContractVersion, featurePipelineVersion: model.featurePipelineVersion,
+      modelSource: model.source, modelSourceKey: model.sourceKey, processed, finishedRaceCount: races.length,
+      byMonth, cumulative, builtAt: new Date().toISOString(),
+    });
+    cb({ byMonth, cumulative, model });
   }
-  if (targets.length) step(); else cb({ byMonth, cumulative });
+  if (targets.length) step(); else cb({ byMonth, cumulative, model });
 }
 function renderAiSeisekiPage() {
   const el = document.getElementById('aiseiseki-body');
   if (!el) return;
   const prevSel = document.getElementById('aiseiseki-month-sel')?.value || 'cumulative';
   el.innerHTML = '<p style="color:#9ca3af;font-size:13px">集計中...</p>';
-  _aiSeisekiBuildOrUpdate(({ byMonth, cumulative }) => {
+  _aiSeisekiBuildOrUpdate(({ byMonth, cumulative, model }) => {
     const months = Object.keys(byMonth).sort((a, b) => b.localeCompare(a));
     const curSel = months.includes(prevSel) || prevSel === 'cumulative' ? prevSel : 'cumulative';
     const monthOptions = ['<option value="cumulative">累計</option>']
@@ -10112,7 +11100,8 @@ function renderAiSeisekiPage() {
         <thead><tr><th>印</th><th>対象R数</th><th>1着率</th><th>連対率</th><th>複勝率</th></tr></thead>
         <tbody>${rows}</tbody>
       </table></div>
-      <div class="ais-note">この成績は、今のAIをそのまま過去のレースに当てはめ直した場合の数字です。実際にその時見せていた印とは、その後の見直しにより少し違う場合があります。</div>`;
+      <div class="ais-note">この成績は、今のAIをそのまま過去のレースに当てはめ直した参考値です。実際にその時見せていた印ではありません。<br>
+      集計モデル: <code>${escapeHTML(model?.fingerprint || '不明')}</code>／${escapeHTML(model?.source || '不明')}。係数や計算契約が変わると別キャッシュで再集計します。</div>`;
     const sel2 = document.getElementById('aiseiseki-month-sel');
     if (sel2) sel2.value = curSel;
   });
@@ -12384,7 +13373,7 @@ function _renderOfficialSection(parsed, code, horseName) {
 
   // ── 馬体重グラフ描画（高知公式データ） ──
   if(weightDataOfficial.length >= 2){
-    requestAnimationFrame(()=>{
+    const drawOfficialWeightChart = () => requestAnimationFrame(()=>{
       const canvas = document.getElementById(officialWeightChartId);
       if(!canvas) return;
       const sortedW = [...weightDataOfficial].reverse();
@@ -12427,6 +13416,7 @@ function _renderOfficialSection(parsed, code, horseName) {
         }
       });
     });
+    ensureChartJs(drawOfficialWeightChart);
   }
 
   // ── キャッシュ保存 ──
@@ -15344,15 +16334,11 @@ function straightColor(v){return{'内':'ana-td-s-uchi','中':'ana-td-s-naka','�
 // ============================================================
 let _lapChart = null;
 
-// Chart.js の動的ロード（まだ読み込まれていない場合のみ）。バージョン固定+SRIは<head>の静的タグと揃える。
+// Chart.js の動的ロード（グラフを初めて表示した時だけ・同時要求も1回に集約）。
 function ensureChartJs(cb) {
-  if (window.Chart) { cb(); return; }
-  const s = document.createElement('script');
-  s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
-  s.integrity = 'sha384-e6nUZLBkQ86NJ6TVVKAeSaK8jWa3NhkYWZFomE39AvDbQWeie9PlQqM3pmYW5d1g';
-  s.crossOrigin = 'anonymous';
-  s.onload = cb;
-  document.head.appendChild(s);
+  _kvLoadLibrary('chart')
+    .then(() => { if (typeof cb === 'function') cb(); })
+    .catch(e => console.warn('[Chart.js]', e));
 }
 
 /** 分析画面のラップグラフ フィルターセレクト初期化（距離・クラス） */
@@ -15894,18 +16880,12 @@ function screenshotHorseModal() {
     }, 80); // レイアウト反映待ち
   }
 
-  if (window.html2canvas) {
-    doCapture();
-  } else {
-    const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
-    s.onload = doCapture;
-    s.onerror = () => {
+  ensureCaptureLibs(false)
+    .then(doCapture)
+    .catch(() => {
       alert('html2canvasの読み込みに失敗しました');
       if (btn) { btn.innerHTML = '<i class="fas fa-camera"></i> 保存'; btn.disabled = false; }
-    };
-    document.head.appendChild(s);
-  }
+    });
 }
 
 // ════════════════════════════════════════════════════════
@@ -18477,6 +19457,14 @@ function renderPredictionPanel(raceNo) {
       </details>`;
   }
 
+  // 実験合格前の相手モデルは、管理者の予想AIパネル内だけにshadow表示する。
+  // predictorには投影コピーを渡すため、ここで呼んでもscored/印/ソート順は変更されない。
+  const _opponentShadow = (_viewMode !== 'after' && typeof computeOpponentShadow === 'function')
+    ? computeOpponentShadow(raceNo, scored) : null;
+  container._opponentShadow = _opponentShadow;
+  const opponentShadowHtml = (typeof buildOpponentShadowHtml === 'function')
+    ? buildOpponentShadowHtml(raceNo, _opponentShadow) : '';
+
   container.innerHTML = `
     <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <span style="font-size:13px;font-weight:700;color:#374151"><i class="fas fa-star" style="color:#d97706;margin-right:4px"></i>予想AI</span>
@@ -18502,6 +19490,7 @@ function renderPredictionPanel(raceNo) {
     ${anaBadge}
     ${condFitBadge}
     ${paceBiasBadge}
+    ${opponentShadowHtml}
     <div style="overflow-x:auto;">${tableHtml}</div>
     <div id="yoso-backtest-${raceNo}"></div>
     <div id="yoso-report-${raceNo}"></div>`;
@@ -19256,7 +20245,7 @@ function runYosoBacktest(raceNo) {
         </tr>`;
       }
 
-      // ── 厳密検証: 5分割 時系列クロスバリデーション ──
+      // ── 旧5分割参考検証（非厳密）: test以外を学習するため未来期間も混入 ──
       // 各foldで「訓練だけで乗替×着差の最適スケールを再導出→初見の検証foldで
       // 元係数モデル(default)・現行モデル(採用値)・再導出モデル(tuned)を比較」。
       // scanDataのmarginN=×1.5済/jockeyChgN=×0.5済なので、元係数は mg=2/3, jc=2.0 で復元。
@@ -19726,13 +20715,13 @@ function runYosoBacktest(raceNo) {
           : `❌ 見送り（複勝${ml.fukuWins}/5・1着${ml.winWins}/5）`;
         const _mlLiveNow = (typeof getMlLiveWeights === 'function' && getMlLiveWeights()) ? '🧠 学習重み適用中' : '手動等倍（従来式）';
         const _cvVerdictCard = `<div class="cv-verdict-card">
-          <div class="cv-verdict-title">🔬 厳密検証の結論（5分割時系列CV・ウォーム評価${_cvEval.length}R・全て初見データ）</div>
+          <div class="cv-verdict-title">⚠ 旧5分割の参考値（非厳密・学習側に未来期間を含む／評価${_cvEval.length}R）</div>
           <div>🤖 学習重み：<b>${_mlShort}</b>　<span style="color:#64748b">／現在のライブ採点：${_mlLiveNow}</span></div>
           <div>💰 ◎単勝ROI <b>${_pcv(_rrAvgCur)}</b>（1番人気${_pcv(_rrAvgFav)}・勝ちfold ${_rrWinsFolds}/${_rrFolds.length}）　🎯 帯別：断然${_pcv(tierRR.strong.roi)}／標準${_pcv(tierRR.mid.roi)}／接戦${_pcv(tierRR.tight.roi)}</div>
-          <div class="cv-verdict-note">根拠は下の「🔬 厳密検証」内の各見出しを開く（見出しに結論を併記しています）</div>
+          <div class="cv-verdict-note">この欄は旧実装の診断表示です。モデル採用判断には、別途保存したexpanding-window＋固定holdout結果を使用してください。</div>
         </div>`;
         _strictCvHtml = _cvVerdictCard + `<details style="font-size:10px;margin-top:6px">
-          <summary style="cursor:pointer;color:#0369a1;font-weight:700;margin-bottom:6px">🔬 厳密検証：5分割 時系列CV（実験ごとの詳細・全て初見データ）</summary>
+          <summary style="cursor:pointer;color:#b45309;font-weight:700;margin-bottom:6px">⚠ 旧5分割参考検証（非厳密・未来学習混入あり）</summary>
           <details class="cv-sec"><summary>📊 現行係数 vs 元係数 <span class="cv-sum-verdict">— 現行が勝ったfold：1着${_sv.curWinsFolds}/5・複勝${_sv.curFukuFolds}/5</span></summary><div class="cv-sec-body">
           <div style="font-size:10px;color:#6b7280;margin-bottom:5px;line-height:1.6">データを日付で5分割し、各回1つを初見の検証用に。元係数＝旧固定値／現行＝採用中の値（現在は中立×1.0）。<b>現行が元係数より高ければ緑</b>。</div>
           <div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:10px;width:100%">
