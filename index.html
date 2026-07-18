@@ -3884,8 +3884,11 @@ function _kvTryDeepLink() {
     try { kvTodayMode(); } catch(e) {}
     return true;
   }
-  const lsData = lsRead();
-  const has = Object.values(lsData).some(v => v.type === 'race' && v.race_date === dl.date && v.baba_code === '31');
+  // 日付索引を使い、ディープリンクを開くたびに全保存データを走査しない。
+  const day = _raceDayIndex?.get(`31|${dl.date}`);
+  const has = day
+    ? [...day.values()].some(entry => entry.raceVal)
+    : Object.values(lsRead()).some(v => v.type === 'race' && v.race_date === dl.date && v.baba_code === '31');
   if (!has) return false;
   window._kvDeepLink = null;
   restoreFromSaved(dl.date, '31', true);
@@ -4271,9 +4274,12 @@ function kvTodayMode() {
   _kvTodayModeDone = true;
   try { if (sessionStorage.getItem('kv_todayJumped')) return; } catch (e) {}
   const today = _kvTodayYmd();
-  buildSavedGroups();
-  const g = (_savedGroups || []).find(x => x.baba === '31' && x.date === today);
-  if (!g || !g.races.length) return; // 本日の保存データなし＝通常起動
+  // 本日の有無だけを調べるために全開催日のグループを組み立てない。
+  const day = _raceDayIndex?.get(`31|${today}`);
+  const hasToday = day
+    ? [...day.values()].some(entry => entry.raceVal)
+    : Object.values(lsRead()).some(v => v.type === 'race' && v.race_date === today && v.baba_code === '31');
+  if (!hasToday) return; // 本日の保存データなし＝通常起動
   try { sessionStorage.setItem('kv_todayJumped', '1'); } catch (e) {}
   // 発走時刻が未取得ならRaceListから副次取得（完了後にタブへ自動反映）
   if (!Object.keys(_kvReadRaceTimes()[today] || {}).length) {
@@ -8159,12 +8165,81 @@ let _horseHistCache = new Map(); // getHorseHistory 結果キャッシュ（idbP
 let _idbReady = false;      // キャッシュロード完了フラグ
 let _idb = null;            // IDBDatabase インスタンス
 let _horseKeyIndex = null;  // Map<horseName, Set<key>> — getHorseHistory 高速化用索引
+let _raceDayIndex = null;   // Map<baba|date, Map<raceNo,{raceKey,raceVal,horseKeys}>> — 出馬表復元用
 let _savedGroupsDirty = true; // buildSavedGroups 再計算フラグ
 let _cacheInvalidateTimer = null; // idbPut キャッシュ無効化デバウンス用
 
 const IDB_NAME    = 'keibaviewer';
 const IDB_VERSION = 1;
 const IDB_STORE   = 'kv';
+
+function _raceDayIndexEntry(baba, date, raceNo, create) {
+  if (!baba || !date || !Number.isFinite(Number(raceNo))) return null;
+  if (!_raceDayIndex) {
+    if (!create) return null;
+    _raceDayIndex = new Map();
+  }
+  const dayKey = `${baba}|${date}`;
+  let day = _raceDayIndex.get(dayKey);
+  if (!day && create) { day = new Map(); _raceDayIndex.set(dayKey, day); }
+  if (!day) return null;
+  const rn = Number(raceNo);
+  let entry = day.get(rn);
+  if (!entry && create) {
+    entry = { raceKey: '', raceVal: null, horseKeys: new Set() };
+    day.set(rn, entry);
+  }
+  return entry || null;
+}
+
+/** 同期メモリキャッシュ用の2索引を1レコードずつ更新する。 */
+function _indexStoredEntry(key, val) {
+  if (!val || typeof val !== 'object') return;
+  if (val.type === 'horse' && val.horseName) {
+    if (!_horseKeyIndex) _horseKeyIndex = new Map();
+    if (!_horseKeyIndex.has(val.horseName)) _horseKeyIndex.set(val.horseName, new Set());
+    _horseKeyIndex.get(val.horseName).add(key);
+  }
+  if (val.type === 'race') {
+    const entry = _raceDayIndexEntry(val.baba_code, val.race_date, val.race_no, true);
+    if (entry) { entry.raceKey = key; entry.raceVal = val; }
+    return;
+  }
+  if (val.type !== 'horse' || key.startsWith('offi_')) return;
+  const parts = String(key).split('_');
+  if (parts.length < 4) return;
+  const entry = _raceDayIndexEntry(val.baba_code || parts[0], val.race_date || parts[1], val.race_no || parseInt(parts[2]), true);
+  if (entry) entry.horseKeys.add(key);
+}
+
+function _unindexStoredEntry(key, val) {
+  if (!val || typeof val !== 'object') return;
+  if (val.type === 'horse' && val.horseName && _horseKeyIndex) {
+    const set = _horseKeyIndex.get(val.horseName);
+    set?.delete(key);
+    if (set && !set.size) _horseKeyIndex.delete(val.horseName);
+  }
+  let baba = val.baba_code, date = val.race_date, rn = val.race_no;
+  if (val.type === 'horse' && !key.startsWith('offi_') && (!baba || !date || !rn)) {
+    const parts = String(key).split('_');
+    baba = baba || parts[0]; date = date || parts[1]; rn = rn || parseInt(parts[2]);
+  }
+  const entry = _raceDayIndexEntry(baba, date, rn, false);
+  if (!entry) return;
+  if (val.type === 'race') { entry.raceKey = ''; entry.raceVal = null; }
+  else if (val.type === 'horse') entry.horseKeys.delete(key);
+  if (!entry.raceVal && !entry.horseKeys.size && _raceDayIndex) {
+    const dayKey = `${baba}|${date}`, day = _raceDayIndex.get(dayKey);
+    day?.delete(Number(rn));
+    if (day && !day.size) _raceDayIndex.delete(dayKey);
+  }
+}
+
+function _rebuildStoredIndexes(data) {
+  _horseKeyIndex = new Map();
+  _raceDayIndex = new Map();
+  for (const [key, val] of Object.entries(data || {})) _indexStoredEntry(key, val);
+}
 
 /** IndexedDB を開く（初回のみ） */
 function openIDB() {
@@ -8182,7 +8257,9 @@ function openIDB() {
   });
 }
 
-/** IDB から全件読み込んで _idbCache を初期化 */
+/** IDB から全件読み込んで _idbCache を初期化。
+ *  1件ずつopenCursorを往復すると15万件でイベントが15万回発生するため、
+ *  getAll/getAllKeysの一括取得を同一snapshot内で使い、索引も1回の走査で構築する。 */
 async function loadIDBCache() {
   if (_idbReady) return;
   try {
@@ -8190,15 +8267,15 @@ async function loadIDBCache() {
     const tx    = db.transaction(IDB_STORE, 'readonly');
     const store = tx.objectStore(IDB_STORE);
     const result = {};
-    await new Promise((resolve, reject) => {
-      const req = store.openCursor();
-      req.onsuccess = e => {
-        const cursor = e.target.result;
-        if (cursor) { result[cursor.key] = _sanDeep(cursor.value); cursor.continue(); }
-        else resolve();
-      };
+    const requestValue = req => new Promise((resolve, reject) => {
+      req.onsuccess = () => resolve(req.result || []);
       req.onerror = e => reject(e.target.error);
     });
+    const [keys, values] = await Promise.all([
+      requestValue(store.getAllKeys()),
+      requestValue(store.getAll()),
+    ]);
+    for (let i = 0; i < keys.length; i++) result[keys[i]] = _sanDeep(values[i]);
 
     // LocalStorage 旧データを IndexedDB へ移行（初回のみ）
     const lsRaw = localStorage.getItem('keibaviewer_data');
@@ -8221,14 +8298,8 @@ async function loadIDBCache() {
 
     _idbCache  = result;
     _idbReady  = true;
-    // 馬名索引を構築（getHorseHistory を O(n)→O(1) に高速化）
-    _horseKeyIndex = new Map();
-    for (const [k, v] of Object.entries(result)) {
-      if (v && v.type === 'horse' && v.horseName) {
-        if (!_horseKeyIndex.has(v.horseName)) _horseKeyIndex.set(v.horseName, new Set());
-        _horseKeyIndex.get(v.horseName).add(k);
-      }
-    }
+    // 馬名履歴と開催日復元の索引を同じ1走査で構築する。
+    _rebuildStoredIndexes(result);
     _savedGroupsDirty = true;
     console.log(`[IDB] キャッシュロード完了 ${Object.keys(result).length}件`);
   } catch(e) {
@@ -8257,13 +8328,10 @@ function _sanDeep(v) {
 function idbPut(key, val) {
   val = _sanDeep(val);
   if (!_idbCache) _idbCache = {};
+  const old = _idbCache[key];
+  if (old) _unindexStoredEntry(key, old);
   _idbCache[key] = val; // メモリキャッシュを即時更新
-  // 馬名索引を更新
-  if (val && val.type === 'horse' && val.horseName) {
-    if (!_horseKeyIndex) _horseKeyIndex = new Map();
-    if (!_horseKeyIndex.has(val.horseName)) _horseKeyIndex.set(val.horseName, new Set());
-    _horseKeyIndex.get(val.horseName).add(key);
-  }
+  _indexStoredEntry(key, val);
   _savedGroupsDirty = true;
   // 馬場差キャッシュを無効化（デバウンス：連続書き込み時は1回だけ実行）
   if (!_cacheInvalidateTimer) {
@@ -8298,9 +8366,7 @@ function idbPut(key, val) {
 function idbDelete(key) {
   if (_idbCache) {
     const _old = _idbCache[key];
-    if (_old && _old.type === 'horse' && _old.horseName && _horseKeyIndex) {
-      _horseKeyIndex.get(_old.horseName)?.delete(key);
-    }
+    if (_old) _unindexStoredEntry(key, _old);
     delete _idbCache[key];
   }
   _savedGroupsDirty = true;
@@ -8416,14 +8482,10 @@ async function _idbBulkPut(obj) {
     tx.onerror = e => reject(e.target.error || new Error('IDB書き込み失敗'));
   });
   if (!_idbCache) _idbCache = {};
-  for (const k of keys) _idbCache[k] = obj[k];
-  // 馬名索引は部分更新より全再構築が確実（削除・変名の混入に対応）
-  _horseKeyIndex = new Map();
-  for (const [k, v] of Object.entries(_idbCache)) {
-    if (v && v.type === 'horse' && v.horseName) {
-      if (!_horseKeyIndex.has(v.horseName)) _horseKeyIndex.set(v.horseName, new Set());
-      _horseKeyIndex.get(v.horseName).add(k);
-    }
+  for (const k of keys) {
+    if (_idbCache[k]) _unindexStoredEntry(k, _idbCache[k]);
+    _idbCache[k] = obj[k];
+    _indexStoredEntry(k, obj[k]);
   }
   _savedGroupsDirty = true;
   _horseHistCache.clear();
@@ -8644,7 +8706,6 @@ async function initDB() {
       return p.length >= 4 && p[0] !== '31' && /^\d{8}$/.test(p[1]);
     });
     for (const k of _nonKochiKeys) {
-      delete _idbCache[k];
       idbDelete(k);
     }
     if (_nonKochiKeys.length > 0) console.log(`[initDB] 非高知データ ${_nonKochiKeys.length}件を削除`);
@@ -8658,6 +8719,24 @@ async function initDB() {
     setTimeout(() => { try { _simRestoreState(); } catch (e) {} }, 0);
     _kvScheduleIdle(() => loadWeeklySchedule(), 2500);
     return;
+  }
+
+  // ── ローカルキャッシュを通信より先に表示 ──
+  // Phase1の通信を待たず、保存済み出馬表があれば即座に操作可能にする。
+  // 通信結果は後から同じ索引へマージし、表示データの鮮度だけを更新する。
+  let _openedCachedDeepLink = false;
+  try {
+    loadSavedData();
+    if (window._kvDeepLink) {
+      _openedCachedDeepLink = _kvTryDeepLink();
+    } else {
+      const _today = _kvTodayYmd();
+      const _todayIndex = _raceDayIndex?.get(`31|${_today}`);
+      const _hasCachedToday = !!(_todayIndex && [..._todayIndex.values()].some(entry => entry.raceVal));
+      if (_hasCachedToday) kvTodayMode();
+    }
+  } catch (e) {
+    console.warn('[initDB] ローカル先行表示に失敗:', e);
   }
 
   // ── 段階的読み込み ──────────────────────────────────────
@@ -8685,7 +8764,7 @@ async function initDB() {
   setTimeout(() => {
     try {
       if (window._kvDeepLink) { _kvTryDeepLink(); }
-      else { kvTodayMode(); }
+      else if (!_openedCachedDeepLink) { kvTodayMode(); }
     } catch (e) { console.warn('[kvTodayMode/deepLink]', e); }
   }, 0);
 
@@ -9720,9 +9799,17 @@ let _savedGroups = [];  // [{date,baba,races,ym}] 新→古順
 function buildSavedGroups() {
   if (!_savedGroupsDirty) return;
   _savedGroupsDirty = false;
-  const lsData = lsRead();
-  const entries = Object.entries(lsData)
-    .filter(([k,v]) => v.type === 'race' || k.startsWith('race_'));
+  // 通常は開催日索引からレース行だけを列挙する（全馬15万件のObject.entriesを避ける）。
+  let entries = [];
+  if (_raceDayIndex) {
+    for (const day of _raceDayIndex.values()) {
+      for (const entry of day.values()) {
+        if (entry.raceVal) entries.push([entry.raceKey, entry.raceVal]);
+      }
+    }
+  } else {
+    entries = Object.entries(lsRead()).filter(([k,v]) => v.type === 'race' || k.startsWith('race_'));
+  }
   const groupMap = {};
   entries.forEach(([key,data]) => {
     // 表示は前後半差paceType優先。first3f欠損で空なら基準比paceTypeAuto(前半区間フォールバック)で補完
@@ -9746,14 +9833,19 @@ function buildSavedGroups() {
 }
 
 function loadSavedData() {
-  buildSavedGroups();
-  renderSavedList();
+  // 保存データページは管理者が開いた時にswitchPage側で描画する。
+  // 起動時には開催日グループ自体も組み立てず、必要になった時だけ作る。
+  if (typeof _currentPage === 'string' && _currentPage === 'saved') {
+    buildSavedGroups();
+    renderSavedList();
+  }
 }
 
 // 年月折りたたみ開閉状態（key=ym, value=bool open）
 const _savedMonthOpen = {};
 
 function renderSavedList() {
+  buildSavedGroups();
   const list = document.getElementById('saved-list'); if (!list) return;
   const badge = document.getElementById('saved-total-badge');
   const q = (document.getElementById('saved-search')?.value || '').trim().toLowerCase();
@@ -11619,6 +11711,7 @@ function rebuildAiSeisekiFromDevice() {
 }
 
 function renderTrackTrend() {
+  buildSavedGroups();
   const wrap = document.getElementById('track-trend-table');
   if (!wrap) return;
   const babaFilter = document.getElementById('track-trend-baba')?.value || '';
@@ -12094,7 +12187,10 @@ function _gotoAnaForDay() {
 function restoreFromSaved(date, baba, silent) {
   if(!_kvViewerDateAllowed(date)){if(!silent)alert(_KV_PAST_HIDDEN_MSG);return;}
   const lsData=lsRead();
-  const raceEntries=Object.entries(lsData).filter(([,v])=>v.type==='race'&&v.race_date===date&&v.baba_code===baba).sort((a,b)=>(a[1].race_no||0)-(b[1].race_no||0));
+  const dayIndex = _raceDayIndex?.get(`${baba}|${date}`) || null;
+  const raceEntries = dayIndex
+    ? [...dayIndex.values()].filter(entry => entry.raceVal).map(entry => [entry.raceKey, entry.raceVal]).sort((a,b)=>(a[1].race_no||0)-(b[1].race_no||0))
+    : Object.entries(lsData).filter(([,v])=>v.type==='race'&&v.race_date===date&&v.baba_code===baba).sort((a,b)=>(a[1].race_no||0)-(b[1].race_no||0));
   if(!raceEntries.length){if(!silent)alert('このデータには出走表情報が見つかりません。\n「再取得」でkeiba.go.jpから読み込んでください。');return;}
   if(date!==currentDate||baba!==currentBaba){allRacesData={};clearRaceTabs();}
   currentDate=date;currentBaba=baba;
@@ -12104,7 +12200,11 @@ function restoreFromSaved(date, baba, silent) {
   raceEntries.forEach(([,raceVal])=>{
     const rn=parseInt(raceVal.race_no); if(isNaN(rn))return;
     const hp=`${baba}_${date}_${rn}_`;
-    const horses=Object.entries(lsData).filter(([k,v])=>v.type==='horse'&&k.startsWith(hp)).sort((a,b)=>(parseInt(a[0].replace(hp,''))||0)-(parseInt(b[0].replace(hp,''))||0)).map(([k,v])=>{const umaBan=parseInt(k.replace(hp,''));return{chakujun:v.chakujun||'',wakuBan:v.wakuBan||String(Math.ceil(umaBan/2)),umaBan,horseName:v.horseName||`馬番${umaBan}`,belong:v.belong||'',sexAge:v.sexAge||'',kinryo:v.kinryo||'',jockey:v.jockey||'',trainer:v.trainer||'',weight:v.weight||'',ninki:v.ninki||'',odds:v.odds||'',time:v.time||'',diff:v.diff||'',agari3f:v.agari3f||'',corner:v.corner||'',first3f:v.first3f||'',paceType:v.paceType||'',mukaeShoumen:v.mukaeShoumen||'',shoumenStraight:v.shoumenStraight||'',postComment:v.postComment||'',lineageLoginCode:v.lineageLoginCode||''};});
+    const indexedKeys = dayIndex?.get(rn)?.horseKeys;
+    const horseEntries = indexedKeys
+      ? [...indexedKeys].map(k => [k, lsData[k]]).filter(([,v]) => v && v.type === 'horse')
+      : Object.entries(lsData).filter(([k,v])=>v.type==='horse'&&k.startsWith(hp));
+    const horses=horseEntries.sort((a,b)=>(parseInt(a[0].replace(hp,''))||0)-(parseInt(b[0].replace(hp,''))||0)).map(([k,v])=>{const umaBan=parseInt(k.replace(hp,''));return{chakujun:v.chakujun||'',wakuBan:v.wakuBan||String(Math.ceil(umaBan/2)),umaBan,horseName:v.horseName||`馬番${umaBan}`,belong:v.belong||'',sexAge:v.sexAge||'',kinryo:v.kinryo||'',jockey:v.jockey||'',trainer:v.trainer||'',weight:v.weight||'',ninki:v.ninki||'',odds:v.odds||'',time:v.time||'',diff:v.diff||'',agari3f:v.agari3f||'',corner:v.corner||'',first3f:v.first3f||'',paceType:v.paceType||'',mukaeShoumen:v.mukaeShoumen||'',shoumenStraight:v.shoumenStraight||'',postComment:v.postComment||'',lineageLoginCode:v.lineageLoginCode||''};});
     let _lapTimes = raceVal.lapTimes || null;
     if (!_lapTimes && raceVal.lap_times) { try { _lapTimes = JSON.parse(raceVal.lap_times); } catch(e){} }
     allRacesData[rn]={raceInfo:{raceDate:date,raceNo:rn,babaCode:baba,raceName:raceVal.race_name||`第${rn}レース`,distance:raceVal.distance||'',raceClass:migrateRaceClass(raceVal.race_class||raceVal.raceClass||'',raceVal.race_name||''),trackCond:raceVal.track_cond||raceVal.trackCond||'',first3f:raceVal.first3f||'',agari4f:raceVal.agari4f||'',agari3f_race:raceVal.agari3f_race||'',paceType:raceVal.paceType||raceVal.pace_type||'',memo:raceVal.memo||'',lapTimes:_lapTimes},horses};
