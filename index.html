@@ -7666,7 +7666,10 @@ function renderAbilityTable(raceNo) {
       const agariIdx  = isKochi ? calcAgariIndex(agv, raceAvgAg) : null;
       // 各馬の前半区間タイム（走破−上がり3F）と基準比dev（負=ハイ/正=スロー）。高知のみ。
       const frontSec = isKochi ? calcFrontSectional(tv, r.agari3f) : null;
-      const frontDev = frontSec != null ? getFrontDev(r.raceDate, r.distance, r.raceClass, rTrackCond, frontSec) : null;
+      // 前半基準の全履歴集計は重いため、別のAI処理でキャッシュ済みの場合だけ表示する。
+      // 馬比較を開いた操作を起点に15万件を同期走査しない。
+      const frontDev = (frontSec != null && window._frontBaseCache)
+        ? getFrontDev(r.raceDate, r.distance, r.raceClass, rTrackCond, frontSec) : null;
       const _fdevClr = frontDev == null ? '' : frontDev <= -0.4 ? (isDark?'#f87171':'#dc2626') : frontDev >= 0.4 ? (isDark?'#60a5fa':'#1d4ed8') : (isDark?'#8fa3be':'#94a3b8');
       const _fdevTxt = frontDev == null ? '' : `${frontDev > 0 ? '+' : ''}${frontDev.toFixed(1)}`;
       // 他場の場合は場名タグを表示
