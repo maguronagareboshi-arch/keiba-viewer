@@ -2019,7 +2019,7 @@ const KV_APP_CSS = [
       'body.kv-cockpit .rqs-item{border-right:1px solid var(--kc-border)!important}',
       'body.kv-cockpit .rqs-label{color:var(--kc-muted)!important}',
       'body.kv-cockpit .rqs-val{color:var(--kc-text)!important}',
-      'body.kv-cockpit [id^="kv-tabbar-"]{height:46px!important;background:var(--kc-surface)!important;border:1px solid var(--kc-border)!important;border-width:0 1px 1px!important;overflow:hidden!important}',
+      'body.kv-cockpit [id^="kv-tabbar-"]{height:46px!important;background:var(--kc-surface)!important;border:1px solid var(--kc-border)!important;border-width:0 1px 1px!important;overflow:visible!important;z-index:30}',
       'body.kv-cockpit .kv-vtabs{height:100%;gap:3px;padding:5px 265px 5px 7px}',
       'body.kv-cockpit .kv-vtab{height:100%;padding:0 13px;border:1px solid transparent!important;border-radius:6px!important;color:var(--kc-muted)!important;font-size:12px;background:transparent!important}',
       'body.kv-cockpit .kv-vtab:hover{background:var(--kc-surface-2)!important;color:var(--kc-text)!important}',
@@ -2142,7 +2142,8 @@ const KV_APP_CSS = [
       'body.public-mode.kv-cockpit .kv-vtabs{grid-template-columns:repeat(4,minmax(0,1fr))}',
       'body.kv-cockpit .kv-vtabs-more{position:relative;min-width:0}',
       'body.kv-cockpit .kv-vtabs-more>.kv-vtab{display:flex!important}',
-      'body.kv-cockpit .kv-vtabs-more-menu{position:absolute;right:0;top:43px;z-index:70;min-width:150px;padding:5px;border:1px solid var(--kc-border);border-radius:8px;background:var(--kc-surface);box-shadow:0 10px 28px rgba(15,23,42,.2)}',
+      'body.kv-cockpit .kv-vtabs-more>.kv-vtab .fa-chevron-down{font-size:9px;transition:transform .16s ease}body.kv-cockpit .kv-vtabs-more>.kv-vtab[aria-expanded="true"] .fa-chevron-down{transform:rotate(180deg)}',
+      'body.kv-cockpit .kv-vtabs-more-menu{position:absolute;right:0;top:calc(100% + 4px);z-index:70;min-width:164px;padding:5px;border:1px solid var(--kc-border);border-radius:8px;background:var(--kc-surface);box-shadow:0 10px 28px rgba(15,23,42,.28)}',
       'body.kv-cockpit .kv-vtabs-more-menu.hidden{display:none}body.kv-cockpit .kv-vtabs-more-menu .kv-vtab{display:flex!important;width:100%;margin:2px 0!important;justify-content:flex-start!important}',
       'body.kv-cockpit .odds-freshness{display:inline-flex;align-items:center;gap:5px;padding:3px 7px;border-radius:999px;background:rgba(22,163,74,.12);color:#16a34a;font-size:10px;font-weight:800}body.kv-cockpit .odds-freshness.is-stale{background:rgba(217,119,6,.13);color:#d97706}body.kv-cockpit .odds-freshness.is-saved{background:var(--kc-surface-3);color:var(--kc-muted)}',
       'body.kv-cockpit .odds-warning{margin:0 0 9px;padding:7px 9px;border-radius:7px;background:rgba(217,119,6,.1);color:#d97706;font-size:10px;font-weight:700}',
@@ -5479,10 +5480,10 @@ function renderRaceContent(raceNo) {
           <span>オッズ</span>
         </button>
         <div class="kv-vtabs-more">
-          <button id="tab-btn-more-${raceNo}" class="kv-vtab" type="button" aria-expanded="false" onclick="toggleRaceMoreTabs(${raceNo})"><i class="fas fa-ellipsis-h"></i><span>詳しく</span></button>
-          <div id="tab-more-menu-${raceNo}" class="kv-vtabs-more-menu hidden">
-            <button id="tab-btn-ability-${raceNo}" class="kv-vtab" data-view="ability" onclick="switchViewTab(${raceNo},'ability')"><i class="fas fa-columns"></i><span>馬比較</span></button>
-            <button id="tab-btn-kekka-${raceNo}" class="kv-vtab" data-view="kekka" disabled onclick="switchViewTab(${raceNo},'kekka')"><i class="fas fa-flag-checkered"></i><span>結果</span></button>
+          <button id="tab-btn-more-${raceNo}" class="kv-vtab" type="button" aria-expanded="false" aria-haspopup="menu" aria-controls="tab-more-menu-${raceNo}" title="馬比較と確定結果を開く" onclick="toggleRaceMoreTabs(${raceNo})"><i class="fas fa-chevron-down"></i><span>比較・結果</span></button>
+          <div id="tab-more-menu-${raceNo}" class="kv-vtabs-more-menu hidden" role="menu" aria-label="比較と結果">
+            <button id="tab-btn-ability-${raceNo}" class="kv-vtab" role="menuitem" data-view="ability" onclick="switchViewTab(${raceNo},'ability')"><i class="fas fa-columns"></i><span>馬比較</span></button>
+            <button id="tab-btn-kekka-${raceNo}" class="kv-vtab" role="menuitem" data-view="kekka" disabled onclick="switchViewTab(${raceNo},'kekka')"><i class="fas fa-flag-checkered"></i><span>結果</span></button>
           </div>
         </div>
       </div>
@@ -6911,11 +6912,30 @@ function toggleCollapse(type, raceNo) {
 // ============================================================
 // タブ切替（出馬表 / 能力表）
 // ============================================================
+let _raceMoreMenuWired = false;
+function _closeRaceMoreMenus(exceptMenu) {
+  document.querySelectorAll('.kv-vtabs-more-menu').forEach(menu => {
+    if (menu === exceptMenu) return;
+    menu.classList.add('hidden');
+    const btn = document.getElementById(menu.id.replace('tab-more-menu-', 'tab-btn-more-'));
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+  });
+}
 function toggleRaceMoreTabs(raceNo, force) {
   const menu = document.getElementById(`tab-more-menu-${raceNo}`), btn = document.getElementById(`tab-btn-more-${raceNo}`);
   if (!menu || !btn) return;
   const open = typeof force === 'boolean' ? force : menu.classList.contains('hidden');
+  if (open) _closeRaceMoreMenus(menu);
   menu.classList.toggle('hidden', !open); btn.setAttribute('aria-expanded', String(open));
+  if (!_raceMoreMenuWired) {
+    _raceMoreMenuWired = true;
+    document.addEventListener('click', event => {
+      if (!event.target.closest('.kv-vtabs-more')) _closeRaceMoreMenus();
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') _closeRaceMoreMenus();
+    });
+  }
 }
 
 async function switchViewTab(raceNo, view) {
