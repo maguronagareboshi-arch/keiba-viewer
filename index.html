@@ -535,7 +535,7 @@ body.dark-mode.minimal-mode .race-tab.active{color:#38bdf8!important;border-bott
 body.dark-mode.minimal-mode #race-tabs-section.sidebar-mode .race-tab.active{color:#fff!important;border-bottom-color:#fff!important}
 </style>
 </head>
-<body>
+<body class="kv-cockpit">
 <script>
 // ============================================================
 // アプリCSS（単一の真実の源）
@@ -1952,6 +1952,171 @@ const KV_APP_CSS = [
       'body.dark-mode .hm-odds-box{background:#0f1b2c;border-color:#1e3048}',
       'body.dark-mode .hm-odds-hd{color:#e2e8f0}',
       'body.dark-mode .hm-odds-note{color:#64748b}',
+      // ═══════════ Race Cockpit 2026：最終デザイン層 ═══════════
+      // 予想ロジックと既存DOM契約は変えず、色・余白・情報階層だけをここで統一する。
+      'body.kv-cockpit{--kc-bg:#f3f5f7;--kc-surface:#ffffff;--kc-surface-2:#eef2f6;--kc-surface-3:#e6ebf1;--kc-text:#152033;--kc-muted:#667085;--kc-border:#d9e0e8;--kc-border-strong:#c4ced9;--kc-primary:#175cd3;--kc-primary-hover:#124aa8;--kc-header:#071018;--kc-header-2:#0c1723;--kc-positive:#087a55;--kc-warning:#a15c00;--kc-danger:#c43232;--kc-focus:#53a7ff;background:var(--kc-bg)!important;color:var(--kc-text);font-variant-numeric:tabular-nums}',
+      'body.kv-cockpit.dark-mode{--kc-bg:#071018;--kc-surface:#101a26;--kc-surface-2:#0c1520;--kc-surface-3:#172333;--kc-text:#e6edf5;--kc-muted:#91a0b2;--kc-border:#263447;--kc-border-strong:#35465c;--kc-primary:#2589e8;--kc-primary-hover:#45a3ff;--kc-header:#050b12;--kc-header-2:#09131e;--kc-positive:#35c48d;--kc-warning:#f2ad4d;--kc-danger:#ff7373;--kc-focus:#72b7ff}',
+      'body.kv-cockpit .app-main{background:transparent!important;max-width:1400px;padding-top:16px;overflow-x:clip}',
+      'body.kv-cockpit .app-header{background:var(--kc-header)!important;color:#fff;border:0!important;border-bottom:1px solid #1d2b3a!important;box-shadow:0 1px 0 rgba(0,0,0,.35)!important}',
+      'body.kv-cockpit .header-inner{max-width:1400px;margin:0 auto;padding:10px 18px!important;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:nowrap!important}',
+      'body.kv-cockpit .header-brand{min-width:0;display:block!important}',
+      'body.kv-cockpit .header-title{display:flex;align-items:center;gap:10px}',
+      'body.kv-cockpit .header-icon{width:32px;height:32px;border-radius:8px;background:#175cd3;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:15px!important;font-weight:900;box-shadow:none}',
+      'body.kv-cockpit .header-title h1{font-size:16px!important;line-height:1.2;color:#f7f9fc!important;letter-spacing:.01em;white-space:nowrap}',
+      'body.kv-cockpit .header-title h1 span{font-size:11px;color:#8ea1b6;font-weight:600;letter-spacing:.05em;margin-left:4px}',
+      'body.kv-cockpit .header-sub{margin:3px 0 0 42px!important;color:#8293a6!important;font-size:10px!important;line-height:1.2}',
+      'body.kv-cockpit .header-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex:0 0 auto!important}',
+      'body.kv-cockpit .cockpit-date{display:flex;align-items:baseline;gap:7px;padding-right:10px;border-right:1px solid #263647;color:#d7e0ea;font-size:12px;font-weight:700;white-space:nowrap}',
+      'body.kv-cockpit .cockpit-date-kicker{color:#5f9de1;font-size:9px;letter-spacing:.12em}',
+      'body.kv-cockpit .header-icon-btn{min-height:34px;border:1px solid #2a3a4b!important;background:#0d1925!important;color:#cad5e1!important;border-radius:8px!important;padding:6px 10px!important;font:600 11px/1.2 inherit;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;box-shadow:none!important;list-style:none}',
+      'body.kv-cockpit .header-icon-btn:hover{background:#142434!important;color:#fff!important;border-color:#3b5067!important}',
+      'body.kv-cockpit .header-icon-btn::-webkit-details-marker,body.kv-cockpit .header-more>summary::-webkit-details-marker{display:none}',
+      'body.kv-cockpit .header-icon-btn::marker,body.kv-cockpit .header-more>summary::marker{content:""}',
+      'body.kv-cockpit .cockpit-admin-menu{position:relative}',
+      'body.kv-cockpit #admin-mode-badge{display:inline-flex;align-items:center;gap:4px;color:#d7e4f1;font-size:10px;font-weight:700}',
+      'body.kv-cockpit .cockpit-admin-panel{position:absolute;right:0;top:calc(100% + 8px);z-index:220;width:190px;padding:8px;background:var(--kc-surface);border:1px solid var(--kc-border-strong);border-radius:9px;box-shadow:0 12px 28px rgba(0,0,0,.28);color:var(--kc-text)}',
+      'body.kv-cockpit .cockpit-menu-title{padding:4px 7px 7px;color:var(--kc-muted);font-size:10px;font-weight:800;letter-spacing:.08em}',
+      'body.kv-cockpit .cockpit-menu-btn{width:100%;display:flex;align-items:center;gap:8px;padding:8px 9px;border:0;background:transparent;color:var(--kc-text);border-radius:6px;font:600 12px/1.3 inherit;cursor:pointer;text-align:left}',
+      'body.kv-cockpit .cockpit-menu-btn:hover{background:var(--kc-surface-2)}',
+      'body.kv-cockpit .cockpit-menu-danger{color:var(--kc-danger)!important;border-top:1px solid var(--kc-border)!important;border-radius:0 0 6px 6px!important;margin-top:4px}',
+      'body.kv-cockpit .header-nav{background:var(--kc-header-2)!important;border-top:1px solid #152535!important}',
+      'body.kv-cockpit .header-nav-inner{max-width:1400px;margin:0 auto;padding:0 14px!important;display:flex;align-items:stretch;gap:3px;overflow:visible!important;flex-wrap:nowrap!important}',
+      'body.kv-cockpit .header-nav-btn{min-height:38px;padding:8px 13px!important;color:#8ea0b4!important;background:transparent!important;border:0!important;border-bottom:2px solid transparent!important;border-radius:0!important;font-size:12px!important;font-weight:700;box-shadow:none!important}',
+      'body.kv-cockpit .header-nav-btn:hover{color:#e5edf5!important;background:#101f2d!important}',
+      'body.kv-cockpit .header-nav-btn.active{color:#fff!important;background:#101f2d!important;border-bottom-color:#4099ee!important}',
+      'body.kv-cockpit .header-more{position:relative;display:flex}',
+      'body.kv-cockpit .header-more>summary{list-style:none}',
+      'body.kv-cockpit .header-more-panel{position:absolute;left:0;top:100%;z-index:210;width:210px;padding:7px;background:var(--kc-surface);border:1px solid var(--kc-border-strong);border-radius:0 0 9px 9px;box-shadow:0 14px 30px rgba(0,0,0,.24)}',
+      'body.kv-cockpit .header-more-panel button{width:100%;display:flex;align-items:center;gap:9px;padding:9px 10px;border:0;border-radius:6px;background:transparent;color:var(--kc-text);font:600 12px/1.3 inherit;text-align:left;cursor:pointer}',
+      'body.kv-cockpit .header-more-panel button:hover{background:var(--kc-surface-2)}',
+      'body.kv-cockpit .search-card,body.kv-cockpit .race-header-card,body.kv-cockpit .saved-card,body.kv-cockpit .progress-section,body.kv-cockpit .loading-area{background:var(--kc-surface)!important;color:var(--kc-text)!important;border:1px solid var(--kc-border)!important;border-radius:10px!important;box-shadow:0 1px 2px rgba(15,23,42,.06)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;animation:none!important;transition:border-color .15s!important}',
+      'body.kv-cockpit .search-card:hover,body.kv-cockpit .saved-card:hover{border-color:var(--kc-border-strong)!important;box-shadow:0 1px 2px rgba(15,23,42,.06)!important}',
+      'body.kv-cockpit .deban-section,body.kv-cockpit .analysis-card,body.kv-cockpit .ana-chart-card,body.kv-cockpit .ana-chart-card--wide,body.kv-cockpit .ana-summary-card,body.kv-cockpit .saved-month-group{background:var(--kc-surface)!important;color:var(--kc-text)!important;border:1px solid var(--kc-border)!important;border-radius:9px!important;box-shadow:0 1px 2px rgba(15,23,42,.05)!important}',
+      'body.kv-cockpit .section-title,body.kv-cockpit .race-name{color:var(--kc-text)!important}',
+      'body.kv-cockpit .section-title{font-size:13px;letter-spacing:.01em}',
+      'body.kv-cockpit .form-input{background:var(--kc-surface-2)!important;color:var(--kc-text)!important;border:1px solid var(--kc-border)!important;box-shadow:none!important}',
+      'body.kv-cockpit .form-input:focus{border-color:var(--kc-focus)!important;box-shadow:0 0 0 3px rgba(83,167,255,.14)!important}',
+      'body.kv-cockpit .btn{border-radius:7px!important;box-shadow:none!important;transform:none!important}',
+      'body.kv-cockpit .btn-primary{background:var(--kc-primary)!important;border-color:var(--kc-primary)!important}',
+      'body.kv-cockpit .btn-primary:hover{background:var(--kc-primary-hover)!important;border-color:var(--kc-primary-hover)!important}',
+      'body.kv-cockpit .week-chip{background:var(--kc-surface-2)!important;border:1px solid var(--kc-border)!important;border-radius:7px!important;box-shadow:none!important}',
+      'body.kv-cockpit .week-chip--today{border-color:var(--kc-primary)!important}',
+      'body.kv-cockpit .week-chip-date{color:var(--kc-text)!important}',
+      'body.kv-cockpit .week-chip-dow,body.kv-cockpit .week-chip-status{color:var(--kc-muted)!important}',
+      'body.kv-cockpit #race-tabs-section.sidebar-mode{position:sticky;top:calc(var(--kv-header-h,88px) - 1px);z-index:50;width:100%;margin:0 0 10px;padding:7px 9px!important;background:var(--kc-surface)!important;border:1px solid var(--kc-border)!important;border-radius:9px!important;box-shadow:0 3px 10px rgba(15,23,42,.10)!important}',
+      'body.kv-cockpit #race-tabs-section.sidebar-mode .race-tabs{width:100%;display:flex;gap:5px;overflow-x:auto}',
+      'body.kv-cockpit #race-tabs-section.sidebar-mode .race-tab{min-width:48px;padding:5px 9px!important;background:var(--kc-surface-2)!important;color:var(--kc-muted)!important;border:1px solid var(--kc-border)!important;border-radius:6px!important;font-size:11px!important;line-height:1.3;box-shadow:none!important}',
+      'body.kv-cockpit #race-tabs-section.sidebar-mode .race-tab:hover{background:var(--kc-surface-3)!important;color:var(--kc-text)!important;border-color:var(--kc-border-strong)!important}',
+      'body.kv-cockpit #race-tabs-section.sidebar-mode .race-tab.active{background:var(--kc-primary)!important;color:#fff!important;border-color:var(--kc-primary)!important;box-shadow:none!important}',
+      'body.kv-cockpit .race-tab-sub{display:block!important;margin:1px 0 0!important;font-size:7px!important;line-height:1.1}',
+      'body.kv-cockpit .race-header-card{padding:16px 18px 0!important;border-left:1px solid var(--kc-border)!important}',
+      'body.kv-cockpit .race-title-row{align-items:center;margin-bottom:12px}',
+      'body.kv-cockpit .race-badge{width:50px;min-width:50px;height:50px;background:var(--kc-primary)!important;border-radius:7px!important;box-shadow:none!important;font-size:16px}',
+      'body.kv-cockpit .race-name{font-size:19px!important;margin-bottom:6px}',
+      'body.kv-cockpit .race-meta{color:var(--kc-muted)!important;gap:5px}',
+      'body.kv-cockpit .race-meta span{background:var(--kc-surface-2)!important;color:var(--kc-muted)!important;border:1px solid var(--kc-border)!important;border-radius:5px!important;padding:2px 7px}',
+      'body.kv-cockpit .race-quick-stats{border-top:1px solid var(--kc-border)!important;margin:0 -18px!important;padding:8px 8px 9px;background:var(--kc-surface-2)}',
+      'body.kv-cockpit .rqs-item{border-right:1px solid var(--kc-border)!important}',
+      'body.kv-cockpit .rqs-label{color:var(--kc-muted)!important}',
+      'body.kv-cockpit .rqs-val{color:var(--kc-text)!important}',
+      'body.kv-cockpit [id^="kv-tabbar-"]{height:46px!important;background:var(--kc-surface)!important;border:1px solid var(--kc-border)!important;border-width:0 1px 1px!important;overflow:hidden!important}',
+      'body.kv-cockpit .kv-vtabs{height:100%;gap:3px;padding:5px 265px 5px 7px}',
+      'body.kv-cockpit .kv-vtab{height:100%;padding:0 13px;border:1px solid transparent!important;border-radius:6px!important;color:var(--kc-muted)!important;font-size:12px;background:transparent!important}',
+      'body.kv-cockpit .kv-vtab:hover{background:var(--kc-surface-2)!important;color:var(--kc-text)!important}',
+      'body.kv-cockpit .kv-vtab.on{background:var(--kc-primary)!important;color:#fff!important;border-color:var(--kc-primary)!important}',
+      'body.kv-cockpit .kv-vtab .vt-badge{background:var(--kc-surface-3)!important;color:var(--kc-muted)!important}',
+      'body.kv-cockpit .kv-vtab.on .vt-badge{background:rgba(255,255,255,.18)!important;color:#fff!important}',
+      'body.kv-cockpit .kv-vctrl{background:var(--kc-surface-2)!important;border-left:1px solid var(--kc-border)!important;color:var(--kc-text)!important}',
+      'body.kv-cockpit .kv-vctrl label{color:var(--kc-muted)!important}',
+      'body.kv-cockpit .ev-monitor-bar,body.kv-cockpit .ev-monitor-bar.skip,body.kv-cockpit .ev-monitor-bar.caution{background:var(--kc-surface-2)!important;color:var(--kc-text)!important;border:1px solid var(--kc-border)!important;border-left:3px solid var(--kc-positive)!important;border-radius:8px!important}',
+      'body.kv-cockpit .ev-monitor-bar.skip{border-left-color:var(--kc-muted)!important}',
+      'body.kv-cockpit .ev-monitor-bar.caution{border-left-color:var(--kc-warning)!important}',
+      'body.kv-cockpit .ev-monitor-bar .evb-row{background:var(--kc-surface)!important;border:1px solid var(--kc-border)!important}',
+      'body.kv-cockpit .ev-monitor-bar .evb-metric{color:var(--kc-muted)!important}',
+      'body.kv-cockpit .ev-monitor-bar .evb-stake,body.kv-cockpit .ev-monitor-bar .evb-fetch{background:var(--kc-positive)!important}',
+      'body.kv-cockpit .pick-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;padding:12px!important;margin:0 0 12px;background:var(--kc-surface-2)!important;border:1px solid var(--kc-border)!important;border-radius:9px!important}',
+      'body.kv-cockpit .ps-head{grid-column:1/-1;margin:0 0 2px;color:var(--kc-text)!important;font-size:13px}',
+      'body.kv-cockpit .ps-copy{color:var(--kc-muted)}',
+      'body.kv-cockpit .ps-row{display:block;margin:0;padding:9px;background:var(--kc-surface);border:1px solid var(--kc-border);border-radius:7px;font-size:12px}',
+      'body.kv-cockpit .ps-tag{display:inline-block;margin-bottom:5px;border-radius:4px}',
+      'body.kv-cockpit .ps-body{display:block;color:var(--kc-text)!important;line-height:1.55}',
+      'body.kv-cockpit .ps-mut{color:var(--kc-muted)!important}',
+      'body.kv-cockpit .ps-line{grid-column:1/-1;margin:2px 0 0;padding:9px 2px 0;border-top:1px solid var(--kc-border)!important;color:var(--kc-muted)!important;font-size:11px}',
+      'body.kv-cockpit .yoso-explain,body.kv-cockpit .yoso-public-aftermatch,body.kv-cockpit .yoso-admin-detail{background:var(--kc-surface-2)!important;color:var(--kc-muted)!important;border:1px solid var(--kc-border)!important;border-radius:8px!important}',
+      'body.kv-cockpit .yoso-explain summary,body.kv-cockpit .yoso-public-aftermatch summary,body.kv-cockpit .yoso-admin-detail>summary{color:var(--kc-text)!important}',
+      'body.kv-cockpit .yoso-explain b{color:var(--kc-text)!important}',
+      'body.kv-cockpit #race-summary-bar{display:none!important}',
+      'body.kv-cockpit #kv-bottom-nav{background:var(--kc-surface)!important;border-top:1px solid var(--kc-border)!important;box-shadow:0 -2px 8px rgba(0,0,0,.12)!important;backdrop-filter:none!important}',
+      'body.kv-cockpit #kv-bottom-nav .kbn-btn{color:var(--kc-muted)!important}',
+      'body.kv-cockpit #kv-bottom-nav .kbn-btn.active{color:var(--kc-primary)!important}',
+      'body.kv-cockpit #kbn-more-menu{background:var(--kc-surface)!important;color:var(--kc-text)!important;border:1px solid var(--kc-border)!important;box-shadow:0 8px 24px rgba(0,0,0,.22)!important}',
+      'body.kv-cockpit #kbn-more-menu button{color:var(--kc-text)!important}',
+      '@media(max-width:640px){body.kv-cockpit .app-main{padding:10px 8px 82px!important}body.kv-cockpit .header-inner{padding:8px 10px!important}body.kv-cockpit .header-title h1{font-size:14px!important}body.kv-cockpit .header-title h1 span,body.kv-cockpit .header-sub,body.kv-cockpit .cockpit-date-kicker{display:none!important}body.kv-cockpit .header-icon{width:30px;height:30px}body.kv-cockpit .cockpit-date{font-size:10px;padding-right:7px;gap:0}body.kv-cockpit #dark-mode-btn{width:34px;padding:5px!important}body.kv-cockpit .cockpit-admin-menu>summary{width:34px;padding:5px!important}body.kv-cockpit #race-tabs-section.sidebar-mode{top:calc(var(--kv-header-h,52px) - 1px);padding:6px!important;margin-bottom:7px}body.kv-cockpit #race-tabs-section.sidebar-mode .race-tabs{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px;overflow:visible}body.kv-cockpit #race-tabs-section.sidebar-mode .race-tab{min-width:0;width:100%;padding:5px 2px!important;font-size:10px!important}body.kv-cockpit .race-tab-sub{display:none!important}body.kv-cockpit .race-header-card{padding:12px 12px 0!important}body.kv-cockpit .race-badge{width:44px;min-width:44px;height:44px;font-size:14px}body.kv-cockpit .race-name{font-size:16px!important}body.kv-cockpit .race-quick-stats{margin:0 -12px!important;overflow-x:auto}body.kv-cockpit .rqs-item{min-width:62px}body.kv-cockpit [id^="kv-tabbar-"]{height:auto!important;overflow:visible!important}body.kv-cockpit .kv-vtabs{height:42px!important;padding:5px!important;gap:2px;overflow-x:auto}body.kv-cockpit .kv-vtab{padding:0 10px!important;font-size:11px!important}body.kv-cockpit .kv-vctrl{position:static!important;height:auto!important;border-left:0!important;border-top:1px solid var(--kc-border)!important;padding:6px 8px!important}body.kv-cockpit .pick-summary{grid-template-columns:1fr;padding:10px!important}body.kv-cockpit .ps-head,body.kv-cockpit .ps-line{grid-column:1}body.kv-cockpit .search-card,body.kv-cockpit .saved-card{padding:14px!important}}',
+      // ── サンプル忠実版：レース日コックピットの構造そのものを再現 ──
+      'body.kv-cockpit .header-icon{width:22px;height:22px;background:transparent!important;color:#4da3f2;font-size:17px!important}',
+      'body.kv-cockpit .header-sub{margin:2px 0 0 32px!important;font-size:10px!important;color:#8ea0b4!important}',
+      'body.kv-cockpit .cockpit-live-status{display:flex;align-items:center;justify-content:flex-end;gap:7px;color:#aebdcb;font-size:10px;font-weight:700;white-space:nowrap}',
+      'body.kv-cockpit .cockpit-live-status span{display:inline-flex;align-items:center;gap:5px;padding:5px 8px;border:1px solid #253647;border-radius:7px;background:#0d1925}',
+      'body.kv-cockpit .cockpit-live-status span:first-child{color:#d8e4ef}',
+      'body.kv-cockpit #race-tabs-section.sidebar-mode{padding:6px!important;margin-bottom:10px}',
+      'body.kv-cockpit #race-tabs-section.sidebar-mode .race-tabs{display:grid!important;grid-template-columns:repeat(12,minmax(0,1fr));gap:5px;overflow:visible!important}',
+      'body.kv-cockpit #race-tabs-section.sidebar-mode .race-tab{min-width:0!important;width:100%;height:34px;padding:0 3px!important;display:flex;align-items:center;justify-content:center;font-size:11px!important}',
+      'body.kv-cockpit .race-tab-sub{display:none!important}',
+      'body.kv-cockpit .race-header-card{margin:0 0 10px;padding:10px 4px!important;background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important}',
+      'body.kv-cockpit .cockpit-race-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}',
+      'body.kv-cockpit .cockpit-race-copy{min-width:0}',
+      'body.kv-cockpit .cockpit-race-no{color:var(--kc-primary);font-weight:900;margin-right:5px}',
+      'body.kv-cockpit .race-name{font-size:20px!important;line-height:1.25;margin:0 0 7px!important}',
+      'body.kv-cockpit .cockpit-race-meta span{padding:0!important;background:transparent!important;border:0!important;border-radius:0!important;color:var(--kc-muted)!important}',
+      'body.kv-cockpit .cockpit-race-meta span+span:before{content:"·";margin-right:5px;color:var(--kc-border-strong)}',
+      'body.kv-cockpit .cockpit-race-time{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex:0 0 auto;color:var(--kc-text)}',
+      'body.kv-cockpit .cockpit-race-time>strong{font-size:15px}',
+      'body.kv-cockpit .cockpit-race-time .race-countdown{font-size:10px!important;color:var(--kc-muted)!important}',
+      'body.kv-cockpit .cockpit-race-actions{display:flex;justify-content:flex-end;gap:5px;margin-top:2px}',
+      'body.kv-cockpit .cockpit-provisional{color:var(--kc-warning)!important}',
+      'body.public-mode.kv-cockpit .race-quick-stats{display:none!important}',
+      'body.kv-cockpit .cockpit-picks{display:grid;grid-template-columns:1.35fr 1fr 1fr;gap:10px;margin:0 0 10px}',
+      'body.kv-cockpit .cockpit-pick{min-width:0;min-height:76px;display:flex;align-items:center;gap:9px;padding:11px 12px;background:var(--kc-surface);color:var(--kc-text);border:1px solid var(--kc-border);border-radius:9px;box-shadow:0 1px 2px rgba(15,23,42,.05);font:inherit;text-align:left;cursor:pointer}',
+      'body.kv-cockpit button.cockpit-pick:hover{border-color:var(--kc-primary);background:var(--kc-surface-2)}',
+      'body.kv-cockpit .cockpit-pick.is-loading,body.kv-cockpit .cockpit-pick.is-empty{cursor:default;color:var(--kc-muted)}',
+      'body.kv-cockpit .cockpit-mark{width:34px;height:34px;display:inline-grid;place-items:center;flex:0 0 auto;border-radius:50%;background:rgba(220,38,38,.14);color:#dc2626;font-size:17px;font-weight:900}',
+      'body.kv-cockpit .cockpit-mark.is-second{background:rgba(37,99,235,.14);color:#2563eb}',
+      'body.kv-cockpit .cockpit-mark.is-value{background:rgba(8,145,178,.14);color:#0891b2}',
+      'body.dark-mode.kv-cockpit .cockpit-mark{color:#ff8585}body.dark-mode.kv-cockpit .cockpit-mark.is-second{color:#76adff}body.dark-mode.kv-cockpit .cockpit-mark.is-value{color:#55c8df}',
+      'body.kv-cockpit .cockpit-pick-copy{display:grid;gap:2px;min-width:0;flex:1}',
+      'body.kv-cockpit .cockpit-pick-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}',
+      'body.kv-cockpit .cockpit-pick-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--kc-muted);font-size:10px}',
+      'body.kv-cockpit .cockpit-odds{flex:0 0 auto;padding:3px 6px;background:var(--kc-surface-2);border-radius:5px;color:var(--kc-muted);font-size:10px;font-weight:800}',
+      'body.kv-cockpit .cockpit-race-panel{background:transparent!important;border:0!important;box-shadow:none!important;overflow:visible!important}',
+      'body.public-mode.kv-cockpit [id^="kv-tabbar-"]{height:auto!important;margin:0 0 10px;background:transparent!important;border:0!important;overflow:visible!important}',
+      'body.public-mode.kv-cockpit .kv-vtabs{width:100%;height:auto!important;display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;padding:0!important;overflow:visible!important}',
+      'body.public-mode.kv-cockpit .kv-vtab{width:100%;height:38px!important;justify-content:center;padding:0 8px!important;background:var(--kc-surface)!important;border:1px solid var(--kc-border)!important;border-radius:7px!important}',
+      'body.public-mode.kv-cockpit .kv-vtab.on{background:var(--kc-primary)!important;border-color:var(--kc-primary)!important;color:#fff!important}',
+      'body.public-mode.kv-cockpit .kv-vtab:disabled{opacity:.42;cursor:not-allowed}',
+      'body.public-mode.kv-cockpit .kv-vctrl{display:none!important}',
+      'body.kv-cockpit [id^="view-yoso-"],body.kv-cockpit [id^="view-odds-"],body.kv-cockpit [id^="view-kekka-"],body.kv-cockpit [id^="view-ability-"]{background:var(--kc-surface);border:1px solid var(--kc-border);border-radius:9px;box-shadow:0 1px 2px rgba(15,23,42,.05)}',
+      'body.kv-cockpit .cockpit-ai-panel,body.kv-cockpit .cockpit-odds-panel{min-height:190px}',
+      'body.kv-cockpit .cockpit-panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:9px}',
+      'body.kv-cockpit .cockpit-panel-head h3{margin:0;color:var(--kc-text);font-size:14px}',
+      'body.kv-cockpit .cockpit-panel-head p{margin:2px 0 0;color:var(--kc-muted);font-size:10px}',
+      'body.kv-cockpit .cockpit-panel-head>span{color:var(--kc-muted);font-size:10px}',
+      'body.kv-cockpit .cockpit-panel-empty{grid-column:1/-1;padding:28px;text-align:center;color:var(--kc-muted);font-size:12px}',
+      'body.kv-cockpit .cockpit-table{width:100%;border-collapse:collapse;font-size:12px;color:var(--kc-text)}',
+      'body.kv-cockpit .cockpit-table th{padding:7px 9px;background:var(--kc-surface-2);border-bottom:1px solid var(--kc-border);color:var(--kc-muted);font-size:10px;text-align:left}',
+      'body.kv-cockpit .cockpit-table td{padding:9px;border-bottom:1px solid var(--kc-border);vertical-align:middle}',
+      'body.kv-cockpit .cockpit-table tbody tr:last-child td{border-bottom:0}',
+      'body.kv-cockpit .cockpit-table td:last-child i{width:15px;color:var(--kc-primary)}',
+      'body.kv-cockpit .cockpit-horse{display:flex;align-items:center;gap:8px;min-width:150px}',
+      'body.kv-cockpit .cockpit-horse>span:last-child{display:grid;gap:1px}',
+      'body.kv-cockpit .cockpit-horse small{color:var(--kc-muted);font-size:9px}',
+      'body.kv-cockpit .cockpit-uma{width:27px;height:27px;display:inline-grid;place-items:center;border-radius:4px;background:var(--kc-surface-3);font-weight:900}',
+      'body.kv-cockpit .cockpit-market{white-space:nowrap}',
+      'body.kv-cockpit .cockpit-odds-value{font-size:15px;font-weight:900;color:var(--kc-primary)}',
+      'body.kv-cockpit .cockpit-ai-details{margin-top:10px;border:1px solid var(--kc-border);border-radius:7px;background:var(--kc-surface-2);overflow:hidden}',
+      'body.kv-cockpit .cockpit-ai-details>summary{padding:9px 11px;color:var(--kc-muted);font-size:11px;font-weight:700;cursor:pointer;list-style:none}',
+      'body.kv-cockpit .cockpit-ai-details>summary::-webkit-details-marker{display:none}',
+      'body.kv-cockpit .cockpit-ai-details-body{padding:10px;border-top:1px solid var(--kc-border)}',
+      '@media(max-width:640px){body.kv-cockpit .header-sub{display:block!important;margin-left:32px!important}body.kv-cockpit .cockpit-live-status{flex-direction:column;align-items:flex-end;gap:3px}body.kv-cockpit .cockpit-live-status span{padding:2px 5px;font-size:8px}body.kv-cockpit #cockpit-global-odds i{display:none}body.kv-cockpit #race-tabs-section.sidebar-mode .race-tabs{grid-template-columns:repeat(6,minmax(0,1fr))!important}body.kv-cockpit .cockpit-race-heading{align-items:flex-start}body.kv-cockpit .race-name{font-size:16px!important}body.kv-cockpit .cockpit-race-time>strong{font-size:12px}body.kv-cockpit .cockpit-race-meta{font-size:10px}body.kv-cockpit .cockpit-picks{grid-template-columns:1fr;gap:6px}body.kv-cockpit .cockpit-pick{min-height:64px;padding:9px 10px}body.public-mode.kv-cockpit .kv-vtabs{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}body.public-mode.kv-cockpit .kv-vtab{height:36px!important;padding:0 5px!important}body.kv-cockpit .cockpit-panel-head{align-items:flex-start}body.kv-cockpit .cockpit-table{min-width:560px}}',
 ];
 (function kvInjectStyles(){
   if (document.getElementById('kv-styles')) return;
@@ -1965,61 +2130,56 @@ const KV_APP_CSS = [
 </script>
 
 <header class="app-header">
-  <div class="header-inner" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-    <div>
+  <div class="header-inner">
+    <div class="header-brand">
       <div class="header-title">
-        <span class="header-icon">🐴</span>
-        <h1>高知競馬ビューア</h1>
+        <span class="header-icon" aria-hidden="true"><i class="fas fa-trophy"></i></span>
+        <h1>高知競馬</h1>
       </div>
-      <p class="header-sub">出馬表 + 前半3F・ペース分析</p>
+      <p class="header-sub" id="cockpit-today-label">--月--日</p>
     </div>
-    <!-- 管理者モードボタン -->
-    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
-      <button id="dev-admin-btn" onclick="toggleDevAdmin()" title="【開発用】管理者/閲覧者モードを切替（完成後は削除予定）">
-        <span id="dev-admin-label">管理者</span>
-      </button>
-      <button id="sim-mode-btn" onclick="toggleSimMode()" title="スマホ表示プレビュー">
-        📱 <span>スマホ表示</span>
-      </button>
-      <!-- ===== 【一時】前半3F出力ボタン（デバッグ用・すぐ削除可） ===== -->
-      <button id="temp-f3-out-btn" class="admin-only" onclick="tempOutputFirst3F()" title="【一時】その日の出走馬の前半3Fをコンソール出力＋クリップボードにコピー（完成後は削除予定）">
-        ⏱ <span>前半3F出力</span>
-      </button>
-      <!-- ===== 【一時】ここまで ===== -->
-      <button id="f3-import-btn" class="admin-only" onclick="import3FBulk()" title="計測アプリが出力した前半3F(TSV/CSV: レース,馬番,[馬名],前半3F)を貼り付けて一括入力">
-        📥 <span>3F取込</span>
-      </button>
-      <button id="minimal-mode-btn" onclick="toggleMinimalMode()" title="ミニマルモード切替">
-        <span id="minimal-mode-icon">▣</span> <span id="minimal-mode-label">ミニマル</span>
-      </button>
-      <button id="dark-mode-btn" onclick="toggleDarkMode()" title="ダークモード切替">
+    <div class="header-actions">
+      <div class="cockpit-live-status" aria-label="現在のレース状態">
+        <span id="cockpit-global-track"><i class="fas fa-cloud-rain"></i> 馬場 —</span>
+        <span id="cockpit-global-odds"><i class="fas fa-sync-alt"></i> オッズ 未取得</span>
+      </div>
+      <button id="dark-mode-btn" class="header-icon-btn" onclick="toggleDarkMode()" title="表示テーマを切り替える" aria-label="表示テーマを切り替える">
         <span id="dark-mode-icon">🌙</span> <span id="dark-mode-label">ダーク</span>
       </button>
-      <span id="admin-mode-badge" class="hidden" style="background:rgba(255,200,0,0.25);color:#fef08a;border:1px solid rgba(255,220,0,0.4);border-radius:20px;padding:3px 12px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:4px"><i class="fas fa-user-shield"></i> 管理者モード</span>
-      <button id="admin-login-btn" onclick="openAdminLogin()"
-        style="background:rgba(255,255,255,0.12);color:#e0e7ff;border:1px solid rgba(255,255,255,0.25);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;backdrop-filter:blur(4px);transition:background .15s"
-        onmouseenter="this.style.background='rgba(255,255,255,0.22)'" onmouseleave="this.style.background='rgba(255,255,255,0.12)'">
-        <i class="fas fa-lock"></i> 管理者ログイン
-      </button>
-      <button id="admin-logout-btn" class="hidden" onclick="adminLogout()"
-        style="background:rgba(239,68,68,0.25);color:#fca5a5;border:1px solid rgba(239,68,68,0.35);border-radius:8px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;transition:background .15s"
-        onmouseenter="this.style.background='rgba(239,68,68,0.40)'" onmouseleave="this.style.background='rgba(239,68,68,0.25)'">
-        <i class="fas fa-sign-out-alt"></i> ログアウト
-      </button>
+      <details class="cockpit-admin-menu admin-only">
+        <summary class="header-icon-btn" title="管理ツール">
+          <i class="fas fa-sliders-h"></i>
+          <span id="admin-mode-badge" class="hidden"><i class="fas fa-user-shield"></i> 管理</span>
+        </summary>
+        <div class="cockpit-admin-panel">
+          <p class="cockpit-menu-title">管理ツール</p>
+          <button id="sim-mode-btn" class="cockpit-menu-btn" onclick="toggleSimMode()"><i class="fas fa-mobile-alt"></i> スマホ表示</button>
+          <button id="temp-f3-out-btn" class="cockpit-menu-btn" onclick="tempOutputFirst3F()"><i class="fas fa-stopwatch"></i> 前半3F出力</button>
+          <button id="f3-import-btn" class="cockpit-menu-btn" onclick="import3FBulk()"><i class="fas fa-file-import"></i> 3F取込</button>
+          <button id="dev-admin-btn" class="cockpit-menu-btn hidden" onclick="toggleDevAdmin()"><span id="dev-admin-label">管理者</span></button>
+          <button id="admin-login-btn" class="cockpit-menu-btn hidden" onclick="openAdminLogin()"><i class="fas fa-lock"></i> 管理者ログイン</button>
+          <button id="admin-logout-btn" class="cockpit-menu-btn cockpit-menu-danger hidden" onclick="adminLogout()"><i class="fas fa-sign-out-alt"></i> ログアウト</button>
+        </div>
+      </details>
     </div>
   </div>
-  <!-- ナビゲーションタブ -->
-  <nav class="header-nav">
+  <nav class="header-nav" aria-label="主要メニュー">
     <div class="header-nav-inner">
-      <button class="header-nav-btn active" data-page="search" onclick="switchPage('search')"><i class="fas fa-search"></i> 検索</button>
+      <button class="header-nav-btn active" data-page="search" onclick="switchPage('search')"><i class="fas fa-calendar-day"></i> 本日</button>
       <button class="header-nav-btn" data-page="deban" onclick="switchPage('deban')"><i class="fas fa-list-ul"></i> 出馬表</button>
       <button class="header-nav-btn" data-page="bunseki" onclick="switchPage('bunseki')"><i class="fas fa-chart-bar"></i> 分析</button>
-      <button class="header-nav-btn" data-page="baba" onclick="switchPage('baba')"><i class="fas fa-chart-area"></i> 馬場傾向</button>
-      <button class="header-nav-btn" data-page="jchg" onclick="switchPage('jchg')"><i class="fas fa-exchange-alt"></i> 乗り替わり</button>
-      <button class="header-nav-btn admin-only" data-page="saved" onclick="switchPage('saved')"><i class="fas fa-database"></i> 保存データ</button>
-      <button class="header-nav-btn" data-page="f3avg" onclick="switchPage('f3avg')"><i class="fas fa-stopwatch"></i> 前半3F基準</button>
-      <button class="header-nav-btn" data-page="aiseiseki" onclick="switchPage('aiseiseki')"><i class="fas fa-trophy"></i> AIの成績</button>
-      <button class="header-nav-btn admin-only" data-page="psfhist" onclick="switchPage('psfhist')"><i class="fas fa-gem"></i> PSF履歴</button>
+      <button class="header-nav-btn" data-page="baba" onclick="switchPage('baba')"><i class="fas fa-chart-area"></i> 馬場</button>
+      <details class="header-more">
+        <summary id="header-more-btn" class="header-nav-btn"><i class="fas fa-ellipsis-h"></i> その他</summary>
+        <div class="header-more-panel">
+          <button type="button" data-page="jchg" onclick="switchPage('jchg')"><i class="fas fa-exchange-alt"></i> 乗り替わり分析</button>
+          <button type="button" data-page="f3avg" onclick="switchPage('f3avg')"><i class="fas fa-stopwatch"></i> 前半3F基準</button>
+          <button type="button" data-page="aiseiseki" onclick="switchPage('aiseiseki')"><i class="fas fa-trophy"></i> AIの成績</button>
+          <button type="button" class="admin-only" data-page="bets" onclick="switchPage('bets')"><i class="fas fa-wallet"></i> 収支ノート</button>
+          <button type="button" class="admin-only" data-page="saved" onclick="switchPage('saved')"><i class="fas fa-database"></i> 保存データ</button>
+          <button type="button" class="admin-only" data-page="psfhist" onclick="switchPage('psfhist')"><i class="fas fa-gem"></i> PSF履歴</button>
+        </div>
+      </details>
     </div>
   </nav>
 </header>
@@ -2697,7 +2857,7 @@ const KV_APP_CSS = [
 
 <!-- スマホ用下部固定ナビ（<=640pxのみ表示・上部ナビの代替。keeeeeeba.com方式） -->
 <nav id="kv-bottom-nav">
-  <button type="button" class="kbn-btn active" data-page="search" onclick="switchPage('search')"><i class="fas fa-search"></i><span>検索</span></button>
+  <button type="button" class="kbn-btn active" data-page="search" onclick="switchPage('search')"><i class="fas fa-calendar-day"></i><span>本日</span></button>
   <button type="button" class="kbn-btn" data-page="deban" onclick="switchPage('deban')"><i class="fas fa-list-ul"></i><span>出馬表</span></button>
   <button type="button" class="kbn-btn" data-page="bunseki" onclick="switchPage('bunseki')"><i class="fas fa-chart-bar"></i><span>分析</span></button>
   <button type="button" class="kbn-btn" data-page="baba" onclick="switchPage('baba')"><i class="fas fa-chart-area"></i><span>馬場</span></button>
@@ -2864,7 +3024,7 @@ let currentRaceNo = null;
 let currentDate = '';
 let currentBaba = '31';
 let _commentVisible = true; // レース後コメントの表示フラグ（チェックボックスで制御）
-let _kvLastViewTab = 'deban'; // レース内サブタブ（出馬表/結果/能力表/AI予想/ランキング）の直近選択を記憶（新規レース表示時に復元）
+let _kvLastViewTab = 'yoso'; // Race CockpitはAI判断を初期表示。以後は直近の選択をレース間で維持する。
 
 // 馬体重の差分を +/- 表記にフォーマット（例: "475(9)" → "475(+9)"）
 function fmtWeightDiff(w) {
@@ -2887,10 +3047,14 @@ function switchPage(pageId, _fromPop) {
   document.querySelectorAll('.header-nav-btn, .kbn-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.page === pageId);
   });
-  // 「その他」配下のページでは下部ナビの⋯をアクティブに
+  // 「その他」配下のページでは上下ナビの⋯をアクティブに
+  const _morePages = ['jchg', 'saved', 'f3avg', 'psfhist', 'bets', 'aiseiseki'];
+  const _headerMoreBtn = document.getElementById('header-more-btn');
+  if (_headerMoreBtn) _headerMoreBtn.classList.toggle('active', _morePages.includes(pageId));
   const _moreBtn = document.getElementById('kbn-more');
-  if (_moreBtn) _moreBtn.classList.toggle('active', ['jchg', 'saved', 'f3avg', 'psfhist', 'bets', 'aiseiseki'].includes(pageId));
+  if (_moreBtn) _moreBtn.classList.toggle('active', _morePages.includes(pageId));
   if (typeof toggleKbnMore === 'function') toggleKbnMore(false);
+  document.querySelectorAll('.header-more[open]').forEach(el => el.removeAttribute('open'));
   window.scrollTo(0, 0);
   _currentPage = pageId;
   // 履歴へ積む（戻るボタン由来の呼び出し時は積まない＝二重化防止）。
@@ -3616,9 +3780,10 @@ function _updateDarkModeBtn(isDark) {
 }
 
 function toggleMinimalMode() {
-  const isMinimal = document.body.classList.toggle('minimal-mode');
-  localStorage.setItem('minimalMode', isMinimal ? '1' : '0');
-  _updateMinimalBtn(isMinimal);
+  // Race Cockpitへ外観を一本化。旧ブックマークレット等から呼ばれても安全な互換関数として残す。
+  document.body.classList.remove('minimal-mode');
+  localStorage.removeItem('minimalMode');
+  _updateMinimalBtn(false);
 }
 
 function _updateMinimalBtn(isMinimal) {
@@ -3631,9 +3796,15 @@ function _updateMinimalBtn(isMinimal) {
 }
 
 function initMinimalMode() {
-  const isMinimal = localStorage.getItem('minimalMode') === '1';
-  if (isMinimal) document.body.classList.add('minimal-mode');
-  _updateMinimalBtn(isMinimal);
+  document.body.classList.remove('minimal-mode');
+  localStorage.removeItem('minimalMode');
+  _updateMinimalBtn(false);
+}
+
+function _updateCockpitHeaderDate() {
+  const el = document.getElementById('cockpit-today-label');
+  if (!el) return;
+  el.textContent = _cockpitDateLabel();
 }
 
 /** ヘッダー実高をCSS変数に反映（レースタブのsticky位置決め用。折返しで高さが変わるためresizeでも更新） */
@@ -3656,6 +3827,7 @@ document.addEventListener('DOMContentLoaded', () => {
   injectStyles();
   initDarkMode();
   initMinimalMode();
+  _updateCockpitHeaderDate();
   _updateDevAdminBtn();
   _setHeaderHVar();
   // sim内（プレビューiframe）では入れ子防止のためスマホ表示ボタンを隠す
@@ -4732,6 +4904,7 @@ function switchRaceTab(raceNo) {
   const existing=document.getElementById(`race-section-${raceNo}`);
   if(existing){
     existing.style.display='';
+    _updateCockpitRaceStatus(raceNo);
     updateRaceSummaryBar(raceNo);
     try{renderDebanBias();}catch(e){}
     // 「AI予想」タブが表示中のレースに戻ってきた場合、共有DOM(AI予想ランキング)を
@@ -4745,6 +4918,7 @@ function switchRaceTab(raceNo) {
     return;
   }
   renderRaceContent(raceNo);
+  _updateCockpitRaceStatus(raceNo);
   updateRaceSummaryBar(raceNo);
   try{renderDebanBias();}catch(e){}
   // 新規レースは、直近このセッションで選んでいたサブタブがあればそれを復元する
@@ -4787,25 +4961,25 @@ function renderRaceContent(raceNo) {
   const _movieUrl = buildMovieUrl(raceInfo.raceDate, raceNo, raceInfo.babaCode);
   const _hasMovie  = !!_movieUrl;
   const _hasReplay = horses.some(h => String(h.corner || '').indexOf('-') >= 0) && horses.some(h => parseInt(h.chakujun) >= 1);
+  const _raceTime = (() => { try { return _kvGetRaceTime(raceInfo.raceDate, raceNo); } catch(e) { return null; } })();
   hCard.innerHTML=`
-    <div class="race-title-row" style="flex-wrap:nowrap;">
-      <div style="display:flex;align-items:flex-start;gap:14px;min-width:0;flex:1;">
-        <div class="race-badge">${raceNo}<span style="font-size:10px;font-weight:600;opacity:.8;display:block;letter-spacing:0;margin-top:1px;">R</span></div>
-        <div class="race-title-info" style="min-width:0;flex:1;">
-          <div class="race-name-row">
-            <h2 class="race-name">${raceInfo.raceName}</h2>
-            ${_hasReplay ? `<button class="btn-replay btn-sm" onclick="openRaceReplay(${raceNo})"><i class="fas fa-play"></i> 展開</button>` : ''}
-            ${_hasMovie ? `<button id="movie-btn-${raceNo}" class="btn btn-movie btn-sm" onclick="toggleMoviePanel(${raceNo})" style="flex-shrink:0;"><i class="fas fa-video"></i> 映像</button>` : ''}
-          </div>
-          <div class="race-meta">
-            <span><i class="fas fa-calendar-alt"></i> ${raceInfo.raceDate}</span>
-            ${(()=>{try{const _t=_kvGetRaceTime(raceInfo.raceDate,raceNo);return _t?`<span class="race-hasso-badge"><i class="far fa-clock"></i> ${_t}発走</span><span class="race-countdown" data-cd-date="${raceInfo.raceDate}" data-cd-time="${_t}" style="display:none"></span>`:'';}catch(e){return '';}})()}
-            <span><i class="fas fa-horse"></i> ${horses.length}頭</span>
-            ${raceInfo.distance ? distanceBadgeHtml(raceInfo.distance) : ''}
-            ${raceInfo.trackCond?`<span class="track-cond-badge track-cond-${trackCondClass(raceInfo.trackCond)}"><i class="fas fa-cloud-rain"></i> ${raceInfo.trackCond}</span>`:''}
-            ${raceInfo.raceClass?`<span class="race-class-badge ${raceClassCssClass(raceInfo.raceClass)}">${raceInfo.raceClass}</span>`:''}
-            ${(raceInfo._isDebaTable||raceInfo._isDebaFallback)?`<span style="background:#fef3c7;color:#92400e;border:1px solid #fbbf24;border-radius:10px;font-size:11px;padding:2px 8px;font-weight:700"><i class="fas fa-clock"></i> 出馬表前</span>`:''}
-          </div>
+    <div class="cockpit-race-heading">
+      <div class="cockpit-race-copy">
+        <h2 class="race-name"><span class="cockpit-race-no">${raceNo}R</span> ${escapeHTML(raceInfo.raceName) || `第${raceNo}レース`}</h2>
+        <div class="race-meta cockpit-race-meta">
+          ${raceInfo.distance ? distanceBadgeHtml(raceInfo.distance) : ''}
+          <span><i class="fas fa-horse"></i> ${horses.length}頭</span>
+          ${raceInfo.trackCond?`<span class="track-cond-badge track-cond-${trackCondClass(raceInfo.trackCond)}"><i class="fas fa-cloud-rain"></i> ${escapeHTML(raceInfo.trackCond)}</span>`:''}
+          ${raceInfo.raceClass?`<span class="race-class-badge ${raceClassCssClass(raceInfo.raceClass)}">${escapeHTML(raceInfo.raceClass)}</span>`:''}
+          ${(raceInfo._isDebaTable||raceInfo._isDebaFallback)?`<span class="cockpit-provisional"><i class="fas fa-clock"></i> 出馬表前</span>`:''}
+        </div>
+      </div>
+      <div class="cockpit-race-time">
+        <strong>${_raceTime ? `${_raceTime}発走` : '発走時刻未定'}</strong>
+        ${_raceTime ? `<span class="race-countdown" data-cd-date="${raceInfo.raceDate}" data-cd-time="${_raceTime}" style="display:none"></span>` : ''}
+        <div class="cockpit-race-actions">
+          ${_hasReplay ? `<button class="btn-replay btn-sm" onclick="openRaceReplay(${raceNo})"><i class="fas fa-play"></i> 展開</button>` : ''}
+          ${_hasMovie ? `<button id="movie-btn-${raceNo}" class="btn btn-movie btn-sm" onclick="toggleMoviePanel(${raceNo})"><i class="fas fa-video"></i> 映像</button>` : ''}
         </div>
       </div>
     </div>
@@ -4989,7 +5163,16 @@ function renderRaceContent(raceNo) {
       </div><!-- /admin-input-body -->
     </div><!-- /admin-input-wrap -->`;
   section.appendChild(hCard);
-  const tSec=document.createElement('div'); tSec.className='deban-section';
+  const pickDock=document.createElement('div');
+  pickDock.id=`cockpit-picks-${raceNo}`;
+  pickDock.className='cockpit-picks';
+  pickDock.setAttribute('aria-label', 'AI注目馬');
+  pickDock.innerHTML=`
+    <div class="cockpit-pick is-loading"><span class="cockpit-mark">◎</span><span>AI本命を計算中</span></div>
+    <div class="cockpit-pick is-loading"><span class="cockpit-mark is-second">○</span><span>相手候補を計算中</span></div>
+    <div class="cockpit-pick is-loading"><span class="cockpit-mark is-value">☆</span><span>妙味候補を計算中</span></div>`;
+  section.appendChild(pickDock);
+  const tSec=document.createElement('div'); tSec.className='deban-section cockpit-race-panel';
   tSec.innerHTML=`
     <!-- タブバー：position:relative で右側コントロールを絶対配置（見た目はクラスで定義＝ダーク上書き対応） -->
     <div id="kv-tabbar-${raceNo}"
@@ -5001,26 +5184,25 @@ function renderRaceContent(raceNo) {
           <i class="fas fa-table"></i>
           <span>出馬表</span>
         </button>
-        <button id="tab-btn-kekka-${raceNo}" class="kv-vtab" data-view="kekka" style="display:none"
-                onclick="switchViewTab(${raceNo},'kekka')">
-          <i class="fas fa-flag-checkered"></i>
-          <span>結果</span>
-        </button>
-        <button id="tab-btn-ability-${raceNo}" class="kv-vtab" data-view="ability"
-                onclick="switchViewTab(${raceNo},'ability')">
-          <i class="fas fa-chart-bar"></i>
-          <span>能力表</span>
-          <span class="vt-badge">過去5走</span>
-        </button>
         <button id="tab-btn-yoso-${raceNo}" class="kv-vtab" data-view="yoso"
                 onclick="switchViewTab(${raceNo},'yoso')">
           <i class="fas fa-star"></i>
           <span>AI予想</span>
         </button>
-        <button id="tab-btn-ranking-${raceNo}" class="kv-vtab" data-view="ranking"
-                onclick="switchViewTab(${raceNo},'ranking')">
-          <i class="fas fa-trophy"></i>
-          <span>ランキング</span>
+        <button id="tab-btn-ability-${raceNo}" class="kv-vtab" data-view="ability"
+                onclick="switchViewTab(${raceNo},'ability')">
+          <i class="fas fa-columns"></i>
+          <span>馬比較</span>
+        </button>
+        <button id="tab-btn-odds-${raceNo}" class="kv-vtab" data-view="odds"
+                onclick="switchViewTab(${raceNo},'odds')">
+          <i class="fas fa-chart-line"></i>
+          <span>オッズ</span>
+        </button>
+        <button id="tab-btn-kekka-${raceNo}" class="kv-vtab" data-view="kekka" disabled
+                onclick="switchViewTab(${raceNo},'kekka')">
+          <i class="fas fa-flag-checkered"></i>
+          <span>結果</span>
         </button>
       </div>
       <!-- 右：コメント操作 — 絶対配置で右端に固定 -->
@@ -5115,10 +5297,18 @@ function renderRaceContent(raceNo) {
 
     <!-- AI予想ビュー：AI予想ランキング＋狙い目/穴馬/買い得チェック/スコア解説（全員に表示）＋管理者詳細（旧予想AIパネル・折りたたみ初期閉・管理者のみ） -->
     <div id="view-yoso-${raceNo}" style="display:none;padding:12px 14px 12px;">
-      <div id="kvx-yoso-slot-${raceNo}" class="kvx-yoso-slot">
-        <div id="kvx-yoso-empty-${raceNo}" class="kvx-yoso-empty" hidden>AI予想を表示できません</div>
+      <div id="cockpit-ai-panel-${raceNo}" class="cockpit-ai-panel" aria-live="polite">
+        <div class="cockpit-panel-empty"><i class="fas fa-spinner fa-spin"></i> AI判断を整理しています</div>
       </div>
-      <div id="yoso-public-extra-${raceNo}" class="yoso-public-extra"></div>
+      <details class="cockpit-ai-details">
+        <summary><i class="fas fa-microscope"></i> 詳しい予想根拠・期待値を見る</summary>
+        <div class="cockpit-ai-details-body">
+          <div id="kvx-yoso-slot-${raceNo}" class="kvx-yoso-slot">
+            <div id="kvx-yoso-empty-${raceNo}" class="kvx-yoso-empty" hidden>AI予想を表示できません</div>
+          </div>
+          <div id="yoso-public-extra-${raceNo}" class="yoso-public-extra"></div>
+        </div>
+      </details>
       <details id="yoso-admin-detail-${raceNo}" class="yoso-admin-detail admin-only">
         <summary>管理者詳細（AI予想の内部パネル・EV／穴馬／検証）</summary>
         <div id="yoso-panel-${raceNo}">
@@ -5127,10 +5317,10 @@ function renderRaceContent(raceNo) {
       </details>
     </div>
 
-    <!-- ランキングビュー -->
-    <div id="view-ranking-${raceNo}" style="display:none;padding:12px 14px 12px;">
-      <div id="ranking-panel-${raceNo}">
-        <div style="text-align:center;padding:24px;color:#9ca3af;font-size:13px;"><i class="fas fa-spinner fa-spin"></i> 読み込み中...</div>
+    <!-- オッズビュー -->
+    <div id="view-odds-${raceNo}" style="display:none;padding:12px 14px 12px;">
+      <div id="odds-panel-${raceNo}" class="cockpit-odds-panel">
+        <div class="cockpit-panel-empty"><i class="fas fa-spinner fa-spin"></i> オッズを整理しています</div>
       </div>
     </div>`;
   section.appendChild(tSec);
@@ -5152,6 +5342,9 @@ function renderRaceContent(raceNo) {
   setTimeout(() => renderDeploySimPanel(raceNo), 0);
   setTimeout(() => renderPaceAIPanel(raceNo), 0);
   setTimeout(() => renderDebanExtra(raceNo), 0);
+  setTimeout(() => renderCockpitSummary(raceNo), 0);
+  setTimeout(() => renderOddsPanel(raceNo), 0);
+  _updateCockpitRaceStatus(raceNo);
   // コメントが保存済みなら再描画（レース移動後も維持）
   if (data.horses.some(h => h.postComment)) {
     _renderCommentsInTable(raceNo);
@@ -5165,6 +5358,139 @@ function renderRaceContent(raceNo) {
     // チェックボックスの状態に合わせて表示切替
     if (!_commentVisible) _hideCommentRows(raceNo);
   }
+}
+
+function _cockpitDateLabel(raw) {
+  const m = String(raw || '').match(/(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})/);
+  const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date();
+  const dow = ['日曜','月曜','火曜','水曜','木曜','金曜','土曜'][d.getDay()];
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${dow}`;
+}
+
+/** サンプル上部の「馬場／オッズ時刻」を、選択中レースの実データへ同期する。 */
+function _updateCockpitRaceStatus(raceNo) {
+  const data = allRacesData[raceNo];
+  if (!data) return;
+  const info = data.raceInfo || {};
+  const dateEl = document.getElementById('cockpit-today-label');
+  if (dateEl) dateEl.textContent = _cockpitDateLabel(info.raceDate);
+  const trackEl = document.getElementById('cockpit-global-track');
+  if (trackEl) trackEl.innerHTML = `<i class="fas fa-cloud-rain"></i> ${escapeHTML(info.trackCond || info.track_cond || '—')}`;
+  const oddsEl = document.getElementById('cockpit-global-odds');
+  if (oddsEl) {
+    let label = '未取得';
+    if (data._liveOddsObservedAt) {
+      const t = new Date(data._liveOddsObservedAt);
+      if (!isNaN(t.getTime())) label = `${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
+    } else if ((data.horses || []).some(h => parseFloat(h.odds) > 0)) label = '保存値';
+    oddsEl.innerHTML = `<i class="fas fa-sync-alt"></i> オッズ ${label}`;
+  }
+}
+
+function _cockpitReasonFor(scoredHorse) {
+  if (!scoredHorse) return '評価データなし';
+  const factors = [
+    ['近走上向き', scoredHorse.trendMod], ['距離適性', scoredHorse.distMod], ['馬場適性', scoredHorse.condMod],
+    ['先行力', scoredHorse.cornMod], ['騎手・厩舎', scoredHorse.comboMod], ['末脚', scoredHorse.agariMod],
+    ['展開適性', scoredHorse.paceCtxMod], ['クラス適性', scoredHorse.classMod], ['ローテ', scoredHorse.rotMod]
+  ].filter(x => Number(x[1]) > 0.15).sort((a, b) => Number(b[1]) - Number(a[1]));
+  if (factors.length) return factors.slice(0, 2).map(x => x[0]).join('・');
+  return scoredHorse.baseScore != null ? '基礎走力を評価' : '総合評価上位';
+}
+
+/** サンプルの◎・○・☆カードと簡潔なAI表を、既存予想コアの結果だけで描画する。 */
+function renderCockpitSummary(raceNo) {
+  const dock = document.getElementById(`cockpit-picks-${raceNo}`);
+  const panel = document.getElementById(`cockpit-ai-panel-${raceNo}`);
+  if (!dock && !panel) return;
+  let result = null;
+  try { result = computeYosoScored(raceNo, null); } catch(e) { console.warn('[cockpit summary]', e); }
+  const scored = (result?.scored || []).filter(s => s && s.horse && s.totalScore != null);
+  if (!scored.length) {
+    const empty = '<div class="cockpit-panel-empty"><i class="fas fa-info-circle"></i> 過去走データが揃うとAI注目馬を表示します</div>';
+    if (dock) dock.innerHTML = empty;
+    if (panel) panel.innerHTML = empty;
+    return;
+  }
+
+  const main = scored[0] || null;
+  const second = scored[1] || null;
+  const used = new Set([main?.horse?.horseName, second?.horse?.horseName].filter(Boolean));
+  let value = null, valueKind = 'rank';
+  try {
+    const ev = computeEvBets(raceNo, result?.selCond);
+    const evPick = ev?.runners?.find(r => r.inWindow && !used.has(r.name));
+    if (evPick) {
+      value = scored.find(s => s.horse.horseName === evPick.name) || null;
+      if (value) valueKind = 'ev';
+    }
+  } catch(e) {}
+  if (!value) {
+    const gapCands = scored.slice(2).map((s, idx) => {
+      const aiRank = idx + 3, popularity = parseInt(s.horse.ninki);
+      return { s, gap: Number.isFinite(popularity) ? popularity - aiRank : -99, odds: parseFloat(s.horse.odds) || 0 };
+    }).filter(x => x.gap >= 2 && x.odds >= 5).sort((a, b) => b.gap - a.gap || b.odds - a.odds);
+    if (gapCands[0]) { value = gapCands[0].s; valueKind = 'gap'; }
+  }
+  const picks = [
+    { mark:'◎', kind:'main', s:main, note: main ? `軸候補・${_cockpitReasonFor(main)}` : '軸候補なし' },
+    { mark:'○', kind:'second', s:second, note: second ? `相手本線・${_cockpitReasonFor(second)}` : '相手候補なし' },
+    { mark:'☆', kind:'value', s:value, note: value ? (valueKind === 'ev' ? '期待値条件を通過' : 'AI評価が人気を上回る') : '現在は明確な妙味なし' }
+  ];
+  const cardHtml = p => {
+    if (!p.s) return `<div class="cockpit-pick is-empty"><span class="cockpit-mark is-${p.kind}">${p.mark}</span><div class="cockpit-pick-copy"><strong>候補なし</strong><small>${p.note}</small></div><span class="cockpit-odds">—</span></div>`;
+    const h = p.s.horse, odds = parseFloat(h.odds), ninki = parseInt(h.ninki);
+    const market = `${Number.isFinite(ninki) ? ninki + '人気 ' : ''}${Number.isFinite(odds) ? odds.toFixed(1) : '—'}`;
+    return `<button type="button" class="cockpit-pick is-${p.kind}" onclick="switchViewTab(${raceNo},'yoso')">
+      <span class="cockpit-mark is-${p.kind}">${p.mark}</span>
+      <span class="cockpit-pick-copy"><strong>${escapeHTML(h.umaBan || '—')}番 ${escapeHTML(h.horseName) || '—'}</strong><small>${escapeHTML(p.note)}</small></span>
+      <span class="cockpit-odds">${escapeHTML(market)}</span>
+    </button>`;
+  };
+  if (dock) dock.innerHTML = picks.map(cardHtml).join('');
+
+  if (panel) {
+    const rows = picks.filter(p => p.s).map(p => {
+      const h = p.s.horse, idx = scored.indexOf(p.s) + 1;
+      const odds = parseFloat(h.odds), ninki = parseInt(h.ninki);
+      const market = `${Number.isFinite(ninki) ? ninki + '人気' : '人気—'} ${Number.isFinite(odds) ? odds.toFixed(1) : '—'}`;
+      const reason = p.kind === 'value' && valueKind === 'ev' ? 'AIの勝率に対してオッズが高い' : p.kind === 'value' && valueKind === 'gap' ? '人気よりAI順位が高い' : _cockpitReasonFor(p.s);
+      const icon = p.kind === 'value' ? 'fa-bullseye' : p.kind === 'main' ? 'fa-chart-line' : 'fa-route';
+      return `<tr>
+        <td><div class="cockpit-horse"><span class="cockpit-uma">${escapeHTML(h.umaBan || '—')}</span><span><b>${p.mark} ${escapeHTML(h.horseName) || '—'}</b><small>AI ${idx}位</small></span></div></td>
+        <td class="cockpit-market">${escapeHTML(market)}</td>
+        <td><i class="fas ${icon}"></i> ${escapeHTML(reason)}</td>
+      </tr>`;
+    }).join('');
+    panel.innerHTML = `<div class="cockpit-panel-head"><div><h3>AI予想</h3><p>履歴・展開・馬場・市場評価を統合</p></div><span>上位${picks.filter(p => p.s).length}頭</span></div>
+      <div class="table-wrapper"><table class="cockpit-table"><thead><tr><th>印・馬</th><th>市場</th><th>判断材料</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+}
+
+/** サンプルのオッズタブ。既存の取得処理と同じhorses配列を読み取り専用で一覧化する。 */
+function renderOddsPanel(raceNo) {
+  const panel = document.getElementById(`odds-panel-${raceNo}`);
+  const data = allRacesData[raceNo];
+  if (!panel || !data) return;
+  let rankMap = new Map();
+  try {
+    const scored = computeYosoScored(raceNo, null)?.scored || [];
+    rankMap = new Map(scored.filter(s => s?.horse).map((s, i) => [s.horse.horseName, i + 1]));
+  } catch(e) {}
+  const horses = [...(data.horses || [])].sort((a, b) => {
+    const ao = parseFloat(a.odds), bo = parseFloat(b.odds);
+    return (Number.isFinite(ao) ? ao : 99999) - (Number.isFinite(bo) ? bo : 99999) || (parseInt(a.umaBan) || 0) - (parseInt(b.umaBan) || 0);
+  });
+  const valid = horses.filter(h => parseFloat(h.odds) > 0).length;
+  const observed = data._liveOddsObservedAt ? new Date(data._liveOddsObservedAt) : null;
+  const stamp = observed && !isNaN(observed.getTime()) ? `${String(observed.getHours()).padStart(2,'0')}:${String(observed.getMinutes()).padStart(2,'0')}現在` : (valid ? '保存オッズ' : '未取得');
+  const rows = horses.map(h => {
+    const odds = parseFloat(h.odds), ninki = parseInt(h.ninki), aiRank = rankMap.get(h.horseName);
+    const ai = aiRank === 1 ? '◎' : aiRank === 2 ? '○' : aiRank === 3 ? '▲' : '';
+    return `<tr><td><span class="cockpit-uma">${escapeHTML(h.umaBan || '—')}</span></td><td><b>${ai} ${escapeHTML(h.horseName) || '—'}</b></td><td>${Number.isFinite(ninki) ? ninki + '人気' : '—'}</td><td class="cockpit-odds-value">${Number.isFinite(odds) ? odds.toFixed(1) : '—'}</td><td>${aiRank ? `AI ${aiRank}位` : '—'}</td></tr>`;
+  }).join('');
+  panel.innerHTML = `<div class="cockpit-panel-head"><div><h3>単勝オッズ</h3><p>${escapeHTML(stamp)}・取得 ${valid}/${horses.length}頭</p></div><button type="button" class="btn btn-secondary viewer-ok" onclick="fetchLiveOddsBtn(${raceNo})"><i class="fas fa-sync-alt"></i> 最新に更新</button></div>
+    <div class="table-wrapper"><table class="cockpit-table cockpit-odds-table"><thead><tr><th>馬番</th><th>馬名</th><th>人気</th><th>単勝</th><th>AI</th></tr></thead><tbody>${rows || '<tr><td colspan="5">出走馬データがありません</td></tr>'}</tbody></table></div>`;
 }
 
 /**
@@ -5230,6 +5556,9 @@ async function fetchLiveOddsBtn(raceNo) {
   try {
     const n = await fetchLiveOdds(raceNo);
     renderHorseRows(raceNo, allRacesData[raceNo].horses);
+    renderCockpitSummary(raceNo);
+    renderOddsPanel(raceNo);
+    _updateCockpitRaceStatus(raceNo);
     // 表を再構築するとコメント行が消えるので、保存済みコメントを再描画（オッズ取得でコメントが消えるバグ修正）
     if (allRacesData[raceNo]?.horses.some(h => h.postComment)) _renderCommentsInTable(raceNo);
     if (btn) btn.innerHTML = `💹 更新済（${n}頭）`;
@@ -5418,6 +5747,7 @@ async function _kvTickOddsAuto() {
       renderHorseRows(raceNo, allRacesData[raceNo].horses);
       if (allRacesData[raceNo].horses.some(h => h.postComment)) { try { _renderCommentsInTable(raceNo); } catch(e) {} }
       try { renderPredictionPanel(raceNo); } catch(e) {}      // オッズ変化でAI印・EVも見直す
+      try { renderCockpitSummary(raceNo); renderOddsPanel(raceNo); _updateCockpitRaceStatus(raceNo); } catch(e) {}
       _kvSetOddsAutoNote(raceNo, '自動更新');
     }
   } catch(e) { /* 未発売・プロキシ失敗などは静かに次回へ */ }
@@ -6162,18 +6492,18 @@ function switchViewTab(raceNo, view) {
   const kekkaView   = document.getElementById(`view-kekka-${raceNo}`);
   const abilityView = document.getElementById(`view-ability-${raceNo}`);
   const yosoView    = document.getElementById(`view-yoso-${raceNo}`);
-  const rankingView = document.getElementById(`view-ranking-${raceNo}`);
+  const oddsView    = document.getElementById(`view-odds-${raceNo}`);
   const debanBtn    = document.getElementById(`tab-btn-deban-${raceNo}`);
   const kekkaBtn    = document.getElementById(`tab-btn-kekka-${raceNo}`);
   const abilityBtn  = document.getElementById(`tab-btn-ability-${raceNo}`);
   const yosoBtn     = document.getElementById(`tab-btn-yoso-${raceNo}`);
-  const rankingBtn  = document.getElementById(`tab-btn-ranking-${raceNo}`);
+  const oddsBtn     = document.getElementById(`tab-btn-odds-${raceNo}`);
   const debanCtrl   = document.getElementById(`deban-controls-${raceNo}`);
   if (!debanView || !abilityView) return;
   _kvLastViewTab = view; // 直近選択のサブタブを記憶（新規レース表示時にswitchRaceTab/renderRaceContentから復元）
 
-  [debanView, kekkaView, abilityView, yosoView, rankingView].forEach(v => { if (v) v.style.display = 'none'; });
-  [debanBtn, kekkaBtn, abilityBtn, yosoBtn, rankingBtn].forEach(b => { if (b) b.classList.remove('on'); });
+  [debanView, kekkaView, abilityView, yosoView, oddsView].forEach(v => { if (v) v.style.display = 'none'; });
+  [debanBtn, kekkaBtn, abilityBtn, yosoBtn, oddsBtn].forEach(b => { if (b) b.classList.remove('on'); });
   if (debanCtrl) debanCtrl.style.display = 'none';
 
   if (view === 'deban') {
@@ -6192,17 +6522,21 @@ function switchViewTab(raceNo, view) {
     if (yosoView) yosoView.style.display = '';
     if (yosoBtn) yosoBtn.classList.add('on');
     renderPredictionPanel(raceNo);
-  } else if (view === 'ranking') {
-    if (rankingView) rankingView.style.display = '';
-    if (rankingBtn) rankingBtn.classList.add('on');
-    renderRankingPanel(raceNo);
+  } else if (view === 'odds') {
+    if (oddsView) oddsView.style.display = '';
+    if (oddsBtn) oddsBtn.classList.add('on');
+    renderOddsPanel(raceNo);
   }
 }
 
 /** 結果タブの表示可否を同期（結果ありレースのみタブを出す） */
 function _kvSyncKekkaTab(raceNo, hasResults) {
   const btn = document.getElementById(`tab-btn-kekka-${raceNo}`);
-  if (btn) btn.style.display = hasResults ? '' : 'none';
+  if (btn) {
+    btn.style.display = '';
+    btn.disabled = !hasResults;
+    btn.title = hasResults ? '確定結果を見る' : '結果確定後に表示します';
+  }
 }
 
 // ══════════════ 結果ビュー（着順・位置取り・払戻金）2026-07-10 ══════════════
@@ -18241,6 +18575,9 @@ async function fetchOddsForEv(raceNo) {
     return;
   }
   renderPredictionPanel(raceNo); // EVモニターを再計算して反映
+  renderCockpitSummary(raceNo);
+  renderOddsPanel(raceNo);
+  _updateCockpitRaceStatus(raceNo);
 }
 
 /** 💹 EVモニターのHTML。オッズ未取得なら取得ボタン、該当なしは見送り、該当ありは傾斜額つきで提示。 */
