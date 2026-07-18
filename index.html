@@ -2106,17 +2106,29 @@ const KV_APP_CSS = [
       'body.kv-cockpit .cockpit-table td{padding:9px;border-bottom:1px solid var(--kc-border);vertical-align:middle}',
       'body.kv-cockpit .cockpit-table tbody tr:last-child td{border-bottom:0}',
       'body.kv-cockpit .cockpit-table td:last-child i{width:15px;color:var(--kc-primary)}',
-      'body.kv-cockpit .cockpit-horse{display:flex;align-items:center;gap:8px;min-width:150px}',
+      'body.kv-cockpit .cockpit-rank-row{--rank-color:#64748b}',
+      'body.kv-cockpit .cockpit-rank-row td:first-child{box-shadow:inset 3px 0 var(--rank-color)}',
+      'body.kv-cockpit .cockpit-rank-row.is-main{--rank-color:#ef4444;background:rgba(239,68,68,.035)}',
+      'body.kv-cockpit .cockpit-rank-row.is-second{--rank-color:#3b82f6;background:rgba(59,130,246,.035)}',
+      'body.kv-cockpit .cockpit-rank-row.is-third{--rank-color:#f59e0b}',
+      'body.kv-cockpit .cockpit-rank-row.is-fourth{--rank-color:#22c55e}',
+      'body.kv-cockpit .cockpit-horse{display:flex;align-items:center;gap:8px;min-width:210px}',
       'body.kv-cockpit .cockpit-horse>span:last-child{display:grid;gap:1px}',
       'body.kv-cockpit .cockpit-horse small{color:var(--kc-muted);font-size:9px}',
+      'body.kv-cockpit .cockpit-rank-mark{width:27px;height:27px;display:inline-grid;place-items:center;flex:0 0 auto;border:1px solid color-mix(in srgb,var(--rank-color) 50%,transparent);border-radius:50%;background:color-mix(in srgb,var(--rank-color) 13%,transparent);color:var(--rank-color);font-size:14px;font-weight:900}',
       'body.kv-cockpit .cockpit-uma{width:27px;height:27px;display:inline-grid;place-items:center;border-radius:4px;background:var(--kc-surface-3);font-weight:900}',
+      'body.kv-cockpit .cockpit-value-badge{display:inline-flex;align-items:center;margin-left:5px;padding:1px 5px;border:1px solid rgba(8,145,178,.35);border-radius:999px;background:rgba(8,145,178,.1);color:#0891b2;font-size:8px;font-weight:900}',
+      'body.kv-cockpit .cockpit-value-note{display:flex;align-items:center;gap:9px;margin-top:9px;padding:9px 11px;border:1px solid rgba(8,145,178,.28);border-radius:7px;background:rgba(8,145,178,.07);color:var(--kc-text);font-size:11px}',
+      'body.kv-cockpit .cockpit-value-note .cockpit-rank-mark{--rank-color:#0891b2}',
+      'body.kv-cockpit .cockpit-value-note strong{color:#0891b2}',
+      'body.kv-cockpit .cockpit-value-note small{margin-left:auto;color:var(--kc-muted);white-space:nowrap}',
       'body.kv-cockpit .cockpit-market{white-space:nowrap}',
       'body.kv-cockpit .cockpit-odds-value{font-size:15px;font-weight:900;color:var(--kc-primary)}',
       'body.kv-cockpit .cockpit-ai-details{margin-top:10px;border:1px solid var(--kc-border);border-radius:7px;background:var(--kc-surface-2);overflow:hidden}',
       'body.kv-cockpit .cockpit-ai-details>summary{padding:9px 11px;color:var(--kc-muted);font-size:11px;font-weight:700;cursor:pointer;list-style:none}',
       'body.kv-cockpit .cockpit-ai-details>summary::-webkit-details-marker{display:none}',
       'body.kv-cockpit .cockpit-ai-details-body{padding:10px;border-top:1px solid var(--kc-border)}',
-      '@media(max-width:640px){body.kv-cockpit .header-sub{display:block!important;margin-left:32px!important}body.kv-cockpit .cockpit-live-status{flex-direction:column;align-items:flex-end;gap:3px}body.kv-cockpit .cockpit-live-status span{padding:2px 5px;font-size:8px}body.kv-cockpit #cockpit-global-odds i{display:none}body.kv-cockpit #race-tabs-section.sidebar-mode .race-tabs{grid-template-columns:repeat(6,minmax(0,1fr))!important}body.kv-cockpit .cockpit-race-heading{align-items:flex-start}body.kv-cockpit .race-name{font-size:16px!important}body.kv-cockpit .cockpit-race-time>strong{font-size:12px}body.kv-cockpit .cockpit-race-meta{font-size:10px}body.kv-cockpit .cockpit-picks{grid-template-columns:1fr;gap:6px}body.kv-cockpit .cockpit-pick{min-height:64px;padding:9px 10px}body.public-mode.kv-cockpit .kv-vtabs{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}body.public-mode.kv-cockpit .kv-vtab{height:36px!important;padding:0 5px!important}body.kv-cockpit .cockpit-panel-head{align-items:flex-start}body.kv-cockpit .cockpit-table{min-width:560px}}',
+      '@media(max-width:640px){body.kv-cockpit .header-sub{display:block!important;margin-left:32px!important}body.kv-cockpit .cockpit-live-status{flex-direction:column;align-items:flex-end;gap:3px}body.kv-cockpit .cockpit-live-status span{padding:2px 5px;font-size:8px}body.kv-cockpit #cockpit-global-odds i{display:none}body.kv-cockpit #race-tabs-section.sidebar-mode .race-tabs{grid-template-columns:repeat(6,minmax(0,1fr))!important}body.kv-cockpit .cockpit-race-heading{align-items:flex-start}body.kv-cockpit .race-name{font-size:16px!important}body.kv-cockpit .cockpit-race-time>strong{font-size:12px}body.kv-cockpit .cockpit-race-meta{font-size:10px}body.kv-cockpit .cockpit-picks{grid-template-columns:1fr;gap:6px}body.kv-cockpit .cockpit-pick{min-height:64px;padding:9px 10px}body.public-mode.kv-cockpit .kv-vtabs{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}body.public-mode.kv-cockpit .kv-vtab{height:36px!important;padding:0 5px!important}body.kv-cockpit .cockpit-panel-head{align-items:flex-start}body.kv-cockpit .cockpit-table{min-width:620px}body.kv-cockpit .cockpit-value-note{align-items:flex-start;flex-wrap:wrap}body.kv-cockpit .cockpit-value-note small{width:100%;margin-left:36px}}',
 ];
 (function kvInjectStyles(){
   if (document.getElementById('kv-styles')) return;
@@ -5398,7 +5410,7 @@ function _cockpitReasonFor(scoredHorse) {
   return scoredHorse.baseScore != null ? '基礎走力を評価' : '総合評価上位';
 }
 
-/** サンプルの◎・○・☆カードと簡潔なAI表を、既存予想コアの結果だけで描画する。 */
+/** サンプルの◎・○・☆注目カードと、◎○▲△××の全印表を既存予想コアの結果だけで描画する。 */
 function renderCockpitSummary(raceNo) {
   const dock = document.getElementById(`cockpit-picks-${raceNo}`);
   const panel = document.getElementById(`cockpit-ai-panel-${raceNo}`);
@@ -5450,20 +5462,33 @@ function renderCockpitSummary(raceNo) {
   if (dock) dock.innerHTML = picks.map(cardHtml).join('');
 
   if (panel) {
-    const rows = picks.filter(p => p.s).map(p => {
-      const h = p.s.horse, idx = scored.indexOf(p.s) + 1;
+    const fullMarks = ['◎', '○', '▲', '△', '×', '×'];
+    const rankTones = ['main', 'second', 'third', 'fourth', 'fifth', 'fifth'];
+    const marked = scored.slice(0, fullMarks.length);
+    const rows = marked.map((s, idx) => {
+      const h = s.horse, mark = fullMarks[idx], tone = rankTones[idx];
       const odds = parseFloat(h.odds), ninki = parseInt(h.ninki);
       const market = `${Number.isFinite(ninki) ? ninki + '人気' : '人気—'} ${Number.isFinite(odds) ? odds.toFixed(1) : '—'}`;
-      const reason = p.kind === 'value' && valueKind === 'ev' ? 'AIの勝率に対してオッズが高い' : p.kind === 'value' && valueKind === 'gap' ? '人気よりAI順位が高い' : _cockpitReasonFor(p.s);
-      const icon = p.kind === 'value' ? 'fa-bullseye' : p.kind === 'main' ? 'fa-chart-line' : 'fa-route';
-      return `<tr>
-        <td><div class="cockpit-horse"><span class="cockpit-uma">${escapeHTML(h.umaBan || '—')}</span><span><b>${p.mark} ${escapeHTML(h.horseName) || '—'}</b><small>AI ${idx}位</small></span></div></td>
+      const isValue = s === value;
+      const reason = isValue && valueKind === 'ev' ? 'AIの勝率に対してオッズが高い' : isValue && valueKind === 'gap' ? '人気よりAI順位が高い' : _cockpitReasonFor(s);
+      const icon = idx === 0 ? 'fa-chart-line' : isValue ? 'fa-bullseye' : idx === 1 ? 'fa-route' : 'fa-layer-group';
+      const valueBadge = isValue ? '<span class="cockpit-value-badge">☆ 妙味</span>' : '';
+      return `<tr class="cockpit-rank-row is-${tone}">
+        <td><div class="cockpit-horse"><span class="cockpit-rank-mark">${mark}</span><span class="cockpit-uma">${escapeHTML(h.umaBan || '—')}</span><span><b>${escapeHTML(h.horseName) || '—'}</b><small>AI ${idx + 1}位${valueBadge}</small></span></div></td>
         <td class="cockpit-market">${escapeHTML(market)}</td>
         <td><i class="fas ${icon}"></i> ${escapeHTML(reason)}</td>
       </tr>`;
     }).join('');
-    panel.innerHTML = `<div class="cockpit-panel-head"><div><h3>AI予想</h3><p>履歴・展開・馬場・市場評価を統合</p></div><span>上位${picks.filter(p => p.s).length}頭</span></div>
-      <div class="table-wrapper"><table class="cockpit-table"><thead><tr><th>印・馬</th><th>市場</th><th>判断材料</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    let valueNote = '';
+    if (value && !marked.includes(value)) {
+      const h = value.horse, idx = scored.indexOf(value) + 1;
+      const odds = parseFloat(h.odds), ninki = parseInt(h.ninki);
+      const market = `${Number.isFinite(ninki) ? ninki + '人気' : '人気—'}・${Number.isFinite(odds) ? odds.toFixed(1) + '倍' : 'オッズ—'}`;
+      const reason = valueKind === 'ev' ? 'AIの勝率に対してオッズが高い' : '人気よりAI順位が高い';
+      valueNote = `<div class="cockpit-value-note"><span class="cockpit-rank-mark">☆</span><span><strong>妙味候補</strong> ${escapeHTML(h.umaBan || '—')}番 ${escapeHTML(h.horseName) || '—'}<br><span style="color:var(--kc-muted)">${escapeHTML(reason)}</span></span><small>AI ${idx}位・${escapeHTML(market)}</small></div>`;
+    }
+    panel.innerHTML = `<div class="cockpit-panel-head"><div><h3>AI予想</h3><p>AI順位どおりの全印。☆は印と分けて妙味を表示</p></div><span>全印 ${marked.length}頭</span></div>
+      <div class="table-wrapper"><table class="cockpit-table"><thead><tr><th>印・馬</th><th>市場</th><th>判断材料</th></tr></thead><tbody>${rows}</tbody></table></div>${valueNote}`;
   }
 }
 
