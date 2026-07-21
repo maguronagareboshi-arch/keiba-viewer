@@ -3824,6 +3824,22 @@ function analysisHtml(st) {
     <div class="legend">レース結果の「発走状況」欄に出遅れと書かれた馬を数えています。記載が無いレースは出遅れ0件として数えています。</div>`;
   })();
 
+  // ---- 調教短評のクセ ----
+  // 短評はほぼ定型文なので、その文言が付いた馬がその後どうだったかをそのまま集計できる。
+  const tanpyoStats = st.tanpyo_stats || {};
+  const tanpyoCard = !Object.keys(tanpyoStats).length ? '' : (() => {
+    const list = Object.entries(tanpyoStats).sort((a, b) => b[1].top3_rate - a[1].top3_rate);
+    const rows = list.map(([text, s]) => `<tr><td class="l">${esc(text)}</td>
+      <td class="num">${(s.win_rate * 100).toFixed(1)}%</td>
+      <td class="num ${s.top3_rate >= 0.4 ? 'best' : s.top3_rate <= 0.15 ? 'a1' : ''}">${(s.top3_rate * 100).toFixed(1)}%</td>
+      <td class="num">${s.n.toLocaleString('ja-JP')}</td></tr>`).join('');
+    return `<h3 class="sec">📝 調教短評のクセ（${state.track}・複勝率が高い順）</h3>
+    <div class="card tablewrap" style="max-height:520px;overflow-y:auto"><table>
+      <tr><th>短評</th><th>勝率</th><th>複勝率</th><th>件数</th></tr>${rows}
+    </table></div>
+    <div class="legend">その短評が付いた馬が、実際のレースでどんな成績だったかの集計です（表記がほぼ定型文なので文言そのままで集計・件数80以上のみ）。過去の傾向であり、この短評が付いた馬を狙う根拠として使えることを保証するものではありません。</div>`;
+  })();
+
   return `
   <div class="note">対象: ${st.n_races}レース（〜${esc(st.generated)}）。基準タイム比＝距離・クラス・馬場ごとの標準タイムと比べてその日は平均何秒速い/遅い走破時計だったか（マイナス＝タフ・時計がかかった／プラス＝軽い馬場）。前残り度は「その日の(前複勝率−後複勝率) − ${state.track}平均ギャップ${st.overall_gap != null ? `(+${st.overall_gap})` : ''}」の相対値。上がり偏差は基準タイム比（負＝上がりが速い＝差しが利く馬場）。</div>
   <h3 class="sec">開催日ごとの馬場バイアス（直近20日・${state.track}平均との相対評価）</h3>
@@ -3844,6 +3860,7 @@ function analysisHtml(st) {
   ${popCard}
   ${c4Card}
   ${startCard}
+  ${tanpyoCard}
   <div class="grid2">${rankTable(st.jockeys, '騎手')}${rankTable(st.trainers, '厩舎')}</div>`;
 }
 
