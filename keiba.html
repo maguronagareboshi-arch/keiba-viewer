@@ -229,8 +229,8 @@ a.horse-link:hover { text-decoration: underline; }
 .np-toggle button { border: 1px solid var(--border); background: var(--chip-bg); color: var(--text); border-radius: 6px; padding: 5px 14px; cursor: pointer; font-size: 12px; }
 .np-toggle button.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 .np-wrap { overflow-x: auto; }
-.np-grid { display: flex; flex-direction: column; gap: 8px; min-width: 680px; }
-.np-row { display: grid; grid-template-columns: 172px repeat(3, 1fr); gap: 6px; }
+.np-grid { display: flex; flex-direction: column; gap: 8px; min-width: 1150px; }
+.np-row { display: grid; grid-template-columns: 176px repeat(5, 1fr); gap: 6px; }
 .np-horse { border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; font-size: 12px; line-height: 1.6; background: var(--panel); }
 .np-mark { font-size: 15px; }
 .np-meta { color: var(--sub); font-size: 11px; }
@@ -247,6 +247,12 @@ a.horse-link:hover { text-decoration: underline; }
 .np-cmt { color: var(--sub); border-top: 1px dashed var(--border); margin-top: 3px; padding-top: 2px; }
 .np-run-empty { display: flex; align-items: center; justify-content: center; color: var(--sub); }
 .np-fallback { grid-column: 2 / -1; padding: 8px 10px; }
+.np-race-name { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.np-eizo { border: 1px solid var(--border); background: var(--chip-bg); color: var(--accent); border-radius: 5px;
+  padding: 1px 8px; cursor: pointer; font-size: 10px; margin-top: 3px; }
+.np-dist { font-size: 11px; color: var(--sub); }
+.np-dist-today { color: var(--text); font-weight: bold; border: 1px solid var(--border); border-radius: 5px;
+  padding: 0 4px; display: inline-block; background: var(--chip-bg); }
 tr.clickable { cursor: pointer; }
 tr.clickable:hover td { background: var(--chip-bg); }
 
@@ -749,6 +755,8 @@ const TRACKS = {
   '浦和': { prefix: 'urawa', baba: '18', slug: 'urawa' },
 };
 const trackCfg = () => TRACKS[state.track] || TRACKS['門別'];
+// race_id内の場コード（[6:8]・競馬ブック採番）→ 場名。過去走の映像ジャンプ等で他場レースの場を特定する
+const RACEID_TRACK = { '42': '門別', '10': '大井', '11': '川崎', '12': '船橋', '13': '浦和' };
 
 async function sbGet(pathq) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${pathq}`, {
@@ -2128,26 +2136,58 @@ function baseDiffSec(run) {
   const da = ((state.stats && state.stats.shisu_day_adj) || {})[run.date] || 0;
   return run.tsec - (e.time.mean - da * e.time.std);
 }
-// 新聞型表示の過去走1マス（着順を大きく・タイムは基準比つき・通過/脚質/騎手/短評まで1箱に）
+// 新聞型表示の過去走1マス（着順を大きく・タイムは基準比つき・通過/脚質/騎手/短評/映像まで1箱に）
 function npRunBox(run, label) {
-  if (!run) return `<div class="np-run np-run-empty">${esc(label)}なし</div>`;
+  if (!run) return '<div class="np-run np-run-empty">―</div>';
   const finCls = run.fin === 1 ? 'fin1' : run.fin === 2 ? 'fin2' : run.fin === 3 ? 'fin3' : '';
   const diff = baseDiffSec(run);
   const s = runShisu(run);
   const going = run.going ? esc(String(run.going).slice(0, 1)) : '';
   const cb = classBadge(run);
+  // 条件名は「サラ」やカンマを落として紙面風に圧縮（例: サラ３歳以上,C4-8 → ３歳以上C4-8）
+  const rn = (run.race_name || '').replace(/\s+/g, '').replace(/^サラ/, '').replace(/,/g, '');
+  const rnShort = rn.length > 10 ? rn.slice(0, 10) + '…' : rn;
+  const ridTrack = RACEID_TRACK[String(run.race_id || '').slice(6, 8)];
   const diffHtml = diff == null ? '' :
     `<span class="${diff <= -0.05 ? 'np-fast' : diff >= 0.05 ? 'np-slow' : ''}" title="その日の馬場・クラス・距離を加味した基準タイムとの差（マイナス＝基準より速い）">基準${diff >= 0 ? '+' : ''}${diff.toFixed(1)}</span>`;
   return `<div class="np-run">
-    <div class="np-run-head"><span>${esc(label)} ${mmdd(run.date)}</span><span>${run.dist ?? '?'}m${going ? '・' + going : ''}</span></div>
-    <div class="np-run-sub">${cb ? `<span class="badge">${esc(cb)}</span>` : ''}${paceLetter(run.pace) ? `<span class="badge">${paceLetter(run.pace)}ペース</span>` : ''}${run.pop != null ? `${run.pop}人気` : ''}</div>
+    <div class="np-run-head"><span class="racelink" data-rid="${esc(run.race_id || '')}" data-rd="${esc(run.date || '')}" title="クリックでそのレースへ">${esc(label)} ${mmdd(run.date)}</span><span>${ridTrack && ridTrack !== state.track ? esc(ridTrack) : ''}${run.dist ?? '?'}m${going ? '・' + going : ''}</span></div>
+    <div class="np-race-name" title="${esc(rn)}">${rnShort ? `<b>${esc(rnShort)}</b>` : (cb ? `<b>${esc(cb)}</b>` : '')}</div>
+    <div class="np-run-sub">${cb && rnShort && !rn.includes(cb) ? `<span class="badge">${esc(cb)}</span>` : ''}${paceLetter(run.pace) ? `<span class="badge">${paceLetter(run.pace)}ペース</span>` : ''}${run.pop != null ? `${run.pop}人気` : ''}</div>
     <div class="np-fin ${finCls}">${run.fin != null ? `${run.fin}<small>着</small>` : '<small>除/取</small>'}</div>
     <div class="np-time">${run.time ? `<b>${esc(run.time)}</b> ` : ''}${diffHtml}</div>
     <div>${run.f3 != null ? `テン${run.f3.toFixed(1)}` : ''} ${run.l3 != null ? `上${run.l3.toFixed(1)}` : ''}${s != null ? ` <span class="np-si" title="この1走の能力指数（50が平均。馬場差・斤量・ペース補正込み）">指${s.toFixed(1)}</span>` : ''}</div>
     <div>${run.passing ? `通過${esc(run.passing)}` : ''}${run.kyaku ? ` <span class="kyaku">${run.kyaku}</span>` : ''}${tripTag(run.date, run.c4)}${equipBadges(run.equip, run._binkFirst)}</div>
     <div class="np-jk">${esc(run.jockey || '')}${run.kin != null ? run.kin : ''}${run.weight ? ` ${run.weight}kg` : ''}</div>
     ${run.comment ? `<div class="np-cmt">${esc(run.comment)}</div>` : ''}
+    ${ridTrack && run.race_id ? `<button type="button" class="np-eizo" data-rid="${esc(run.race_id)}" data-rd="${esc(run.date || '')}">▶ 映像</button>` : ''}
   </div>`;
+}
+// 距離別の着度数 [1着,2着,3着,着外]（新聞型の馬柱に表示。除外/取消は数えない）
+function distRecords(runs) {
+  const by = new Map();
+  for (const r of runs) {
+    if (!r.dist || r.fin == null) continue;
+    const rec = by.get(r.dist) || [0, 0, 0, 0];
+    rec[r.fin === 1 ? 0 : r.fin === 2 ? 1 : r.fin === 3 ? 2 : 3]++;
+    by.set(r.dist, rec);
+  }
+  return by;
+}
+function distRecordHtml(runs, todayDist) {
+  const by = distRecords(runs);
+  if (!by.size && !todayDist) return '';
+  const fmt = (rec) => rec.join('-');
+  const lines = [];
+  if (todayDist) {
+    const rec = by.get(todayDist);
+    lines.push(`<div class="np-dist np-dist-today" title="今回の距離での着度数（1着-2着-3着-着外）">${todayDist}m ${rec ? fmt(rec) : '初'}</div>`);
+  }
+  const others = [...by.entries()].filter(([d]) => d !== todayDist)
+    .sort((a, b) => b[1].reduce((s, v) => s + v, 0) - a[1].reduce((s, v) => s + v, 0))
+    .slice(0, 4);
+  for (const [d, rec] of others) lines.push(`<div class="np-dist">${d}m ${fmt(rec)}</div>`);
+  return lines.join('');
 }
 // 出馬表の表示モード（通常⇔新聞）。ブラウザに記憶して次回も同じ表示で開く。
 function syutubaMode() {
@@ -2210,13 +2250,15 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   const aiTopUma = aiRanked.length ? aiRanked[0][0] : null;
   const aiConf = aiConfidence(aiRanked.map(([, v]) => v));
 
-  // ---- 新聞型表示: 1馬=1行、近3走を紙面風のマス目（着順大・基準タイム比・通過・短評）で並べる ----
+  // ---- 新聞型表示: 1馬=1行、近5走を紙面風のマス目（着順大・基準タイム比・通過・短評・映像）で並べる ----
   if (syutubaMode() === 'np') {
+    const todayDist = raceMeta.distance_m || raceMeta.dist || null;
     const npRows = entries.map((e) => {
-      const runs = (history[e.horse_id] || []).filter((r) => r.race_id !== raceMeta.race_id).slice(0, 3);
+      const allRuns = (history[e.horse_id] || []).filter((r) => r.race_id !== raceMeta.race_id);
+      const runs = allRuns.slice(0, 5);
       const s = shisuOf(e.horse_id);
       const runCells = runs.length
-        ? [0, 1, 2].map((i) => npRunBox(runs[i], ['前走', '2走前', '3走前'][i])).join('')
+        ? [0, 1, 2, 3, 4].map((i) => npRunBox(runs[i], ['前走', '2走前', '3走前', '4走前', '5走前'][i])).join('')
         : `<div class="np-run np-fallback">${[nokenLineHtml(e.horse_id),
             nouRuns(nouByUma, e.umaban, 3).map((r) => nouRunHtml(r) + ' <span class="badge">能力表</span>').join('<br>')]
             .filter(Boolean).join('<br>') || '出走歴なし（初出走）'}</div>`;
@@ -2228,14 +2270,15 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
           <div class="np-meta">${esc(e.trainer)}</div>
           <div class="np-meta">馬体重<span data-live-weight="${e.umaban}">${e.body_weight ?? '-'}${e.weight_diff != null ? `(${fmtDiff(e.weight_diff)})` : ''}</span>　単勝<span data-live-odds="${e.umaban}">${e.win_odds ?? '-'}${e.pop != null ? `(${e.pop})` : ''}</span></div>
           <div class="np-meta">能力点 <b class="${s != null && top3S.includes(s) ? 'best' : ''}">${s != null ? s.toFixed(1) : '-'}</b></div>
+          ${distRecordHtml(allRuns, todayDist)}
         </div>
         ${runCells}
       </div>`;
     }).join('');
     return raceHeaderHtml(raceMeta) + syutubaModeBar() + `
     <div class="card"><div style="text-align:right;margin-bottom:4px"><span id="oddsUpdated" class="badge"></span></div>
-      <div class="np-wrap"><div class="np-grid">${npRows}</div></div>
-      <div class="legend">基準±秒＝距離×馬場×クラスの標準タイムに当日の馬場差を加味した基準との差（マイナス＝基準より速い走破時計）。指＝その1走の能力指数（50が平均。馬場差・斤量・ペース補正込み）。<br>近走の${TRIP_LEGEND}<br>${EQUIP_LEGEND}</div></div>`;
+      <div class="np-wrap"><div class="np-grid np-grid5">${npRows}</div></div>
+      <div class="legend">基準±秒＝距離×馬場×クラスの標準タイムに当日の馬場差を加味した基準との差（マイナス＝基準より速い走破時計）。指＝その1走の能力指数（50が平均。馬場差・斤量・ペース補正込み）。馬柱の距離別成績は 1着-2着-3着-着外（枠つき＝今回の距離）。日付タップでそのレースへ、▶映像でレース映像へ。<br>近走の${TRIP_LEGEND}<br>${EQUIP_LEGEND}</div></div>`;
   }
 
   const rows = entries.map((e) => {
@@ -3048,11 +3091,16 @@ async function renderRaceView() {
   if (state.sub === 'eizo') {   // NAR公式レース映像（公式プレーヤーを埋め込み）
     const raceNo = parseInt((raceId || '').slice(-6, -4), 10);
     const ymd = (state.date || '').replace(/-/g, '');
-    const url = `https://keiba-lv-st.jp/movie/player?date=${ymd}&race=${raceNo}&track=${trackCfg().slug}`;
+    // 過去走の映像ジャンプは他場のレースもあり得るため、場はrace_id内の場コードから決める
+    const ridTrack = RACEID_TRACK[(raceId || '').slice(6, 8)];
+    const slug = (TRACKS[ridTrack] || trackCfg()).slug;
+    const url = `https://keiba-lv-st.jp/movie/player?date=${ymd}&race=${raceNo}&track=${slug}`;
     // 固定680px幅の公式プレーヤーを原寸基準で表示（拡大しない＝歪まない）。
     // 上のロゴ帯(60px)をmargin-topで隠し、下のコピーライトはcardのheight+overflowで切る（操作バーは残す）。
     // 画面幅が680px未満（スマホ）の時はvidwrapがtransform:scaleで中身ごと縮小（initVideoScale）。
-    $('raceView').innerHTML = `<div class="vidwrap" data-basew="680" data-baseh="460">
+    // 新聞型の「▶映像」から飛んで来た時に元のレースへ帰れるよう、映像タブにも戻るボタンを出す
+    const backBtn = state.prevRace ? '<div class="backbtn-row"><button class="foldbtn backbtn" onclick="goBackRace()">← 戻る（元のレースへ）</button></div>' : '';
+    $('raceView').innerHTML = backBtn + `<div class="vidwrap" data-basew="680" data-baseh="460">
       <div class="vidcard" style="width:680px;height:460px;background:#000;border-radius:8px;overflow:hidden">
         <iframe src="${url}" title="レース映像" loading="lazy" allowfullscreen style="width:100%;height:540px;border:0;display:block;margin-top:-70px"></iframe></div></div>
       <div class="note">${state.date} ${raceNo}R のレース映像（NAR公式）。再生ボタンで再生。発走前・未配信のレースは再生できません。</div>`;
@@ -3988,8 +4036,8 @@ function goHome() {
   switchView('deck');
 }
 
-async function openHistoricalRace(raceId, date) {
-  // 馬モーダルの成績「場R」タップ→そのレースの出馬表・成績ページへ移動
+async function openHistoricalRace(raceId, date, sub) {
+  // 馬モーダルの成績「場R」タップ→そのレースの出馬表・成績ページへ移動（sub指定で映像等へ直行）
   if (state.raceId && state.raceId !== raceId) {
     state.prevRace = { date: state.date, raceId: state.raceId, sub: state.sub, view: state.view };
   }
@@ -4002,7 +4050,7 @@ async function openHistoricalRace(raceId, date) {
     renderMonths();
     renderDates();
   }
-  await selectRace(raceId);
+  await selectRace(raceId, sub);
 }
 
 async function goBackRace() {
@@ -4158,6 +4206,8 @@ async function init() {
       hl.dataset.hid ? openHorseModal(hl.dataset.hid, true, nm) : openHorseModal(hl.dataset.horse, false, nm); return; }
     const od = e.target.closest('[data-live-odds]');
     if (od) { e.stopPropagation(); showOddsFlow(od.dataset.liveOdds, od); return; }
+    const ne = e.target.closest('.np-eizo');   // 新聞型: 過去走の「▶映像」→そのレースの映像タブへ直行
+    if (ne && ne.dataset.rid) { openHistoricalRace(ne.dataset.rid, ne.dataset.rd, 'eizo'); return; }
     const rl = e.target.closest('.racelink');   // 前後半タイムの日付タップ→そのレースへ
     if (rl && rl.dataset.rid) { openHistoricalRace(rl.dataset.rid, rl.dataset.rd); return; }
     const de = e.target.closest('.danwa-expand');   // 厩舎の話「▼過去のコメント」展開
