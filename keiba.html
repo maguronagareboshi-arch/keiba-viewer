@@ -2123,6 +2123,18 @@ function nouRuns(nouByUma, umaban, n) {
   return runs.slice(-n).reverse();
 }
 
+// レースが新馬戦かどうか（父馬成績を出すかどうかの判定に使う）
+const isDebutRace = (raceMeta) => /新馬/.test(`${raceMeta.klass || ''}${raceMeta.name || raceMeta.race_name || ''}`);
+// 父馬成績（能力表のpedigree.fatherをstats.sire_statsと突き合わせ）。
+// 自身の過去走が無い新馬戦でこそ意味を持つ（horse_sireは自身の出走歴から引く索引なので新馬には使えない）。
+function sireLineHtml(nouEntry) {
+  // nouByUmaの中身はSupabase行 {umaban, data:{pedigree,...}} なので、nouRuns()と同じくdata経由で読む
+  const father = nouEntry && nouEntry.data && nouEntry.data.pedigree && nouEntry.data.pedigree.father;
+  if (!father) return '';
+  const s = ((state.stats && state.stats.sire_stats) || {})[father];
+  if (!s) return `<span class="kyaku">父 ${esc(father)}</span>`;
+  return `<b>父 ${esc(father)}</b> 複勝率${(s.rate * 100).toFixed(1)}%・勝率${(s.win * 100).toFixed(1)}%<span class="kyaku">（産駒${s.n}走）</span>`;
+}
 // 能検成績の1行表示（新馬/未勝利の出馬表・予想に埋め込む）。無ければ空。
 function nokenLineHtml(hid) {
   const n = (state.nokenByHorse || {})[hid];
@@ -2424,6 +2436,7 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
       const runCells = runs.length
         ? [0, 1, 2, 3, 4].map((i) => npRunBox(runs[i], ['前走', '2走前', '3走前', '4走前', '5走前'][i])).join('')
         : `<div class="np-run np-fallback">${[nokenLineHtml(e.horse_id),
+            isDebutRace(raceMeta) ? sireLineHtml(nouByUma[e.umaban]) : '',
             nouRuns(nouByUma, e.umaban, 3).map((r) => nouRunHtml(r) + ' <span class="badge">能力表</span>').join('<br>')]
             .filter(Boolean).join('<br>') || '出走歴なし（初出走）'}</div>`;
       return `<div class="np-row">
@@ -2470,11 +2483,12 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
       <td class="small fold"><div class="kv">${(() => {
         const nk = nokenLineHtml(e.horse_id);
         const nkEntry = (state.nokenByHorse || {})[e.horse_id];
+        const sire = isDebutRace(raceMeta) ? sireLineHtml(nouByUma[e.umaban]) : '';
         const past = runs.map(pastRunHtml).join('<br>')
           || nouRuns(nouByUma, e.umaban, 3)
               .filter((r) => !nkEntry || r.date !== nkEntry.date)   // 能検と同一走の能力表エントリは重複表示しない
               .map((r) => nouRunHtml(r) + ' <span class="badge">能力表</span>').join('<br>');
-        return [nk, past].filter(Boolean).join('<br>') || '-';
+        return [nk, sire, past].filter(Boolean).join('<br>') || '-';
       })()}</div></td>
       <td class="small fold"><div class="kv">${(() => {
         // 今回に向けた追切のみ（前走日以降）。新馬など前走が無い馬は全件が今回分。
@@ -2495,7 +2509,7 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
     <table>
       <tr><th>枠</th><th>番</th><th>AI印</th>
       <th class="stickyname">馬名</th><th>性齢</th><th>騎手</th><th>斤量</th><th>厩舎</th><th>馬体重</th><th>単勝(人気)</th>
-      <th>能力点</th><th>前半の速さ</th><th>調教評価</th><th>近3走（前半3F/上り3F/脚質）</th><th>調教（最新追切）</th></tr>
+      <th>能力点</th><th>前半の速さ</th><th>調教評価</th><th>近3走（前半3F/上り3F/脚質）${isDebutRace(raceMeta) ? '<br><span class="kyaku">新馬戦：父馬成績も表示</span>' : ''}</th><th>調教（最新追切）</th></tr>
       ${rows}
     </table>
   </div>
@@ -3523,7 +3537,14 @@ function analysisHtml(st) {
     const c4cls = c4 == null ? '' : c4 >= 0.10 ? 'bias-front' : c4 <= -0.10 ? 'bias-back' : '';
     const kk = ['逃げ', '先行', '差し', '追込'].map((k) =>
       b.kyaku[k] ? `<td class="num">${rateBar(b.kyaku[k].rate)} <span class="kyaku">${b.kyaku[k].top3}/${b.kyaku[k].n}</span></td>` : '<td>-</td>').join('');
-    return `<tr><td>${d}</td><td class="${cls}">${b.label}</td>
+    // 基準タイム比: 距離×クラス×馬場の基準タイムと比べて、その日は平均で何秒速い/遅いか。
+    // マイナス＝基準より遅い＝タフ（時計がかかった）、プラス＝基準より速い＝軽い馬場。
+    const sec = b.clock_sec;
+    const secCls = sec == null ? '' : sec <= -0.15 ? 'bias-back' : sec >= 0.15 ? 'bias-front' : '';
+    const secLabel = sec == null ? '-' : `${sec > 0 ? '+' : ''}${sec.toFixed(2)}秒${sec <= -0.15 ? '（タフ）' : sec >= 0.15 ? '（軽い）' : ''}`;
+    return `<tr><td>${d}</td><td>${esc(b.going || '-')}</td>
+      <td class="num ${secCls}">${secLabel}</td>
+      <td class="${cls}">${b.label}</td>
       <td class="num">${b.rel != null ? (b.rel > 0 ? '+' : '') + b.rel : '-'}</td>
       <td class="${c4cls}">${c4label(c4)}${c4 != null ? `<span class="kyaku">${fmtDev(c4)}</span>` : ''}</td>
       <td class="num">${fmtDev(b.agari3_dev)}</td>
@@ -3804,10 +3825,10 @@ function analysisHtml(st) {
   })();
 
   return `
-  <div class="note">対象: ${st.n_races}レース（〜${esc(st.generated)}）。前残り度は「その日の(前複勝率−後複勝率) − ${state.track}平均ギャップ${st.overall_gap != null ? `(+${st.overall_gap})` : ''}」の相対値。上がり偏差は基準タイム比（負＝上がりが速い＝差しが利く馬場）。</div>
+  <div class="note">対象: ${st.n_races}レース（〜${esc(st.generated)}）。基準タイム比＝距離・クラス・馬場ごとの標準タイムと比べてその日は平均何秒速い/遅い走破時計だったか（マイナス＝タフ・時計がかかった／プラス＝軽い馬場）。前残り度は「その日の(前複勝率−後複勝率) − ${state.track}平均ギャップ${st.overall_gap != null ? `(+${st.overall_gap})` : ''}」の相対値。上がり偏差は基準タイム比（負＝上がりが速い＝差しが利く馬場）。</div>
   <h3 class="sec">開催日ごとの馬場バイアス（直近20日・${state.track}平均との相対評価）</h3>
   <div class="card tablewrap"><table>
-    <tr><th>開催日</th><th>判定</th><th>前残り度<br>(対平均)</th><th>4角<br>位置</th><th>勝ち馬<br>上がり3F偏差</th><th>レース<br>上がり4F偏差</th><th>逃げ</th><th>先行</th><th>差し</th><th>追込</th></tr>
+    <tr><th>開催日</th><th>馬場<br>状態</th><th>基準タイム比<br>（速さ）</th><th>判定</th><th>前残り度<br>(対平均)</th><th>4角<br>位置</th><th>勝ち馬<br>上がり3F偏差</th><th>レース<br>上がり4F偏差</th><th>逃げ</th><th>先行</th><th>差し</th><th>追込</th></tr>
     ${biasRows}
   </table></div>
   <div class="grid2">${pkTables}</div>
