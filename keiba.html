@@ -75,6 +75,8 @@ td[data-live-odds]:hover { text-decoration: underline; }
 #evMonitor.ev-hit { background: rgba(46,160,67,.16); border: 1px solid rgba(46,160,67,.55); border-radius: 8px; font-size: 13px; }
 #evMonitor.ev-idle { opacity: .75; }
 .trackswitch { display: flex; gap: 4px; margin-left: 14px; flex-wrap: wrap; }
+.trackswitch button small { display: block; font-size: 9px; opacity: .8; font-weight: normal; }
+.trackswitch button.track-off { opacity: .5; }
 .trackswitch button { padding: 5px 12px; border: 1px solid var(--border); border-radius: 6px;
   background: var(--panel); color: var(--text); cursor: pointer; font-size: 13px; font-weight: bold; }
 .trackswitch button.active { background: #7a5cc0; color: #fff; border-color: #7a5cc0; }
@@ -258,6 +260,16 @@ a.horse-link:hover { text-decoration: underline; }
 .np-matchup-head { color: var(--sub); display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; }
 .np-matchup-runners { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 3px; }
 .np-matchup-runner { white-space: nowrap; }
+.person-link { color: var(--accent); cursor: pointer; }
+.race-finder { margin: 6px 0 2px; font-size: 12px; }
+.race-finder summary { cursor: pointer; color: var(--accent); }
+.finder-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.finder-controls select { font-size: 12px; }
+.finder-controls .foldbtn { margin: 0; padding: 4px 14px; font-size: 12px; }
+.finder-row { display: flex; gap: 10px; align-items: baseline; padding: 5px 2px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.finder-row:hover { background: var(--chip-bg); }
+.finder-row b { min-width: 74px; }
+.finder-row span { color: var(--sub); }
 .ana-breakdown { margin-top: 2px; }
 .ana-breakdown summary { cursor: pointer; font-size: 10px; color: var(--sub); }
 .ana-bd-row { display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 11px; padding: 2px 0 0 8px; }
@@ -732,6 +744,17 @@ main { max-width: 1320px; }
         <label>日 <select id="dateSel" aria-label="開催日"></select></label>
       </div>
       <div class="racetabs" id="raceTabs" aria-label="レース番号"></div>
+      <details class="race-finder" id="raceFinder">
+        <summary>🔎 レースを探す（距離・クラス・馬場から）</summary>
+        <div class="finder-controls">
+          <label>距離 <select id="fDist"></select></label>
+          <label>クラス <select id="fClass"></select></label>
+          <label>馬場 <select id="fGoing"></select></label>
+          <label>時期 <select id="fYear"></select></label>
+          <button class="foldbtn" id="fRun">探す</button>
+        </div>
+        <div id="finderResult"></div>
+      </details>
       <div class="subtabs" id="subTabs" aria-label="レース情報メニュー" hidden></div>
     </section>
     <div id="raceView"><div class="empty">読み込み中…</div></div>
@@ -773,6 +796,9 @@ const TRACKS = {
 const trackCfg = () => TRACKS[state.track] || TRACKS['門別'];
 // race_id内の場コード（[6:8]・競馬ブック採番）→ 場名。過去走の映像ジャンプ等で他場レースの場を特定する
 const RACEID_TRACK = { '42': '門別', '10': '大井', '11': '川崎', '12': '船橋', '13': '浦和' };
+// 騎手名/厩舎名を「人を追う」モーダルへのリンクにする（馬名と同じ扱いにするための共通化）
+const personLink = (kind, name) => (name
+  ? `<a class="person-link" data-person-kind="${kind}" data-person="${esc(name)}">${esc(name)}</a>` : '');
 
 async function sbGet(pathq) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${pathq}`, {
@@ -1581,6 +1607,7 @@ function renderDeck() {
       <div class="deck-date"><button ${dateIndex <= 0 ? 'disabled' : ''} onclick="setDeckDate('${dates[dateIndex - 1] || ''}')" aria-label="前の開催日">‹</button><strong>${deckDateLabel(state.date)}</strong><button ${dateIndex < 0 || dateIndex >= dates.length - 1 ? 'disabled' : ''} onclick="setDeckDate('${dates[dateIndex + 1] || ''}')" aria-label="次の開催日">›</button></div>
       <div class="deck-mode${state.deckRefreshError ? ' is-error' : ''}" id="deckFreshness">${esc(deckFreshnessText())}</div>
     </div>
+    ${state.deckNotice ? `<div class="note" style="display:block;margin-bottom:10px">${esc(state.deckNotice)}</div>` : ''}
     ${hero}
     <div class="deck-summary">
       <div class="summary-chip"><span>全レース</span><b>${races.length}R</b></div>
@@ -2364,8 +2391,8 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
         <div class="np-horse">
           <div><span class="waku w${e.waku || 1}">${e.waku ?? ''}</span> <b>${e.umaban ?? ''}</b> <span class="np-mark">${aiMark.get(e.umaban) || ''}</span></div>
           <div><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a>${todayBlinkerBadge(e, history)}${kakuBadge(e)}</div>
-          <div class="np-meta">${esc(e.sex_age)}${e.genryo ? ` ${esc(e.genryo)}` : ''}　${esc(e.jockey)}${e.kinryo ?? ''}</div>
-          <div class="np-meta">${esc(e.trainer)}</div>
+          <div class="np-meta">${esc(e.sex_age)}${e.genryo ? ` ${esc(e.genryo)}` : ''}　${personLink('jockey', e.jockey)}${e.kinryo ?? ''}</div>
+          <div class="np-meta">${personLink('trainer', e.trainer)}</div>
           <div class="np-meta">馬体重<span data-live-weight="${e.umaban}">${e.body_weight ?? '-'}${e.weight_diff != null ? `(${fmtDiff(e.weight_diff)})` : ''}</span>　単勝<span data-live-odds="${e.umaban}">${e.win_odds ?? '-'}${e.pop != null ? `(${e.pop})` : ''}</span></div>
           <div class="np-meta">能力点 <b class="${s != null && top3S.includes(s) ? 'best' : ''}">${s != null ? s.toFixed(1) : '-'}</b></div>
           ${distRecordHtml(allRuns, todayDist)}
@@ -2394,9 +2421,9 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
       <td class="l stickyname"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a>${todayBlinkerBadge(e, history)}${kakuBadge(e)}</td>
       <td>${esc(e.sex_age)}</td>
       <td>${esc(e.genryo || '')}</td>
-      <td class="l">${esc(e.jockey)}</td>
+      <td class="l">${personLink('jockey', e.jockey)}</td>
       <td class="num">${e.kinryo ?? ''}</td>
-      <td class="l">${esc(e.trainer)}</td>
+      <td class="l">${personLink('trainer', e.trainer)}</td>
       <td class="num" data-live-weight="${e.umaban}">${e.body_weight ?? ''}${e.weight_diff != null ? `(${fmtDiff(e.weight_diff)})` : ''}</td>
       <td class="num" data-live-odds="${e.umaban}">${e.win_odds ?? ''}${e.pop != null ? `(${e.pop})` : ''}</td>
       <td class="num ${s != null && top3S.includes(s) ? 'best' : ''}">${s != null ? s.toFixed(1) : '-'}</td>
@@ -3908,6 +3935,54 @@ function openPedModal(type, name) {
     <div class="legend">走数の多い順。着別＝1着-2着-3着-着外の度数。産駒名をタップでその馬の成績・調教。${state.track}出走のある産駒のみ。</div></div>`;
 }
 
+// 騎手/厩舎モーダル。「この人を今日どこで見られるか／最近どうか」を出す。
+// 分析タブのランキング（通年・誰が強いか）とは役割を分ける。回収率や指数は出さない。
+async function openPersonModal(kind, name) {
+  const label = kind === 'jockey' ? '騎手' : '厩舎';
+  const modal = $('horseModal');
+  modal.hidden = false;
+  $('horseModalTitle').textContent = `${name} ${label}`;
+  $('horseModalBody').innerHTML = '<div class="empty">読み込み中…</div>';
+  try {
+    const col = kind === 'jockey' ? 'jockey' : 'trainer';
+    const sel = `horse_id,horse_name,umaban,finish,pop,race_id,chihou_races(race_date,track,race_no,klass,race_name,distance_m)`;
+    // 表示中の日の騎乗は race_id のパターン（先頭=年 / 末尾=月日）でサーバ側から直接引く。
+    // 全期間から limit で切ると古い分しか返らず、当日分に届かない。
+    const ymd = (state.date || '').replace(/-/g, '');
+    const [runs, todays] = await Promise.all([
+      withTimeout(sbGet(`chihou_results?${col}=eq.${encodeURIComponent(name)}&select=${sel}&order=race_id.desc&limit=40`), 10000),
+      ymd ? withTimeout(sbGet(`chihou_entries?${col}=eq.${encodeURIComponent(name)}&race_id=like.${ymd.slice(0, 4)}*${ymd.slice(4)}&select=race_id,umaban,horse_id,horse_name,pop&order=race_id.asc&limit=20`), 10000).catch(() => []) : [],
+    ]);
+    // 場をまたぐと race_id 順は時系列にならないので、日付で並べ直す
+    runs.sort((a, b) => String((b.chihou_races || {}).race_date || '').localeCompare(String((a.chihou_races || {}).race_date || '')));
+    runs.splice(30);
+    const wins = runs.filter((r) => r.finish === 1).length;
+    const top3 = runs.filter((r) => r.finish != null && r.finish <= 3).length;
+    const todayHtml = todays.length ? `<h3 class="sec" style="margin-top:0">この日の${kind === 'jockey' ? '騎乗' : '出走'}（${todays.length}鞍）</h3>
+      <div class="card">${todays.map((r) => `<div class="finder-row" data-rid="${esc(r.race_id)}" data-rd="${esc(state.date)}">
+        <b>${parseInt(String(r.race_id).slice(-6, -4), 10)}R</b><b>${r.umaban}番</b>
+        <span>${esc(r.horse_name || '')}</span><span>${r.pop ? `${r.pop}番人気` : ''}</span></div>`).join('')}</div>` : '';
+    const rows = runs.map((r) => {
+      const ra = r.chihou_races || {};
+      const finCls = r.finish >= 1 && r.finish <= 3 ? `fin${r.finish}` : '';
+      return `<tr class="clickable" data-rid="${esc(r.race_id)}" data-rd="${esc(ra.race_date || '')}">
+        <td>${mmdd(ra.race_date)}</td><td>${esc(ra.track || '')}${ra.race_no || ''}R</td>
+        <td class="l"><a class="horse-link" data-hid="${esc(r.horse_id || '')}">${esc(r.horse_name || '')}</a></td>
+        <td class="num">${r.pop ?? '-'}</td><td class="num ${finCls}">${r.finish ?? '-'}</td></tr>`;
+    }).join('');
+    $('horseModalBody').innerHTML = `
+      <div class="note" style="display:block">直近${runs.length}走で 1着${wins}回・3着内${top3}回</div>
+      ${todayHtml}
+      <h3 class="sec">直近の成績</h3>
+      <div class="card tablewrap"><table>
+        <tr><th>日付</th><th>場R</th><th>馬名</th><th>人気</th><th>着順</th></tr>${rows}
+      </table></div>
+      <div class="legend">馬名をタップすると馬の成績へ、行をタップするとそのレースへ移動します。</div>`;
+  } catch (e) {
+    $('horseModalBody').innerHTML = `<div class="empty">読み込み失敗: ${esc(e.message)}</div>`;
+  }
+}
+
 async function openHorseModal(nameOrId, byId, displayName) {
   const modal = $('horseModal');
   modal.hidden = false;
@@ -4362,9 +4437,79 @@ function selectDate(d) {
 }
 
 // 場切替（門別/大井/船橋/川崎/浦和）。場ごとに別のstats/model/日程を読み直す。
+// 「今日どこが走っているか」は切り替える前に分かる必要があるので、当日開催R数をバッジで出す。
 function renderTrackSwitch() {
-  $('trackSwitch').innerHTML = Object.keys(TRACKS).map((t) =>
-    `<button class="${t === state.track ? 'active' : ''}" data-track="${t}">${t}</button>`).join('');
+  const today = state.todayTracks;   // {場: R数} / 未取得なら undefined
+  $('trackSwitch').innerHTML = Object.keys(TRACKS).map((t) => {
+    const cfg = TRACKS[t];
+    let badge = '';
+    let cls = t === state.track ? 'active' : '';
+    if (!cfg.data) badge = '<small>準備中</small>';       // 川崎/浦和はまだデータを取っていない
+    else if (today) {
+      const n = today[t] || 0;
+      badge = n ? `<small>${n}R</small>` : '<small>―</small>';
+      if (!n && t !== state.track) cls += ' track-off';
+    }
+    return `<button class="${cls}" data-track="${t}">${t}${badge}</button>`;
+  }).join('');
+}
+
+// ---- レースを探す（条件でレースを横断） ----------------------------------
+// 月→日→R番号の導線しか無いと「1200mのC2だけ見たい」に答えられない。
+// クラスだけは race_name の文字列規則なのでサーバで絞れず、粗く引いてから classMajor で絞る。
+const FINDER_CLASSES = ['C4', 'C3', 'C2', 'C1', 'B', 'A', 'OP', '2歳', '3歳'];
+function initRaceFinder() {
+  const opt = (v, l) => `<option value="${esc(v)}">${esc(l)}</option>`;
+  const dists = [...new Set(Object.values(state.dates).flat().map((r) => r.distance_m).filter(Boolean))].sort((a, b) => a - b);
+  const years = [...new Set(Object.keys(state.dates).map((d) => d.slice(0, 4)))].sort().reverse();
+  $('fDist').innerHTML = opt('', 'すべて') + dists.map((d) => opt(d, `${d}m`)).join('');
+  $('fClass').innerHTML = opt('', 'すべて') + FINDER_CLASSES.map((c) => opt(c, c)).join('');
+  $('fGoing').innerHTML = opt('', 'すべて') + ['良', '稍重', '重', '不良'].map((g) => opt(g, g)).join('');
+  $('fYear').innerHTML = opt('', 'すべて') + years.map((y) => opt(y, `${y}年`)).join('');
+}
+async function runRaceFinder(more) {
+  const box = $('finderResult');
+  const dist = $('fDist').value, klass = $('fClass').value, going = $('fGoing').value, year = $('fYear').value;
+  if (!more) state.finderOffset = 0;
+  const limit = klass ? 400 : 60;   // クラス条件は取ってから絞るので多めに引く
+  const q = [`track=eq.${encodeURIComponent(state.track)}`,
+    'select=race_id,race_date,race_no,klass,race_name,distance_m,going,pace',
+    'order=race_date.desc,race_no.asc', `limit=${limit}`, `offset=${state.finderOffset || 0}`];
+  if (dist) q.push(`distance_m=eq.${dist}`);
+  if (going) q.push(`going=eq.${encodeURIComponent(going)}`);
+  if (year) q.push(`race_date=gte.${year}-01-01`, `race_date=lte.${year}-12-31`);
+  box.innerHTML = '<div class="empty">探しています…</div>';
+  try {
+    let rows = await sbGet(`chihou_races?${q.join('&')}`);
+    if (klass) {
+      rows = rows.filter((r) => (classMajor(r.race_name) || classGroup((r.klass || '') + (r.race_name || ''))) === klass);
+    }
+    state.finderOffset = (state.finderOffset || 0) + limit;
+    const html = rows.map((r) => `<div class="finder-row" data-rid="${esc(r.race_id)}" data-rd="${esc(r.race_date)}">
+      <b>${mmdd(r.race_date)}</b><b>${r.race_no}R</b>
+      <span>${esc(classMajor(r.race_name) || r.klass || '')}</span>
+      <span>${r.distance_m || '?'}m</span><span>${esc(r.going || '')}</span><span>${esc(r.pace || '')}</span></div>`).join('');
+    const prev = more ? (state.finderHtml || '') : '';
+    state.finderHtml = prev + html;
+    box.innerHTML = state.finderHtml
+      ? `<div class="legend">条件に合うレース（新しい順）</div>${state.finderHtml}
+         <button class="foldbtn" id="fMore">さらに読み込む</button>
+         <div class="legend">馬場と天候は終わったレースにだけ付きます（これから走るレースは空欄）。行をタップでそのレースへ。</div>`
+      : '<div class="empty">この条件のレースは見つかりませんでした</div>';
+  } catch (e) {
+    box.innerHTML = `<div class="empty">検索に失敗しました（${esc(e.message)}）</div>`;
+  }
+}
+
+// 当日どの場が開催しているかを1クエリで取る（場を絞らない唯一の一覧クエリ・当日分のみなので軽い）
+async function loadTodayTracks() {
+  try {
+    const rows = await sbGet(`chihou_races?race_date=eq.${jstToday()}&select=track,race_no`);
+    const by = {};
+    for (const r of rows) by[r.track] = (by[r.track] || 0) + 1;
+    state.todayTracks = by;
+    renderTrackSwitch();
+  } catch (e) { /* 出せなければバッジ無しのまま */ }
 }
 
 // 場のデータ一式（日程・統計・モデル・予想）を読み直す。ビューの遷移はしない。
@@ -4405,8 +4550,17 @@ async function selectTrack(track) {
   state.statsPromise.then(() => { if (state.view === 'deck' && state.track === track) renderDeck(); });
   const ds = Object.keys(state.dates).sort().reverse();
   const today = jstToday();
-  if (ds.length) { setDeckDate(state.dates[today] ? today : ds[0]); switchView('deck'); }
-  else { renderMonths(); renderDates(); renderTabs(); switchView('deck'); }
+  if (ds.length) {
+    // 当日開催が無い場は最新の過去開催日を出す。黙って過去へ落ちると「今日の話」と
+    // 誤解されるので、何を表示しているのかを1行で伝える。
+    state.deckNotice = state.dates[today] ? null
+      : `${track}は本日開催がありません。最新の開催日（${ds[0].slice(5).replace('-', '/')}）を表示しています。`;
+    setDeckDate(state.dates[today] ? today : ds[0]);
+    switchView('deck');
+  } else {
+    state.deckNotice = TRACKS[track].data ? null : `${track}のデータはまだ取り込んでいません（準備中）。`;
+    renderMonths(); renderDates(); renderTabs(); switchView('deck');
+  }
 }
 
 async function init() {
@@ -4433,6 +4587,7 @@ async function init() {
     state.provider = providers.supabase;
     state.dates = {};
   }
+  loadTodayTracks();   // 場ボタンの「本日開催」バッジ（裏で1回だけ）
   // 起動は直近分だけで即表示→全期間分は裏で追って取得し月/日セレクトへ反映（表示中のレースは邪魔しない）
   if (state.provider === providers.supabase) {
     providers.supabase.listDatesFull().then((full) => {
@@ -4457,6 +4612,13 @@ async function init() {
     if (ds.length) selectDate(ds[0]);
   });
   $('dateSel').addEventListener('change', (e) => selectDate(e.target.value));
+  $('raceFinder').addEventListener('toggle', (e) => { if (e.target.open) initRaceFinder(); });
+  $('fRun').addEventListener('click', () => runRaceFinder(false));
+  $('finderResult').addEventListener('click', (e) => {
+    if (e.target.id === 'fMore') { runRaceFinder(true); return; }
+    const row = e.target.closest('.finder-row');
+    if (row) openHistoricalRace(row.dataset.rid, row.dataset.rd);
+  });
   $('raceTabs').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-id]');
     if (b) selectRace(b.dataset.id);
@@ -4493,6 +4655,8 @@ async function init() {
   });
   // 馬名リンク（レース各ビュー）と モーダルを閉じる
   $('raceView').addEventListener('click', (e) => {
+    const pl = e.target.closest('a.person-link');
+    if (pl) { e.preventDefault(); openPersonModal(pl.dataset.personKind, pl.dataset.person); return; }
     const hl = e.target.closest('a.horse-link');
     if (hl) { e.preventDefault(); const nm = hl.textContent.trim();
       hl.dataset.hid ? openHorseModal(hl.dataset.hid, true, nm) : openHorseModal(hl.dataset.horse, false, nm); return; }
@@ -4531,6 +4695,10 @@ async function init() {
     if (rl && rl.dataset.rid) { openHistoricalRace(rl.dataset.rid, rl.dataset.rd); return; }
     const yb = e.target.closest('.cyo-yr-btn');   // 調教履歴の年切替
     if (yb) { filterCyoYear(yb.dataset.yr); return; }
+    const pl = e.target.closest('a.person-link');   // モーダル内の騎手/厩舎名タップ
+    if (pl) { e.preventDefault(); openPersonModal(pl.dataset.personKind, pl.dataset.person); return; }
+    const fr = e.target.closest('.finder-row, tr.clickable');   // 騎手モーダルの行→そのレースへ
+    if (fr && fr.dataset.rid) { $('horseModal').hidden = true; openHistoricalRace(fr.dataset.rid, fr.dataset.rd); return; }
     const hl = e.target.closest('a.horse-link');   // 産駒一覧などモーダル内の馬名タップ→その馬詳細へ
     if (hl) { e.preventDefault(); const nm = hl.textContent.trim();
       hl.dataset.hid ? openHorseModal(hl.dataset.hid, true, nm) : openHorseModal(hl.dataset.horse, false, nm); return; }
