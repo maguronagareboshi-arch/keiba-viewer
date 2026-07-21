@@ -260,6 +260,8 @@ a.horse-link:hover { text-decoration: underline; }
 .np-matchup-head { color: var(--sub); display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; }
 .np-matchup-runners { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 3px; }
 .np-matchup-runner { white-space: nowrap; }
+.clarity-clear { color: var(--arrow-up); }
+.clarity-chaos { color: var(--arrow-down); }
 .person-link { color: var(--accent); cursor: pointer; }
 .race-finder { margin: 6px 0 2px; font-size: 12px; }
 .race-finder summary { cursor: pointer; color: var(--accent); }
@@ -1383,6 +1385,19 @@ function deckArchivedMarks(v3Race) {
   return { marks, archived: marks.size > 0, label: 'オッズ非使用の事前予想印' };
 }
 
+// レースの「読みやすさ」。AIが出した1位と2位の勝率の開きをそのまま言い換えるだけで、
+// 的中率などの検証済み数値は名乗らない（aiConfidenceの閾値はv2指数で較正したものなので流用しない）。
+function deckClarity(v3Race) {
+  const runners = (v3Race && v3Race.runners || [])
+    .map((r) => Number(r && r.win_probability_raw)).filter(Number.isFinite).sort((a, b) => b - a);
+  if (runners.length < 2) return null;
+  const gap = runners[0] - runners[1];
+  if (gap >= 0.15) return { gap, kind: 'clear', label: '抜けている' };
+  if (gap >= 0.08) return { gap, kind: 'mid', label: 'やや抜けている' };
+  if (gap >= 0.03) return { gap, kind: 'close', label: '互角' };
+  return { gap, kind: 'chaos', label: '大混戦' };
+}
+
 function deckDecision(v3Race) {
   // AI予想を配信していない場で「判定待ち」を出すと、来ないものを待っているように見える
   if (!trackCfg().ai) return { kind: 'none', label: '—', detail: `${state.track}はAI予想の対象外` };
@@ -1567,10 +1582,15 @@ function renderDeck() {
     </section>`;
   })() : `<section class="deck-ended"><div class="deck-kicker">開催終了 · ${esc(state.track)}</div><h2>${state.date === today ? '本日の開催は終了しました' : '開催結果を振り返る'}</h2><div class="legend">${resultsFetched ? `${resultRaceCount}/${races.length}Rの公式成績を取得済み。` : '公式成績を読み込み中です。'}各カードから着順とレース詳細を確認できます。</div></section>`;
 
+  // 朝のうちに「どのレースを読むか」を絞る手掛かり（買い目判断はオッズが出るまで空のため）
+  const clearRaces = isPastDay ? [] : races
+    .filter((r) => { const c = deckClarity(deckV3Race(r.race_id)); return c && c.kind === 'clear'; })
+    .map((r) => `${r.race_no}R`);
   const cards = races.map((r) => {
     const v3 = deckV3Race(r.race_id);
     const ai = deckAiLeader(v3);
     const decision = deckDecision(v3);
+    const clarity = deckClarity(v3);
     const t = deckPostTime(state.date, r);
     const isFinished = state.date < today || (t && now > new Date(t.getTime() + 5 * 60000));
     const isLive = state.date === today && t && now >= new Date(t.getTime() - 2 * 60000) && now <= new Date(t.getTime() + 5 * 60000);
@@ -1596,7 +1616,7 @@ function renderDeck() {
       <div class="race-time-rail"><b>${esc(r.hasso_time || '--:--')}</b><span>${esc(status)}</span></div>
       <div class="race-card-main">
         <div class="race-card-head"><span class="race-no">${r.race_no}R</span><h4>${esc(r.name || r.klass || '')}</h4></div>
-        <div class="race-card-meta">${r.distance_m || '?'}m · ${esc(r.klass || '')}${r.going ? ` · ${esc(r.going)}` : ''}</div>
+        <div class="race-card-meta">${r.distance_m || '?'}m · ${esc(r.klass || '')}${r.going ? ` · ${esc(r.going)}` : ''}${clarity ? ` · <b class="clarity-${clarity.kind}">${esc(clarity.label)}</b>` : ''}</div>
         ${decisionBlock}
       </div>
     </article>`;
@@ -1614,6 +1634,7 @@ function renderDeck() {
       <div class="summary-chip"><span>進行</span><b>${finished}/${races.length}</b></div>
       ${isPastDay ? `<div class="summary-chip"><span>結果取得</span><b>${resultRaceCount}/${races.length}</b></div>` : `<div class="summary-chip"><span>候補 / 見送り</span><b>${candidates} / ${passes}</b></div>`}
     </div>
+    ${clearRaces.length ? `<div class="note" style="display:block;margin:-8px 0 12px">AIの見立てが抜けているレース: <b>${clearRaces.join('・')}</b></div>` : ''}
     <div class="deck-section-head"><h3>レースタイムライン</h3><span>${isPastDay ? '着順・人気・単勝オッズは公式成績から取得' : 'AI判断は最新データを1分ごとに再取得'}</span></div>
     <div class="deck-grid">${cards}</div>
   </div>`;
@@ -2420,8 +2441,7 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
       <td style="font-size:15px">${aiMark.get(e.umaban) || ''}${(e.umaban === aiTopUma && aiConf) ? `<br><span class="badge conf-${aiConf.tier}" title="◎信頼度：予測1位が2位をどれだけ引き離しているか（複勝率の目安 S81%/A73%/B65%/C62%）">${aiConf.label}</span>` : ''}</td>
       <td class="l stickyname"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a>${todayBlinkerBadge(e, history)}${kakuBadge(e)}</td>
       <td>${esc(e.sex_age)}</td>
-      <td>${esc(e.genryo || '')}</td>
-      <td class="l">${personLink('jockey', e.jockey)}</td>
+      <td class="l">${e.genryo ? `<span class="kyaku">${esc(e.genryo)}</span>` : ''}${personLink('jockey', e.jockey)}</td>
       <td class="num">${e.kinryo ?? ''}</td>
       <td class="l">${personLink('trainer', e.trainer)}</td>
       <td class="num" data-live-weight="${e.umaban}">${e.body_weight ?? ''}${e.weight_diff != null ? `(${fmtDiff(e.weight_diff)})` : ''}</td>
@@ -2456,7 +2476,7 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   <div class="card"><div style="text-align:right;margin-bottom:4px"><span id="oddsUpdated" class="badge"></span></div><div class="tablewrap">
     <table>
       <tr><th>枠</th><th>番</th><th>AI印</th>
-      <th class="stickyname">馬名</th><th>性齢</th><th>減</th><th>騎手</th><th>斤量</th><th>厩舎</th><th>馬体重</th><th>単勝(人気)</th>
+      <th class="stickyname">馬名</th><th>性齢</th><th>騎手</th><th>斤量</th><th>厩舎</th><th>馬体重</th><th>単勝(人気)</th>
       <th>能力点</th><th>前半の速さ</th><th>調教評価</th><th>近3走（前半3F/上り3F/脚質）</th><th>調教（最新追切）</th></tr>
       ${rows}
     </table>
@@ -2737,7 +2757,7 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
       <td><span class="waku w${e.waku || 1}">${e.waku ?? ''}</span></td>
       <td>${e.umaban ?? ''}</td>
       <td class="l stickyname"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a>${todayBlinkerBadge(e, history)}${kakuBadge(e)}</td>
-      <td class="num ${r.mark === '◎' ? 'best' : ''}">${r.aiDev != null ? r.aiDev.toFixed(1) : '-'}</td>
+      ${hasV3 ? '' : `<td class="num ${r.mark === '◎' ? 'best' : ''}">${r.aiDev != null ? r.aiDev.toFixed(1) : '-'}</td>`}
       <td class="num ${r.mark === '◎' ? 'best' : ''}">${pct(r.winP)}</td>
       <td class="num">${pct(r.top3P)}</td>
       <td class="num">${r.score != null ? (50 + r.score * 10).toFixed(1) : '-'}</td>
@@ -2778,7 +2798,7 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
     <div class="forecast-table-head"><b>全馬評価</b><span>AI順 · ${hasV3 ? '単勝期待値は厳しめ / 中心の2通り' : '単勝期待値は以前の予想方式による参考値'}</span></div>
     <div class="tablewrap">
     <table>
-      <thead><tr><th>評価</th><th>枠</th><th>番</th><th class="stickyname">馬名</th><th>${hasV3 ? '基礎評価' : 'AI予測'}</th><th>勝率</th><th>3着内</th><th>総合</th><th>脚力</th><th>調教</th><th>単勝(人気)</th><th>単勝期待値${hasV3 ? '' : '(参考)'}</th><th>根拠</th></tr></thead>
+      <thead><tr><th>評価</th><th>枠</th><th>番</th><th class="stickyname">馬名</th>${hasV3 ? '' : '<th>AI予測</th>'}<th>勝率</th><th>3着内</th><th>総合</th><th>脚力</th><th>調教</th><th>単勝(人気)</th><th>単勝期待値${hasV3 ? '' : '(参考)'}</th><th>根拠</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     </div>
@@ -4295,7 +4315,9 @@ async function renderNoken() {
   const nvid = hasDayVideo ? 1 : day.races.filter((r) => r.mp4).length;
   const sort = state.nokenSort || 'race';
   const racesShown = twoOnly ? day.races.filter((r) => (r.rows || []).length) : day.races;
-  const body = sort === 'time' ? nokenTimeCard(day) : racesShown.map((r) => nokenRaceCard(r, day.date, hasDayVideo)).join('');
+  const body = sort === 'debut' ? nokenDebutCard()
+    : sort === 'time' ? nokenTimeCard(day)
+      : racesShown.map((r) => nokenRaceCard(r, day.date, hasDayVideo)).join('');
   const videoSrc = state.track === '門別' ? 'ホッカイドウ競馬公式' : '南関競馬公式(nankankeiba.com)';
   const dayVideoBlock = hasDayVideo ? `<details class="nk-vid"><summary>▶ 能試映像を見る（${dayRaw.races.length}R分・1本）</summary>
     <iframe width="100%" height="400" style="border:0;max-width:640px;aspect-ratio:16/9;height:auto" loading="lazy"
@@ -4309,6 +4331,7 @@ async function renderNoken() {
         <span class="nk-sort">
           <button class="nk-sort-btn${sort === 'race' ? ' active' : ''}" data-nksort="race">レース別</button>
           <button class="nk-sort-btn${sort === 'time' ? ' active' : ''}" data-nksort="time">タイム順</button>
+          <button class="nk-sort-btn${sort === 'debut' ? ' active' : ''}" data-nksort="debut">デビュー待ち</button>
         </span>
         <button class="nk-sort-btn${twoOnly ? ' active' : ''}" data-nktwoonly style="margin-left:6px">2歳限定${twoOnly ? ' ✓' : ''}</button>
         ${day.all_pdf ? `<a href="${esc(day.all_pdf)}" target="_blank" rel="noopener" class="nk-pdf">📄 全レース成績表PDF</a>` : ''}</div>
@@ -4316,6 +4339,54 @@ async function renderNoken() {
     </div>
     <div class="nk-grid${sort === 'time' ? ' nk-grid-1' : ''}">${body || '<div class="empty">この開催日のデータがありません</div>'}</div>`;
   loadNokenHist(dayRaw);   // その後の成績を裏で取得して該当セルを更新（絞り込み前の全馬分をキャッシュ）
+}
+
+// 「デビュー待ち」＝能検を受けたのに、まだ1度も実戦に出ていない馬の横断リスト。
+// 未出走かどうかは「出走記録があるIDの集合」を軽量クエリで取り、その差集合で決める。
+// （loadHistory は limit=2000 で打ち切られ、切れた馬を未出走と誤判定するので使わない）
+async function loadNokenDebut() {
+  const idx = state.nokenByHorse || {};
+  const ids = Object.keys(idx);
+  if (!ids.length) { state.nokenRaced = new Set(); return; }
+  const raced = new Set();
+  for (let i = 0; i < ids.length; i += 100) {
+    const chunk = ids.slice(i, i + 100).map(encodeURIComponent).join(',');
+    try {
+      const rows = await sbGet(`chihou_results?horse_id=in.(${chunk})&select=horse_id&limit=5000`);
+      for (const r of rows) raced.add(r.horse_id);
+    } catch (e) { /* 取れなかった分は「出走あり」に倒して未出走の誤表示を避ける */
+      ids.slice(i, i + 100).forEach((id) => raced.add(id));
+    }
+  }
+  state.nokenRaced = raced;
+}
+function nokenDebutCard() {
+  if (!state.nokenRaced) {
+    loadNokenDebut().then(() => { if (state.view === 'noken' && (state.nokenSort || '') === 'debut') renderNoken(); });
+    return '<div class="empty">デビュー待ちの馬を探しています…</div>';
+  }
+  const idx = state.nokenByHorse || {};
+  const nameById = {};
+  for (const d of ((state.noken && state.noken.days) || [])) {
+    for (const r of d.races) for (const h of (r.rows || [])) if (h.horse_id) nameById[h.horse_id] = h;
+  }
+  const today = jstToday();
+  const list = Object.entries(idx)
+    .filter(([id, n]) => !state.nokenRaced.has(id) && n.ok !== '不合格')
+    .map(([id, n]) => ({ id, n, h: nameById[id] || {}, days: Math.round((new Date(today) - new Date(n.date)) / 86400000) }))
+    .sort((a, b) => String(a.n.time || '').localeCompare(String(b.n.time || '')));
+  if (!list.length) return '<div class="empty">いま「まだ走っていない合格馬」はいません</div>';
+  const rows = list.map(({ id, n, h, days }) => `<tr>
+    <td class="num"><b>${esc(n.time || '-')}</b></td>
+    <td>${mmdd(n.date)} ${n.dist || ''}m</td>
+    <td class="l"><a class="horse-link" data-hid="${esc(id)}">${esc(h.name || h.horse_name || '')}</a> <span class="kyaku">${esc(h.sexage || '')}</span></td>
+    <td>${esc(n.ok || '')}</td>
+    <td class="l small">${esc(n.comment || '')}</td>
+    <td class="nk-unraced">出走待ち（${days}日）</td></tr>`).join('');
+  return `<div class="card tablewrap">
+    <div class="nk-day-head" style="margin-top:0">まだ走っていない合格馬（${list.length}頭・能検タイムの速い順）</div>
+    <table><tr><th>能検タイム</th><th>能検日</th><th>馬名</th><th>合否</th><th>寸評</th><th>状況</th></tr>${rows}</table>
+    <div class="legend">実戦に出た馬はこの一覧から自動で消えます。不合格の馬は除いています。</div></div>`;
 }
 
 // 能検を horse_id で引ける索引（新馬出馬表・その後成績用）
