@@ -258,6 +258,10 @@ a.horse-link:hover { text-decoration: underline; }
 .np-matchup-head { color: var(--sub); display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; }
 .np-matchup-runners { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 3px; }
 .np-matchup-runner { white-space: nowrap; }
+.ana-breakdown { margin-top: 2px; }
+.ana-breakdown summary { cursor: pointer; font-size: 10px; color: var(--sub); }
+.ana-bd-row { display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 11px; padding: 2px 0 0 8px; }
+.ana-bd-row span { color: var(--sub); }
 .odds-move-up { color: var(--arrow-up); font-weight: bold; }
 .odds-move-down { color: var(--arrow-down); font-weight: bold; }
 .payout-combo { display: inline-block; margin: 2px 10px 2px 0; white-space: nowrap; }
@@ -3571,13 +3575,109 @@ function analysisHtml(st) {
   }
 
   // 騎手・厩舎（勝率順）
+  // 騎手・厩舎: 通算に加えて脚質別/人気帯別の内訳を折りたたみで出す（同じ勝率でも中身が違う）
+  const KYAKUS = ['逃げ', '先行', '差し', '追込'];
+  const POPB = [['1-3', '1〜3番人気'], ['4-6', '4〜6番人気'], ['7+', '7番人気以下']];
+  const breakdownHtml = (e) => {
+    if (!e.by_kyaku && !e.by_pop) return '';
+    const cell = (o) => (o ? `${rateBar(o.top3_rate)}<span class="kyaku">${o.n}</span>` : '-');
+    const k = KYAKUS.filter((x) => e.by_kyaku && e.by_kyaku[x]);
+    const p = POPB.filter(([x]) => e.by_pop && e.by_pop[x]);
+    if (!k.length && !p.length) return '';
+    return `<details class="ana-breakdown"><summary>内訳</summary>
+      ${k.length ? `<div class="ana-bd-row"><span>脚質別 複勝率</span>${k.map((x) => `<b>${x} ${cell(e.by_kyaku[x])}</b>`).join('')}</div>` : ''}
+      ${p.length ? `<div class="ana-bd-row"><span>人気帯別 複勝率</span>${p.map(([x, lbl]) => `<b>${lbl} ${cell(e.by_pop[x])}</b>`).join('')}</div>` : ''}
+    </details>`;
+  };
   const rankTable = (obj, label) => {
     const rows = Object.entries(obj).sort((a, b) => b[1].win_rate - a[1].win_rate).slice(0, 30)
-      .map(([n, e], i) => `<tr><td>${i + 1}</td><td class="l">${esc(n)}</td><td class="num">${e.starts}</td>
+      .map(([n, e], i) => `<tr><td>${i + 1}</td><td class="l">${esc(n)}${breakdownHtml(e)}</td><td class="num">${e.starts}</td>
         <td class="num">${e.wins}</td><td class="num">${rateBar(e.win_rate)}</td><td class="num">${rateBar(e.top3_rate)}</td></tr>`).join('');
     return `<div><h3 class="sec">${label}（勝率順・10走以上）</h3><div class="card tablewrap"><table>
-      <tr><th>#</th><th>${label}</th><th>騎乗/出走</th><th>勝利</th><th>勝率</th><th>複勝率</th></tr>${rows}</table></div></div>`;
+      <tr><th>#</th><th>${label}</th><th>騎乗/出走</th><th>勝利</th><th>勝率</th><th>複勝率</th></tr>${rows}</table></div>
+      <div class="legend">名前の下の「内訳」を開くと、脚質別・人気帯別の複勝率が出ます（小さい数字は該当した走数）。</div></div>`;
   };
+
+  // ---- 配当のクセ（公式払戻の条件別分布・傾向の可視化であって買い方の推奨ではない） ----
+  const TICKETS = [['win', '単勝'], ['place', '複勝'], ['quinella', '馬複'], ['exacta', '馬単'],
+    ['wide', 'ワイド'], ['trio', '3連複'], ['trifecta', '3連単']];
+  const pp = st.payout_profile;
+  const yen = (v) => (v == null ? '-' : `${v.toLocaleString('ja-JP')}円`);
+  const payoutCard = !pp || !pp.by_ticket ? '' : (() => {
+    const rows = TICKETS.filter(([k]) => pp.by_ticket[k]).map(([k, lbl]) => {
+      const e = pp.by_ticket[k];
+      return `<tr><td>${lbl}</td><td class="num">${yen(e.median)}</td>
+        <td class="num"><span class="kyaku">${yen(e.p25)}〜${yen(e.p75)}</span></td>
+        <td class="num">${rateBar(e.over10k)}</td><td class="num">${e.n.toLocaleString('ja-JP')}</td></tr>`;
+    }).join('');
+    const axis = (name, label, fmtKey) => {
+      const d = (pp.trifecta || {})[name];
+      if (!d || !Object.keys(d).length) return '';
+      const cells = Object.entries(d).map(([k, e]) =>
+        `<tr><td>${fmtKey ? fmtKey(k) : k}</td><td class="num">${yen(e.median)}</td>
+         <td class="num">${rateBar(e.over10k)}</td><td class="num">${e.n.toLocaleString('ja-JP')}</td></tr>`).join('');
+      return `<div><h4 class="sec" style="margin:10px 0 4px;font-size:13px">3連単 · ${label}</h4>
+        <div class="card tablewrap"><table><tr><th>${label}</th><th>まん中の配当</th><th>1万円超</th><th>R数</th></tr>${cells}</table></div></div>`;
+    };
+    return `
+    <h3 class="sec">💴 配当のクセ（${state.track}・公式払戻）</h3>
+    <div class="card tablewrap"><table>
+      <tr><th>券種</th><th>まん中の配当</th><th>よくある幅</th><th>1万円超</th><th>R数</th></tr>${rows}
+    </table></div>
+    <div class="grid2">${axis('field', '頭数', (k) => `${k}頭`)}${axis('klass', 'クラス')}</div>
+    <div class="grid2">${axis('pace', 'ペース')}${axis('dist', '距離', (k) => `${k}m`)}</div>
+    <div class="legend">「まん中の配当」は高い順に並べたときの真ん中の値です（平均は一部の大穴に引っ張られるため使っていません）。「よくある幅」は下から4分の1〜4分の3の範囲。これは過去にどうだったかの傾向で、これから当たりやすい買い方を示すものではありません。</div>`;
+  })();
+
+  // ---- 人気の信頼度 ----
+  const ps = st.pop_stats;
+  const popCard = !ps || !(ps.by_pop || []).length ? '' : (() => {
+    const rows = ps.by_pop.map((r) => `<tr><td>${r.pop}番人気</td><td class="num">${r.starts.toLocaleString('ja-JP')}</td>
+      <td class="num">${rateBar(r.win_rate)}</td><td class="num">${rateBar(r.top3_rate)}</td>
+      <td class="num ${r.win_ret >= 100 ? 'best' : ''}">${r.win_ret}円</td>
+      <td class="num ${r.place_ret >= 100 ? 'best' : ''}">${r.place_ret}円</td></tr>`).join('');
+    const tf = Object.entries(ps.top3_by_field || {});
+    const tfRows = tf.map(([k, v]) => `<tr><td>${k}頭</td><td class="num">${rateBar(v.rate)}</td><td class="num">${v.races.toLocaleString('ja-JP')}</td></tr>`).join('');
+    return `
+    <h3 class="sec">🎫 人気の信頼度（${state.track}）</h3>
+    <div class="grid2">
+      <div><div class="card tablewrap"><table>
+        <tr><th>人気</th><th>頭数</th><th>勝率</th><th>複勝率</th><th>単勝100円が</th><th>複勝100円が</th></tr>${rows}
+      </table></div></div>
+      ${tfRows ? `<div><h4 class="sec" style="margin:0 0 4px;font-size:13px">上位3人気だけで決まった割合</h4>
+        <div class="card tablewrap"><table><tr><th>頭数</th><th>3頭とも上位人気</th><th>R数</th></tr>${tfRows}</table></div></div>` : ''}
+    </div>
+    <div class="legend">「単勝100円が」は、その人気の馬すべてを100円ずつ買い続けた場合に平均でいくら戻ったかです（100円未満なら目減り）。過去の傾向であり、今後を保証するものではありません。</div>`;
+  })();
+
+  // ---- 4角の順位別 3着内率 ----
+  const c4r = st.corner4_rank || {};
+  const c4Card = !Object.keys(c4r).length ? '' : (() => {
+    const cards = Object.entries(c4r).map(([band, list]) => {
+      const rows = list.map((x) => `<tr><td>${x.rank}番手</td><td class="num">${rateBar(x.top3_rate)}</td><td class="num">${x.n.toLocaleString('ja-JP')}</td></tr>`).join('');
+      return `<div><h4 class="sec" style="margin:10px 0 4px;font-size:13px">${band}</h4>
+        <div class="card tablewrap"><table><tr><th>4角の位置</th><th>3着内率</th><th>頭数</th></tr>${rows}</table></div></div>`;
+    }).join('');
+    return `<h3 class="sec">🏁 4角を何番手で回ったか（${state.track}）</h3><div class="grid2">${cards}</div>
+      <div class="legend">上の「ペース×脚質」を、逃げ/先行/差し/追込よりも細かい順位刻みで見たものです。短い距離は3コーナーと4コーナーがほぼ同じ位置になるため、コーナーが4つある1500m以上がいちばん読み取りやすくなります。</div>`;
+  })();
+
+  // ---- 出遅れの傾向 ----
+  const stb = st.start_trouble;
+  const startCard = !stb || !(stb.by_waku || []).length ? '' : (() => {
+    const rows = stb.by_waku.map((x) => `<tr><td><span class="waku w${x.waku}">${x.waku}</span></td>
+      <td class="num">${rateBar(x.late_rate)}</td><td class="num">${x.n.toLocaleString('ja-JP')}</td></tr>`).join('');
+    const a = stb.after;
+    return `<h3 class="sec">🚦 出遅れの傾向（${state.track}）</h3>
+    <div class="grid2">
+      <div><div class="card tablewrap"><table><tr><th>枠</th><th>出遅れ率</th><th>頭数</th></tr>${rows}</table></div></div>
+      <div><div class="card"><div class="note" style="display:block">
+        出遅れた馬の3着内率 <b>${a.late.top3_rate != null ? rateBar(a.late.top3_rate) : '-'}</b>（${a.late.n.toLocaleString('ja-JP')}頭）<br>
+        それ以外の3着内率 <b>${a.clean.top3_rate != null ? rateBar(a.clean.top3_rate) : '-'}</b>（${a.clean.n.toLocaleString('ja-JP')}頭）
+      </div></div></div>
+    </div>
+    <div class="legend">レース結果の「発走状況」欄に出遅れと書かれた馬を数えています。記載が無いレースは出遅れ0件として数えています。</div>`;
+  })();
 
   return `
   <div class="note">対象: ${st.n_races}レース（〜${esc(st.generated)}）。前残り度は「その日の(前複勝率−後複勝率) − ${state.track}平均ギャップ${st.overall_gap != null ? `(+${st.overall_gap})` : ''}」の相対値。上がり偏差は基準タイム比（負＝上がりが速い＝差しが利く馬場）。</div>
@@ -3595,6 +3695,10 @@ function analysisHtml(st) {
   ${kobaMatrix}
   ${lapClassHtml}
   ${paceZoneHtml}
+  ${payoutCard}
+  ${popCard}
+  ${c4Card}
+  ${startCard}
   <div class="grid2">${rankTable(st.jockeys, '騎手')}${rankTable(st.trainers, '厩舎')}</div>`;
 }
 
