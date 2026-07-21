@@ -582,6 +582,10 @@ main { max-width: 1320px; }
 .horse-ev.ev-positive b { color: var(--positive); }
 .horse-ev.ev-watch b { color: #d8a514; }
 .horse-ev.ev-negative b { color: var(--sub); }
+/* 参考値（旧方式の中心値）。太字・色による「買える」の含意を与えない中立表示にする。 */
+.horse-ev.ev-reference b { color: var(--sub); font-weight: 500; }
+.horse-ev.ev-reference small { color: var(--sub); }
+.horse-ev.ev-unknown b { color: var(--sub); font-weight: 500; }
 .ev-ticket-card .ev-allocation { color: var(--sub); font-size: 9px; }
 
 @media (max-width: 760px) {
@@ -2177,6 +2181,29 @@ function v5ShadowCardHtml(shadow) {
   </section>`;
 }
 
+// 単勝期待値セルの表示状態。静的描画とライブ更新(applyHorseEvs)が必ずこの1関数を共有する。
+// 閾値は v5 ShadowPolicy.ev_thresholds.win と同値。較正済み下限(win_probability.low)にのみ適用し、
+// 較正区間を持たない旧v2ソフトマックス由来の参考値には絶対に当てない（購入候補サインの密輸を防ぐ）。
+const EV_CANDIDATE = 1.08;   // 買い目候補ライン（v3の厳しめ計算のみ）
+const EV_BREAKEVEN = 1.00;   // 損益分岐
+// null/空文字は Number() で 0 になり有限扱いされてしまうため、必ずこの判定を通す。
+const evFinite = (v) => v != null && v !== '' && Number.isFinite(+v);
+// 馬ごとの確率ソース。レース単位のhasV3で二分するとlowだけ欠けた馬を取りこぼす。
+const evModeOf = (r) => (evFinite(r.winPLow) ? 'v3' : (evFinite(r.winP) ? 'reference' : 'none'));
+function evCellState(mode, low, mid, odds, isToday) {
+  if (mode === 'none' || !evFinite(mid)) return { cls: 'ev-unknown', main: '-', note: '実績なし' };
+  if (!(odds > 0)) return { cls: 'ev-unknown', main: '-', note: 'オッズ待ち' };
+  if (mode === 'v3' && evFinite(low)) {
+    const conservative = +low * odds;
+    const cls = conservative >= EV_CANDIDATE ? 'ev-positive' : (conservative >= EV_BREAKEVEN ? 'ev-watch' : 'ev-negative');
+    return { cls, main: conservative.toFixed(2), note: `中心 ${(+mid * odds).toFixed(2)}` };
+  }
+  // 参考モード＝旧v2の中心値のみ。色による買える/買えないの含意は与えない。
+  // 発走後は確定に近いオッズが入るため、後知恵の的中演出にならないよう数値を出さない。
+  if (!isToday) return { cls: 'ev-unknown', main: '-', note: '発走前のみ' };
+  return { cls: 'ev-reference', main: (+mid * odds).toFixed(2), note: '参考' };
+}
+
 function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   if (!entries.length) return raceHeaderHtml(raceMeta) + '<div class="empty">出馬表データがありません</div>';
   const cyoByUma = {};
@@ -2273,17 +2300,19 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
     return sum + (Number.isFinite(value) && value >= 0 ? value : 0);
   }, 0) || 1 : 1;
   hs.forEach((r, i) => {
-    r.winP = hasV3 ? Number(r.v3.win_probability.mid) / v3MidMass
+    // hasV3 は win_probability_raw しか検査しないため、win_probability を欠くレシートで
+    // 予想タブ全体が落ちないよう必ずガード越しに読む。
+    const wp = (r.v3 && r.v3.win_probability) || {};
+    r.winP = hasV3 ? Number(wp.mid) / v3MidMass
       : (zAi[i] != null ? exps[i] / expSum : null);
     r.top3P = hasV3 ? Number(r.v3.top3_probability) : null;
-    const coreLowRaw = hasV3 && r.v3.win_probability ? Number(r.v3.win_probability.low) : null;
+    const coreLowRaw = hasV3 ? Number(wp.low) : null;
     // Never increase a conservative bound merely because an old receipt's
     // independently calibrated midpoints did not sum to one.
     const coreLow = Number.isFinite(coreLowRaw) ? Math.min(coreLowRaw, r.winP) : null;
     r.winPLow = Number.isFinite(coreLow) ? coreLow : null;
-    const currentOdds = Number(r.e.win_odds);
-    r.winEv = r.winP != null && Number.isFinite(currentOdds) && currentOdds > 0 ? r.winP * currentOdds : null;
-    r.winEvLow = r.winPLow != null && Number.isFinite(currentOdds) && currentOdds > 0 ? r.winPLow * currentOdds : null;
+    // 期待値の算出はセル描画時に evCellState が現在オッズで行う（ライブ更新と式を1本化するため
+    // ここでは持たない）。
   });
   const siTop = hs.filter((r) => r.si != null).sort((a, b) => b.si - a.si)[0];
   for (const r of hs) r.myomi = siTop && r === siTop && r.e.pop != null && r.e.pop >= 4;
@@ -2328,11 +2357,10 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   };
   const pct = (v, digits = 0) => v != null && Number.isFinite(+v) ? `${(+v * 100).toFixed(digits)}%` : '-';
   const dev = (v, digits = 0) => v != null && Number.isFinite(+v) ? (+v).toFixed(digits) : '-';
-  const horseEvClass = (v) => v != null && Number.isFinite(+v)
-    ? (+v >= 1.08 ? 'ev-positive' : (+v >= 1 ? 'ev-watch' : 'ev-negative')) : 'ev-negative';
-  const horseEvHtml = (r) => r.winEvLow != null && Number.isFinite(+r.winEvLow)
-    ? `<b>${(+r.winEvLow).toFixed(2)}</b><small>中心 ${Number.isFinite(+r.winEv) ? (+r.winEv).toFixed(2) : '-'}</small>`
-    : '<b>-</b><small>オッズ待ち</small>';
+  const horseEvHtml = (r) => {
+    const s = evCellState(evModeOf(r), r.winPLow, r.winP, Number(r.e.win_odds), state.date === jstToday());
+    return `<b class="ev-main">${s.main}</b><small class="ev-note">${s.note}</small>`;
+  };
   const leader = disp[0] || null;
   const topTicket = v5Shadow && Array.isArray(v5Shadow.tickets)
     ? v5Shadow.tickets.slice().sort((a, b) => Number(b.conservative_ev || 0) - Number(a.conservative_ev || 0))[0] : null;
@@ -2354,7 +2382,7 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
     <div class="forecast-side">
       <div class="forecast-side-head"><b>上位評価</b><span>数字より先に序列を読む</span></div>
       <div class="contender-grid">${contenderCards}</div>
-      <div class="forecast-insight"><div><span>買い目判断</span><b>${topTicket ? `${esc(V5_TICKET_LABELS[topTicket.ticket_type] || topTicket.ticket_type)} ${esc(topTicket.combination)}` : '今回は見送り、または購入用オッズの取得待ち'}</b></div><div><span>現在の扱い</span><b>成績を記録中 · 実際の購入0円</b></div></div>
+      <div class="forecast-insight"><div><span>買い目判断</span><b>${topTicket ? `${esc(V5_TICKET_LABELS[topTicket.ticket_type] || topTicket.ticket_type)} ${esc(topTicket.combination)}` : (v5Shadow ? '今回は見送り' : '発走前の判定待ち')}</b></div><div><span>現在の扱い</span><b>成績を記録中 · 実際の購入0円</b></div></div>
     </div>
   </section>` : '';
 
@@ -2366,13 +2394,13 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
       <td>${e.umaban ?? ''}</td>
       <td class="l stickyname"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a>${todayBlinkerBadge(e, history)}${kakuBadge(e)}</td>
       <td class="num ${r.mark === '◎' ? 'best' : ''}">${r.aiDev != null ? r.aiDev.toFixed(1) : '-'}</td>
-      <td class="num ${r.mark === '◎' ? 'best' : ''}">${r.winP != null ? (r.winP * 100).toFixed(0) + '%' : '-'}</td>
-      <td class="num">${r.top3P != null ? (r.top3P * 100).toFixed(0) + '%' : '-'}</td>
+      <td class="num ${r.mark === '◎' ? 'best' : ''}">${pct(r.winP)}</td>
+      <td class="num">${pct(r.top3P)}</td>
       <td class="num">${r.score != null ? (50 + r.score * 10).toFixed(1) : '-'}</td>
       <td class="num">${r.si != null ? r.si.toFixed(0) : '-'}</td>
       <td class="num">${r.cz != null ? r.cz.toFixed(1) : '-'}</td>
       <td class="num" data-live-odds="${e.umaban}">${e.win_odds ?? '-'}${e.pop != null ? `(${e.pop})` : ''}</td>
-      <td class="num horse-ev ${horseEvClass(r.winEvLow)}" data-horse-ev="${e.umaban}" data-prob-low="${r.winPLow ?? ''}" data-prob-mid="${r.winP ?? ''}">${horseEvHtml(r)}</td>
+      <td class="num horse-ev ${evCellState(evModeOf(r), r.winPLow, r.winP, Number(e.win_odds), state.date === jstToday()).cls}" data-horse-ev="${e.umaban}" data-ev-mode="${evModeOf(r)}" data-prob-low="${r.winPLow ?? ''}" data-prob-mid="${r.winP ?? ''}">${horseEvHtml(r)}</td>
       <td class="small fold"><span class="kv">${esc(r.konkyo)}</span></td>
     </tr>`;
   }).join('');
@@ -2388,7 +2416,7 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
       <div class="runner-prob"><i style="width:${Math.max(1, Math.min(100, Number(r.winP || 0) * 100))}%"></i></div>
       <div class="runner-metrics">
         <span>3着内<b>${pct(r.top3P)}</b></span><span>単勝<b data-live-odds="${e.umaban}">${e.win_odds ?? '-'}${e.pop != null ? `(${e.pop})` : ''}</b></span>
-        <span class="horse-ev ${horseEvClass(r.winEvLow)}" data-horse-ev="${e.umaban}" data-prob-low="${r.winPLow ?? ''}" data-prob-mid="${r.winP ?? ''}">単勝期待値${horseEvHtml(r)}</span>
+        <span class="horse-ev ${evCellState(evModeOf(r), r.winPLow, r.winP, Number(e.win_odds), state.date === jstToday()).cls}" data-horse-ev="${e.umaban}" data-ev-mode="${evModeOf(r)}" data-prob-low="${r.winPLow ?? ''}" data-prob-mid="${r.winP ?? ''}">単勝期待値${horseEvHtml(r)}</span>
         <span>総合<b>${r.score != null ? (50 + r.score * 10).toFixed(1) : '-'}</b></span><span>調教<b>${dev(r.cz, 1)}</b></span>
       </div>
       <div class="runner-reason">評価根拠 · ${esc(r.konkyo || 'データ待ち')}</div>
@@ -2399,27 +2427,30 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
     ? `<b>オッズと分離したAI印</b>＝今回の単勝オッズと人気を能力順位に使わず、過去成績とレース前に取得できる馬体・調教・記者印から計算した勝率です。オッズは買い目候補タブの価格判断だけに使います。${formSignalsAvailable ? '「反発候補」「人気崩れ注意」は、能力順位とは別の買い目用注意表示です。' : ''}`
     : '<b>現在のAI印</b>は以前の予想方式による参考順位です。購入候補の判定とは分けて表示しています。';
 
+  const evExplanation = hasV3
+    ? '単勝期待値は、その勝率に購入判断用の発走前オッズを掛けた別の数字です。1.00が長い目で見た損益分岐の目安です。太字は勝率を低めに見た厳しい計算、小字は中心の計算です。データ量・人気馬の危険条件も通った場合だけ買い目候補にします。'
+    : 'いまの単勝期待値は、以前の予想方式で見積もった勝率に現在のオッズを掛けた<b>参考の数字</b>です。1.00が長い目で見た損益分岐の目安ですが、この参考値は買い目候補の判定には使っていません。発走が近づいて新しい予想が届くと、勝率を低めに見た厳しい計算に切り替わります（そのとき数字は通常小さくなります）。';
   const allHorseCard = `<section class="card forecast-table-card">
-    <div class="forecast-table-head"><b>全馬評価</b><span>AI順 · 単勝期待値は厳しめ / 中心の2通り</span></div>
+    <div class="forecast-table-head"><b>全馬評価</b><span>AI順 · ${hasV3 ? '単勝期待値は厳しめ / 中心の2通り' : '単勝期待値は以前の予想方式による参考値'}</span></div>
     <div class="tablewrap">
     <table>
-      <thead><tr><th>評価</th><th>枠</th><th>番</th><th class="stickyname">馬名</th><th>${hasV3 ? '基礎評価' : 'AI予測'}</th><th>勝率</th><th>3着内</th><th>総合</th><th>脚力</th><th>調教</th><th>単勝(人気)</th><th>単勝期待値</th><th>根拠</th></tr></thead>
+      <thead><tr><th>評価</th><th>枠</th><th>番</th><th class="stickyname">馬名</th><th>${hasV3 ? '基礎評価' : 'AI予測'}</th><th>勝率</th><th>3着内</th><th>総合</th><th>脚力</th><th>調教</th><th>単勝(人気)</th><th>単勝期待値${hasV3 ? '' : '(参考)'}</th><th>根拠</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     </div>
     <div class="forecast-mobile-list">${mobileRows}</div>
-    <details class="prediction-disclosure"><summary>AI評価と単勝期待値の読み方</summary><p>${modelExplanation} 能力順位と勝率はオッズを使わずに先に確定します。単勝期待値は、その勝率に購入判断用の発走前オッズを掛けた別の数字です。1.00が長い目で見た損益分岐の目安です。太字は勝率を低めに見た厳しい計算、小字は中心の計算です。データ量・人気馬の危険条件も通った場合だけ買い目候補にします。利益を保証する数字ではありません。</p></details>
+    <details class="prediction-disclosure"><summary>AI評価と単勝期待値の読み方</summary><p>${modelExplanation} 能力順位と勝率はオッズを使わずに先に確定します。${evExplanation} 利益を保証する数字ではありません。</p></details>
   </section>`;
   const ticketCount = v5Shadow && Array.isArray(v5Shadow.tickets) ? v5Shadow.tickets.length : 0;
   const valueCard = v5ShadowCardHtml(v5Shadow)
-    || '<div class="note"><b>購入用オッズの取得待ち</b> — 能力予想は確定済みです。発走前の価格を保存できた場合だけ、7種類の馬券から買い目候補を探します。</div>';
+    || '<div class="note"><b>発走前の判定待ち</b> — 能力予想は確定済みです。発走前の価格を保存できた場合だけ、7種類の馬券から買い目候補を探します。</div>';
   const workspace = `<section class="forecast-workspace" aria-label="予想分析ワークスペース">
     <input class="forecast-view-toggle" type="radio" name="forecast-view" id="forecast-view-runners" checked>
     <input class="forecast-view-toggle" type="radio" name="forecast-view" id="forecast-view-value">
     <input class="forecast-view-toggle" type="radio" name="forecast-view" id="forecast-view-summary">
     <div class="forecast-view-tabs" role="tablist" aria-label="予想表示切替">
       <label for="forecast-view-runners">全馬評価 <span>${disp.length}頭</span></label>
-      <label for="forecast-view-value">買い目候補 <span>${ticketCount ? `${ticketCount}点` : 'オッズ待ち'}</span></label>
+      <label for="forecast-view-value">買い目候補 <span>${v5Shadow ? (ticketCount ? `${ticketCount}点` : '見送り') : '判定待ち'}</span></label>
       <label for="forecast-view-summary">AI要約 <span>上位3頭</span></label>
     </div>
     <div class="forecast-panel forecast-panel-runners">${allHorseCard}</div>
@@ -2578,25 +2609,22 @@ function applyLiveWeights(wts) {
   }
 }
 
+// オッズが届くたびに単勝期待値を貼り替える。判定は静的描画と同じ evCellState に必ず委譲する
+// （二重実装にすると初回描画と60秒毎の更新で表示が食い違う）。
 function applyHorseEvs(oddsMap) {
+  const isToday = state.date === jstToday();
   for (const el of document.querySelectorAll('#raceView [data-horse-ev]')) {
     const odds = Number(oddsMap && oddsMap[+el.dataset.horseEv]);
-    const probabilityLow = parseFloat(el.dataset.probLow);
-    const probabilityMid = parseFloat(el.dataset.probMid);
-    const lowNode = el.querySelector('b');
-    const midNode = el.querySelector('small');
-    el.classList.remove('ev-positive', 'ev-watch', 'ev-negative');
-    if (!(odds > 0) || !Number.isFinite(probabilityLow) || !Number.isFinite(probabilityMid)) {
-      el.classList.add('ev-negative');
-      if (lowNode) lowNode.textContent = '-';
-      if (midNode) midNode.textContent = 'オッズ待ち';
-      continue;
-    }
-    const conservativeEv = probabilityLow * odds;
-    const estimatedEv = probabilityMid * odds;
-    el.classList.add(conservativeEv >= 1.08 ? 'ev-positive' : (conservativeEv >= 1 ? 'ev-watch' : 'ev-negative'));
-    if (lowNode) lowNode.textContent = conservativeEv.toFixed(2);
-    if (midNode) midNode.textContent = `推定 ${estimatedEv.toFixed(2)}`;
+    // 空文字は parseFloat で NaN になり「値なし」を意味する。Number() に変えると 0 になり誤表示。
+    const low = parseFloat(el.dataset.probLow);
+    const mid = parseFloat(el.dataset.probMid);
+    const s = evCellState(el.dataset.evMode || 'none', low, mid, odds, isToday);
+    el.classList.remove('ev-positive', 'ev-watch', 'ev-negative', 'ev-reference', 'ev-unknown');
+    el.classList.add(s.cls);
+    const mainNode = el.querySelector('.ev-main') || el.querySelector('b');
+    const noteNode = el.querySelector('.ev-note') || el.querySelector('small');
+    if (mainNode) mainNode.textContent = s.main;
+    if (noteNode) noteNode.textContent = s.note;
   }
 }
 
@@ -2690,6 +2718,8 @@ async function seedRecordedOdds(rd, raceNo, hist) {
 
 async function startLiveOdds(raceMeta) {
   clearInterval(state.oddsTimer); state.oddsTimer = null;
+  // 世代トークン: 再描画で startLiveOdds が入れ子に走った時、古い run() がタイマーを張り直さないように
+  const gen = (state.oddsGen = (state.oddsGen || 0) + 1);
   const rd = raceMeta.race_date || raceMeta.date;
   if (rd !== jstToday() || !(state.sub === 'yosou' || state.sub === 'syutuba')) return;
   const rid = raceMeta.race_id || state.raceId;
@@ -2732,10 +2762,35 @@ async function startLiveOdds(raceMeta) {
     }
     if (state.raceId === rid && state.view === 'race') {
       applyLiveOdds(live); applyLiveWeights(state.liveWeights[rid]); recordOdds(rid, live);
+      await pickupV3Receipt(rid, gen);
     }
   };
   await run();
-  state.oddsTimer = setInterval(run, 60000);
+  if (state.oddsGen === gen) state.oddsTimer = setInterval(run, 60000);
+}
+
+// 予想レシート(v3)は発走30分前ごろに publish される。予想タブに留まったままだと
+// 取り込む契機が無く「参考値のまま切り替わらない」ので、ライブ更新に相乗りして1度だけ拾う。
+async function pickupV3Receipt(rid, gen) {
+  if (state.v3PickupBusy) return;
+  const has = state.v3Predictions && state.v3Predictions.races && state.v3Predictions.races[rid];
+  if (has || typeof state.provider.loadV3Predictions !== 'function') return;
+  state.v3PickupBusy = true;
+  try {
+    const latest = await state.provider.loadV3Predictions();
+    const arrived = latest && latest.races && latest.races[rid];
+    if (!arrived) return;
+    state.v3Predictions = latest;
+    // 世代・表示中レースが変わっていない時だけ描き直す（二重タイマー/誤爆防止）
+    if (state.oddsGen === gen && state.raceId === rid && state.view === 'race' && state.sub === 'yosou') {
+      const open = $('raceView').querySelector('.prediction-disclosure[open]') ? true : false;
+      const view = ($('raceView').querySelector('.forecast-view-toggle:checked') || {}).id;
+      await renderRaceView();
+      if (view) { const el = document.getElementById(view); if (el) el.checked = true; }
+      if (open) { const d = $('raceView').querySelector('.prediction-disclosure'); if (d) d.open = true; }
+    }
+  } catch (e) { /* 取れなければ次のライブ更新で再試行 */ }
+  finally { state.v3PickupBusy = false; }
 }
 
 // オッズ推移ポップアップ（クリックしたセルの馬の 朝→現在 の変化をミニグラフ表示）
