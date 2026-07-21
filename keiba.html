@@ -1538,7 +1538,7 @@ function renderViewTabs() {
 function renderSubTabs() {
   $('subTabs').hidden = false;
   const cfg = trackCfg();
-  const subs = [['yosou', '🎯 予想'], ['syutuba', '出馬表'], ['cyokyo', '調教'], ['zenkouhan', '前後半'], ['seiseki', '成績'], ['eizo', '🎬 映像']];
+  const subs = [['yosou', '🎯 予想'], ['syutuba', '出馬表'], ['danwa', '厩舎の話'], ['cyokyo', '調教'], ['zenkouhan', '前後半'], ['seiseki', '成績'], ['eizo', '🎬 映像']];
   if (cfg.sim) subs.push(['sim', '🎲 シミュレータ']);   // シミュレータは門別のみ（トラック描画が門別専用）
   $('subTabs').innerHTML = subs.map(([s, l]) => `<button data-sub="${s}" class="${state.sub === s ? 'active' : ''}">${l}</button>`).join('');
 }
@@ -1979,15 +1979,34 @@ function nokenLineHtml(hid) {
     + `${n.comment ? ` ${esc(n.comment)}` : ''}`;
 }
 
+// 厩舎の話に添える「前走」参考表示: 着順(距離・日付・クラス)。コメントの文脈を読むための最小限の材料。
+function prevRunRefHtml(run) {
+  if (!run) return '<span style="font-size:11px;color:var(--sub)">前走なし（初出走）</span>';
+  const fin = run.fin != null ? `${run.fin}着` : (run.fin_note || '結果不明');
+  const cls = classBadge(run);
+  const parts = [run.dist ? `${run.dist}m` : '', mmdd(run.date), cls].filter(Boolean).join('・');
+  return `<span style="font-size:11px;color:var(--sub)">前走 ${fin}${parts ? `（${parts}）` : ''}</span>`;
+}
 // 厩舎の話（今回のレースに向けた調教師コメント。競馬ブック danwa）
-function danwaCard(entries, danwaByUma) {
+// 各コメントの直前に「前走の着順(距離・日・クラス)」を添える。過去コメント展開でも同じ理論を使えるよう、
+// 走歴をstate.danwaHistoryCacheへ退避しておく（toggleDanwaPastが再フェッチ無しで参照する）。
+function danwaCard(entries, danwaByUma, history) {
   if (!danwaByUma || !Object.keys(danwaByUma).length) return '';
+  state.danwaHistoryCache = state.danwaHistoryCache || {};
   const rows = entries.filter((e) => danwaByUma[e.umaban]).map((e) => {
     const d = danwaByUma[e.umaban];
+    const hRuns = (history && history[e.horse_id]) || [];
+    if (e.horse_id) {
+      state.danwaHistoryCache[e.horse_id] = hRuns.map((r) => ({
+        race_id: r.race_id, date: r.date, dist: r.dist, fin: r.fin, fin_note: r.fin_note,
+        cls: r.cls, race_name: r.race_name,
+      }));
+    }
     const nameHtml = `<a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}>${esc(e.horse_name)}</a>`;
     return `<div style="padding:6px 0;border-bottom:1px solid var(--border)">
       <b>${e.umaban}</b> ${nameHtml}${d.headline ? ` <span class="badge">${esc(d.headline)}</span>` : ''}
       <button class="foldbtn danwa-expand" style="font-size:11px;padding:1px 8px;margin-left:6px" data-hid="${esc(e.horse_id || '')}" data-hname="${esc(e.horse_name || '')}" data-cur-rid="${esc(d.race_id || '')}">▼過去のコメント</button>
+      <div style="margin-top:2px">${prevRunRefHtml(hRuns[0])}</div>
       <div style="font-size:13px;color:var(--sub);margin-top:2px">${d.trainer ? `<b>${esc(d.trainer)}</b>――` : ''}${esc(d.comment || d.raw || '')}</div>
       <div class="danwa-past" hidden></div>
     </div>`;
@@ -2011,13 +2030,19 @@ async function toggleDanwaPast(btn) {
     const rows = await sbGet(`chihou_danwa?${filt}&select=race_id,headline,trainer,comment,raw&order=race_id.desc&limit=8`);
     const past = rows.filter((r) => r.race_id !== curRid);
     if (!past.length) { wrap.innerHTML = '<div style="font-size:12px;color:var(--sub)">過去のコメントはありません</div>'; return; }
+    // このコメントが向けられたレースの「前走」も、今走コメントと同じ理論で添える。
+    // 既に読み込み済みの走歴キャッシュ(danwaCardが退避したもの)から引くので再フェッチしない。
+    const cachedRuns = (hid && state.danwaHistoryCache && state.danwaHistoryCache[hid]) || [];
     wrap.innerHTML = past.map((r) => {
       const y = r.race_id.slice(0, 4), mm = r.race_id.slice(12, 14), dd = r.race_id.slice(14, 16);
       const date = `${y}-${mm}-${dd}`;
+      const idx = cachedRuns.findIndex((x) => x.race_id === r.race_id);
+      const prevLine = idx >= 0 ? prevRunRefHtml(cachedRuns[idx + 1]) : '';
       return `<div style="font-size:12px;padding:4px 0;border-top:1px dashed var(--border)">
         <span class="racelink" data-rid="${esc(r.race_id)}" data-rd="${esc(date)}" title="クリックでそのレースへ">${mmdd(date)}</span>
         ${r.headline ? ` <span class="badge">${esc(r.headline)}</span>` : ''}
         ${r.trainer ? ` <b>${esc(r.trainer)}</b>――` : ' '}${esc(r.comment || r.raw || '')}
+        ${prevLine ? `<br>${prevLine}` : ''}
       </div>`;
     }).join('');
   } catch (e) {
@@ -2112,7 +2137,6 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   }).join('');
 
   return raceHeaderHtml(raceMeta) + `
-  ${danwaCard(entries, danwaByUma)}
   <div class="card"><div style="text-align:right;margin-bottom:4px"><span id="oddsUpdated" class="badge"></span></div><div class="tablewrap">
     <table>
       <tr><th>枠</th><th>番</th><th>AI印</th>
@@ -2461,8 +2485,13 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   return raceHeaderHtml(raceMeta) + `
   <div class="signal-strip"><span>直近の馬場 · ${recentBias || 'データなし'}</span><span class="signal-live" id="oddsUpdated">ライブオッズ確認中</span></div>
   ${workspace}
-  <div id="evMonitor" class="note" hidden></div>
-  ${danwaCard(entries, danwaByUma)}`;
+  <div id="evMonitor" class="note" hidden></div>`;
+}
+
+// 厩舎の話タブ（今回のレースに向けたコメント一覧。▼過去のコメントで各馬の履歴も見られる）
+function danwaRaceHtml(raceMeta, entries, danwaByUma, history) {
+  const card = danwaCard(entries, danwaByUma, history);
+  return raceHeaderHtml(raceMeta) + (card || '<div class="empty">厩舎の話（調教師コメント）はまだ届いていません。</div>');
 }
 
 // レース単位の調教ビュー（各馬の最新坂路追切・ラップ判定・調教偏差順）
@@ -2934,7 +2963,9 @@ async function renderRaceView() {
           ? cyokyoRaceHtml(raceMeta, entries, cyokyo, history)
           : state.sub === 'zenkouhan'
             ? zenkouhanTabHtml(raceMeta, entries, history)
-            : syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma);
+            : state.sub === 'danwa'
+              ? danwaRaceHtml(raceMeta, entries, danwaByUma, history)
+              : syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma);
       startLiveOdds(raceMeta);   // 当日レースは現在オッズをライブ取得・自動更新
     }
   } catch (e) {
