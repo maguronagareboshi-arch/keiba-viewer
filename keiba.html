@@ -2884,7 +2884,7 @@ function cyokyoRaceHtml(raceMeta, entries, cyokyo, history) {
     return { e, w, mid, mark: aiMark.get(e.umaban) || '', best: bw ? bw.z : null,
       bestWork: bw ? bw.w : null,
       arrow: c ? c.arrow : null, tanpyo: c ? c.tanpyo : null };
-  }).sort((a, b) => (b.best ?? -99) - (a.best ?? -99));
+  }).sort((a, b) => (a.e.umaban ?? 99) - (b.e.umaban ?? 99));
   // 追切1本ぶんの時計セル（最終追いと中間で同じ列に並べ、そのまま縦に比べられるようにする）
   const timeCells = (w) => {
     const t = (w && w.times) || {};
@@ -2904,12 +2904,12 @@ function cyokyoRaceHtml(raceMeta, entries, cyokyo, history) {
     const isBest = (w) => !!(w && bestDate && w.date === bestDate);
     // 中間追いは隠さずに行として展開する。最終追いと同じ列に並ぶので時計を直接比較できる。
     const midRows = r.mid.map((w) => `<tr class="cyo-mid">
-      <td colspan="4" class="l"><span class="cyo-mid-tag">中間</span>${esc(w.tanpyo || '')}</td>
+      <td colspan="4" class="l"><span class="cyo-mid-tag">中間</span></td>
       <td class="num">${isBest(w) ? '<span class="cyo-used" title="調教評価はこの追切から算出">評価元</span>' : ''}</td>
       <td>${mmdd(w.date)}</td>
       <td>${esc(w.course || '')}</td>
       ${timeCells(w)}
-      <td></td>
+      <td class="small l">${esc(w.tanpyo || '')}</td>
     </tr>`).join('');
     return `<tr>
       <td style="font-size:15px">${r.mark}</td>
@@ -2924,7 +2924,7 @@ function cyokyoRaceHtml(raceMeta, entries, cyokyo, history) {
     </tr>${midRows}`;
   }).join('');
   return raceHeaderHtml(raceMeta) + `
-  <div class="note">各馬の最新の追切（最終追いの印☆を優先し、無ければ直近1本。調教評価の良い順）。AI印は過去レースから学習した順です。馬名を押すと全調教履歴を見られます。</div>
+  <div class="note">馬番順。各馬の最新の追切（最終追いの印☆を優先し、無ければ直近1本）と調教評価を表示。AI印は過去レースから学習した順です。馬名を押すと全調教履歴を見られます。</div>
   <div class="card tablewrap"><table>
     <tr><th>AI印</th><th>枠</th><th>番</th><th>馬名</th><th>調教評価</th><th>追切日</th><th>コース</th><th>坂4F/本5F</th><th>坂3F/本4F</th><th>坂2F/本3F</th><th>1F</th><th>200mごとの時計（坂路のみ）</th><th>脚色</th><th>短評</th></tr>
     ${body}
