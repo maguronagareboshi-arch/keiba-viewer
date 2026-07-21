@@ -260,6 +260,8 @@ a.horse-link:hover { text-decoration: underline; }
 .np-matchup-runner { white-space: nowrap; }
 .odds-move-up { color: var(--arrow-up); font-weight: bold; }
 .odds-move-down { color: var(--arrow-down); font-weight: bold; }
+.payout-combo { display: inline-block; margin: 2px 10px 2px 0; white-space: nowrap; }
+.payout-combo small { color: var(--sub); }
 tr.clickable { cursor: pointer; }
 tr.clickable:hover td { background: var(--chip-bg); }
 
@@ -810,11 +812,13 @@ const providers = {
       return rows.length ? this._rowsToDates(rows) : null;
     },
     async loadRace(raceId) {
-      const [races, results] = await Promise.all([
+      const [races, results, payouts] = await Promise.all([
         sbGet(`chihou_races?race_id=eq.${raceId}&select=*`),
         sbGet(`chihou_results?race_id=eq.${raceId}&select=*&order=finish.asc.nullslast`),
+        // chihou_payoutsは後発テーブル（未作成/未backfillの環境もある）なので失敗しても静かに空扱い
+        sbGet(`chihou_payouts?race_id=eq.${raceId}&select=ticket_type,combination,official_payout_per_100,popularity`).catch(() => []),
       ]);
-      return { race: races[0] || {}, results };
+      return { race: races[0] || {}, results, payouts };
     },
     async loadDayResults(raceIds) {
       if (!raceIds.length) return {};
@@ -1816,6 +1820,26 @@ function zenkouhanTabHtml(raceMeta, entries, history) {
 }
 
 // ---- 成績サブビュー ----
+// 払戻金カード（keiba.go.jp公式・scraper/backfill_official_payouts.pyがchihou_payoutsへ集約）。
+// テーブル未作成/該当データなしの日は data.payouts が空配列になるだけなので、静かに何も出さない。
+function payoutCardHtml(payouts) {
+  if (!payouts || !payouts.length) return '';
+  const order = ['win', 'place', 'quinella', 'wide', 'exacta', 'trio', 'trifecta'];
+  const byType = new Map();
+  for (const p of payouts) {
+    if (!byType.has(p.ticket_type)) byType.set(p.ticket_type, []);
+    byType.get(p.ticket_type).push(p);
+  }
+  const rows = order.filter((t) => byType.has(t)).map((t) => {
+    const list = byType.get(t).slice().sort((a, b) => (a.popularity ?? 99) - (b.popularity ?? 99));
+    const cells = list.map((p) => `<span class="payout-combo"><b>${esc(p.combination)}</b> ${Number(p.official_payout_per_100).toLocaleString()}円${p.popularity ? `<small>（${p.popularity}人気）</small>` : ''}</span>`).join('');
+    return `<tr><th>${esc(V5_TICKET_LABELS[t] || t)}</th><td>${cells}</td></tr>`;
+  }).join('');
+  if (!rows) return '';
+  return `<div class="card"><h3 class="sec" style="margin-top:0">払戻金（100円あたり）</h3><div class="tablewrap"><table>${rows}</table></div>
+    <div class="legend">keiba.go.jp公式の確定払戻です。</div></div>`;
+}
+
 function seisekiHtml(data, aiMark, aiLabel = '予想履歴', aiNote = '') {
   const race = data.race || {};
   const results = (data.results || []).slice();
@@ -1867,7 +1891,8 @@ function seisekiHtml(data, aiMark, aiLabel = '予想履歴', aiNote = '') {
       ${rows}
     </table>
   </div>
-  <div class="legend"><span class="sw f"></span> 前半3F上位3頭　<span class="sw a"></span> 上り3F上位3頭<br>${TRIP_LEGEND}</div></div>`;
+  <div class="legend"><span class="sw f"></span> 前半3F上位3頭　<span class="sw a"></span> 上り3F上位3頭<br>${TRIP_LEGEND}</div></div>
+  ${payoutCardHtml(data.payouts)}`;
 }
 
 // ---- 出馬表サブビュー（keibabook風＋能力表＋調教） ----
