@@ -253,6 +253,13 @@ a.horse-link:hover { text-decoration: underline; }
 .np-dist { font-size: 11px; color: var(--sub); }
 .np-dist-today { color: var(--text); font-weight: bold; border: 1px solid var(--border); border-radius: 5px;
   padding: 0 4px; display: inline-block; background: var(--chip-bg); }
+.np-best-time { color: var(--sub); }
+.np-matchup { font-size: 12px; border-bottom: 1px dashed var(--border); padding: 6px 0; }
+.np-matchup-head { color: var(--sub); display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; }
+.np-matchup-runners { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 3px; }
+.np-matchup-runner { white-space: nowrap; }
+.odds-move-up { color: var(--arrow-up); font-weight: bold; }
+.odds-move-down { color: var(--arrow-down); font-weight: bold; }
 tr.clickable { cursor: pointer; }
 tr.clickable:hover td { background: var(--chip-bg); }
 
@@ -845,7 +852,7 @@ const providers = {
     async loadHistory(horseIds) {
       if (!horseIds.length) return {};
       const idlist = horseIds.map(encodeURIComponent).join(',');
-      const rows = await sbGet(`chihou_results?horse_id=in.(${idlist})&select=horse_id,umaban,finish,pop,first3f,last3f,time_sec,kinryo,sex_age,passing,corner4_pos,comment,time_str,body_weight,jockey,race_id,chihou_races(race_date,distance_m,going,pace,klass,race_name,soubi:extra->>馬装具,laps:extra->laps)&order=race_id.desc&limit=2000`);
+      const rows = await sbGet(`chihou_results?horse_id=in.(${idlist})&select=horse_id,umaban,finish,pop,first3f,last3f,time_sec,kinryo,sex_age,passing,corner4_pos,comment,time_str,margin,body_weight,jockey,race_id,chihou_races(race_date,distance_m,going,pace,klass,race_name,soubi:extra->>馬装具,laps:extra->laps)&order=race_id.desc&limit=2000`);
       const map = {};
       for (const r of rows) {
         const ra = r.chihou_races || {};
@@ -854,7 +861,7 @@ const providers = {
           pace: ra.pace, cls: classGroup((ra.klass || '') + (ra.race_name || '')), race_name: ra.race_name, fin: r.finish, pop: r.pop, sex: r.sex_age,
           f3: r.first3f, l3: r.last3f, tsec: r.time_sec, kin: r.kinryo,
           kyaku: kyakuFromPassing(r.passing), passing: r.passing, c4: r.corner4_pos,
-          comment: r.comment, time: r.time_str, weight: r.body_weight, jockey: r.jockey,
+          comment: r.comment, time: r.time_str, margin: r.margin, weight: r.body_weight, jockey: r.jockey,
           equip: equipOfRun(ra.soubi, r.umaban), laps: ra.laps,
         });
       }
@@ -2154,7 +2161,7 @@ function npRunBox(run, label) {
     <div class="np-run-head"><span class="racelink" data-rid="${esc(run.race_id || '')}" data-rd="${esc(run.date || '')}" title="クリックでそのレースへ">${esc(label)} ${mmdd(run.date)}</span><span>${ridTrack && ridTrack !== state.track ? esc(ridTrack) : ''}${run.dist ?? '?'}m${going ? '・' + going : ''}</span></div>
     <div class="np-race-name" title="${esc(rn)}">${rnShort ? `<b>${esc(rnShort)}</b>` : (cb ? `<b>${esc(cb)}</b>` : '')}</div>
     <div class="np-run-sub">${cb && rnShort && !rn.includes(cb) ? `<span class="badge">${esc(cb)}</span>` : ''}${paceLetter(run.pace) ? `<span class="badge">${paceLetter(run.pace)}ペース</span>` : ''}${run.pop != null ? `${run.pop}人気` : ''}</div>
-    <div class="np-fin ${finCls}">${run.fin != null ? `${run.fin}<small>着</small>` : '<small>除/取</small>'}</div>
+    <div class="np-fin ${finCls}">${run.fin != null ? `${run.fin}<small>着${run.margin ? `(${esc(run.margin)})` : ''}</small>` : '<small>除/取</small>'}</div>
     <div class="np-time">${run.time ? `<b>${esc(run.time)}</b> ` : ''}${diffHtml}</div>
     <div>${run.f3 != null ? `テン${run.f3.toFixed(1)}` : ''} ${run.l3 != null ? `上${run.l3.toFixed(1)}` : ''}${s != null ? ` <span class="np-si" title="この1走の能力指数（50が平均。馬場差・斤量・ペース補正込み）">指${s.toFixed(1)}</span>` : ''}</div>
     <div>${run.passing ? `通過${esc(run.passing)}` : ''}${run.kyaku ? ` <span class="kyaku">${run.kyaku}</span>` : ''}${tripTag(run.date, run.c4)}${equipBadges(run.equip, run._binkFirst)}</div>
@@ -2163,13 +2170,14 @@ function npRunBox(run, label) {
     ${ridTrack && run.race_id ? `<button type="button" class="np-eizo" data-rid="${esc(run.race_id)}" data-rd="${esc(run.date || '')}">▶ 映像</button>` : ''}
   </div>`;
 }
-// 距離別の着度数 [1着,2着,3着,着外]（新聞型の馬柱に表示。除外/取消は数えない）
+// 距離別の着度数[1着,2着,3着,着外]＋持ちタイム(自己ベスト・基準比つき)。除外/取消は数えない。
 function distRecords(runs) {
   const by = new Map();
   for (const r of runs) {
     if (!r.dist || r.fin == null) continue;
-    const rec = by.get(r.dist) || [0, 0, 0, 0];
-    rec[r.fin === 1 ? 0 : r.fin === 2 ? 1 : r.fin === 3 ? 2 : 3]++;
+    const rec = by.get(r.dist) || { counts: [0, 0, 0, 0], best: null };
+    rec.counts[r.fin === 1 ? 0 : r.fin === 2 ? 1 : r.fin === 3 ? 2 : 3]++;
+    if (r.tsec != null && (!rec.best || r.tsec < rec.best.tsec)) rec.best = r;
     by.set(r.dist, rec);
   }
   return by;
@@ -2177,17 +2185,58 @@ function distRecords(runs) {
 function distRecordHtml(runs, todayDist) {
   const by = distRecords(runs);
   if (!by.size && !todayDist) return '';
-  const fmt = (rec) => rec.join('-');
+  const fmt = (rec) => rec.counts.join('-');
+  const bestHtml = (rec) => {
+    if (!rec || !rec.best || !rec.best.time) return '';
+    const diff = baseDiffSec(rec.best);
+    const diffTxt = diff == null ? '' : `<span class="${diff <= -0.05 ? 'np-fast' : diff >= 0.05 ? 'np-slow' : ''}">(${diff >= 0 ? '+' : ''}${diff.toFixed(1)})</span>`;
+    return ` <span class="np-best-time" title="この距離での持ちタイム(自己ベスト)。カッコは基準タイムとの差">${esc(rec.best.time)}${diffTxt}</span>`;
+  };
   const lines = [];
   if (todayDist) {
     const rec = by.get(todayDist);
-    lines.push(`<div class="np-dist np-dist-today" title="今回の距離での着度数（1着-2着-3着-着外）">${todayDist}m ${rec ? fmt(rec) : '初'}</div>`);
+    lines.push(`<div class="np-dist np-dist-today" title="今回の距離での着度数（1着-2着-3着-着外）">${todayDist}m ${rec ? fmt(rec) : '初'}${bestHtml(rec)}</div>`);
   }
   const others = [...by.entries()].filter(([d]) => d !== todayDist)
-    .sort((a, b) => b[1].reduce((s, v) => s + v, 0) - a[1].reduce((s, v) => s + v, 0))
+    .sort((a, b) => b[1].counts.reduce((s, v) => s + v, 0) - a[1].counts.reduce((s, v) => s + v, 0))
     .slice(0, 4);
-  for (const [d, rec] of others) lines.push(`<div class="np-dist">${d}m ${fmt(rec)}</div>`);
+  for (const [d, rec] of others) lines.push(`<div class="np-dist">${d}m ${fmt(rec)}${bestHtml(rec)}</div>`);
   return lines.join('');
+}
+// 対戦成績: 今回のメンバーが過去に同じレースを走ったことがあるかを、既に読み込み済みの
+// 全馬走歴(history)をrace_idで突き合わせるだけで探す（追加の通信は発生しない）。
+function buildMatchups(entries, history) {
+  const byRace = new Map();
+  for (const e of entries) {
+    for (const r of (history[e.horse_id] || [])) {
+      if (!r.race_id) continue;
+      if (!byRace.has(r.race_id)) byRace.set(r.race_id, []);
+      byRace.get(r.race_id).push({ ...r, umaban: e.umaban, horse_name: e.horse_name });
+    }
+  }
+  return [...byRace.entries()]
+    .filter(([, arr]) => arr.length >= 2)
+    .sort((a, b) => (b[1][0].date || '').localeCompare(a[1][0].date || ''))
+    .slice(0, 8);
+}
+function matchupCardHtml(entries, history) {
+  const shared = buildMatchups(entries, history);
+  if (!shared.length) return '';
+  const rows = shared.map(([rid, arr]) => {
+    const sorted = arr.slice().sort((a, b) => (a.fin ?? 99) - (b.fin ?? 99));
+    const first = sorted[0];
+    const cb = classBadge(first);
+    const runners = sorted.map((r) => {
+      const finCls = r.fin === 1 ? 'fin1' : r.fin === 2 ? 'fin2' : r.fin === 3 ? 'fin3' : '';
+      const finTxt = r.fin != null ? `${r.fin}着` : '除/取';
+      return `<span class="np-matchup-runner"><b>${r.umaban}</b> ${esc(r.horse_name)} <span class="${finCls}">${finTxt}</span>${r.margin && r.fin > 1 ? `(${esc(r.margin)})` : ''}</span>`;
+    }).join('');
+    return `<div class="np-matchup">
+      <div class="np-matchup-head"><span class="racelink" data-rid="${esc(rid)}" data-rd="${esc(first.date || '')}" title="クリックでそのレースへ">${mmdd(first.date)}</span><span>${first.dist ?? '?'}m${cb ? `・${esc(cb)}` : ''}</span></div>
+      <div class="np-matchup-runners">${runners}</div>
+    </div>`;
+  }).join('');
+  return `<div class="card"><h3 class="sec" style="margin-top:0">対戦成績（メンバーで同じレースを走ったことがある組み合わせ）</h3>${rows}</div>`;
 }
 // 出馬表の表示モード（通常⇔新聞）。ブラウザに記憶して次回も同じ表示で開く。
 function syutubaMode() {
@@ -2278,7 +2327,8 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
     return raceHeaderHtml(raceMeta) + syutubaModeBar() + `
     <div class="card"><div style="text-align:right;margin-bottom:4px"><span id="oddsUpdated" class="badge"></span></div>
       <div class="np-wrap"><div class="np-grid np-grid5">${npRows}</div></div>
-      <div class="legend">基準±秒＝距離×馬場×クラスの標準タイムに当日の馬場差を加味した基準との差（マイナス＝基準より速い走破時計）。指＝その1走の能力指数（50が平均。馬場差・斤量・ペース補正込み）。馬柱の距離別成績は 1着-2着-3着-着外（枠つき＝今回の距離）。日付タップでそのレースへ、▶映像でレース映像へ。<br>近走の${TRIP_LEGEND}<br>${EQUIP_LEGEND}</div></div>`;
+      <div class="legend">基準±秒＝距離×馬場×クラスの標準タイムに当日の馬場差を加味した基準との差（マイナス＝基準より速い走破時計）。指＝その1走の能力指数（50が平均。馬場差・斤量・ペース補正込み）。馬柱の距離別成績は 1着-2着-3着-着外（枠つき＝今回の距離）。日付タップでそのレースへ、▶映像でレース映像へ。単勝オッズ横の<span class="odds-move-up">▲</span><span class="odds-move-down">▼</span>＝朝と比べて人気順位が2つ以上動いた馬（門別のみ）。<br>近走の${TRIP_LEGEND}<br>${EQUIP_LEGEND}</div></div>
+    ${matchupCardHtml(entries, history)}`;
   }
 
   const rows = entries.map((e) => {
@@ -2335,7 +2385,8 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
       ${rows}
     </table>
   </div>
-  <div class="legend"><span class="sw b"></span> 能力上位3頭（走破50%＋前半25%＋上がり25%、直近5走平均）　<span class="sw f"></span> 前半の速さトップ（直近5走最良）　<span class="sw a"></span> 調教トップ（50が平均）<br>◎の下の表示は順位差の目安です。的中や利益を保証するものではなく、購入判断には使いません。<br>近走の${TRIP_LEGEND}<br>${EQUIP_LEGEND}</div></div>`;
+  <div class="legend"><span class="sw b"></span> 能力上位3頭（走破50%＋前半25%＋上がり25%、直近5走平均）　<span class="sw f"></span> 前半の速さトップ（直近5走最良）　<span class="sw a"></span> 調教トップ（50が平均）<br>◎の下の表示は順位差の目安です。的中や利益を保証するものではなく、購入判断には使いません。単勝オッズ横の<span class="odds-move-up">▲</span><span class="odds-move-down">▼</span>＝朝と比べて人気順位が2つ以上動いた馬（門別のみ）。<br>近走の${TRIP_LEGEND}<br>${EQUIP_LEGEND}</div></div>
+  ${matchupCardHtml(entries, history)}`;
 }
 
 // ---- 予想サブビュー（A3: 自動印＋根拠＋妙味ゾーン） ----
@@ -2971,6 +3022,7 @@ async function startLiveOdds(raceMeta) {
   }
   applyHorseEvs(domOdds);
   updateEvMonitor(domOdds);
+  applyOddsMoveBadges(hist);
   const run = async () => {
     const live = await fetchLiveOdds(rd, raceMeta.race_no);
     // 当日馬体重: 計量発表まで毎回試行→取れたら保持（変わらないので再取得しない）
@@ -2981,11 +3033,48 @@ async function startLiveOdds(raceMeta) {
     }
     if (state.raceId === rid && state.view === 'race') {
       applyLiveOdds(live); applyLiveWeights(state.liveWeights[rid]); recordOdds(rid, live);
+      applyOddsMoveBadges(hist);
       await pickupV3Receipt(rid, gen);
     }
   };
   await run();
   if (state.oddsGen === gen) state.oddsTimer = setInterval(run, 60000);
+}
+
+// 朝オッズ→現在オッズで人気順位が2つ以上動いた馬に矢印バッジを付ける。
+// 既にstartLiveOddsが集めているhist(朝＋5分毎スナップショット＋ライブ更新)をそのまま使うので
+// 追加の通信は発生しない。門別以外は朝オッズの記録元(monbetsu_odds)が無いため実質発火しない。
+function applyOddsMoveBadges(hist) {
+  if (!hist) return;
+  const early = {}, now = {};
+  for (const um in hist) {
+    const arr = hist[um];
+    if (!arr || !arr.length) continue;
+    if (arr[0].o > 0) early[um] = arr[0].o;
+    const last = arr[arr.length - 1];
+    if (last && last.o > 0) now[um] = last.o;
+  }
+  const rankOf = (obj) => {
+    const rank = {};
+    Object.entries(obj).sort((a, b) => a[1] - b[1]).forEach(([um], i) => { rank[um] = i + 1; });
+    return rank;
+  };
+  const earlyRank = rankOf(early), nowRank = rankOf(now);
+  for (const td of document.querySelectorAll('#raceView [data-live-odds]')) {
+    const old = td.querySelector('.odds-move'); if (old) old.remove();
+    const um = td.dataset.liveOdds;
+    if (earlyRank[um] == null || nowRank[um] == null) continue;
+    const delta = earlyRank[um] - nowRank[um];   // 正＝人気順位が上がった(支持が集まった)
+    if (Math.abs(delta) < 2) continue;
+    // 全馬が大きく散らばった結果、当のオッズは悪化しているのに他馬がもっと崩れて相対順位だけ
+    // 上がる(逆もまた然り)ケースがある。順位の向きとオッズ自体の向きが一致する時だけ出す。
+    if ((delta > 0 && now[um] >= early[um]) || (delta < 0 && now[um] <= early[um])) continue;
+    const span = document.createElement('span');
+    span.className = `odds-move ${delta > 0 ? 'odds-move-up' : 'odds-move-down'}`;
+    span.title = `朝${early[um]}倍（${earlyRank[um]}人気）→ 現在${now[um]}倍（${nowRank[um]}人気）`;
+    span.textContent = delta > 0 ? ` ▲${delta}` : ` ▼${-delta}`;
+    td.appendChild(span);
+  }
 }
 
 // 予想レシート(v3)は発走30分前ごろに publish される。予想タブに留まったままだと
