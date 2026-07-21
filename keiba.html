@@ -756,10 +756,13 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 // prefix=Supabase chihou_metaキー接頭辞 / baba=keiba.go.jpライブオッズ馬場コード / slug=NAR映像プレーヤー
 // noken=能検タブ有 / sim=シミュレータ(トラック描画がその場専用)
 // ============================================================
+// ai: レース前に保存する予想（v3レシート）を配信している場。無い場で「判定待ち」を出すと
+//     永遠に来ないものを待っているように見えるので、UI側で未対応と明示するために持つ。
+// data: 日次更新の対象。未対応の場はタブに「準備中」を出して空振りを説明する。
 const TRACKS = {
-  '門別': { prefix: 'monbetsu', baba: '36', slug: 'monbetsu', noken: true, sim: true },
-  '大井': { prefix: 'ooi', baba: '20', slug: 'ooi', noken: true, sim: true },
-  '船橋': { prefix: 'funabashi', baba: '19', slug: 'funabashi' },
+  '門別': { prefix: 'monbetsu', baba: '36', slug: 'monbetsu', noken: true, sim: true, ai: true, data: true },
+  '大井': { prefix: 'ooi', baba: '20', slug: 'ooi', noken: true, sim: true, ai: true, data: true },
+  '船橋': { prefix: 'funabashi', baba: '19', slug: 'funabashi', data: true },
   '川崎': { prefix: 'kawasaki', baba: '21', slug: 'kawasaki' },
   '浦和': { prefix: 'urawa', baba: '18', slug: 'urawa' },
 };
@@ -803,7 +806,14 @@ const providers = {
       const cut = new Date(); cut.setDate(cut.getDate() - 60);
       const cutStr = `${cut.getFullYear()}-${String(cut.getMonth() + 1).padStart(2, '0')}-${String(cut.getDate()).padStart(2, '0')}`;
       const rows = await sbGet(`chihou_races?select=race_id,race_date,race_no,track,klass,race_name,distance_m,going,weather,hasso_time,pace&track=eq.${encodeURIComponent(state.track)}&race_date=gte.${cutStr}&order=race_date.desc,race_no.asc&limit=3000`);
-      if (!rows.length) throw new Error('empty');
+      // 直近60日が空でも失敗にはせず全期間へ切り替える。門別は11月中旬〜4月中旬が丸ごとオフシーズンで
+      // この窓が必ず空になり、ここで throw するとローカルへ退避→公開サイトには data/ が無いので
+      // 起動が止まる（トップが「準備中…」のまま・場切替も効かない）。
+      if (!rows.length) {
+        const full = await this.listDatesFull();
+        if (full) return full;
+        throw new Error('empty');
+      }
       return this._rowsToDates(rows);
     },
     // 全期間分（過去の月をさかのぼる用）。バックグラウンドで呼ぶ想定。
@@ -890,6 +900,8 @@ const providers = {
       return providers.local.loadModel();
     },
     async loadV3Predictions() {
+      // 配信していない場は問い合わせない（デッキが毎分ここを空打ちするため）
+      if (!trackCfg().ai) return null;
       try {
         const rows = await sbGet(`chihou_meta?key=eq.${trackCfg().prefix}_v3_predictions&select=value`);
         if (rows.length) return rows[0].value;
@@ -1342,6 +1354,8 @@ function deckArchivedMarks(v3Race) {
 }
 
 function deckDecision(v3Race) {
+  // AI予想を配信していない場で「判定待ち」を出すと、来ないものを待っているように見える
+  if (!trackCfg().ai) return { kind: 'none', label: '—', detail: `${state.track}はAI予想の対象外` };
   const shadow = v3Race && v3Race.v5_shadow;
   if (!shadow) return { kind: 'wait', label: '判定待ち', detail: '購入候補は発走前オッズ取得後' };
   const tickets = (Array.isArray(shadow.tickets) ? shadow.tickets : [])
@@ -1375,9 +1389,15 @@ function deckResultSummary(rows) {
 }
 
 function deckFreshnessText() {
-  if (state.deckRefreshError) return 'AIデータの再確認に失敗 · 1分後に再試行';
   const key = deckDayKey(state.track, state.date);
   const resultAt = state.dayResultsFetchedAt[key];
+  // AI予想が無い場で「AIデータ確認 ○時○分」を出すと、更新され続けているように誤解させる
+  if (!trackCfg().ai) {
+    return resultAt
+      ? `結果データ取得 ${new Date(resultAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`
+      : `${state.track}はAI予想の対象外`;
+  }
+  if (state.deckRefreshError) return 'AIデータの再確認に失敗 · 1分後に再試行';
   if (state.date < jstToday() && resultAt) {
     return `結果データ取得 ${new Date(resultAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`;
   }
@@ -1512,7 +1532,7 @@ function renderDeck() {
         <small>買い目候補 · 記録検証中</small>
         <b>${esc(decision.label)}</b>
         <small>${esc(decision.detail)} · 実投資0円</small>
-        <div class="hero-ai"><span>AI最上位</span><strong>${ai ? `${ai.umaban}番 ${esc(ai.name)} · ${ai.value}` : '予測データ待ち'}</strong></div>
+        <div class="hero-ai"><span>AI最上位</span><strong>${ai ? `${ai.umaban}番 ${esc(ai.name)} · ${ai.value}` : (trackCfg().ai ? '予測データ待ち' : '対象外')}</strong></div>
       </div>
     </section>`;
   })() : `<section class="deck-ended"><div class="deck-kicker">開催終了 · ${esc(state.track)}</div><h2>${state.date === today ? '本日の開催は終了しました' : '開催結果を振り返る'}</h2><div class="legend">${resultsFetched ? `${resultRaceCount}/${races.length}Rの公式成績を取得済み。` : '公式成績を読み込み中です。'}各カードから着順とレース詳細を確認できます。</div></section>`;
@@ -1538,7 +1558,7 @@ function renderDeck() {
         </div>
         <div class="race-card-actions"><small>${resultsFetched ? '中止・取止めを含め詳細で確認' : '成績データを取得しています'}</small><button class="race-open" onclick="openDeckRace('${esc(r.race_id)}','seiseki')">成績を確認</button></div>`) : `
         <div class="decision-row">
-          <div class="decision-cell"><span>AI最上位</span><b>${ai ? `${ai.umaban}番 ${esc(ai.name)} · ${ai.value}` : '予測待ち'}</b></div>
+          <div class="decision-cell"><span>AI最上位</span><b>${ai ? `${ai.umaban}番 ${esc(ai.name)} · ${ai.value}` : (trackCfg().ai ? '予測待ち' : '対象外')}</b></div>
           <div class="decision-cell ${decision.kind}"><span>買い目判断</span><b>${esc(decision.label)}</b></div>
         </div>
         <div class="race-card-actions"><small>${esc(decision.detail)} · 実際には購入していません</small><button class="race-open" onclick="openDeckRace('${esc(r.race_id)}','yosou')">予想を見る</button></div>`;
@@ -2622,11 +2642,14 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   const disp = hs.slice().sort((a, b) => (b[markKey] ?? -99) - (a[markKey] ?? -99));
   for (const r of disp) {
     const e = r.e;
+    // 呼び名は必ず表頭に合わせる（同じ数字が画面ごとに別名になるのを防ぐ）。
+    // comp=出馬表の「能力点」/ si=この表の「脚力」/ ten=出馬表の「前半の速さ」。
+    // 「SI」等の専門用語は閲覧者向けには出さない。
     r.konkyo = [
-      r.comp != null ? `指数${rk.comp(r.comp)}位` : null,
-      r.si != null ? `SI${rk.si(r.si)}位` : null,
+      r.comp != null ? `能力点${rk.comp(r.comp)}位` : null,
+      r.si != null ? `脚力${rk.si(r.si)}位` : null,
       r.cz != null ? `調教${rk.cz(r.cz)}位` : null,
-      r.ten != null ? `テン${rk.ten(r.ten)}位` : null,
+      r.ten != null ? `前半の速さ${rk.ten(r.ten)}位` : null,
       r.kyaku,
     ].filter(Boolean).join('・');
     if (r.comp == null && r.si == null) {
@@ -3200,6 +3223,10 @@ function initVideoScale(container) {
 
 async function renderRaceView() {
   clearInterval(state.oddsTimer); state.oddsTimer = null;
+  // 世代トークン: レース/タブを連打すると renderRaceView が並走し、遅れて解決した古い方が
+  // 新しい画面を上書きしてしまう（タブとURLは3R・中身は2R）。各awaitの後、自分が最新でなければ捨てる。
+  const gen = (state.viewGen = (state.viewGen || 0) + 1);
+  const fresh = () => state.viewGen === gen;
   $('raceView').innerHTML = '<div class="empty">読み込み中…</div>';
   const raceId = state.raceId;
   if (state.sub === 'eizo') {   // NAR公式レース映像（公式プレーヤーを埋め込み）
@@ -3230,6 +3257,7 @@ async function renderRaceView() {
   try {
     if (state.sub === 'seiseki') {
       const data = await state.provider.loadRace(raceId);
+      if (!fresh()) return;
       if (!(data.results || []).length && state.sub === 'seiseki') {
         state.sub = 'syutuba';  // 未発走レースは出馬表へ
         renderSubTabs();
@@ -3266,6 +3294,7 @@ async function renderRaceView() {
         try { state.noken = state.noken || await state.provider.loadNoken(); buildNokenIndex(); }
         catch (e) { /* 能検が無くても続行 */ }
       }
+      if (!fresh()) return;
       $('raceView').innerHTML = state.sub === 'yosou'
         ? yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma)
         : state.sub === 'cyokyo'
@@ -3278,7 +3307,7 @@ async function renderRaceView() {
       startLiveOdds(raceMeta);   // 当日レースは現在オッズをライブ取得・自動更新
     }
   } catch (e) {
-    $('raceView').innerHTML = `<div class="empty">読み込み失敗: ${esc(e.message)}</div>`;
+    if (fresh()) $('raceView').innerHTML = `<div class="empty">読み込み失敗: ${esc(e.message)}</div>`;
   }
 }
 
@@ -3287,11 +3316,13 @@ async function renderRaceView() {
 // ============================================================
 // 予想AIの運用成績（chihou_meta → ローカルの順で取得）
 async function loadRecord() {
+  const prefix = trackCfg().prefix;
   try {
-    const rows = await sbGet('chihou_meta?key=eq.monbetsu_record&select=value');
+    const rows = await sbGet(`chihou_meta?key=eq.${prefix}_record&select=value`);
     if (rows.length) return rows[0].value;
   } catch (e) { /* 次へ */ }
-  try { return await jsonGet('data/yosou_record.json'); } catch (e) { return null; }
+  const local = prefix === 'monbetsu' ? 'data/yosou_record.json' : `data/yosou_record_${prefix}.json`;
+  try { return await jsonGet(local); } catch (e) { return null; }
 }
 
 function recordHtml(rec) {
@@ -3311,7 +3342,7 @@ function recordHtml(rec) {
   const first12 = allMonths.slice(0, 12).map(rowHtml).join('');
   const rest = allMonths.slice(12).map(rowHtml).join('');
   return `
-  <h3 class="sec">🎯 予想AIの運用成績（全過去レースでの答え合わせ・各レース前情報のみ使用）</h3>
+  <h3 class="sec">🎯 ${esc(rec.track || state.track)}での予想AIの運用成績（過去レースでの答え合わせ・各レース前情報のみ使用）</h3>
   <div class="card tablewrap">
     <div class="note">通算: ◎ ${o.races}Rで勝率 ${pct(o.hon_win, o.races)}・複勝率 ${pct(o.hon_top3, o.races)}・単勝回収率 ${roi(o.hon_ret, o.races)}
     ／ 💰妙味ゾーン ${o.myo_bets}Rで複勝率 ${pct(o.myo_top3, o.myo_bets)}・<b>単勝回収率 ${roi(o.myo_ret, o.myo_bets)}</b></div>
@@ -3595,13 +3626,19 @@ async function cyoLoadYear(y) {
 
 async function renderCyokyo() {
   const root = $('cyokyoRoot');
+  // 取得の最中に場が切り替わることがある。selectTrack は cyokyoState をクリアするだけで
+  // 飛行中の取得までは止められないため、await のたびに場が変わっていないかを見て、
+  // 旧場のデータを新しい場の画面へ流し込まないようにする。
+  const track = state.track;
   if (!cyokyoState.data) {
     root.innerHTML = '<div class="empty">読み込み中…（調教データ）</div>';
     // Supabase（既定＝最新年＋年リスト）→ ローカル全期間 の順で取得
     try {
       const rows = await sbGet(`chihou_meta?key=eq.${trackCfg().prefix}_cyokyo&select=value`);
+      if (state.track !== track) return;
       if (rows.length && rows[0].value && rows[0].value.dates) cyokyoState.data = rows[0].value;
     } catch (e) { /* 次へ */ }
+    if (state.track !== track) return;
     if (!cyokyoState.data) {
       try { cyokyoState.data = await jsonGet('data/cyokyo_works.json'); cyokyoState.local = cyokyoState.data.dates; }
       catch (e) {
@@ -3609,6 +3646,7 @@ async function renderCyokyo() {
           <button onclick="renderCyokyo()">↻ 再試行</button></div>`;
         return;
       }
+      if (state.track !== track) return;
     }
     cyokyoState.base = cyokyoState.data.base;
     cyokyoState.baseHonba = cyokyoState.data.base_honba;
@@ -4165,14 +4203,22 @@ function goHome() {
 async function openHistoricalRace(raceId, date, sub) {
   // 馬モーダルの成績「場R」タップ→そのレースの出馬表・成績ページへ移動（sub指定で映像等へ直行）
   if (state.raceId && state.raceId !== raceId) {
-    state.prevRace = { date: state.date, raceId: state.raceId, sub: state.sub, view: state.view };
+    state.prevRace = { date: state.date, raceId: state.raceId, sub: state.sub, view: state.view, track: state.track };
   }
   $('horseModal').hidden = true;
+  // 他場のレースなら場ごと切り替える。日付だけ移すとR番号タブが消え、
+  // 基準タイムも別の場のものが使われて指数が誤った値になる。
+  const ridTrack = RACEID_TRACK[String(raceId || '').slice(6, 8)];
+  if (ridTrack && TRACKS[ridTrack] && ridTrack !== state.track) {
+    $('raceView').innerHTML = '<div class="empty">読み込み中…</div>';
+    await loadTrackData(ridTrack);
+  }
+  state.raceId = raceId;
   switchView('race');
   if (date && state.date !== date) {
     state.date = date;
     state.month = date.slice(0, 7);
-    try { localStorage.setItem('mb_last_date', date); } catch (e) { /* プライベートモード等は無視 */ }
+    try { localStorage.setItem(`nk_last_date_${trackCfg().prefix}`, date); } catch (e) { /* プライベートモード等は無視 */ }
     renderMonths();
     renderDates();
   }
@@ -4184,10 +4230,15 @@ async function goBackRace() {
   const p = state.prevRace;
   if (!p) return;
   state.prevRace = null;
+  // 他場へ飛んでいた場合は場ごと戻す（戻り先の日付・レースは元の場のもの）
+  if (p.track && p.track !== state.track && TRACKS[p.track]) {
+    $('raceView').innerHTML = '<div class="empty">読み込み中…</div>';
+    await loadTrackData(p.track);
+  }
   if (p.date && p.date !== state.date) {
     state.date = p.date;
     state.month = p.date.slice(0, 7);
-    try { localStorage.setItem('mb_last_date', p.date); } catch (e) { /* プライベートモード等は無視 */ }
+    try { localStorage.setItem(`nk_last_date_${trackCfg().prefix}`, p.date); } catch (e) { /* プライベートモード等は無視 */ }
     renderMonths();
     renderDates();
   }
@@ -4212,19 +4263,19 @@ function renderTrackSwitch() {
     `<button class="${t === state.track ? 'active' : ''}" data-track="${t}">${t}</button>`).join('');
 }
 
-async function selectTrack(track) {
-  if (track === state.track || !TRACKS[track]) return;
+// 場のデータ一式（日程・統計・モデル・予想）を読み直す。ビューの遷移はしない。
+// 場切替ボタンと、他場のレースへ直接飛ぶ導線（馬モーダルの過去走）の両方から使う。
+async function loadTrackData(track) {
   state.track = track;
-  state.stats = null; state.model = null; state.v3Predictions = null; state.dates = {}; state.raceId = null; state.prevRace = null;
+  state.stats = null; state.model = null; state.v3Predictions = null; state.dates = {}; state.raceId = null;
   state.deckDataCheckedAt = null; state.deckRefreshError = null;
+  state.record = undefined;   // 運用成績も場別。持ち越すと別の場の数字が残る
   state.noken = null; state.nokenByHorse = null;   // 能検は門別専用＝場切替でクリア
   cyokyoState.data = null; cyokyoState.date = null; cyokyoState.year = null; cyokyoState.byYear = {};
   cyokyoState.years = []; cyokyoState.base = null; cyokyoState.baseHonba = null; cyokyoState.local = null;   // 調教データも場ごとに読み直す
-  state.view = 'deck';  // 場を変えたら、その場の今日を起点にする
   if (state.sub === 'sim') state.sub = 'seiseki';   // シミュレータsubからも離脱
   renderTrackSwitch();
   renderViewTabs();
-  $('raceView').innerHTML = '<div class="empty">読み込み中…</div>';
   try { state.dates = await state.provider.listDates(); } catch (e) { state.dates = {}; }
   state.kakuPoints = null;
   state.statsPromise = Promise.all([
@@ -4233,17 +4284,25 @@ async function selectTrack(track) {
     state.provider.loadV3Predictions().then((v) => { state.v3Predictions = v; state.deckDataCheckedAt = new Date(); }),
     state.provider.loadPoints().then((p) => { state.kakuPoints = p; }),
   ]);
-  state.statsPromise.then(() => { if (state.view === 'deck' && state.track === track) renderDeck(); });
-  const ds = Object.keys(state.dates).sort().reverse();
-  const today = jstToday();
-  if (ds.length) { setDeckDate(state.dates[today] ? today : ds[0]); switchView('deck'); }
-  else { renderMonths(); renderDates(); renderTabs(); switchView('deck'); }
   // 全期間分は裏で取得して月/日セレクトへ反映
   if (state.provider === providers.supabase) {
     providers.supabase.listDatesFull().then((full) => {
       if (full && state.track === track) { state.dates = full; renderMonths(); renderDates(); if (state.view === 'deck') renderDeck(); }
     }).catch(() => {});
   }
+}
+
+async function selectTrack(track) {
+  if (track === state.track || !TRACKS[track]) return;
+  state.prevRace = null;
+  state.view = 'deck';  // 場を変えたら、その場の今日を起点にする
+  $('raceView').innerHTML = '<div class="empty">読み込み中…</div>';
+  await loadTrackData(track);
+  state.statsPromise.then(() => { if (state.view === 'deck' && state.track === track) renderDeck(); });
+  const ds = Object.keys(state.dates).sort().reverse();
+  const today = jstToday();
+  if (ds.length) { setDeckDate(state.dates[today] ? today : ds[0]); switchView('deck'); }
+  else { renderMonths(); renderDates(); renderTabs(); switchView('deck'); }
 }
 
 async function init() {
@@ -4259,14 +4318,17 @@ async function init() {
       break;
     } catch (e) { /* 次のプロバイダへ */ }
   }
-  if (!state.provider) {
-    $('raceView').innerHTML = '<div class="empty">データがありません</div>';
-    return;
-  }
+  // 場切替は「データの無い場を開いてしまった時の唯一の逃げ道」なので、
+  // データ取得の成否より先に必ず有効化する（ここで return すると他の場へ移れなくなる）。
   $('trackSwitch').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-track]');
     if (b) selectTrack(b.dataset.track);
   });
+  if (!state.provider) {
+    // データが無い場でもアプリ自体は動かす。各ローダーは空振り時 null を返すので実害は無い。
+    state.provider = providers.supabase;
+    state.dates = {};
+  }
   // 起動は直近分だけで即表示→全期間分は裏で追って取得し月/日セレクトへ反映（表示中のレースは邪魔しない）
   if (state.provider === providers.supabase) {
     providers.supabase.listDatesFull().then((full) => {
@@ -4394,7 +4456,6 @@ async function init() {
   // ブラウザの戻る/進むボタンでレース間を移動できるように
   window.addEventListener('hashchange', () => {
     if (!location.hash) { goHome(); return; }
-    if (state.view !== 'race') switchView('race');
     applyHash();
   });
 }
@@ -4409,7 +4470,7 @@ async function applyHash() {
   state.month = hd.slice(0, 7);
   renderMonths();
   renderDates();
-  if (hr && state.dates[hd].some((r) => r.race_id === hr)) { switchView('race'); renderTabs(); await selectRace(hr); return true; }
+  if (hr && state.dates[hd].some((r) => r.race_id === hr)) { state.raceId = hr; switchView('race'); renderTabs(); await selectRace(hr); return true; }
   setDeckDate(hd);
   switchView('deck');
   return true;
