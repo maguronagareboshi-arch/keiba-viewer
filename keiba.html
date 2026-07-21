@@ -264,6 +264,9 @@ a.horse-link:hover { text-decoration: underline; }
 .cyo-mid-tag { display: inline-block; font-size: 9px; padding: 0 5px; margin-right: 6px;
   border: 1px solid var(--border); border-radius: 4px; }
 .cyo-used { font-size: 9px; color: var(--accent); }
+.refmark-compare { line-height: 1.9; }
+.refmark-compare .ref-hname { font-size: 10px; color: var(--sub); margin-right: 8px; }
+.refmark-compare .ref-changed { color: var(--arrow-up); font-weight: bold; }
 .clarity-clear { color: var(--arrow-up); }
 .clarity-chaos { color: var(--arrow-down); }
 .person-link { color: var(--accent); cursor: pointer; }
@@ -2664,6 +2667,13 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   const markKey = hasV3 ? 'v3Score' : (hs.some((r) => r.ai != null) ? 'ai' : 'score');
   const ranked = hs.filter((r) => r[markKey] != null).sort((a, b) => b[markKey] - a[markKey]);
   ranked.forEach((r, i) => { r.mark = MARKS[i] || ''; });
+  // 切替前(参考)モードの間は毎回スナップショットを上書き保存し、v3切替直前の状態を残す。
+  // 切替後(hasV3)は書き込みを止めて固定し、切替前との比較に使う。
+  if (!hasV3) {
+    saveRefMarkSnapshot(raceMeta.race_id, ranked.filter((r) => r.mark)
+      .map((r) => ({ umaban: r.e.umaban, mark: r.mark, name: r.e.horse_name })));
+  }
+  const refSnapshot = hasV3 ? readRefMarkSnapshot(raceMeta.race_id) : null;
   const aiVals = hs.map((r) => r.ai).filter((v) => v != null).sort((a, b) => b - a);
   const zAi = zscoresJs(hs.map((r) => r.ai));   // 表示用に偏差値化
   hs.forEach((r, i) => { r.aiDev = hasV3 ? r.v3.win_probability_raw * 100 : (zAi[i] != null ? 50 + zAi[i] * 10 : null); });
@@ -2837,8 +2847,26 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
     <div class="forecast-panel forecast-panel-summary">${overview}</div>
   </section>`;
 
+  // 切替前(参考)→切替後(直前確定)で印がどう動いたかの比較。このブラウザで切替前に開いていた時だけ出る。
+  const refCompareHtml = (() => {
+    if (!refSnapshot || !refSnapshot.marks || !refSnapshot.marks.length) return '';
+    const curByUm = new Map(ranked.filter((r) => r.mark).map((r) => [+r.e.umaban, r.mark]));
+    const refLine = refSnapshot.marks
+      .map((m) => `${esc(m.mark)}${m.umaban}<span class="ref-hname">${esc(m.name || '')}</span>`).join(' ');
+    const curLine = ranked.filter((r) => r.mark)
+      .map((r) => `${r.mark}${r.e.umaban}<span class="ref-hname">${esc(r.e.horse_name || '')}</span>`).join(' ');
+    const changed = refSnapshot.marks.some((m) => curByUm.get(+m.umaban) !== m.mark);
+    const atTime = new Date(refSnapshot.at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+    return `<div class="note refmark-compare" style="display:block">
+      <b>参考モード時点の印</b>（${atTime}頃・このブラウザで記録）：${refLine}<br>
+      <b>→ 直前確定の印</b>：${curLine}${changed ? '　<span class="ref-changed">変わりました</span>' : '　変わりませんでした'}
+      <div class="legend" style="margin-top:2px">この記録は端末のブラウザにのみ残るメモです。他の端末や、切替後に初めてこのレースを開いた場合は表示されません。</div>
+    </div>`;
+  })();
+
   return raceHeaderHtml(raceMeta) + `
   <div class="signal-strip"><span>直近の馬場 · ${recentBias || 'データなし'}</span><span class="signal-live" id="oddsUpdated">ライブオッズ確認中</span></div>
+  ${refCompareHtml}
   ${workspace}
   <div id="evMonitor" class="note" hidden></div>`;
 }
@@ -3064,6 +3092,29 @@ function recordOdds(rid, live) {
 }
 
 // ---- オッズ推移の永続化（リロードで消える問題の対策） ----
+// 「切替前(参考)の印」を憶えておく。v3レシートが来ると印の根拠がまるごと変わる（発走約10分前・1回だけ）。
+// このブラウザでレースを開いた記録が無いと後から比較できないので、参考モードで開くたびに
+// 上書き保存し、v3へ切り替わった時点の状態を残す（切替後は書き込みを止めて固定）。
+// あくまで「このブラウザで最後に見えていた印」の記録であり、サーバー側の公式な保存ではない。
+const REFMARK_KEY = 'kv_refmarks_v1';
+function loadRefMarks() {
+  try { return JSON.parse(localStorage.getItem(REFMARK_KEY) || '{}'); } catch (e) { return {}; }
+}
+function saveRefMarkSnapshot(raceId, marks) {
+  if (!raceId || !marks.length) return;
+  try {
+    const all = loadRefMarks();
+    all[raceId] = { at: new Date().toISOString(), marks };
+    const keys = Object.keys(all);
+    if (keys.length > 300) {   // 肥大化防止：古い記録から間引く
+      keys.sort((a, b) => (all[a].at || '').localeCompare(all[b].at || ''));
+      for (const k of keys.slice(0, keys.length - 300)) delete all[k];
+    }
+    localStorage.setItem(REFMARK_KEY, JSON.stringify(all));
+  } catch (e) { /* 容量超過等は無視（表示は生きる） */ }
+}
+const readRefMarkSnapshot = (raceId) => loadRefMarks()[raceId] || null;
+
 // localStorage（このブラウザで見ていた分）＋ Supabase記録（5分おきの自動スナップショット）を
 // マージして復元する。日付が変わったら自動破棄。
 const oddsStoreKey = () => `chihou_odds_hist_v2_${trackCfg().prefix}`;
