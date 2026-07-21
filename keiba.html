@@ -938,14 +938,19 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': 
 const fmtDiff = (v) => (v == null ? '' : v > 0 ? `+${v}` : `${v}`);
 const mmdd = (iso) => (iso ? `${+iso.slice(5, 7)}/${+iso.slice(8, 10)}` : '');
 
-// 通過順位は各コーナー位置の連結（例 '5744' = 5→7→4→4）。10以上は丸数字（⑩⑪…）
+// 通過順位は区切り付き（例 '5-7-4-4', '11-11-11'）。
+// 旧区切りなし形式は1-1と11を判別できないので、推測せず不明扱いにする。
 function kyakuFromPassing(passing) {
   if (!passing) return null;
-  let p = null;
-  for (const ch of String(passing)) {
-    const cp = ch.codePointAt(0);
-    if (cp >= 0x2460 && cp <= 0x2473) { p = cp - 0x2460 + 1; break; }  // ①〜⑳
-    if (ch >= '1' && ch <= '9') { p = +ch; break; }
+  const text = String(passing).trim();
+  const first = text[0] || '';
+  const cp = first.codePointAt(0);
+  let p = cp >= 0x2460 && cp <= 0x2473 ? cp - 0x2460 + 1 : null; // ①〜⑳
+  if (p == null && /[^0-9]/.test(text)) {
+    const match = text.match(/\d+/);
+    p = match ? Number(match[0]) : null;
+  } else if (p == null && /^\d$/.test(text) && text !== '0') {
+    p = Number(text);
   }
   if (p == null) return null;
   if (p === 1) return '逃げ';
@@ -1262,18 +1267,20 @@ function deckV3Race(raceId) {
 function deckAiLeader(v3Race) {
   const runners = (v3Race && v3Race.runners || []).filter((r) => r && r.umaban != null);
   if (!runners.length) return null;
-  const overlay = !!(v3Race.market_overlay && v3Race.market_overlay.status === 'shadow');
-  const usePattern = overlay && runners.every((r) => Number.isFinite(Number(r.pattern_probability)));
-  const score = (r) => usePattern ? Number(r.pattern_probability)
-    : Number.isFinite(Number(r.win_probability && r.win_probability.mid)) ? Number(r.win_probability.mid)
-    : Number(r.win_probability_raw);
-  const top = runners.filter((r) => Number.isFinite(score(r))).sort((a, b) => score(b) - score(a))[0];
+  const archivedMass = runners.reduce((sum, r) => {
+    const value = Number(r.win_probability && r.win_probability.mid);
+    return sum + (Number.isFinite(value) && value >= 0 ? value : 0);
+  }, 0) || 1;
+  const rawScore = (r) => Number(r.win_probability_raw);
+  const displayScore = (r) => Number.isFinite(Number(r.win_probability && r.win_probability.mid)) ? Number(r.win_probability.mid) / archivedMass
+    : rawScore(r);
+  const top = runners.filter((r) => Number.isFinite(rawScore(r))).sort((a, b) => rawScore(b) - rawScore(a))[0];
   if (!top) return null;
   return {
     name: top.horse_name || top.name || `${top.umaban}番`,
     umaban: top.umaban,
-    label: usePattern ? '直前人気を反映' : 'AIが見積もった勝率',
-    value: `${(score(top) * 100).toFixed(0)}%`,
+    label: 'オッズ非使用のAI勝率',
+    value: `${(displayScore(top) * 100).toFixed(0)}%`,
   };
 }
 
@@ -1281,19 +1288,15 @@ function deckArchivedMarks(v3Race) {
   const marks = new Map();
   const runners = (v3Race && v3Race.runners || []).filter((r) => r && r.umaban != null);
   if (!runners.length) return { marks, archived: false, label: '予想履歴' };
-  const overlay = !!(v3Race.market_overlay && v3Race.market_overlay.status === 'shadow');
-  const usePattern = overlay && runners.every((r) => Number.isFinite(Number(r.pattern_probability)));
-  const score = (r) => usePattern ? Number(r.pattern_probability)
-    : Number.isFinite(Number(r.win_probability && r.win_probability.mid)) ? Number(r.win_probability.mid)
-    : Number(r.win_probability_raw);
+  const score = (r) => Number(r.win_probability_raw);
   runners.filter((r) => Number.isFinite(score(r))).sort((a, b) => score(b) - score(a))
     .forEach((r, i) => { if (i < MARKS.length) marks.set(+r.umaban, MARKS[i]); });
-  return { marks, archived: marks.size > 0, label: usePattern ? '発走10分前の予想印' : '事前予想印' };
+  return { marks, archived: marks.size > 0, label: 'オッズ非使用の事前予想印' };
 }
 
 function deckDecision(v3Race) {
   const shadow = v3Race && v3Race.v5_shadow;
-  if (!shadow) return { kind: 'wait', label: '判定待ち', detail: '発走10分前に更新' };
+  if (!shadow) return { kind: 'wait', label: '判定待ち', detail: '購入候補は発走前オッズ取得後' };
   const tickets = (Array.isArray(shadow.tickets) ? shadow.tickets : [])
     .slice().sort((a, b) => Number(b.conservative_ev || 0) - Number(a.conservative_ev || 0));
   if (!tickets.length) return { kind: 'pass', label: '見送り', detail: '安全基準未達' };
@@ -2159,7 +2162,7 @@ function v5ShadowCardHtml(shadow) {
     : '<div class="note"><b>今回は見送り</b> — 的中率を低めに見た場合の期待値、オッズの余裕、データ量、人気馬の危険度のいずれかが基準に届きませんでした。</div>';
   return `<section class="ev-board">
     <div class="ev-board-head">
-      <div class="ev-title"><small>発走10分前のオッズで判定</small><b>券種をまたいだ買い目候補</b></div>
+      <div class="ev-title"><small>購入候補だけ発走前オッズで判定（能力順位には不使用）</small><b>券種をまたいだ買い目候補</b></div>
       <span class="ev-audit-badge">${checked ? checked.toLocaleString() + '通りを確認 → ' : ''}${selected}点 · ${typeCount}券種</span>
     </div>
     <div class="ev-spotlight">
@@ -2182,11 +2185,34 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   for (const n of (nouryoku || [])) nouByUma[n.umaban] = n;
   const v3Race = state.v3Predictions && state.v3Predictions.races
     ? state.v3Predictions.races[raceMeta.race_id || state.raceId] : null;
-  const v3ByUma = new Map((v3Race && v3Race.runners || []).map((r) => [+r.umaban, r]));
+  const receiptRunners = (v3Race && v3Race.runners || []);
+  const v3ByUma = new Map(receiptRunners.map((r) => [+r.umaban, r]));
   const v5Shadow = v3Race && v3Race.v5_shadow;
   const v5ByUma = new Map((v5Shadow && v5Shadow.runner_signals || []).map((r) => [+r.runner_number, r]));
 
-  const hs = entries.map((e) => ({
+  const entryNumbers = new Set(entries.map((e) => +e.umaban));
+  const receiptContainsScratch = entries.some((entry) =>
+    v3ByUma.has(+entry.umaban) && ['取消', '除外'].includes(String(entry.status || ''))
+  );
+  const receiptMismatch = v3ByUma.size > 0 && (
+    receiptRunners.length !== v3ByUma.size
+    || [...v3ByUma.keys()].some((number) => !entryNumbers.has(number))
+    || receiptContainsScratch
+  );
+  if (receiptMismatch) {
+    return raceHeaderHtml(raceMeta)
+      + '<div class="note"><b>予想データを更新中です</b> — 出馬表とAIの有効出走馬が一致しないため、不完全な確率を表示していません。</div>';
+  }
+
+  // A signed prediction receipt defines the active choice set at prediction
+  // time. This also protects older Supabase schemas that do not yet expose a
+  // scratch-status column: a scratched entry cannot force the whole race back
+  // to the legacy model merely because it correctly has no v3 probability.
+  const forecastEntries = v3ByUma.size
+    ? entries.filter((e) => v3ByUma.has(+e.umaban))
+    : entries.filter((e) => !['取消', '除外'].includes(String(e.status || '')));
+
+  const hs = forecastEntries.map((e) => ({
     e,
     v3: v3ByUma.get(+e.umaban) || null,
     v5: v5ByUma.get(+e.umaban) || null,
@@ -2227,9 +2253,10 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
     && v3Race.market_overlay.form_reversal_rules.status === 'outcome_pattern_validated_shadow');
   const hasMarketOverlay = hasV3 && marketOverlayApproved
     && hs.every((r) => Number.isFinite(Number(r.v3.pattern_probability)));
+  // Ability rank is immutable with respect to current popularity/odds.  The
+  // market overlay belongs only to value flags and the separate ticket tab.
   hs.forEach((r) => {
-    r.v3Score = hasMarketOverlay ? Number(r.v3.pattern_probability)
-      : (hasV3 ? r.v3.win_probability_raw : null);
+    r.v3Score = hasV3 ? r.v3.win_probability_raw : null;
   });
   const markKey = hasV3 ? 'v3Score' : (hs.some((r) => r.ai != null) ? 'ai' : 'score');
   const ranked = hs.filter((r) => r[markKey] != null).sort((a, b) => b[markKey] - a[markKey]);
@@ -2241,21 +2268,19 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   const zMax = Math.max(...zAi.filter((v) => v != null), 0);
   const exps = zAi.map((z) => (z != null ? Math.exp((z - zMax) / 0.75) : 0));
   const expSum = exps.reduce((s, v) => s + v, 0) || 1;
+  const v3MidMass = hasV3 ? hs.reduce((sum, r) => {
+    const value = Number(r.v3 && r.v3.win_probability && r.v3.win_probability.mid);
+    return sum + (Number.isFinite(value) && value >= 0 ? value : 0);
+  }, 0) || 1 : 1;
   hs.forEach((r, i) => {
-    r.winP = hasMarketOverlay ? Number(r.v3.pattern_probability)
-      : (hasV3 ? Number(r.v3.win_probability.mid) : (zAi[i] != null ? exps[i] / expSum : null));
+    r.winP = hasV3 ? Number(r.v3.win_probability.mid) / v3MidMass
+      : (zAi[i] != null ? exps[i] / expSum : null);
     r.top3P = hasV3 ? Number(r.v3.top3_probability) : null;
-    const coreMidRaw = hasV3 && r.v3.win_probability ? r.v3.win_probability.mid : null;
-    const coreLowRaw = hasV3 && r.v3.win_probability ? r.v3.win_probability.low : null;
-    const coreMid = coreMidRaw != null && coreMidRaw !== '' ? Number(coreMidRaw) : null;
-    const coreLow = coreLowRaw != null && coreLowRaw !== '' ? Number(coreLowRaw) : null;
-    if (hasMarketOverlay && Number.isFinite(coreLow) && Number.isFinite(coreMid) && coreMid > 0) {
-      // Match the v5 ticket pipeline: preserve the outer-fold lower-bound
-      // shape and add a composition penalty to the market-adjusted head.
-      r.winPLow = r.winP * Math.min(Math.max(coreLow / coreMid, 0), 0.85);
-    } else {
-      r.winPLow = Number.isFinite(coreLow) ? coreLow : null;
-    }
+    const coreLowRaw = hasV3 && r.v3.win_probability ? Number(r.v3.win_probability.low) : null;
+    // Never increase a conservative bound merely because an old receipt's
+    // independently calibrated midpoints did not sum to one.
+    const coreLow = Number.isFinite(coreLowRaw) ? Math.min(coreLowRaw, r.winP) : null;
+    r.winPLow = Number.isFinite(coreLow) ? coreLow : null;
     const currentOdds = Number(r.e.win_odds);
     r.winEv = r.winP != null && Number.isFinite(currentOdds) && currentOdds > 0 ? r.winP * currentOdds : null;
     r.winEvLow = r.winPLow != null && Number.isFinite(currentOdds) && currentOdds > 0 ? r.winPLow * currentOdds : null;
@@ -2318,18 +2343,18 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   </article>`).join('');
   const overview = leader ? `<section class="forecast-overview">
     <div class="forecast-leader">
-      <div class="forecast-kicker">${hasMarketOverlay ? '発走10分前の人気を反映したAI評価' : '過去成績から見たAI評価'}</div>
+      <div class="forecast-kicker">オッズと分離したAI能力評価</div>
       <span class="forecast-mark">${leader.mark || '◎'}</span>
       <div class="leader-number">${leader.e.umaban}番 · ${leader.e.waku ? `${leader.e.waku}枠` : ''}</div>
       <h3>${esc(leader.e.horse_name)}</h3>
-      <div class="probability-label"><span>${hasMarketOverlay ? '直前人気を反映した勝率' : 'AIが見積もった勝率'}</span><b>${pct(leader.winP)}</b></div>
+      <div class="probability-label"><span>AIが見積もった勝率</span><b>${pct(leader.winP)}</b></div>
       <div class="probability-track"><i style="width:${Math.max(2, Math.min(100, Number(leader.winP || 0) * 100))}%"></i></div>
       <div class="leader-foot"><span>3着内 ${pct(leader.top3P)}</span><span>単勝 <b data-live-odds="${leader.e.umaban}">${leader.e.win_odds ?? '-'}${leader.e.pop != null ? `(${leader.e.pop})` : ''}</b></span></div>
     </div>
     <div class="forecast-side">
       <div class="forecast-side-head"><b>上位評価</b><span>数字より先に序列を読む</span></div>
       <div class="contender-grid">${contenderCards}</div>
-      <div class="forecast-insight"><div><span>買い目判断</span><b>${topTicket ? `${esc(V5_TICKET_LABELS[topTicket.ticket_type] || topTicket.ticket_type)} ${esc(topTicket.combination)}` : '今回は見送り、または発走10分前の判定待ち'}</b></div><div><span>現在の扱い</span><b>成績を記録中 · 実際の購入0円</b></div></div>
+      <div class="forecast-insight"><div><span>買い目判断</span><b>${topTicket ? `${esc(V5_TICKET_LABELS[topTicket.ticket_type] || topTicket.ticket_type)} ${esc(topTicket.combination)}` : '今回は見送り、または購入用オッズの取得待ち'}</b></div><div><span>現在の扱い</span><b>成績を記録中 · 実際の購入0円</b></div></div>
     </div>
   </section>` : '';
 
@@ -2358,7 +2383,7 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
         <span class="runner-mark">${r.mark || '・'}</span>
         <span class="runner-number waku w${e.waku || 1}">${e.umaban ?? '-'}</span>
         <div class="runner-name"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a><div class="runner-tags">${signalBadges(r)}${todayBlinkerBadge(e, history)}${kakuBadge(e)}</div></div>
-        <div class="runner-win"><span>${hasMarketOverlay ? '直前人気反映後' : '勝率'}</span><b>${pct(r.winP)}</b></div>
+        <div class="runner-win"><span>勝率</span><b>${pct(r.winP)}</b></div>
       </div>
       <div class="runner-prob"><i style="width:${Math.max(1, Math.min(100, Number(r.winP || 0) * 100))}%"></i></div>
       <div class="runner-metrics">
@@ -2371,30 +2396,30 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   }).join('');
 
   const modelExplanation = hasV3
-    ? `<b>${hasMarketOverlay ? '発走10分前の人気を反映したAI印' : '過去成績から見たAI印'}</b>＝${hasMarketOverlay ? '過去成績から見た能力に、発走10分前の「人気になりすぎ・人気がなさすぎ」の傾向を加えた勝率です。' : '過去レースだけで作り、今回の着順を見ずに保存した予想です。'}${formSignalsAvailable ? '「反発候補」「人気崩れ注意」は、別の期間でも同じ傾向が出るか確認した注意表示です。' : ''}`
+    ? `<b>オッズと分離したAI印</b>＝今回の単勝オッズと人気を能力順位に使わず、過去成績とレース前に取得できる馬体・調教・記者印から計算した勝率です。オッズは買い目候補タブの価格判断だけに使います。${formSignalsAvailable ? '「反発候補」「人気崩れ注意」は、能力順位とは別の買い目用注意表示です。' : ''}`
     : '<b>現在のAI印</b>は以前の予想方式による参考順位です。購入候補の判定とは分けて表示しています。';
 
   const allHorseCard = `<section class="card forecast-table-card">
     <div class="forecast-table-head"><b>全馬評価</b><span>AI順 · 単勝期待値は厳しめ / 中心の2通り</span></div>
     <div class="tablewrap">
     <table>
-      <thead><tr><th>評価</th><th>枠</th><th>番</th><th class="stickyname">馬名</th><th>${hasV3 ? '基礎評価' : 'AI予測'}</th><th>${hasMarketOverlay ? '直前人気反映後の勝率' : '勝率'}</th><th>3着内</th><th>総合</th><th>脚力</th><th>調教</th><th>単勝(人気)</th><th>単勝期待値</th><th>根拠</th></tr></thead>
+      <thead><tr><th>評価</th><th>枠</th><th>番</th><th class="stickyname">馬名</th><th>${hasV3 ? '基礎評価' : 'AI予測'}</th><th>勝率</th><th>3着内</th><th>総合</th><th>脚力</th><th>調教</th><th>単勝(人気)</th><th>単勝期待値</th><th>根拠</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     </div>
     <div class="forecast-mobile-list">${mobileRows}</div>
-    <details class="prediction-disclosure"><summary>AI評価と単勝期待値の読み方</summary><p>${modelExplanation} 単勝期待値は「AIが見積もった勝率×現在オッズ」です。1.00が長い目で見た損益分岐の目安です。太字は勝率を低めに見た厳しい計算、小字は中心の計算です。1.00を超えても、発走10分前のオッズ・データ量・人気馬の危険条件をすべて通った場合だけ買い目候補にします。利益を保証する数字ではありません。</p></details>
+    <details class="prediction-disclosure"><summary>AI評価と単勝期待値の読み方</summary><p>${modelExplanation} 能力順位と勝率はオッズを使わずに先に確定します。単勝期待値は、その勝率に購入判断用の発走前オッズを掛けた別の数字です。1.00が長い目で見た損益分岐の目安です。太字は勝率を低めに見た厳しい計算、小字は中心の計算です。データ量・人気馬の危険条件も通った場合だけ買い目候補にします。利益を保証する数字ではありません。</p></details>
   </section>`;
   const ticketCount = v5Shadow && Array.isArray(v5Shadow.tickets) ? v5Shadow.tickets.length : 0;
   const valueCard = v5ShadowCardHtml(v5Shadow)
-    || '<div class="note"><b>発走10分前の判定待ち</b> — その時点のオッズを保存し、7種類の馬券から候補を探します。</div>';
+    || '<div class="note"><b>購入用オッズの取得待ち</b> — 能力予想は確定済みです。発走前の価格を保存できた場合だけ、7種類の馬券から買い目候補を探します。</div>';
   const workspace = `<section class="forecast-workspace" aria-label="予想分析ワークスペース">
     <input class="forecast-view-toggle" type="radio" name="forecast-view" id="forecast-view-runners" checked>
     <input class="forecast-view-toggle" type="radio" name="forecast-view" id="forecast-view-value">
     <input class="forecast-view-toggle" type="radio" name="forecast-view" id="forecast-view-summary">
     <div class="forecast-view-tabs" role="tablist" aria-label="予想表示切替">
       <label for="forecast-view-runners">全馬評価 <span>${disp.length}頭</span></label>
-      <label for="forecast-view-value">買い目候補 <span>${ticketCount ? `${ticketCount}点` : '10分前'}</span></label>
+      <label for="forecast-view-value">買い目候補 <span>${ticketCount ? `${ticketCount}点` : 'オッズ待ち'}</span></label>
       <label for="forecast-view-summary">AI要約 <span>上位3頭</span></label>
     </div>
     <div class="forecast-panel forecast-panel-runners">${allHorseCard}</div>
