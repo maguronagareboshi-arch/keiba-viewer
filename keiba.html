@@ -3550,21 +3550,29 @@ async function renderCyokyo() {
     return groups.get(b).length - groups.get(a).length;
   });
   const other = works.length - usable.length;
-  const rowHtml = (w, i) => {
+  // 門別坂（坂路）は実測ではt4(4F系)がほぼ存在せず(1907本中30本=1.6%)、脚色もほぼ記録されない(1.7%)。
+  // 本馬場は5F(t4)が7割・脚色は100%記録される。坂路と本馬場を別表に分けた以上、
+  // 存在しない列を出し続けるのは無意味なので表側で分岐して落とす（データは元のまま・表示だけ調整）。
+  const rowHtml = (w, i, kind) => {
     const z = hensachiOf(w);
     const lap = w.hanro ? hanroLapCells(w.t4, w.t3, w.t2, w.t1, z) : { str: '', tag: '' };
     const pb = w.hanro ? w.pb : w.pb_honba;
+    const timeCells = kind === 'hanro'
+      ? `<td class="num ${sortBy === '3f' && i < 3 ? 'f1' : ''}">${w.t3 != null ? w.t3.toFixed(1) : ''}</td>
+         <td class="num">${w.t2 != null ? w.t2.toFixed(1) : ''}</td>
+         <td class="num ${sortBy === '1f' && i < 3 ? 'f1' : ''}">${w.t1 != null ? w.t1.toFixed(1) : ''}</td>
+         <td class="small l">${lap.str}${lap.tag}</td>`
+      : `<td class="num">${w.t4 != null ? w.t4.toFixed(1) : ''}</td>
+         <td class="num ${sortBy === '3f' && i < 3 ? 'f1' : ''}">${w.t3 != null ? w.t3.toFixed(1) : ''}</td>
+         <td class="num">${w.t2 != null ? w.t2.toFixed(1) : ''}</td>
+         <td class="num ${sortBy === '1f' && i < 3 ? 'f1' : ''}">${w.t1 != null ? w.t1.toFixed(1) : ''}</td>`;
     return `<tr>
       <td>${i + 1}</td>
       <td class="l"><a class="horse-link" data-horse="${esc(w.name)}">${esc(w.name)}</a>${pb ? ' <span class="badge arrow-up">自己ベスト</span>' : ''}${w.cls ? ` <span class="badge">${esc(w.cls)}</span>` : ''}</td>
       <td>${esc(w.sex || '')}</td><td class="l small">${esc(w.trainer || '')}</td><td>${esc(w.course)}</td><td>${esc(w.baba || '')}</td>
-      <td class="num">${w.t4 != null ? w.t4.toFixed(1) : ''}</td>
-      <td class="num ${sortBy === '3f' && i < 3 ? 'f1' : ''}">${w.t3 != null ? w.t3.toFixed(1) : ''}</td>
-      <td class="num">${w.t2 != null ? w.t2.toFixed(1) : ''}</td>
-      <td class="num ${sortBy === '1f' && i < 3 ? 'f1' : ''}">${w.t1 != null ? w.t1.toFixed(1) : ''}</td>
-      <td class="small l">${w.hanro ? `${lap.str}${lap.tag}` : ''}</td>
+      ${timeCells}
       <td class="num">${z != null ? z.toFixed(1) : ''}</td>
-      ${finCell(w)}${finalCell(w)}<td>${esc(w.ashiiro || '')}</td><td class="l">${esc(w.tanpyo || '')}</td>
+      ${finCell(w)}${finalCell(w)}${kind === 'honba' ? `<td>${esc(w.ashiiro || '')}</td>` : ''}<td class="l">${esc(w.tanpyo || '')}</td>
     </tr>`;
   };
   const facAnchor = (f, i) => `cyo-fac-${i}`;
@@ -3576,11 +3584,15 @@ async function renderCyokyo() {
   const sortFn = (a, b) => sortBy === '1f'
     ? (a.t1 == null ? 99 : a.t1) - (b.t1 == null ? 99 : b.t1)
     : (sortVal(a) == null ? 99 : sortVal(a)) - (sortVal(b) == null ? 99 : sortVal(b));
-  const subTableHtml = (label, list) => !list.length ? '' : `
+  const subTableHtml = (label, list, kind) => !list.length ? '' : `
     <div class="small" style="margin:8px 0 2px;opacity:.75">${esc(label)}（${list.length}本）</div>
     <table>
-      <tr><th>#</th><th>馬名</th><th>馬齢</th><th>厩舎</th><th>コース</th><th>馬場</th><th>坂4F/本5F</th><th>坂3F/本4F</th><th>坂2F/本3F</th><th>1F</th><th>ラップ(坂路のみ)</th><th>偏差値</th><th>着順</th><th>最終追い/対象R</th><th>脚色</th><th>短評</th></tr>
-      ${list.map((w, i) => rowHtml(w, i)).join('')}
+      <tr><th>#</th><th>馬名</th><th>馬齢</th><th>厩舎</th><th>コース</th><th>馬場</th>${
+        kind === 'hanro'
+          ? '<th>3F</th><th>2F</th><th>1F</th><th>ラップ</th>'
+          : '<th>5F</th><th>4F</th><th>3F</th><th>1F</th>'
+      }<th>偏差値</th><th>着順</th><th>最終追い/対象R</th>${kind === 'honba' ? '<th>脚色</th>' : ''}<th>短評</th></tr>
+      ${list.map((w, i) => rowHtml(w, i, kind)).join('')}
     </table>`;
   const facilityBlocks = facilities.map((f, i) => {
     const grp = groups.get(f);
@@ -3589,8 +3601,8 @@ async function renderCyokyo() {
     const isHome = f === state.track;
     return `<div class="card tablewrap" id="${facAnchor(f, i)}"${isHome ? ' style="border:1px solid var(--accent)"' : ''}>
       <b${isHome ? ' style="color:var(--accent)"' : ''}>${isHome ? '🏇 ' : ''}${esc(f)}（${cyokyoState.date}）${grp.length}本</b>
-      ${subTableHtml('坂路', hanroList)}
-      ${subTableHtml('本馬場', honbaList)}
+      ${subTableHtml('坂路', hanroList, 'hanro')}
+      ${subTableHtml('本馬場', honbaList, 'honba')}
     </div>`;
   }).join('');
 
