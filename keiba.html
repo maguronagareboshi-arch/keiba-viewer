@@ -224,6 +224,29 @@ a.horse-link:hover { text-decoration: underline; }
 .foldbtn { border: 1px solid var(--border); background: var(--chip-bg); color: var(--text);
   border-radius: 6px; padding: 5px 12px; cursor: pointer; font-size: 13px; margin: 6px 0; }
 .foldbtn:disabled { opacity: .5; cursor: default; }
+/* 出馬表の新聞型表示（通常⇔新聞の切替。新聞は1馬=1行で近3走を紙面風のマス目に展開） */
+.np-toggle { display: flex; gap: 6px; align-items: center; margin: 10px 0 8px; }
+.np-toggle button { border: 1px solid var(--border); background: var(--chip-bg); color: var(--text); border-radius: 6px; padding: 5px 14px; cursor: pointer; font-size: 12px; }
+.np-toggle button.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.np-wrap { overflow-x: auto; }
+.np-grid { display: flex; flex-direction: column; gap: 8px; min-width: 680px; }
+.np-row { display: grid; grid-template-columns: 172px repeat(3, 1fr); gap: 6px; }
+.np-horse { border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; font-size: 12px; line-height: 1.6; background: var(--panel); }
+.np-mark { font-size: 15px; }
+.np-meta { color: var(--sub); font-size: 11px; }
+.np-run { border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font-size: 11px; line-height: 1.55; background: var(--row-alt); }
+.np-run-head { display: flex; justify-content: space-between; color: var(--sub); }
+.np-run-sub { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.np-fin { font-size: 21px; font-weight: 800; text-align: center; margin: 2px 0; }
+.np-fin small { font-size: 11px; font-weight: normal; }
+.np-time b { font-size: 12px; }
+.np-fast { color: var(--arrow-up); font-weight: bold; }
+.np-slow { color: var(--arrow-down); }
+.np-si { border: 1px solid var(--border); border-radius: 5px; padding: 0 4px; background: var(--chip-bg); }
+.np-jk { color: var(--sub); }
+.np-cmt { color: var(--sub); border-top: 1px dashed var(--border); margin-top: 3px; padding-top: 2px; }
+.np-run-empty { display: flex; align-items: center; justify-content: center; color: var(--sub); }
+.np-fallback { grid-column: 2 / -1; padding: 8px 10px; }
 tr.clickable { cursor: pointer; }
 tr.clickable:hover td { background: var(--chip-bg); }
 
@@ -2096,6 +2119,56 @@ async function toggleDanwaPastAll(btn) {
   btn.textContent = '▲全馬の過去コメントを閉じる';
 }
 
+// その1走の走破タイムが「その日の馬場を加味した基準タイム」と比べ何秒速い/遅いか。
+// 基準 = 距離×馬場×クラスの平均タイム − 当日馬場差(z)×標準偏差（runShisuの補正と同じ向き）。
+// マイナス＝基準より速い。
+function baseDiffSec(run) {
+  const e = baseEntry(run.dist, run.going, run.cls);
+  if (!e || !e.time || !e.time.std || run.tsec == null) return null;
+  const da = ((state.stats && state.stats.shisu_day_adj) || {})[run.date] || 0;
+  return run.tsec - (e.time.mean - da * e.time.std);
+}
+// 新聞型表示の過去走1マス（着順を大きく・タイムは基準比つき・通過/脚質/騎手/短評まで1箱に）
+function npRunBox(run, label) {
+  if (!run) return `<div class="np-run np-run-empty">${esc(label)}なし</div>`;
+  const finCls = run.fin === 1 ? 'fin1' : run.fin === 2 ? 'fin2' : run.fin === 3 ? 'fin3' : '';
+  const diff = baseDiffSec(run);
+  const s = runShisu(run);
+  const going = run.going ? esc(String(run.going).slice(0, 1)) : '';
+  const cb = classBadge(run);
+  const diffHtml = diff == null ? '' :
+    `<span class="${diff <= -0.05 ? 'np-fast' : diff >= 0.05 ? 'np-slow' : ''}" title="その日の馬場・クラス・距離を加味した基準タイムとの差（マイナス＝基準より速い）">基準${diff >= 0 ? '+' : ''}${diff.toFixed(1)}</span>`;
+  return `<div class="np-run">
+    <div class="np-run-head"><span>${esc(label)} ${mmdd(run.date)}</span><span>${run.dist ?? '?'}m${going ? '・' + going : ''}</span></div>
+    <div class="np-run-sub">${cb ? `<span class="badge">${esc(cb)}</span>` : ''}${paceLetter(run.pace) ? `<span class="badge">${paceLetter(run.pace)}ペース</span>` : ''}${run.pop != null ? `${run.pop}人気` : ''}</div>
+    <div class="np-fin ${finCls}">${run.fin != null ? `${run.fin}<small>着</small>` : '<small>除/取</small>'}</div>
+    <div class="np-time">${run.time ? `<b>${esc(run.time)}</b> ` : ''}${diffHtml}</div>
+    <div>${run.f3 != null ? `テン${run.f3.toFixed(1)}` : ''} ${run.l3 != null ? `上${run.l3.toFixed(1)}` : ''}${s != null ? ` <span class="np-si" title="この1走の能力指数（50が平均。馬場差・斤量・ペース補正込み）">指${s.toFixed(1)}</span>` : ''}</div>
+    <div>${run.passing ? `通過${esc(run.passing)}` : ''}${run.kyaku ? ` <span class="kyaku">${run.kyaku}</span>` : ''}${tripTag(run.date, run.c4)}${equipBadges(run.equip, run._binkFirst)}</div>
+    <div class="np-jk">${esc(run.jockey || '')}${run.kin != null ? run.kin : ''}${run.weight ? ` ${run.weight}kg` : ''}</div>
+    ${run.comment ? `<div class="np-cmt">${esc(run.comment)}</div>` : ''}
+  </div>`;
+}
+// 出馬表の表示モード（通常⇔新聞）。ブラウザに記憶して次回も同じ表示で開く。
+function syutubaMode() {
+  if (!state.syutubaMode) {
+    try { state.syutubaMode = localStorage.getItem('kv_syutuba_mode') || 'normal'; }
+    catch (e) { state.syutubaMode = 'normal'; }
+  }
+  return state.syutubaMode;
+}
+function setSyutubaMode(m) {
+  state.syutubaMode = m;
+  try { localStorage.setItem('kv_syutuba_mode', m); } catch (e) { /* プライベートモード等は無視 */ }
+  renderRaceView();
+}
+function syutubaModeBar() {
+  const m = syutubaMode();
+  return `<div class="np-toggle"><span class="np-meta">表示:</span>
+    <button class="${m === 'normal' ? 'active' : ''}" onclick="setSyutubaMode('normal')">通常</button>
+    <button class="${m === 'np' ? 'active' : ''}" onclick="setSyutubaMode('np')">新聞</button></div>`;
+}
+
 function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   if (!entries.length) return raceHeaderHtml(raceMeta) + '<div class="empty">出馬表データがありません（day取得時に --what syutuba を含めてください）</div>';
   const cyoByUma = {};
@@ -2136,6 +2209,34 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   aiRanked.forEach(([um], i) => { if (i < MARKS.length) aiMark.set(um, MARKS[i]); });
   const aiTopUma = aiRanked.length ? aiRanked[0][0] : null;
   const aiConf = aiConfidence(aiRanked.map(([, v]) => v));
+
+  // ---- 新聞型表示: 1馬=1行、近3走を紙面風のマス目（着順大・基準タイム比・通過・短評）で並べる ----
+  if (syutubaMode() === 'np') {
+    const npRows = entries.map((e) => {
+      const runs = (history[e.horse_id] || []).filter((r) => r.race_id !== raceMeta.race_id).slice(0, 3);
+      const s = shisuOf(e.horse_id);
+      const runCells = runs.length
+        ? [0, 1, 2].map((i) => npRunBox(runs[i], ['前走', '2走前', '3走前'][i])).join('')
+        : `<div class="np-run np-fallback">${[nokenLineHtml(e.horse_id),
+            nouRuns(nouByUma, e.umaban, 3).map((r) => nouRunHtml(r) + ' <span class="badge">能力表</span>').join('<br>')]
+            .filter(Boolean).join('<br>') || '出走歴なし（初出走）'}</div>`;
+      return `<div class="np-row">
+        <div class="np-horse">
+          <div><span class="waku w${e.waku || 1}">${e.waku ?? ''}</span> <b>${e.umaban ?? ''}</b> <span class="np-mark">${aiMark.get(e.umaban) || ''}</span></div>
+          <div><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a>${todayBlinkerBadge(e, history)}${kakuBadge(e)}</div>
+          <div class="np-meta">${esc(e.sex_age)}${e.genryo ? ` ${esc(e.genryo)}` : ''}　${esc(e.jockey)}${e.kinryo ?? ''}</div>
+          <div class="np-meta">${esc(e.trainer)}</div>
+          <div class="np-meta">馬体重<span data-live-weight="${e.umaban}">${e.body_weight ?? '-'}${e.weight_diff != null ? `(${fmtDiff(e.weight_diff)})` : ''}</span>　単勝<span data-live-odds="${e.umaban}">${e.win_odds ?? '-'}${e.pop != null ? `(${e.pop})` : ''}</span></div>
+          <div class="np-meta">能力点 <b class="${s != null && top3S.includes(s) ? 'best' : ''}">${s != null ? s.toFixed(1) : '-'}</b></div>
+        </div>
+        ${runCells}
+      </div>`;
+    }).join('');
+    return raceHeaderHtml(raceMeta) + syutubaModeBar() + `
+    <div class="card"><div style="text-align:right;margin-bottom:4px"><span id="oddsUpdated" class="badge"></span></div>
+      <div class="np-wrap"><div class="np-grid">${npRows}</div></div>
+      <div class="legend">基準±秒＝距離×馬場×クラスの標準タイムに当日の馬場差を加味した基準との差（マイナス＝基準より速い走破時計）。指＝その1走の能力指数（50が平均。馬場差・斤量・ペース補正込み）。<br>近走の${TRIP_LEGEND}<br>${EQUIP_LEGEND}</div></div>`;
+  }
 
   const rows = entries.map((e) => {
     const cyo = cyoByUma[e.umaban];
@@ -2182,7 +2283,7 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
     </tr>`;
   }).join('');
 
-  return raceHeaderHtml(raceMeta) + `
+  return raceHeaderHtml(raceMeta) + syutubaModeBar() + `
   <div class="card"><div style="text-align:right;margin-bottom:4px"><span id="oddsUpdated" class="badge"></span></div><div class="tablewrap">
     <table>
       <tr><th>枠</th><th>番</th><th>AI印</th>
