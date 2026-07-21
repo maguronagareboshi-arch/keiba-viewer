@@ -260,6 +260,10 @@ a.horse-link:hover { text-decoration: underline; }
 .np-matchup-head { color: var(--sub); display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; }
 .np-matchup-runners { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 3px; }
 .np-matchup-runner { white-space: nowrap; }
+.cyo-mid > td { background: var(--row-alt); color: var(--sub); border-top: 0; }
+.cyo-mid-tag { display: inline-block; font-size: 9px; padding: 0 5px; margin-right: 6px;
+  border: 1px solid var(--border); border-radius: 4px; }
+.cyo-used { font-size: 9px; color: var(--accent); }
 .clarity-clear { color: var(--arrow-up); }
 .clarity-chaos { color: var(--arrow-down); }
 .person-link { color: var(--accent); cursor: pointer; }
@@ -1279,25 +1283,36 @@ function hanroRefTime(t) {
 // 調教偏差＝拠点別基準の坂路3F最速（終いの加速/失速を0.49倍で加味）。坂路の追切が無い馬・場（大井等は本馬場主体）は
 // 本馬場「真の3F」（終い1Fがほぼ未収録のため3Fのみ）でフォールバック評価する。複数の追切があれば最良z値を採用。
 // 検証: 同じ3F合計でも終い1Fが中間より速い（加速）か遅い（バテ）かで複勝率±6〜7pt（坂路のみ）
-function cyoZFromWorks(cyo) {
-  if (!cyo) return null;
+function cyoWorkZ(w) {
+  const t = (w && w.times) || {};
+  const isHanro = ((w && w.course) || '').includes('坂');
+  const base = facilityBase(w && w.course, isHanro);
+  if (!base || !base.std) return null;
+  const val = isHanro ? hanroRefTime(t) : t.t_3f;
+  if (val == null) return null;
+  let z = 50 + 10 * (base.mean - val) / base.std;
   const fb = state.stats && state.stats.hanro_finish;
-  let bestZ = null;
-  for (const w of (cyo.works || [])) {
-    const t = w.times || {};
-    const isHanro = (w.course || '').includes('坂');
-    const base = facilityBase(w.course, isHanro);
-    if (!base || !base.std) continue;
-    const val = isHanro ? hanroRefTime(t) : t.t_3f;
-    if (val == null) continue;
-    let z = 50 + 10 * (base.mean - val) / base.std;
-    if (isHanro && t.t_half != null && fb && fb.std && t.t_3f != null && t.t_1f != null) {   // 終い加速 = (中間F − 終いF)。t_halfのある4段階の坂路のみ
-      const accel = (t.t_3f - t.t_1f) - t.t_1f;
-      z += 4.9 * Math.max(-2, Math.min(2, (accel - fb.mean) / fb.std));
-    }
-    if (bestZ == null || z > bestZ) bestZ = z;
+  if (isHanro && t.t_half != null && fb && fb.std && t.t_3f != null && t.t_1f != null) {   // 終い加速 = (中間F − 終いF)。t_halfのある4段階の坂路のみ
+    const accel = (t.t_3f - t.t_1f) - t.t_1f;
+    z += 4.9 * Math.max(-2, Math.min(2, (accel - fb.mean) / fb.std));
   }
-  return bestZ;
+  return z;
+}
+// 最良の1本とその値を返す。日付の取れない追切は除外する——表示側は日付でしか並べられないため、
+// 含めると「追切なし」と出ている馬に評価だけ付くなど、画面と評価の根拠がズレる。
+function cyoBestWork(cyo) {
+  let best = null;
+  for (const w of ((cyo && cyo.works) || [])) {
+    if (!w || !w.date) continue;
+    const z = cyoWorkZ(w);
+    if (z == null) continue;
+    if (!best || z > best.z) best = { z, w };
+  }
+  return best;
+}
+function cyoZFromWorks(cyo) {
+  const best = cyoBestWork(cyo);
+  return best ? best.z : null;
 }
 
 // 坂路の200m毎ラップ＋加速/失速/好走判定（t4/t3/t2/t1=累計・zは偏差値）。カレンダーと調教タブで共用。
@@ -2865,21 +2880,37 @@ function cyokyoRaceHtml(raceMeta, entries, cyokyo, history) {
     const cur = currentCycleWorks(c, lastRaceDate);
     const w = pickLatest(cur);
     const mid = cur.filter((x) => x !== w);
+    const bw = cyoBestWork(c);
+    return { e, w, mid, mark: aiMark.get(e.umaban) || '', best: bw ? bw.z : null,
+      bestWork: bw ? bw.w : null,
+      arrow: c ? c.arrow : null, tanpyo: c ? c.tanpyo : null };
+  }).sort((a, b) => (b.best ?? -99) - (a.best ?? -99));
+  // 追切1本ぶんの時計セル（最終追いと中間で同じ列に並べ、そのまま縦に比べられるようにする）
+  const timeCells = (w) => {
     const t = (w && w.times) || {};
     const isHanro = w && (w.course || '').includes('坂');
     const z = hensachi(w);
-    return { e, w, mid, isHanro, mark: aiMark.get(e.umaban) || '', best: cyoZOf(e.umaban),
-      lap: isHanro ? hanroLapCells(t.t_5f, t.t_half, t.t_3f, t.t_1f, z) : { str: '', tag: '' },
-      arrow: c ? c.arrow : null, tanpyo: c ? c.tanpyo : null };
-  }).sort((a, b) => (b.best ?? -99) - (a.best ?? -99));
-  // 短評セル＝最終追いの短評＋（あれば）▼中間N本を同じマスの下に展開（別列にしない）
-  const noteCell = (r) => {
-    const head = `${arrowHtml(r.arrow)} ${esc(r.tanpyo || '')}`;
-    if (!r.mid.length) return `<td class="small l">${head}</td>`;
-    return `<td class="small l">${head}<details class="cyo-more"><summary>▼中間${r.mid.length}本</summary>${r.mid.map((w) => workHtml(w)).join('<br>')}</details></td>`;
+    const lap = isHanro ? hanroLapCells(t.t_5f, t.t_half, t.t_3f, t.t_1f, z) : { str: '', tag: '' };
+    return `<td class="num">${t.t_5f != null ? t.t_5f.toFixed(1) : ''}</td>
+      <td class="num">${t.t_half != null ? t.t_half.toFixed(1) : ''}</td>
+      <td class="num">${t.t_3f != null ? t.t_3f.toFixed(1) : ''}</td>
+      <td class="num">${t.t_1f != null ? t.t_1f.toFixed(1) : ''}</td>
+      <td class="small l">${lap.str}${lap.tag}</td>
+      <td class="l">${esc((w && w.ashiiro) || '')}</td>`;
   };
   const body = rows.map((r) => {
-    const e = r.e, t = (r.w && r.w.times) || {};
+    const e = r.e;
+    const bestDate = r.bestWork && r.bestWork.date;
+    const isBest = (w) => !!(w && bestDate && w.date === bestDate);
+    // 中間追いは隠さずに行として展開する。最終追いと同じ列に並ぶので時計を直接比較できる。
+    const midRows = r.mid.map((w) => `<tr class="cyo-mid">
+      <td colspan="4" class="l"><span class="cyo-mid-tag">中間</span>${esc(w.tanpyo || '')}</td>
+      <td class="num">${isBest(w) ? '<span class="cyo-used" title="調教評価はこの追切から算出">評価元</span>' : ''}</td>
+      <td>${mmdd(w.date)}</td>
+      <td>${esc(w.course || '')}</td>
+      ${timeCells(w)}
+      <td></td>
+    </tr>`).join('');
     return `<tr>
       <td style="font-size:15px">${r.mark}</td>
       <td><span class="waku w${e.waku || 1}">${e.waku ?? ''}</span></td>
@@ -2888,14 +2919,9 @@ function cyokyoRaceHtml(raceMeta, entries, cyokyo, history) {
       <td class="num ${r.mark === '◎' ? 'best' : ''}">${r.best != null ? r.best.toFixed(1) : '-'}</td>
       <td>${r.w ? mmdd(r.w.date) : ''}</td>
       <td>${r.w ? esc(r.w.course) : '<span class="sub">追切なし</span>'}</td>
-      <td class="num">${t.t_5f != null ? t.t_5f.toFixed(1) : ''}</td>
-      <td class="num">${t.t_half != null ? t.t_half.toFixed(1) : ''}</td>
-      <td class="num">${t.t_3f != null ? t.t_3f.toFixed(1) : ''}</td>
-      <td class="num">${t.t_1f != null ? t.t_1f.toFixed(1) : ''}</td>
-      <td class="small l">${r.lap.str}${r.lap.tag}</td>
-      <td class="l">${esc((r.w && r.w.ashiiro) || '')}</td>
-      ${noteCell(r)}
-    </tr>`;
+      ${timeCells(r.w)}
+      <td class="small l">${arrowHtml(r.arrow)} ${esc(r.tanpyo || '')}</td>
+    </tr>${midRows}`;
   }).join('');
   return raceHeaderHtml(raceMeta) + `
   <div class="note">各馬の最新の追切（最終追いの印☆を優先し、無ければ直近1本。調教評価の良い順）。AI印は過去レースから学習した順です。馬名を押すと全調教履歴を見られます。</div>
@@ -2903,7 +2929,7 @@ function cyokyoRaceHtml(raceMeta, entries, cyokyo, history) {
     <tr><th>AI印</th><th>枠</th><th>番</th><th>馬名</th><th>調教評価</th><th>追切日</th><th>コース</th><th>坂4F/本5F</th><th>坂3F/本4F</th><th>坂2F/本3F</th><th>1F</th><th>200mごとの時計（坂路のみ）</th><th>脚色</th><th>短評</th></tr>
     ${body}
   </table>
-  <div class="legend">今回に向けた追切のみ（前走日より後）を表示・過去のレース分は含みません。調教偏差＝拠点別基準（大井の時計は大井、小林の時計は小林…と場所ごとに比較）の坂路3F最速（無ければ本馬場「真の3F」）の偏差値（50が平均）。時計欄は坂路コースなら4F/3F/2F/1F、本馬場コースなら5F/4F/3F/1Fとして読む（終い1Fは本馬場ではほぼ記録なし）。短評の<b>▼中間N本</b>＝最終追いより前に行った今回サイクル分の追切（タップで展開）。ラップ・加速/失速判定は坂路のみ対応：<span class="badge conf-S">加速</span>尻上がり／<span class="badge conf-C">失速</span>終い掛かる／<span class="badge conf-S">🔥好走</span>偏差値60+×加速（実測複勝59%）。</div></div>`;
+  <div class="legend">今回に向けた追切のみ（前走日より後）を表示・過去のレース分は含みません。調教偏差＝拠点別基準（大井の時計は大井、小林の時計は小林…と場所ごとに比較）の坂路3F最速（無ければ本馬場「真の3F」）の偏差値（50が平均）。時計欄は坂路コースなら4F/3F/2F/1F、本馬場コースなら5F/4F/3F/1Fとして読む（終い1Fは本馬場ではほぼ記録なし）。グレーの<b>中間</b>行＝最終追いより前に行った今回サイクル分の追切（同じ列に並ぶので時計をそのまま比べられます）。<b>評価元</b>＝調教評価を出した追切がその行であることを示します。ラップ・加速/失速判定は坂路のみ対応：<span class="badge conf-S">加速</span>尻上がり／<span class="badge conf-C">失速</span>終い掛かる／<span class="badge conf-S">🔥好走</span>偏差値60+×加速（実測複勝59%）。</div></div>`;
 }
 
 // ---- リアルタイムオッズ（keiba.go.jp・門別=馬場コード36、Workerプロキシ経由でCORS回避）----
