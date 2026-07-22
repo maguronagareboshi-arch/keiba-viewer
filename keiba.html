@@ -4817,7 +4817,7 @@ async function selectRace(raceId, sub) {
 }
 
 function goHome() {
-  // ブランドタップ→今日のレースデッキ（開催が無ければ最新開催日）へ
+  // ブランドタップ→モックと同じ「選択中レースの判断画面」へ
   $('horseModal').hidden = true;
   state.prevRace = null;
   const dates = Object.keys(state.dates);
@@ -4826,8 +4826,9 @@ function goHome() {
   if (!target) return;
   history.replaceState(null, '', location.pathname + location.search);
   state.raceId = null;
+  state.sub = 'yosou'; state.railSection = 'yosou';
   setDeckDate(target);
-  switchView('deck');
+  switchView('race');
 }
 
 async function openHistoricalRace(raceId, date, sub) {
@@ -4998,7 +4999,7 @@ async function loadTrackData(track) {
 async function selectTrack(track) {
   if (track === state.track || !TRACKS[track]) return;
   state.prevRace = null;
-  state.view = 'deck';  // 場を変えたら、その場の今日を起点にする
+  state.view = 'race';  // 場を変えても、承認済みモックと同じレース判断画面を維持する
   $('raceView').innerHTML = '<div class="empty">読み込み中…</div>';
   await loadTrackData(track);
   state.statsPromise.then(() => { if (state.view === 'deck' && state.track === track) renderDeck(); });
@@ -5010,7 +5011,7 @@ async function selectTrack(track) {
     state.deckNotice = state.dates[today] ? null
       : `${track}は本日開催がありません。最新の開催日（${ds[0].slice(5).replace('-', '/')}）を表示しています。`;
     setDeckDate(state.dates[today] ? today : ds[0]);
-    switchView('deck');
+    await switchView('race');
   } else {
     state.deckNotice = TRACKS[track].data ? null : `${track}のデータはまだ取り込んでいません（準備中）。`;
     renderMonths(); renderDates(); renderTabs(); switchView('deck');
