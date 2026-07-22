@@ -1,4 +1,4 @@
-const CACHE = 'kochi-viewer-v1';
+const CACHE = 'kochi-viewer-v2';
 const CORE = [
   './', './index.html', './manifest.webmanifest',
   './modules/ai-analysis.js', './modules/ai-insights.js', './modules/value-t10-shadow.js',
@@ -20,9 +20,9 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
   if (request.mode === 'navigate') {
-    event.respondWith(fetch(request).then(response => {
-      const copy = response.clone(); caches.open(CACHE).then(cache => cache.put('./index.html', copy)); return response;
-    }).catch(() => caches.match('./index.html')));
+    // Never save an arbitrary page as index.html. Doing so allowed legacy
+    // Monbetsu/Ooi pages to replace the Kochi home screen in the offline cache.
+    event.respondWith(fetch(request).catch(() => caches.match('./index.html')));
     return;
   }
   event.respondWith(caches.match(request).then(cached => {
