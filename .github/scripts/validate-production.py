@@ -17,13 +17,6 @@ SUPPORT_FILES = {
     ".github/workflows/odds-capture.yml",
     ".github/workflows/pages.yml",
 }
-FORBIDDEN_PATHS = {
-    "keiba.html",
-    "monbetsu.html",
-    "nankan.html",
-    "sim3d.html",
-    "simulator.html",
-}
 SECRET_NAMES = {
     ".env",
     ".env.local",
@@ -84,8 +77,6 @@ def validate(root: Path, require_tracked: bool) -> tuple[list[str], list[str]]:
         candidate = root / path
         if not candidate.is_file():
             fail(errors, f"missing public file: {path}")
-        if path in FORBIDDEN_PATHS or path.startswith("vendor/"):
-            fail(errors, f"forbidden public file: {path}")
 
     tracked = tracked_files(root, errors) if require_tracked else public_set | SUPPORT_FILES
     if require_tracked:
@@ -98,8 +89,6 @@ def validate(root: Path, require_tracked: bool) -> tuple[list[str], list[str]]:
     for path in sorted(tracked):
         candidate = root / path
         lower_name = candidate.name.lower()
-        if path in FORBIDDEN_PATHS or path.startswith("vendor/"):
-            fail(errors, f"forbidden repository file: {path}")
         if lower_name in SECRET_NAMES or lower_name.endswith((".pem", ".p12", ".pfx", ".key")):
             fail(errors, f"possible credential file: {path}")
         if candidate.is_file() and candidate.stat().st_size > 2_000_000:
@@ -116,8 +105,22 @@ def validate(root: Path, require_tracked: bool) -> tuple[list[str], list[str]]:
         index = index_path.read_text(encoding="utf-8", errors="replace")
         if "高知競馬ビューア" not in index:
             fail(errors, "index.html does not identify the 高知競馬ビューア")
-        if re.search(r"(?:href|src)=[\"'][^\"']*(?:monbetsu|nankan|keiba\.html|sim3d|simulator)", index, re.I):
-            fail(errors, "index.html links to a forbidden separate-site page")
+
+    keiba_path = root / "keiba.html"
+    if keiba_path.is_file():
+        keiba = keiba_path.read_text(encoding="utf-8", errors="replace")
+        if "地方競馬ビューア" not in keiba or "門別" not in keiba or "大井" not in keiba:
+            fail(errors, "keiba.html does not identify the shared Monbetsu/Ooi viewer")
+
+    monbetsu_path = root / "monbetsu.html"
+    if monbetsu_path.is_file() and "keiba.html" not in monbetsu_path.read_text(encoding="utf-8", errors="replace"):
+        fail(errors, "monbetsu.html does not route to keiba.html")
+
+    nankan_path = root / "nankan.html"
+    if nankan_path.is_file():
+        nankan = nankan_path.read_text(encoding="utf-8", errors="replace")
+        if "keiba.html" not in nankan or "大井" not in nankan:
+            fail(errors, "nankan.html does not route to the Ooi view in keiba.html")
 
     sw_path = root / "sw.js"
     if sw_path.is_file():
