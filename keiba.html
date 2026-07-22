@@ -576,6 +576,35 @@ main { max-width: 1320px; }
 .signal-live { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .signal-live::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--positive); box-shadow: 0 0 0 4px var(--positive-soft); }
 
+/* 承認済みモック: 軸・価格差・危険人気を最初の一画面で判断する。 */
+.decision-cockpit { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 10px; margin: 12px 0 10px; }
+.decision-pick {
+  position: relative; min-width: 0; padding: 16px; overflow: hidden; border: 1px solid var(--hairline);
+  border-radius: 16px; background: var(--panel); box-shadow: 0 8px 24px rgba(20, 35, 75, .055);
+}
+.decision-pick.primary { border-color: color-mix(in srgb, var(--brand) 42%, var(--border)); background: linear-gradient(145deg, var(--panel), var(--brand-soft)); }
+.decision-pick.value { border-color: color-mix(in srgb, var(--positive) 36%, var(--border)); }
+.decision-pick.risk { border-color: color-mix(in srgb, var(--danger) 30%, var(--border)); }
+.decision-label { padding-right: 40px; color: var(--sub); font-size: 9px; font-weight: 850; letter-spacing: .09em; }
+.decision-mark { position: absolute; right: 13px; top: 12px; display: grid; place-items: center; width: 33px; height: 33px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); font-size: 18px; font-weight: 900; }
+.decision-pick.value .decision-mark { background: var(--positive-soft); color: var(--positive); }
+.decision-pick.risk .decision-mark { background: var(--danger-soft); color: var(--danger); }
+.decision-horse { overflow: hidden; margin-top: 9px; padding-right: 30px; white-space: nowrap; text-overflow: ellipsis; font-size: 17px; font-weight: 900; }
+.decision-meta { margin-top: 3px; color: var(--sub); font-size: 10px; }
+.decision-metrics { display: flex; gap: 15px; margin-top: 12px; }
+.decision-metric { min-width: 0; }
+.decision-metric b { display: block; font-size: 15px; font-variant-numeric: tabular-nums; }
+.decision-metric span { display: block; margin-top: 2px; color: var(--sub); font-size: 8px; }
+.decision-reason { min-height: 36px; margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--hairline); color: var(--sub); font-size: 10px; line-height: 1.55; }
+.decision-empty .decision-horse { color: var(--sub); font-size: 14px; }
+.decision-verdict { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; padding: 10px 13px; border: 1px solid var(--hairline); border-radius: 13px; background: var(--surface-2); }
+.decision-confidence { color: var(--brand); font-weight: 900; white-space: nowrap; }
+.decision-verdict-text { min-width: 0; flex: 1; color: var(--sub); font-size: 11px; line-height: 1.5; }
+.decision-action { padding: 6px 10px; border-radius: 99px; font-size: 10px; font-weight: 850; white-space: nowrap; }
+.decision-action.buy { background: var(--positive-soft); color: var(--positive); }
+.decision-action.pass { background: var(--danger-soft); color: var(--danger); }
+.decision-action.pending { background: var(--chip-bg); color: var(--sub); }
+
 .ev-board {
   margin: 12px 0; padding: 15px; border: 1px solid color-mix(in srgb, var(--positive) 28%, var(--border));
   border-radius: 18px; background: linear-gradient(145deg, var(--panel), color-mix(in srgb, var(--panel) 90%, var(--positive-soft)));
@@ -666,6 +695,11 @@ main { max-width: 1320px; }
     background: color-mix(in srgb, var(--panel) 95%, transparent); backdrop-filter: blur(14px);
   }
   .race-navigation .subtabs button { min-height: 42px; padding: 8px 14px; }
+  .decision-cockpit { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .decision-pick.primary { grid-column: 1 / -1; }
+  .decision-pick { padding: 14px; border-radius: 15px; }
+  .decision-verdict { align-items: flex-start; flex-wrap: wrap; }
+  .decision-verdict-text { flex-basis: calc(100% - 112px); }
   .race-hero-card { margin: 10px 0; padding: 17px 15px; border-radius: 18px; }
   .race-hero-top { align-items: flex-start; gap: 9px; }
   .race-identity { align-items: flex-start; gap: 10px; }
@@ -733,13 +767,18 @@ main { max-width: 1320px; }
   .prediction-disclosure { margin: 11px 3px 15px; }
   .danwa-card { border-radius: 15px; }
 }
+@media (max-width: 480px) {
+  .decision-cockpit { grid-template-columns: 1fr; }
+  .decision-pick.primary { grid-column: auto; }
+  .decision-reason { min-height: 0; }
+}
 </style>
 </head>
 <body>
 <header class="appbar">
   <div class="brand" onclick="goHome()" title="今日のレースへ">
     <span class="brand-mark">KP</span>
-    <span class="brand-copy"><h1>KEIBA PULSE</h1><small>地方競馬を分かりやすく</small></span>
+    <span class="brand-copy"><h1>KEIBA PULSE</h1><small>地方競馬を、判断しやすく。</small></span>
   </div>
   <div class="trackswitch" id="trackSwitch"></div>
   <div class="viewtabs" id="viewTabs"></div>
@@ -2767,6 +2806,78 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   const leader = disp[0] || null;
   const topTicket = v5Shadow && Array.isArray(v5Shadow.tickets)
     ? v5Shadow.tickets.slice().sort((a, b) => Number(b.conservative_ev || 0) - Number(a.conservative_ev || 0))[0] : null;
+  const confidence = aiConfidence(hs.map((r) => r[markKey]));
+  const priced = disp.map((r, index) => {
+    const odds = Number(r.e.win_odds);
+    const ev = evCellState(evModeOf(r), r.winPLow, r.winP, odds, state.date === jstToday());
+    const conservative = evFinite(r.winPLow) && odds > 0 ? Number(r.winPLow) * odds : null;
+    return { r, index, ev, conservative };
+  });
+  const valueChoice = priced
+    .filter((x) => x.ev.cls === 'ev-positive' || x.ev.cls === 'ev-watch')
+    .sort((a, b) => {
+      const classDiff = (a.ev.cls === 'ev-positive' ? 1 : 0) - (b.ev.cls === 'ev-positive' ? 1 : 0);
+      return classDiff ? -classDiff : Number(b.conservative || 0) - Number(a.conservative || 0);
+    })[0] || null;
+  const validatedDanger = disp.find((r) => r.v3 && (
+    (hasMarketOverlay && r.v3.dangerous_favourite)
+    || (formSignalsAvailable && r.v3.popular_collapse_candidate)
+  )) || null;
+  const popularityMismatch = priced
+    .filter((x) => Number.isFinite(Number(x.r.e.pop)) && Number(x.r.e.pop) <= 3 && x.index + 1 - Number(x.r.e.pop) >= 2)
+    .sort((a, b) => (b.index + 1 - Number(b.r.e.pop)) - (a.index + 1 - Number(a.r.e.pop)))[0];
+  const riskChoice = validatedDanger || (popularityMismatch && popularityMismatch.r) || null;
+  const riskValidated = !!validatedDanger;
+
+  const decisionCockpit = (() => {
+    if (!leader) return '';
+    const leaderRankValue = leader.aiDev != null ? leader.aiDev.toFixed(1) : (leader.score != null ? (50 + leader.score * 10).toFixed(1) : '-');
+    const leaderCard = `<article class="decision-pick primary">
+      <div class="decision-label">軸候補 · オッズと分離した能力最上位</div><span class="decision-mark">${leader.mark || '◎'}</span>
+      <div class="decision-horse">${leader.e.umaban}番 ${esc(leader.e.horse_name)}</div>
+      <div class="decision-meta">AI 1位 · 単勝 <b data-live-odds="${leader.e.umaban}">${leader.e.win_odds ?? '-'}${leader.e.pop != null ? `（${leader.e.pop}人気）` : ''}</b></div>
+      <div class="decision-metrics"><div class="decision-metric"><b>${leaderRankValue}</b><span>能力評価</span></div><div class="decision-metric"><b>${pct(leader.winP)}</b><span>推定勝率</span></div><div class="decision-metric"><b>${confidence ? confidence.tier : '-'}</b><span>◎信頼度</span></div></div>
+      <div class="decision-reason">${esc(leader.konkyo || '評価根拠を計算中')}</div>
+    </article>`;
+    const valueCard = valueChoice ? (() => {
+      const r = valueChoice.r;
+      const positive = valueChoice.ev.cls === 'ev-positive';
+      return `<article class="decision-pick value">
+        <div class="decision-label">${positive ? '人気以上の評価 · 期待値候補' : '価格注目 · 損益分岐付近'}</div><span class="decision-mark">☆</span>
+        <div class="decision-horse">${r.e.umaban}番 ${esc(r.e.horse_name)}</div>
+        <div class="decision-meta">AI ${valueChoice.index + 1}位 · 単勝 <b data-live-odds="${r.e.umaban}">${r.e.win_odds ?? '-'}${r.e.pop != null ? `（${r.e.pop}人気）` : ''}</b></div>
+        <div class="decision-metrics"><div class="decision-metric"><b>${valueChoice.ev.main}</b><span>厳しめ期待値</span></div><div class="decision-metric"><b>${pct(r.winP)}</b><span>推定勝率</span></div></div>
+        <div class="decision-reason">勝率を低めに見た計算で${positive ? `${EV_CANDIDATE.toFixed(2)}以上。市場価格とのズレを検出。` : '損益分岐以上。最終オッズを確認。'}</div>
+      </article>`;
+    })() : `<article class="decision-pick value decision-empty">
+      <div class="decision-label">人気以上の評価 · 期待値候補</div><span class="decision-mark">☆</span>
+      <div class="decision-horse">${hasV3 ? '基準を超える馬なし' : '発走前の価格判定待ち'}</div>
+      <div class="decision-meta">能力順位はオッズと分けて確定済み</div>
+      <div class="decision-reason">${hasV3 ? '厳しめ期待値が基準へ届く馬は現在いません。' : '較正済み確率と発走前オッズが揃った場合だけ表示します。'}</div>
+    </article>`;
+    const riskCard = riskChoice ? (() => {
+      const rank = disp.indexOf(riskChoice) + 1;
+      return `<article class="decision-pick risk">
+        <div class="decision-label">${riskValidated ? '過剰人気に注意' : '人気とAI順位のズレ'}</div><span class="decision-mark">!</span>
+        <div class="decision-horse">${riskChoice.e.umaban}番 ${esc(riskChoice.e.horse_name)}</div>
+        <div class="decision-meta">AI ${rank}位 · ${riskChoice.e.pop != null ? `${riskChoice.e.pop}人気` : '人気未取得'}</div>
+        <div class="decision-metrics"><div class="decision-metric"><b>${rank}位</b><span>AI能力順位</span></div><div class="decision-metric"><b>${riskChoice.e.pop ?? '-'}</b><span>単勝人気</span></div></div>
+        <div class="decision-reason">${riskValidated ? '検証済みの人気崩れ条件に該当。相手固定には注意。' : '人気よりAI能力順位が低い馬。危険断定ではなく、価格確認の注意表示。'}</div>
+      </article>`;
+    })() : `<article class="decision-pick risk decision-empty">
+      <div class="decision-label">過剰人気に注意</div><span class="decision-mark">!</span>
+      <div class="decision-horse">目立つ該当馬なし</div>
+      <div class="decision-meta">人気とAI能力順位を照合</div>
+      <div class="decision-reason">危険人気を無理に作らず、明確な条件に該当した場合だけ表示します。</div>
+    </article>`;
+    const actionKind = topTicket ? 'buy' : (v5Shadow ? 'pass' : 'pending');
+    const actionLabel = topTicket ? '買い候補' : (v5Shadow ? '今回は見送り' : '価格判定待ち');
+    const verdict = topTicket
+      ? `◎${esc(leader.e.horse_name)}を能力軸に、${esc(V5_TICKET_LABELS[topTicket.ticket_type] || topTicket.ticket_type)} ${esc(topTicket.combination)}が最上位候補。実際の購入は0円で記録中です。`
+      : (v5Shadow ? `◎${esc(leader.e.horse_name)}が能力最上位。厳しめ条件では買い目候補が基準に届きません。` : `◎${esc(leader.e.horse_name)}が能力最上位。発走前オッズが揃ってから価格判断を行います。`);
+    return `<section class="decision-cockpit" aria-label="このレースの判断">${leaderCard}${valueCard}${riskCard}</section>
+      <div class="decision-verdict"><span class="decision-confidence">◎信頼度 ${confidence ? `${confidence.tier} · ${esc(confidence.label)}` : '計算待ち'}</span><span class="decision-verdict-text">${verdict}</span><span class="decision-action ${actionKind}">${actionLabel}</span></div>`;
+  })();
   const contenderCards = disp.slice(0, 3).map((r) => `<article class="contender-card">
     <div class="contender-top"><span class="contender-mark">${r.mark || '・'}</span><span class="waku w${r.e.waku || 1}">${r.e.waku ?? ''}</span></div>
     <h4>${r.e.umaban ?? '-'}番 ${esc(r.e.horse_name)}</h4><small>${esc(r.kyaku || '脚質データ待ち')}</small>
@@ -2881,6 +2992,7 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   return raceHeaderHtml(raceMeta) + `
   <div class="signal-strip"><span>直近の馬場 · ${recentBias || 'データなし'}</span><span class="signal-live" id="oddsUpdated">ライブオッズ確認中</span></div>
   ${refCompareHtml}
+  ${decisionCockpit}
   ${workspace}
   <div id="evMonitor" class="note" hidden></div>`;
 }
