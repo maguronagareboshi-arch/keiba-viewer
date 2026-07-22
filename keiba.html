@@ -349,6 +349,16 @@ body {
 }
 body[data-track="門別"] { --brand: #087ca7; --brand-deep: #064e68; --brand-soft: #e8f6fa; --track-accent: #17b4bc; --track-accent-deep: #087ca7; }
 body[data-track="大井"] { --brand: #7d4cdb; --brand-deep: #47288d; --brand-soft: #f1ebfc; --track-accent: #b36be2; --track-accent-deep: #7d4cdb; }
+body[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #101720; --panel: #18212e; --text: #edf2f8; --sub: #9ca9ba; --border: #344153;
+  --chip-bg: #222d3b; --row-alt: #1b2532; --hl-first3f: #173d58; --hl-last3f: #512b31; --hl-best: #1b422c;
+  --note: #efb34f; --note-bg: #3b321e; --arrow-up: #5dd3a2; --arrow-down: #ff8998;
+  --positive: #5dd3a2; --positive-soft: #183a31; --danger: #ff8998; --danger-soft: #47272f;
+  --deck-shadow: 0 14px 36px rgba(0,0,0,.28);
+}
+body[data-theme="dark"][data-track="門別"] { --brand: #43d4d5; --brand-deep: #0a7184; --brand-soft: #153b42; }
+body[data-theme="dark"][data-track="大井"] { --brand: #bc9bff; --brand-deep: #6340aa; --brand-soft: #33274d; }
 header.appbar {
   position: sticky; top: 0; z-index: 40; min-height: 68px;
   padding: 10px max(20px, calc((100vw - 1440px) / 2 + 28px));
@@ -369,8 +379,11 @@ header.appbar .trackswitch button { min-width: 74px; padding: 7px 13px; border: 
 header.appbar .trackswitch button:hover { color: var(--appbar-text); background: rgba(255,255,255,.07); }
 header.appbar .trackswitch button.active { color: #fff; background: linear-gradient(135deg, var(--track-accent), var(--track-accent-deep)); box-shadow: 0 5px 15px rgba(0,0,0,.2); }
 header.appbar > .viewtabs { display: none; }
-.top-meta { margin-left: auto; color: var(--appbar-sub); font-size: 11px; white-space: nowrap; }
-.top-meta::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; background: #42d19b; box-shadow: 0 0 0 4px rgba(66,209,155,.12); }
+.top-meta { display: flex; align-items: center; gap: 14px; margin-left: auto; color: var(--appbar-sub); font-size: 11px; white-space: nowrap; }
+.top-status::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; background: #42d19b; box-shadow: 0 0 0 4px rgba(66,209,155,.12); }
+.theme-toggle { min-height: 36px; padding: 7px 11px; border: 1px solid var(--appbar-border); border-radius: 10px; background: var(--appbar-panel); color: var(--appbar-text); cursor: pointer; font-weight: 750; }
+.theme-toggle:hover { border-color: var(--track-accent); }
+body[data-theme="dark"] header.appbar > .viewtabs { background: rgba(24,33,46,.97); }
 .app-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 22px; max-width: 1440px; padding: 22px 28px 80px; }
 .app-content { min-width: 0; }
 .desktop-rail { position: sticky; top: 90px; align-self: start; overflow: hidden; padding: 10px; border: 1px solid var(--border); border-radius: 16px; background: var(--panel); box-shadow: 0 8px 25px rgba(24,40,68,.05); }
@@ -456,7 +469,9 @@ header.appbar > .viewtabs { display: none; }
   .app-layout { display: block; padding: 15px 14px 88px; }
   .desktop-rail { display: none; }
   .brand { min-width: 0; }
-  .top-meta { display: none; }
+  .top-status, .theme-label { display: none; }
+  .top-meta { display: flex; gap: 0; }
+  .theme-toggle { width: 38px; padding: 6px; font-size: 16px; }
   header.appbar > .viewtabs { display: flex; position: fixed; z-index: 60; left: 0; right: 0; bottom: 0; height: 64px; margin: 0; padding: 7px 8px max(7px, env(safe-area-inset-bottom));
     gap: 3px; overflow-x: auto; background: rgba(255,255,255,.96); border-top: 1px solid var(--border); box-shadow: 0 -8px 22px rgba(20,36,60,.08); }
   .decision-cockpit { grid-template-columns: 1fr 1fr; }
@@ -856,7 +871,7 @@ main { max-width: 1320px; }
     <span class="brand-copy"><h1>KEIBA PULSE</h1><small>地方競馬を、判断しやすく。</small></span>
   </div>
   <div class="trackswitch" id="trackSwitch"></div>
-  <div class="top-meta" id="topDataStatus">データ確認中</div>
+  <div class="top-meta"><span class="top-status" id="topDataStatus">データ確認中</span><button class="theme-toggle" id="themeToggle" type="button" onclick="toggleTheme()" aria-label="ダークモードに切り替える">☾ <span class="theme-label">ダーク</span></button></div>
   <div class="viewtabs" id="viewTabs"></div>
 </header>
 <main class="app-layout">
@@ -1169,6 +1184,27 @@ const state = { provider: null, dates: {}, month: null, date: null, raceId: null
 // ============================================================
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function applyTheme(theme) {
+  const next = theme === 'dark' ? 'dark' : 'light';
+  document.body.dataset.theme = next;
+  const button = $('themeToggle');
+  if (button) {
+    const isDark = next === 'dark';
+    button.innerHTML = isDark ? '☀ <span class="theme-label">ライト</span>' : '☾ <span class="theme-label">ダーク</span>';
+    button.setAttribute('aria-label', isDark ? 'ライトモードに切り替える' : 'ダークモードに切り替える');
+    button.setAttribute('aria-pressed', String(isDark));
+  }
+}
+function initTheme() {
+  let saved = 'light';
+  try { saved = localStorage.getItem('keiba_ui_theme') || 'light'; } catch (e) { /* 保存不可ならライト */ }
+  applyTheme(saved);
+}
+function toggleTheme() {
+  const next = document.body.dataset.theme === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  try { localStorage.setItem('keiba_ui_theme', next); } catch (e) { /* 表示切替だけ継続 */ }
+}
 const fmtDiff = (v) => (v == null ? '' : v > 0 ? `+${v}` : `${v}`);
 const mmdd = (iso) => (iso ? `${+iso.slice(5, 7)}/${+iso.slice(8, 10)}` : '');
 
@@ -5203,6 +5239,7 @@ async function applyHash() {
   switchView('deck');
   return true;
 }
+initTheme();
 init();
 </script>
 </body>
