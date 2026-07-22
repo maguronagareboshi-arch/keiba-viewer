@@ -2948,7 +2948,7 @@ function cyokyoRaceHtml(raceMeta, entries, cyokyo, history) {
     const midRows = r.mid.map((w) => `<tr class="cyo-mid">
       <td colspan="4" class="l"><span class="cyo-mid-tag">中間</span></td>
       <td class="num">${isBest(w) ? '<span class="cyo-used" title="調教評価はこの追切から算出">評価元</span>' : ''}</td>
-      <td>${mmdd(w.date)}</td>
+      <td>${w.date ? `<span class="racelink" data-cyodate="${esc(w.date)}" title="この日の調教デイビューへ">${mmdd(w.date)}</span>` : ''}</td>
       <td>${esc(w.course || '')}</td>
       ${timeCells(w)}
       <td class="small l">${esc(w.tanpyo || '')}</td>
@@ -2959,14 +2959,14 @@ function cyokyoRaceHtml(raceMeta, entries, cyokyo, history) {
       <td>${e.umaban ?? ''}</td>
       <td class="l"><a class="horse-link" ${e.horse_id ? `data-hid="${esc(e.horse_id)}"` : `data-horse="${esc(e.horse_name)}"`}><b>${esc(e.horse_name)}</b></a>${todayBlinkerBadge(e, history)}${kakuBadge(e)}</td>
       <td class="num ${r.mark === '◎' ? 'best' : ''}">${r.best != null ? r.best.toFixed(1) : '-'}</td>
-      <td>${r.w ? mmdd(r.w.date) : ''}</td>
+      <td>${r.w ? `<span class="racelink" data-cyodate="${esc(r.w.date)}" title="この日の調教デイビューへ">${mmdd(r.w.date)}</span>` : ''}</td>
       <td>${r.w ? esc(r.w.course) : '<span class="sub">追切なし</span>'}</td>
       ${timeCells(r.w)}
       <td class="small l">${arrowHtml(r.arrow)} ${esc(r.tanpyo || '')}</td>
     </tr>${midRows}`;
   }).join('');
   return raceHeaderHtml(raceMeta) + `
-  <div class="note">馬番順。各馬の最新の追切（最終追いの印☆を優先し、無ければ直近1本）と調教評価を表示。AI印は過去レースから学習した順です。馬名を押すと全調教履歴を見られます。</div>
+  <div class="note">馬番順。各馬の最新の追切（最終追いの印☆を優先し、無ければ直近1本）と調教評価を表示。AI印は過去レースから学習した順です。馬名を押すと全調教履歴を、追切日を押すとその日の調教デイビュー（同じ日に走った他馬との比較）を見られます。</div>
   <div class="card tablewrap"><table>
     <tr><th>AI印</th><th>枠</th><th>番</th><th>馬名</th><th>調教評価</th><th>追切日</th><th>コース</th><th>坂4F/本5F</th><th>坂3F/本4F</th><th>坂2F/本3F</th><th>1F</th><th>200mごとの時計（坂路のみ）</th><th>脚色</th><th>短評</th></tr>
     ${body}
@@ -4273,7 +4273,7 @@ function renderHorseModal(results, cyokyo) {
 // ============================================================
 // 制御
 // ============================================================
-function switchView(v) {
+async function switchView(v) {
   state.view = v;
   if (v === 'deck' && location.hash) history.replaceState(null, '', location.pathname + location.search);
   if (v !== 'race') { clearInterval(state.oddsTimer); state.oddsTimer = null; }  // レース以外はライブオッズ停止
@@ -4294,9 +4294,22 @@ function switchView(v) {
     const target = deckFocusRace(races, state.date) || races[0];
     if (target) selectRace(target.race_id, 'yosou');
   }
-  if (v === 'analysis') renderAnalysis();
-  if (v === 'cyokyo') renderCyokyo();
-  if (v === 'noken') renderNoken();
+  if (v === 'analysis') await renderAnalysis();
+  if (v === 'cyokyo') await renderCyokyo();
+  if (v === 'noken') await renderNoken();
+}
+// 調教表の追切日タップ→その日の調教デイビューへ移動（同じ日に走った他馬とも比較できる）
+async function openCyokyoDate(dateStr) {
+  if (!dateStr) return;
+  cyokyoState.year = dateStr.slice(0, 4);
+  cyokyoState.date = dateStr;
+  await switchView('cyokyo');
+  // 調教データの初回読み込み時は既定(最新)年に上書きされるため、ずれていたら入れ直す
+  if (cyokyoState.date !== dateStr) {
+    cyokyoState.year = dateStr.slice(0, 4);
+    cyokyoState.date = dateStr;
+    await renderCyokyo();
+  }
 }
 
 // ---- 能検ゾーン（能力検査：2歳馬の資格試験）。動画=ホッカイドウ公式 / 成績=競馬ブック ----
@@ -4852,6 +4865,7 @@ async function init() {
     if (ne && ne.dataset.rid) { openHistoricalRace(ne.dataset.rid, ne.dataset.rd, 'eizo'); return; }
     const rl = e.target.closest('.racelink');   // 前後半タイムの日付タップ→そのレースへ
     if (rl && rl.dataset.rid) { openHistoricalRace(rl.dataset.rid, rl.dataset.rd); return; }
+    if (rl && rl.dataset.cyodate) { openCyokyoDate(rl.dataset.cyodate); return; }   // 調教表の追切日タップ→その日の調教デイビューへ
     const de = e.target.closest('.danwa-expand');   // 厩舎の話「▼過去のコメント」展開
     if (de) { toggleDanwaPast(de); return; }
     const dea = e.target.closest('.danwa-expand-all');   // 厩舎の話「全馬の過去コメントを開く/閉じる」
