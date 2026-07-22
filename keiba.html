@@ -338,6 +338,17 @@ body[data-track="大井"] {
   body[data-track="門別"] { --brand: #36d0d1; --brand-deep: #0b6377; --brand-soft: #143b42; }
   body[data-track="大井"] { --brand: #b491ff; --brand-deep: #513491; --brand-soft: #30264a; }
 }
+/* 承認済みモックは明るい情報面＋濃紺ヘッダー。OS設定に左右されず同じ見た目にする。 */
+body {
+  --bg: #f4f7fb; --panel: #fff; --text: #172033; --sub: #657187; --border: #dce3ed;
+  --accent: #087ca7; --accent-text: #fff; --chip-bg: #f1f5f9; --row-alt: #fbfcfe;
+  --hl-first3f: #d7ecff; --hl-last3f: #ffe3e3; --hl-best: #dff5e1;
+  --note: #a9650d; --note-bg: #fff4e5; --arrow-up: #11845b; --arrow-down: #c33c51;
+  --positive: #11845b; --positive-soft: #eaf8f2; --danger: #c33c51; --danger-soft: #fcebef;
+  --deck-shadow: 0 14px 36px rgba(23, 32, 51, .09);
+}
+body[data-track="門別"] { --brand: #087ca7; --brand-deep: #064e68; --brand-soft: #e8f6fa; --track-accent: #17b4bc; --track-accent-deep: #087ca7; }
+body[data-track="大井"] { --brand: #7d4cdb; --brand-deep: #47288d; --brand-soft: #f1ebfc; --track-accent: #b36be2; --track-accent-deep: #7d4cdb; }
 header.appbar {
   position: sticky; top: 0; z-index: 40; min-height: 68px;
   padding: 10px max(20px, calc((100vw - 1440px) / 2 + 28px));
@@ -345,7 +356,7 @@ header.appbar {
   border-bottom: 1px solid var(--appbar-border); backdrop-filter: blur(16px);
   box-shadow: 0 8px 30px rgba(3, 11, 25, .18);
 }
-.brand { display: flex; align-items: center; gap: 9px; cursor: pointer; min-width: max-content; }
+.brand { display: flex; align-items: center; gap: 11px; cursor: pointer; min-width: 230px; }
 .brand:hover { opacity: .88; }
 .brand-mark { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px;
   color: #fff; background: linear-gradient(145deg, var(--track-accent), var(--track-accent-deep)); font-size: 17px; font-weight: 900;
@@ -358,19 +369,20 @@ header.appbar .trackswitch button { min-width: 74px; padding: 7px 13px; border: 
 header.appbar .trackswitch button:hover { color: var(--appbar-text); background: rgba(255,255,255,.07); }
 header.appbar .trackswitch button.active { color: #fff; background: linear-gradient(135deg, var(--track-accent), var(--track-accent-deep)); box-shadow: 0 5px 15px rgba(0,0,0,.2); }
 header.appbar > .viewtabs { display: none; }
-.app-layout { display: grid; grid-template-columns: 202px minmax(0, 1fr); gap: 22px; max-width: 1440px; padding: 22px 28px 70px; }
+.top-meta { margin-left: auto; color: var(--appbar-sub); font-size: 11px; white-space: nowrap; }
+.top-meta::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; background: #42d19b; box-shadow: 0 0 0 4px rgba(66,209,155,.12); }
+.app-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 22px; max-width: 1440px; padding: 22px 28px 80px; }
 .app-content { min-width: 0; }
-.desktop-rail { position: sticky; top: 90px; align-self: start; overflow: hidden; border: 1px solid var(--border); border-radius: 18px; background: var(--panel); box-shadow: var(--deck-shadow); }
-.rail-head { padding: 19px 17px 16px; border-bottom: 1px solid var(--border); background: linear-gradient(145deg, color-mix(in srgb, var(--brand-soft) 70%, var(--panel)), var(--panel)); }
+.desktop-rail { position: sticky; top: 90px; align-self: start; overflow: hidden; padding: 10px; border: 1px solid var(--border); border-radius: 16px; background: var(--panel); box-shadow: 0 8px 25px rgba(24,40,68,.05); }
+.rail-head { padding: 10px 11px 7px; }
 .rail-head small { display: block; color: var(--sub); font-size: 9px; font-weight: 850; letter-spacing: .16em; }
-.rail-head strong { display: flex; align-items: center; gap: 8px; margin-top: 7px; font-size: 17px; }
-.rail-head strong::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 5px var(--brand-soft); }
-.rail-nav { display: grid; gap: 4px; padding: 10px; }
+.rail-head strong { display: block; margin-top: 4px; color: var(--brand); font-size: 12px; }
+.rail-nav { display: grid; gap: 2px; padding: 2px 0; }
 .rail-nav button { display: grid; grid-template-columns: 28px 1fr; align-items: center; width: 100%; padding: 11px 12px; border: 0; border-radius: 10px; background: transparent; color: var(--sub); text-align: left; cursor: pointer; font-weight: 750; }
 .rail-nav button:hover { color: var(--text); background: var(--chip-bg); }
 .rail-nav button.active { color: var(--brand); background: var(--brand-soft); }
 .rail-nav .rail-icon { text-align: center; font-size: 15px; }
-.rail-foot { margin: 2px 12px 14px; padding: 11px; border-radius: 11px; background: var(--chip-bg); color: var(--sub); font-size: 10px; line-height: 1.55; }
+.rail-foot { margin: 12px 2px 2px; padding: 13px; border-radius: 11px; background: var(--chip-bg); color: var(--sub); font-size: 10px; line-height: 1.65; }
 .rail-foot b { display: block; margin-bottom: 2px; color: var(--text); font-size: 11px; }
 .deck-shell { padding: 8px 0 30px; }
 .deck-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 2px 0 12px; }
@@ -439,6 +451,17 @@ header.appbar > .viewtabs { display: none; }
 .deck-ended { padding: 27px; border-radius: 18px; color: var(--text); background: var(--panel); border: 1px solid var(--border); }
 .deck-ended h2 { margin: 0 0 6px; }
 
+@media (max-width: 900px) {
+  body { padding-bottom: 72px; }
+  .app-layout { display: block; padding: 15px 14px 88px; }
+  .desktop-rail { display: none; }
+  .brand { min-width: 0; }
+  .top-meta { display: none; }
+  header.appbar > .viewtabs { display: flex; position: fixed; z-index: 60; left: 0; right: 0; bottom: 0; height: 64px; margin: 0; padding: 7px 8px max(7px, env(safe-area-inset-bottom));
+    gap: 3px; overflow-x: auto; background: rgba(255,255,255,.96); border-top: 1px solid var(--border); box-shadow: 0 -8px 22px rgba(20,36,60,.08); }
+  .decision-cockpit { grid-template-columns: 1fr 1fr; }
+  .decision-pick.primary { grid-column: 1 / -1; }
+}
 @media (max-width: 760px) {
   body { padding-bottom: 72px; }
   header.appbar { position: sticky; min-height: 54px; padding: 7px 10px; gap: 7px; }
@@ -498,26 +521,32 @@ body {
 main { max-width: 1320px; }
 #raceRoot { padding-bottom: 18px; }
 .race-navigation {
-  margin: 6px 0 12px; padding: 10px 12px 8px; border: 1px solid var(--hairline);
-  border-radius: 16px; background: color-mix(in srgb, var(--panel) 88%, transparent);
-  box-shadow: 0 8px 30px rgba(20, 35, 75, .05); backdrop-filter: blur(14px);
+  margin: 0 0 14px; padding: 0; border: 0; background: transparent; box-shadow: none;
 }
-.race-navigation .controls { margin: 0 0 7px; }
+.race-daybar { display: flex; align-items: center; gap: 12px; margin-bottom: 13px; }
+.race-daybar button { width: 39px; height: 39px; border: 1px solid var(--border); border-radius: 11px; background: var(--panel); color: #4b5c75; cursor: pointer; font-size: 20px; }
+.race-daybar button:disabled { opacity: .32; cursor: default; }
+.race-day-label { font-size: 20px; font-weight: 900; }
+.race-day-label small { margin-left: 8px; color: var(--sub); font-size: 12px; font-weight: 650; }
+.race-day-freshness { margin-left: auto; color: var(--sub); font-size: 11px; }
+.race-navigation .controls { display: none; }
 .race-navigation .controls::before {
   content: '開催'; color: var(--sub); font-size: 10px; font-weight: 800; letter-spacing: .12em;
   text-transform: uppercase;
 }
 .race-navigation select { min-height: 38px; border-radius: 10px; border-color: var(--hairline); font-weight: 700; }
-.race-navigation .racetabs { margin: 3px 0 7px; gap: 5px; }
+.race-navigation .racetabs { flex-wrap: nowrap; gap: 7px; margin: 0; padding: 3px 2px 12px; overflow-x: auto; scrollbar-width: thin; }
 .race-navigation .racetabs button {
-  position: relative; width: 47px; min-height: 38px; border-radius: 10px; border-color: var(--hairline);
-  background: var(--surface-2); font-weight: 800; transition: transform .16s ease, box-shadow .16s ease;
+  position: relative; flex: 0 0 66px; width: 66px; min-height: 55px; padding: 7px 4px; border-radius: 12px; border-color: var(--border);
+  background: var(--panel); color: var(--sub); font-weight: 800; transition: transform .16s ease, box-shadow .16s ease;
 }
+.race-navigation .racetabs button b { display: block; color: var(--text); font-size: 14px; }
+.race-navigation .racetabs button small { display: block; margin-top: 2px; color: var(--sub); font-size: 9px; font-weight: 600; }
 .race-navigation .racetabs button:hover { transform: translateY(-1px); }
 .race-navigation .racetabs button.active {
-  background: linear-gradient(145deg, color-mix(in srgb, var(--brand) 86%, #fff), var(--brand));
-  color: #fff; box-shadow: 0 7px 18px var(--glow);
+  border-color: #0b1830; background: #0b1830; color: #aebbd0; box-shadow: 0 8px 20px rgba(11,24,48,.17);
 }
+.race-navigation .racetabs button.active b { color: #fff; }
 .race-navigation .subtabs { margin: 0; padding-top: 7px; border-top: 1px solid var(--hairline); }
 .race-navigation .subtabs button {
   min-height: 39px; padding: 7px 15px; border-radius: 10px; border-color: transparent;
@@ -527,43 +556,38 @@ main { max-width: 1320px; }
 
 .race-hero-card {
   position: relative; overflow: hidden; margin: 12px 0; padding: clamp(18px, 3vw, 28px);
-  border: 1px solid color-mix(in srgb, var(--brand) 23%, var(--border)); border-radius: 22px;
+  border: 0; border-radius: 22px; color: #fff;
   background:
-    radial-gradient(circle at 92% 4%, color-mix(in srgb, var(--brand) 17%, transparent), transparent 37%),
-    linear-gradient(145deg, var(--panel), color-mix(in srgb, var(--panel) 91%, var(--brand-soft)));
-  box-shadow: 0 18px 44px rgba(18, 31, 72, .08);
+    radial-gradient(circle at 92% 4%, color-mix(in srgb, var(--track-accent) 38%, transparent), transparent 37%),
+    linear-gradient(120deg, #0b1830 0%, #123459 60%, var(--track-accent-deep) 130%);
+  box-shadow: var(--deck-shadow);
 }
 .race-hero-card::before {
-  content: ''; position: absolute; inset: 0 auto 0 0; width: 4px;
-  background: linear-gradient(var(--brand), color-mix(in srgb, var(--positive) 80%, var(--brand)));
+  content: ''; position: absolute; width: 330px; height: 330px; right: -120px; top: -190px;
+  border: 55px solid rgba(255,255,255,.055); border-radius: 50%;
 }
 .race-hero-top { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
 .race-identity { display: flex; align-items: center; gap: 15px; min-width: 0; }
-.race-number-orb {
-  flex: 0 0 auto; display: grid; place-items: center; width: 68px; height: 68px; border-radius: 21px;
-  color: #fff; background: linear-gradient(145deg, #3159f5, #14277b); box-shadow: 0 12px 26px var(--glow);
-  font-size: 23px; font-weight: 900; letter-spacing: -.04em;
-}
-.race-eyebrow { color: var(--brand); font-size: 10px; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
+.race-number-orb { display: none; }
+.race-eyebrow { color: #8ee6e8; font-size: 10px; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
 .race-title-block { min-width: 0; }
 .race-title-block h2 { margin: 5px 0 0; font-size: clamp(19px, 2.6vw, 29px); line-height: 1.2; }
-.race-title-block p { margin: 6px 0 0; color: var(--sub); font-size: 12px; }
+.race-title-block p { margin: 6px 0 0; color: #d9e4f2; font-size: 12px; }
 .race-start-panel {
-  flex: 0 0 auto; min-width: 140px; padding: 12px 16px; border: 1px solid var(--hairline);
-  border-radius: 15px; background: color-mix(in srgb, var(--panel) 73%, transparent); text-align: right;
+  flex: 0 0 auto; min-width: 140px; padding: 8px 0; border: 0; background: transparent; text-align: right;
 }
-.race-start-panel span { display: block; color: var(--sub); font-size: 9px; font-weight: 800; letter-spacing: .1em; }
+.race-start-panel span { display: block; color: #adbbce; font-size: 9px; font-weight: 800; letter-spacing: .1em; }
 .race-start-panel b { display: block; margin-top: 2px; font-size: 25px; font-variant-numeric: tabular-nums; }
 .race-start-panel .countdown { margin-top: 3px; font-size: 11px; }
 .race-facts { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 18px; }
 .race-fact {
   display: inline-flex; align-items: center; gap: 5px; min-height: 31px; padding: 6px 10px;
-  border: 1px solid var(--hairline); border-radius: 10px; background: var(--surface-2); color: var(--sub); font-size: 11px;
+  border: 1px solid rgba(255,255,255,.1); border-radius: 9px; background: rgba(255,255,255,.09); color: #d9e4f2; font-size: 11px;
 }
-.race-fact b { color: var(--text); font-size: 12px; }
+.race-fact b { color: #fff; font-size: 12px; }
 .race-hero-card .pacebar { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
-.race-hero-card .pacebar span { padding: 5px 9px; border-radius: 9px; background: var(--brand-soft); color: var(--sub); font-size: 10px; }
-.race-hero-card .pacebar b { color: var(--brand); }
+.race-hero-card .pacebar span { padding: 5px 9px; border-radius: 9px; background: rgba(255,255,255,.09); color: #d9e4f2; font-size: 10px; }
+.race-hero-card .pacebar b { color: #fff; }
 .race-hero-card .backbtn-row { position: absolute; right: 16px; top: 14px; }
 
 .forecast-overview {
@@ -622,17 +646,17 @@ main { max-width: 1320px; }
 .signal-live::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--positive); box-shadow: 0 0 0 4px var(--positive-soft); }
 
 /* 承認済みモック: 軸・価格差・危険人気を最初の一画面で判断する。 */
-.decision-cockpit { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 10px; margin: 12px 0 10px; }
+.decision-cockpit { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 12px; margin: 14px 0; }
 .decision-pick {
   position: relative; min-width: 0; padding: 16px; overflow: hidden; border: 1px solid var(--hairline);
   border-radius: 16px; background: var(--panel); box-shadow: 0 8px 24px rgba(20, 35, 75, .055);
 }
 .decision-pick.primary { border-color: color-mix(in srgb, var(--brand) 42%, var(--border)); background: linear-gradient(145deg, var(--panel), var(--brand-soft)); }
-.decision-pick.value { border-color: color-mix(in srgb, var(--positive) 36%, var(--border)); }
+.decision-pick.value { border-color: color-mix(in srgb, var(--note) 36%, var(--border)); }
 .decision-pick.risk { border-color: color-mix(in srgb, var(--danger) 30%, var(--border)); }
 .decision-label { padding-right: 40px; color: var(--sub); font-size: 9px; font-weight: 850; letter-spacing: .09em; }
 .decision-mark { position: absolute; right: 13px; top: 12px; display: grid; place-items: center; width: 33px; height: 33px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); font-size: 18px; font-weight: 900; }
-.decision-pick.value .decision-mark { background: var(--positive-soft); color: var(--positive); }
+.decision-pick.value .decision-mark { background: #fff2df; color: var(--note); }
 .decision-pick.risk .decision-mark { background: var(--danger-soft); color: var(--danger); }
 .decision-horse { overflow: hidden; margin-top: 9px; padding-right: 30px; white-space: nowrap; text-overflow: ellipsis; font-size: 17px; font-weight: 900; }
 .decision-meta { margin-top: 3px; color: var(--sub); font-size: 10px; }
@@ -642,7 +666,7 @@ main { max-width: 1320px; }
 .decision-metric span { display: block; margin-top: 2px; color: var(--sub); font-size: 8px; }
 .decision-reason { min-height: 36px; margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--hairline); color: var(--sub); font-size: 10px; line-height: 1.55; }
 .decision-empty .decision-horse { color: var(--sub); font-size: 14px; }
-.decision-verdict { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; padding: 10px 13px; border: 1px solid var(--hairline); border-radius: 13px; background: var(--surface-2); }
+.decision-verdict { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; padding: 12px 15px; border: 1px solid var(--hairline); border-radius: 14px; background: var(--panel); }
 .decision-confidence { color: var(--brand); font-weight: 900; white-space: nowrap; }
 .decision-verdict-text { min-width: 0; flex: 1; color: var(--sub); font-size: 11px; line-height: 1.5; }
 .decision-action { padding: 6px 10px; border-radius: 99px; font-size: 10px; font-weight: 850; white-space: nowrap; }
@@ -812,6 +836,12 @@ main { max-width: 1320px; }
   .prediction-disclosure { margin: 11px 3px 15px; }
   .danwa-card { border-radius: 15px; }
 }
+@media (max-width: 650px) {
+  .decision-cockpit { grid-template-columns: 1fr; }
+  .decision-pick.primary { grid-column: auto; }
+  .race-day-label { font-size: 17px; }
+  .race-day-freshness { display: none; }
+}
 @media (max-width: 480px) {
   .decision-cockpit { grid-template-columns: 1fr; }
   .decision-pick.primary { grid-column: auto; }
@@ -826,24 +856,33 @@ main { max-width: 1320px; }
     <span class="brand-copy"><h1>KEIBA PULSE</h1><small>地方競馬を、判断しやすく。</small></span>
   </div>
   <div class="trackswitch" id="trackSwitch"></div>
+  <div class="top-meta" id="topDataStatus">データ確認中</div>
   <div class="viewtabs" id="viewTabs"></div>
 </header>
 <main class="app-layout">
   <aside class="desktop-rail" aria-label="メインメニュー">
     <div class="rail-head"><small>RACE MENU</small><strong id="railTrack">門別</strong></div>
     <nav class="rail-nav" id="railNav">
-      <button data-rail-view="deck" onclick="switchView('deck')"><span class="rail-icon">★</span><span>今日</span></button>
-      <button data-rail-view="race" onclick="switchView('race')"><span class="rail-icon">▦</span><span>レース</span></button>
-      <button data-rail-view="analysis" onclick="switchView('analysis')"><span class="rail-icon">⌁</span><span>分析</span></button>
-      <button data-rail-view="cyokyo" onclick="switchView('cyokyo')"><span class="rail-icon">◫</span><span>調教</span></button>
-      <button data-rail-view="noken" onclick="switchView('noken')"><span class="rail-icon">◎</span><span>能検</span></button>
+      <button data-rail-section="yosou" onclick="openRailSection('yosou')"><span class="rail-icon">★</span><span>AI予想</span></button>
+      <button data-rail-section="syutuba" onclick="openRailSection('syutuba')"><span class="rail-icon">▦</span><span>出馬表</span></button>
+      <button data-rail-section="odds" onclick="openRailSection('odds')"><span class="rail-icon">⌁</span><span>オッズ</span></button>
+      <button data-rail-section="seiseki" onclick="openRailSection('seiseki')"><span class="rail-icon">▥</span><span>結果</span></button>
+      <button data-rail-section="cyokyo" onclick="openRailSection('cyokyo')"><span class="rail-icon">◫</span><span>調教</span></button>
+      <button data-rail-section="noken" onclick="openRailSection('noken')"><span class="rail-icon">◎</span><span>能検</span></button>
+      <button data-rail-section="sim" onclick="openRailSection('sim')"><span class="rail-icon">▶</span><span>シミュレータ</span></button>
     </nav>
-    <div class="rail-foot"><b>KEIBA PULSE</b>能力評価と市場評価を分けて、買う理由を短く表示します。</div>
+    <div class="rail-foot"><b>KEIBA PULSE</b>能力評価と市場価格を分けて、買う理由を短く表示します。</div>
   </aside>
   <div class="app-content">
     <div id="deckRoot"><div class="empty">今日のレースを準備中…</div></div>
     <div id="raceRoot" hidden>
     <section class="race-navigation" aria-label="レースナビゲーション">
+      <div class="race-daybar">
+        <button id="racePrevDay" onclick="stepRaceDate(-1)" aria-label="前の開催日">‹</button>
+        <div class="race-day-label" id="raceDayLabel">開催日を確認中</div>
+        <button id="raceNextDay" onclick="stepRaceDate(1)" aria-label="次の開催日">›</button>
+        <span class="race-day-freshness" id="raceDayFreshness">出馬表・オッズを確認中</span>
+      </div>
       <div class="controls">
         <label>月 <select id="monthSel" aria-label="開催月"></select></label>
         <label>日 <select id="dateSel" aria-label="開催日"></select></label>
@@ -1120,7 +1159,7 @@ const providers = {
 };
 
 const state = { provider: null, dates: {}, month: null, date: null, raceId: null, track: '門別',
-  sub: 'yosou', stats: null, model: null, view: 'deck', prevRace: null,
+  sub: 'yosou', railSection: 'yosou', stats: null, model: null, view: 'deck', prevRace: null,
   noken: null, nokenDate: null, nokenSort: 'race', nokenTwoOnly: false, nokenHist: null, nokenByHorse: null,
   v3Predictions: null, deckDataCheckedAt: null, deckRefreshBusy: false, deckRefreshError: null,
   dayResults: {}, dayResultsFetchedAt: {}, dayResultsLoading: new Set() };
@@ -1445,11 +1484,29 @@ function renderDates() {
   const ds = Object.keys(state.dates).filter((d) => d.startsWith(state.month));
   $('dateSel').innerHTML = ds.map((d) => `<option value="${d}">${d.slice(5)}</option>`).join('');
   $('dateSel').value = state.date;
+  updateRaceDaybar();
+}
+function updateRaceDaybar() {
+  const label = $('raceDayLabel');
+  if (!label || !state.date) return;
+  const dates = Object.keys(state.dates).sort();
+  const index = dates.indexOf(state.date);
+  label.innerHTML = `${deckDateLabel(state.date)} <small>${esc(state.track)}開催</small>`;
+  $('racePrevDay').disabled = index <= 0;
+  $('raceNextDay').disabled = index < 0 || index >= dates.length - 1;
+  const freshness = $('raceDayFreshness');
+  if (freshness) freshness.textContent = '出馬表・オッズは表示時点の最新値';
+}
+function stepRaceDate(offset) {
+  const dates = Object.keys(state.dates).sort();
+  const index = dates.indexOf(state.date);
+  const next = dates[index + offset];
+  if (next) selectDate(next);
 }
 function renderTabs() {
   const races = state.dates[state.date] || [];
   $('raceTabs').innerHTML = races.map((r) =>
-    `<button data-id="${r.race_id}" class="${r.race_id === state.raceId ? 'active' : ''}">${r.race_no}R</button>`).join('');
+    `<button data-id="${r.race_id}" class="${r.race_id === state.raceId ? 'active' : ''}"><b>${r.race_no}R</b><small>${esc(r.hasso_time || '--:--')}</small></button>`).join('');
 }
 
 // ---- 今日のレースデッキ：情報を探す前に「次・AI最上位・判断」を一画面で示す ----
@@ -1766,10 +1823,12 @@ function renderViewTabs() {
   $('viewTabs').innerHTML = html;
   const railTrack = $('railTrack');
   if (railTrack) railTrack.textContent = state.track;
-  document.querySelectorAll('[data-rail-view]').forEach((button) => {
-    const view = button.dataset.railView;
-    button.classList.toggle('active', view === state.view);
-    button.hidden = view === 'noken' && !cfg.noken;
+  const activeSection = state.view === 'cyokyo' ? 'cyokyo' : state.view === 'noken' ? 'noken'
+    : state.view === 'race' ? (state.railSection || state.sub) : '';
+  document.querySelectorAll('[data-rail-section]').forEach((button) => {
+    const section = button.dataset.railSection;
+    button.classList.toggle('active', section === activeSection);
+    button.hidden = (section === 'noken' && !cfg.noken) || (section === 'sim' && !cfg.sim);
   });
 }
 function renderSubTabs() {
@@ -4469,11 +4528,26 @@ async function switchView(v) {
   if (v === 'race' && !state.raceId) {
     const races = state.dates[state.date] || [];
     const target = deckFocusRace(races, state.date) || races[0];
-    if (target) selectRace(target.race_id, 'yosou');
+    if (target) await selectRace(target.race_id, 'yosou');
   }
   if (v === 'analysis') await renderAnalysis();
   if (v === 'cyokyo') await renderCyokyo();
   if (v === 'noken') await renderNoken();
+}
+async function openRailSection(section) {
+  state.railSection = section;
+  if (section === 'cyokyo' || section === 'noken') { await switchView(section); return; }
+  if (section === 'sim') { location.href = `simulator.html?track=${encodeURIComponent(state.track)}`; return; }
+  const targetSub = section === 'odds' ? 'yosou' : section;
+  state.sub = targetSub;
+  await switchView('race');
+  if (state.raceId) await selectRace(state.raceId, targetSub);
+  state.railSection = section;
+  renderViewTabs();
+  if (section === 'odds') {
+    const target = document.querySelector('.forecast-table-card, .forecast-workspace');
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 }
 // 調教表の追切日タップ→その日の調教デイビューへ移動（同じ日に走った他馬とも比較できる）
 async function openCyokyoDate(dateStr) {
@@ -4735,6 +4809,7 @@ async function selectRace(raceId, sub) {
   state.raceId = raceId;
   const meta = (state.dates[state.date] || []).find((r) => r.race_id === raceId);
   state.sub = sub || (meta && meta.entries_only ? 'yosou' : state.sub || 'seiseki');
+  if (sub) state.railSection = sub;
   renderTabs();
   renderSubTabs();
   location.hash = `${state.date}/${raceId}`;
@@ -4817,7 +4892,7 @@ function selectDate(d) {
 function renderTrackSwitch() {
   document.body.dataset.track = state.track;
   const today = state.todayTracks;   // {場: R数} / 未取得なら undefined
-  $('trackSwitch').innerHTML = Object.keys(TRACKS).map((t) => {
+  $('trackSwitch').innerHTML = ['門別', '大井'].map((t) => {
     const cfg = TRACKS[t];
     let badge = '';
     let cls = t === state.track ? 'active' : '';
@@ -4829,6 +4904,8 @@ function renderTrackSwitch() {
     }
     return `<button class="${cls}" data-track="${t}">${t}${badge}</button>`;
   }).join('');
+  const status = $('topDataStatus');
+  if (status) status.textContent = `${state.track}データ確認済み`;
 }
 
 // ---- レースを探す（条件でレースを横断） ----------------------------------
@@ -5002,7 +5079,7 @@ async function init() {
   });
   $('subTabs').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-sub]');
-    if (b) { state.sub = b.dataset.sub; renderSubTabs(); renderRaceView(); }
+    if (b) { state.sub = b.dataset.sub; state.railSection = b.dataset.sub; renderViewTabs(); renderSubTabs(); renderRaceView(); }
   });
   $('viewTabs').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-view]');
@@ -5101,7 +5178,7 @@ async function init() {
     try { saved = localStorage.getItem(`nk_last_date_${trackCfg().prefix}`); } catch (e) { /* 無視 */ }
     const today = jstToday();
     setDeckDate((saved && state.dates[saved]) ? saved : (state.dates[today] ? today : dates[0]));
-    switchView('deck');
+    await switchView('race');
   }
   // ブラウザの戻る/進むボタンでレース間を移動できるように
   window.addEventListener('hashchange', () => {
