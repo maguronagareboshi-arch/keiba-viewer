@@ -1098,6 +1098,25 @@ const providers = {
       } catch (e) { /* ローカルへ */ }
       return providers.local.loadV3Predictions();
     },
+    async loadV3RaceArchive(raceId) {
+      if (!trackCfg().ai || !raceId) return null;
+      try {
+        const key = `${trackCfg().prefix}_v3_race_${raceId}`;
+        const rows = await sbGet(`chihou_meta?key=eq.${key}&select=value`);
+        return rows.length && rows[0].value ? (rows[0].value.race || null) : null;
+      } catch (e) { return null; }
+    },
+    async hasRecordedPreRaceOdds(raceDate, raceNo, hassoTime) {
+      // 現在、汎用の時系列オッズ保存表があるのは門別だけ。
+      if (state.track !== '門別' || !raceDate || !raceNo || !hassoTime) return false;
+      const match = String(hassoTime).match(/^(\d{1,2}):(\d{2})/);
+      if (!match) return false;
+      const postAt = new Date(`${raceDate}T${String(match[1]).padStart(2, '0')}:${match[2]}:00+09:00`).toISOString();
+      try {
+        const rows = await sbGet(`monbetsu_odds?race_date=eq.${raceDate}&race_no=eq.${raceNo}&captured_at=lt.${encodeURIComponent(postAt)}&select=captured_at&limit=1`);
+        return rows.length > 0;
+      } catch (e) { return false; }
+    },
     async loadNoken() {
       try {
         const rows = await sbGet(`chihou_meta?key=eq.${trackCfg().prefix}_noken&select=value`);
@@ -1166,6 +1185,8 @@ const providers = {
       if (state.track !== '門別') return null;
       try { return await jsonGet('data/monbetsu_v3_predictions.json'); } catch (e) { return null; }
     },
+    async loadV3RaceArchive() { return null; },
+    async hasRecordedPreRaceOdds() { return false; },
     async loadNoken() {
       try { return await jsonGet('data/noken.json'); } catch (e) { return null; }
     },
@@ -1176,7 +1197,8 @@ const providers = {
 const state = { provider: null, dates: {}, month: null, date: null, raceId: null, track: '門別',
   sub: 'yosou', railSection: 'yosou', stats: null, model: null, view: 'deck', prevRace: null,
   noken: null, nokenDate: null, nokenSort: 'race', nokenTwoOnly: false, nokenHist: null, nokenByHorse: null,
-  v3Predictions: null, deckDataCheckedAt: null, deckRefreshBusy: false, deckRefreshError: null,
+  v3Predictions: null, v3ArchiveChecked: {}, preRaceOddsCoverage: {},
+  deckDataCheckedAt: null, deckRefreshBusy: false, deckRefreshError: null,
   dayResults: {}, dayResultsFetchedAt: {}, dayResultsLoading: new Set() };
 
 // ============================================================
@@ -1866,6 +1888,40 @@ function renderViewTabs() {
     button.classList.toggle('active', section === activeSection);
     button.hidden = (section === 'noken' && !cfg.noken) || (section === 'sim' && !cfg.sim);
   });
+}
+
+async function ensureArchivedV3Race(raceId) {
+  if (!raceId || typeof state.provider.loadV3RaceArchive !== 'function') return deckV3Race(raceId);
+  const current = deckV3Race(raceId);
+  // The rolling card is enough once it already contains the price receipt.
+  if (current && current.v5_shadow) return current;
+  const cacheKey = `${state.track}:${raceId}`;
+  const checkedAt = Number(state.v3ArchiveChecked[cacheKey] || 0);
+  if (Date.now() - checkedAt < 60000) return current;
+  state.v3ArchiveChecked[cacheKey] = Date.now();
+  const archived = await state.provider.loadV3RaceArchive(raceId);
+  if (!archived) return current;
+  if (!state.v3Predictions) state.v3Predictions = { races: {} };
+  if (!state.v3Predictions.races) state.v3Predictions.races = {};
+  // Prefer the durable row when it contains a T-10 price receipt that the
+  // rolling daily card has not picked up yet.
+  state.v3Predictions.races[raceId] = archived;
+  return state.v3Predictions.races[raceId];
+}
+
+async function ensurePreRaceOddsCoverage(raceId, raceMeta) {
+  const key = `${state.track}:${raceId}`;
+  if (Object.prototype.hasOwnProperty.call(state.preRaceOddsCoverage, key)) {
+    return state.preRaceOddsCoverage[key];
+  }
+  const has = typeof state.provider.hasRecordedPreRaceOdds === 'function'
+    ? await state.provider.hasRecordedPreRaceOdds(
+      raceMeta.race_date || raceMeta.date || state.date,
+      raceMeta.race_no,
+      raceMeta.hasso_time,
+    ) : false;
+  state.preRaceOddsCoverage[key] = !!has;
+  return !!has;
 }
 function renderSubTabs() {
   $('subTabs').hidden = false;
@@ -2786,7 +2842,7 @@ function evCellState(mode, low, mid, odds, priceWindowOpen) {
   if (mode === 'none' || !evFinite(mid)) return { cls: 'ev-unknown', main: '-', note: '実績なし' };
   if (!(odds > 0)) return { cls: 'ev-unknown', main: '-', note: 'オッズ待ち' };
   // 終了後の確定オッズで「期待値があった」と後付けしない。保存済みの発走前判定はv5 receipt側だけで表示する。
-  if (!priceWindowOpen) return { cls: 'ev-unknown', main: '-', note: '発走前記録なし' };
+  if (!priceWindowOpen) return { cls: 'ev-unknown', main: '-', note: '価格判定記録なし' };
   if (mode === 'v3' && evFinite(low)) {
     const conservative = +low * odds;
     const cls = conservative >= EV_CANDIDATE ? 'ev-positive' : (conservative >= EV_BREAKEVEN ? 'ev-watch' : 'ev-negative');
@@ -2813,6 +2869,8 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
   if (!entries.length) return raceHeaderHtml(raceMeta) + '<div class="empty">出馬表データがありません</div>';
   const raceFinished = raceIsFinished(raceMeta);
   const priceWindowOpen = !raceFinished;
+  const coverageKey = `${state.track}:${raceMeta.race_id || state.raceId}`;
+  const preRaceOddsSaved = !!state.preRaceOddsCoverage[coverageKey];
   const cyoByUma = {};
   for (const c of cyokyo) cyoByUma[c.umaban] = c;
   const nouByUma = {};
@@ -3003,6 +3061,10 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
     .sort((a, b) => (b.index + 1 - Number(b.r.e.pop)) - (a.index + 1 - Number(a.r.e.pop)))[0];
   const riskChoice = validatedDanger || (popularityMismatch && popularityMismatch.r) || null;
   const riskValidated = !!validatedDanger;
+  const missingPriceTitle = preRaceOddsSaved ? '発走前オッズ保存済み' : '発走前記録なし';
+  const missingPriceReason = preRaceOddsSaved
+    ? 'オッズ履歴は保存されていますが、当時のAI価格判定レシートがありません。確定後の後付け計算は行いません。'
+    : '発走前オッズとAI価格判定レシートがありません。確定後の後付け計算は行いません。';
 
   const decisionCockpit = (() => {
     if (!leader) return '';
@@ -3032,9 +3094,9 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
       </article>`;
     })() : `<article class="decision-pick value decision-empty">
       <div class="decision-label">人気以上の評価 · 期待値候補</div><span class="decision-mark">☆</span>
-      <div class="decision-horse">${raceFinished && !v5Shadow ? '発走前オッズ未保存' : (hasV3 ? '基準を超える馬なし' : '発走前の価格判定待ち')}</div>
-      <div class="decision-meta">能力順位はオッズと分けて確定済み</div>
-      <div class="decision-reason">${raceFinished && !v5Shadow ? '終了済みです。確定オッズを使った後付けの価格判定は行いません。' : (hasV3 ? '厳しめ期待値が基準へ届く馬は現在いません。' : '較正済み確率と発走前オッズが揃った場合だけ表示します。')}</div>
+      <div class="decision-horse">${raceFinished && !v5Shadow ? missingPriceTitle : (hasV3 ? '基準を超える馬なし' : '発走前の価格判定待ち')}</div>
+      <div class="decision-meta">${raceFinished && !v5Shadow && preRaceOddsSaved ? 'AI価格判定レシートなし' : '能力順位はオッズと分けて確定済み'}</div>
+      <div class="decision-reason">${raceFinished && !v5Shadow ? missingPriceReason : (hasV3 ? '厳しめ期待値が基準へ届く馬は現在いません。' : '較正済み確率と発走前オッズが揃った場合だけ表示します。')}</div>
     </article>`;
     const riskCard = riskChoice ? (() => {
       const rank = disp.indexOf(riskChoice) + 1;
@@ -3052,10 +3114,10 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
       <div class="decision-reason">危険人気を無理に作らず、明確な条件に該当した場合だけ表示します。</div>
     </article>`;
     const actionKind = topTicket ? 'buy' : (v5Shadow ? 'pass' : 'pending');
-    const actionLabel = topTicket ? '買い候補' : (v5Shadow ? '今回は見送り' : (raceFinished ? '価格検証不可' : '価格判定待ち'));
+    const actionLabel = topTicket ? '買い候補' : (v5Shadow ? '今回は見送り' : (raceFinished ? (preRaceOddsSaved ? 'AI判定記録なし' : '価格記録なし') : '価格判定待ち'));
     const verdict = topTicket
       ? `◎${esc(leader.e.horse_name)}を能力軸に、${esc(V5_TICKET_LABELS[topTicket.ticket_type] || topTicket.ticket_type)} ${esc(topTicket.combination)}が最上位候補。実際の購入は0円で記録中です。`
-      : (v5Shadow ? `◎${esc(leader.e.horse_name)}が能力最上位。厳しめ条件では買い目候補が基準に届きません。` : (raceFinished ? `◎${esc(leader.e.horse_name)}が能力最上位。発走前オッズの保存がないため、このレースの価格検証はできません。` : `◎${esc(leader.e.horse_name)}が能力最上位。発走前オッズが揃ってから価格判断を行います。`));
+      : (v5Shadow ? `◎${esc(leader.e.horse_name)}が能力最上位。厳しめ条件では買い目候補が基準に届きません。` : (raceFinished ? `◎${esc(leader.e.horse_name)}が能力最上位。${missingPriceReason}` : `◎${esc(leader.e.horse_name)}が能力最上位。発走前オッズが揃ってから価格判断を行います。`));
     return `<section class="decision-cockpit" aria-label="このレースの判断">${leaderCard}${valueCard}${riskCard}</section>
       <div class="decision-verdict"><span class="decision-confidence">◎信頼度 ${confidence ? `${confidence.tier} · ${esc(confidence.label)}` : '計算待ち'}</span><span class="decision-verdict-text">${verdict}</span><span class="decision-action ${actionKind}">${actionLabel}</span></div>`;
   })();
@@ -3077,7 +3139,7 @@ function yosouHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
     <div class="forecast-side">
       <div class="forecast-side-head"><b>上位評価</b><span>数字より先に序列を読む</span></div>
       <div class="contender-grid">${contenderCards}</div>
-      <div class="forecast-insight"><div><span>買い目判断</span><b>${topTicket ? `${esc(V5_TICKET_LABELS[topTicket.ticket_type] || topTicket.ticket_type)} ${esc(topTicket.combination)}` : (v5Shadow ? '今回は見送り' : (raceFinished ? '発走前記録なし' : '発走前の判定待ち'))}</b></div><div><span>現在の扱い</span><b>成績を記録中 · 実際の購入0円</b></div></div>
+      <div class="forecast-insight"><div><span>買い目判断</span><b>${topTicket ? `${esc(V5_TICKET_LABELS[topTicket.ticket_type] || topTicket.ticket_type)} ${esc(topTicket.combination)}` : (v5Shadow ? '今回は見送り' : (raceFinished ? missingPriceTitle : '発走前の判定待ち'))}</b></div><div><span>現在の扱い</span><b>成績を記録中 · 実際の購入0円</b></div></div>
     </div>
   </section>` : '';
 
@@ -3693,6 +3755,16 @@ async function renderRaceView() {
     return;
   }
   try {
+    // 日次カードは翌日に上書きされるため、過去レースはレースID単位の
+    // 永続レシートを先に補完する。門別はオッズ保存の有無も別系統で確認する。
+    const listedMeta = (state.dates[state.date] || []).find((r) => r.race_id === raceId) || {};
+    await Promise.all([
+      ensureArchivedV3Race(raceId),
+      state.sub === 'yosou' && raceIsFinished({ ...listedMeta, race_date: state.date })
+        ? ensurePreRaceOddsCoverage(raceId, { ...listedMeta, race_date: state.date })
+        : Promise.resolve(false),
+    ]);
+    if (!fresh()) return;
     if (state.sub === 'seiseki') {
       const data = await state.provider.loadRace(raceId);
       if (!fresh()) return;
