@@ -27,7 +27,7 @@
     betaCurrent:1.191459575752015,
     gates:Object.freeze({ oddsMin:5, oddsMax:20, marketRankMin:4, currentRankMax:5, evMin:0.75 }),
     capture:Object.freeze({ minutesMin:10, minutesMax:10.9, maxMarketAgeMinutes:2,
-      maxFetchDurationSeconds:120, source:'keiba.go.jp/OddsTanFuku', maxPicksPerRace:1 }),
+      maxFetchDurationSeconds:120, source:'first_party_worker:keiba.go.jp/OddsTanFuku', maxPicksPerRace:1 }),
     confirmation:Object.freeze({ years:'2025-2026', bets:273, roi:104.18,
       dayBootstrap95:Object.freeze([68.28,144.49]), roiWithoutTopPayout:95.05, maxLosingStreak:37,
       currentScoreCaveat:'104.18% historical confirmation used legacy_v2_anchor.score_approx; the deployed live totalScore stream requires independent forward validation' }),
@@ -118,6 +118,10 @@
       return {
         horse:{ umaBan:row && row.u, horseName:String(row && row.name || '') },
         totalScore:row && row.currentScore,
+        siCount:row && row.quality && row.quality.siCount,
+        kochiSICount:row && row.quality && row.quality.kochiSICount,
+        isTransfer:!!(row && row.quality && row.quality.isTransfer),
+        isEstimatedScore:!!(row && row.quality && row.quality.isEstimatedScore),
         baseScore:f.base, condMod:f.condNew, distMod:f.distNew, rotMod:f.rotN,
         classMod:f.clsN, _cornModRaw:f.cornN, trendMod:f.trendN,
         weightMod:f.weightN, agariMod:f.agariN, comboMod:f.comboN,
@@ -132,6 +136,8 @@
     if (!Array.isArray(marketRows) || marketRows.length !== scored.length) return { ok:false, reason:'RUNNER_UNIVERSE_MISMATCH', rows:[], candidate:null };
     const runners = scored.map(s => ({
       scored:s, u:uma(s?.horse?.umaBan), name:String(s?.horse?.horseName || ''), currentScore:finite(s?.totalScore), feat:normalizedFeatures(s || {}),
+      quality:{ siCount:Number(s?.siCount || 0), kochiSICount:Number(s?.kochiSICount || 0),
+        isTransfer:!!s?.isTransfer, isEstimatedScore:!!s?.isEstimatedScore },
     }));
     const market = marketRows.map(r => ({ u:uma(r?.u ?? r?.umaBan), odds:finite(r?.odds) }));
     if (runners.some(r => r.u == null || r.currentScore == null) || new Set(runners.map(r => r.u)).size !== runners.length) {
@@ -147,6 +153,7 @@
     const inputRows = runners.map(r => ({
       u:r.u, name:r.name, currentScore:r.currentScore,
       features:Object.fromEntries(MODEL.additive.features.map(key => [key, r.feat[key]])),
+      quality:{ ...r.quality, missingFeatureCount:MODEL.additive.features.filter(key => r.feat[key] == null).length },
       odds:oddsByU.get(r.u),
     })).sort((a,b) => a.u - b.u);
     const abilityOrder = runners.slice().sort((a,b) => b.currentScore - a.currentScore || a.u - b.u);
@@ -238,6 +245,29 @@
       rankingModel:live.rankingModel, rankingModelFingerprint:live.rankingModel.fingerprint };
   }
 
+  function persistServerSnapshot(key, snapshot) {
+    const upsert = root && root.apiUpsert;
+    if (typeof upsert !== 'function') return;
+    const id = `t10_31_${snapshot.raceDate.replace(/\D/g,'')}_${String(snapshot.raceNo).padStart(2,'0')}`;
+    Promise.resolve(upsert('keiba_value_t10_ledger', id, {
+      baba_code:'31', race_date:snapshot.raceDate, race_no:snapshot.raceNo,
+      scheduled_post_at:snapshot.scheduledStartAt, status:snapshot.selected == null ? 'no_bet' : 'saved',
+      transport:'first_party_worker', runner_count:snapshot.runnerSet.length,
+      model_fingerprint:snapshot.model.fingerprint, payload:snapshot,
+    })).then(() => {
+      const read = root && root.lsRead, write = root && root.lsWrite;
+      if (typeof read !== 'function' || typeof write !== 'function') return;
+      const current = read()[key];
+      if (current) write(key, { ...current, serverSync:'saved', serverSyncedAt:new Date().toISOString() });
+    }).catch(error => {
+      const read = root && root.lsRead, write = root && root.lsWrite;
+      if (typeof read === 'function' && typeof write === 'function') {
+        const current = read()[key];
+        if (current) write(key, { ...current, serverSync:'failed', serverSyncError:String(error && error.message || error).slice(0,240) });
+      }
+    });
+  }
+
   function captureLive(raceNo, scored) {
     try {
       const admin = root && root.isAdminMode, read = root && root.lsRead, write = root && root.lsWrite;
@@ -287,7 +317,7 @@
       const key = `${SNAPSHOT_KEY_PREFIX}|31|${result.raceDate.replace(/\D/g,'')}|${String(result.raceNo).padStart(2,'0')}|${modelFingerprint}|${rankingModel.fingerprint}|${inputFingerprint}`;
       if (read()[key]) return { saved:false, reason:'DUPLICATE', key, result };
       const storedRows = result.rows.map(r => ({...r})).sort((a,b) => a.u - b.u);
-      write(key, {
+      const snapshot = {
         type:SNAPSHOT_TYPE, schema:SNAPSHOT_SCHEMA, status:'forward_shadow_only', publicEligible:false,
         babaCode:'31', raceDate:result.raceDate, raceNo:result.raceNo, capturedAt,
         scheduledStartAt, minutesBeforeStart, timing:'verified_prestart',
@@ -297,7 +327,10 @@
         input, inputFingerprint, runnerSet, rows:storedRows,
         selected:result.candidate ? result.candidate.u : null,
         selectionReason:result.reason,
-      });
+        serverSync:'pending',
+      };
+      write(key, snapshot);
+      persistServerSnapshot(key, snapshot);
       return { saved:true, key, result };
     } catch (e) { return { saved:false, reason:'WRITE_ERROR', error:String(e && e.message || e) }; }
   }
@@ -505,6 +538,9 @@
       counts.selections++;
       const payouts = tanPayouts(payoutRecord);
       if (!payouts.length) { counts.pendingPayout++; continue; }
+      const resultWinners = [...statuses.entries()].filter(([,status]) => status.finish === 1).map(([u]) => u).sort((a,b) => a-b);
+      const payoutWinners = payouts.map(payout => payout.u).sort((a,b) => a-b);
+      if (!same(resultWinners, payoutWinners)) { counts.invalidUniverse++; continue; }
       counts.settledSelections++; stake += 100;
       const winningPayout = payouts.find(payout => payout.u === selected) || null;
       const hit = !!winningPayout, pay = winningPayout ? winningPayout.pay : 0;

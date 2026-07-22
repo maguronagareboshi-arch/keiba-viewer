@@ -53,18 +53,24 @@
     const winRate = stat.win / stat.n, top3Rate = stat.top3 / stat.n;
     const winLow = wilsonLower(stat.win, stat.n, 1.645), top3Low = wilsonLower(stat.top3, stat.n, 1.645);
     const label = winLow >= .40 && top3Low >= .70 ? '高' : winLow >= .20 && top3Low >= .50 ? '中' : '慎重';
-    return { label, className:label === '高' ? 'high' : label === '中' ? 'mid' : 'low', band,
+    return { label, kind:'market_band_history', className:label === '高' ? 'high' : label === '中' ? 'mid' : 'low', band,
       requestedBand, n:stat.n, winRate, top3Rate, winLow, top3Low,
-      source:`監査済み固定評価 ${INSIGHTS.raceCount}R（${INSIGHTS.startDate}〜${INSIGHTS.endDate}）` };
+      source:`同人気帯における◎の過去成績 ${INSIGHTS.raceCount}R（${INSIGHTS.startDate}〜${INSIGHTS.endDate}）。AI勝率ではありません` };
   }
   function reasonFor(row) {
     if (typeof _cockpitReasonFor === 'function') return _cockpitReasonFor(row);
     return '総合評価上位';
   }
   function runnerSignature(data) {
-    const rows = (data && data.horses || []).map(h => [parseInt(h.umaBan, 10) || null, String(h.horseName || '')])
+    const race = data && data.raceInfo || {};
+    const rows = (data && data.horses || []).map(h => [
+      parseInt(h.umaBan, 10) || null, String(h.horseName || ''), String(h.jockey || ''),
+      String(h.trainer || ''), String(h.kinryo || ''), String(h.weight || ''), String(h.sexAge || ''),
+    ])
       .sort((a, b) => (a[0] || 0) - (b[0] || 0));
-    return typeof _aiFingerprint === 'function' ? _aiFingerprint(rows) : JSON.stringify(rows);
+    const signatureInput = { distance:String(race.distance || ''), trackCond:String(race.trackCond || ''),
+      raceClass:String(race.raceClass || ''), runners:rows };
+    return typeof _aiFingerprint === 'function' ? _aiFingerprint(signatureInput) : JSON.stringify(signatureInput);
   }
   function findValuePick(raceNo, result, scored) {
     // 旧EVモデルは最終オッズ混入のため廃止。新T10モデルは管理者のforward shadowへ隔離し、
@@ -205,7 +211,7 @@
     if (gap < 2) risks.push('上位評価が接近');
     if (!value) risks.push('明確な妙味なし');
     if (!risks.length) risks.push('大きな不安材料なし');
-    const decision = `<div class="cockpit-decision"><span class="decision-chip is-${confidence.className}" title="${esc(confidence.source)}"><i class="fas fa-shield-alt"></i> 信頼度 ${confidence.label}</span><span class="decision-action"><i class="fas fa-gavel"></i> ${esc(snapshotAction(confidence, !!value))}</span><span class="decision-risk"><b>${confidenceHtml(confidence)}</b><br>不安材料: ${esc(risks.join('・'))}</span><button type="button" class="btn btn-secondary btn-sm" onclick="switchViewTab(${raceNo},'yoso')">最新計算へ</button></div>`;
+    const decision = `<div class="cockpit-decision"><span class="decision-chip is-${confidence.className}" title="${esc(confidence.source)}"><i class="fas fa-chart-bar"></i> 同人気帯実績 ${confidence.label}</span><span class="decision-action"><i class="fas fa-gavel"></i> ${esc(snapshotAction(confidence, !!value))}</span><span class="decision-risk"><b>${confidenceHtml(confidence)}</b><br>不安材料: ${esc(risks.join('・'))}</span><button type="button" class="btn btn-secondary btn-sm viewer-ok" onclick="switchViewTab(${raceNo},'yoso')">最新計算へ</button></div>`;
     if (dock) dock.innerHTML = card(main, '◎', 'main', `能力1位・${main.reason}`) + opponentHtml + (value ? card(value, '☆', 'value', snapshot.value.note) : '') + decision;
     if (panel) {
       const time = new Date(snapshot.computedAt), stamp = Number.isNaN(time.getTime()) ? '' : time.toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});

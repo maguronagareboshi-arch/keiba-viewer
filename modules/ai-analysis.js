@@ -2153,6 +2153,14 @@ function computePsfScores(raceNo) {
 // 現行を上回り◎も平均改善したため、上がり3F/騎手×厩舎/馬体重/勝ち馬強さを増、乗替/叩きを減。
 // 未記載の項目（馬場適性・距離・トレンド・脚質・着差・ローテ・昇降級・C一貫性）は等倍のまま。
 const YOSO_FACTOR_SCALE = { agariN: 2.5, comboN: 3.0, weightN: 2.5, winStrN: 2.5, jockeyChgN: 0.5, takiN: 0.5, paceCtxN: 1.5 };
+const _yosoScoreCache = new Map();
+
+function _yosoInputSignature(raceNo, data, selCondOverride) {
+  const info = data.raceInfo || {};
+  const rows = (data.horses || []).map(h => [h.umaBan,h.horseName,h.jockey,h.trainer,h.kinryo,h.weight,h.odds,h.ninki]);
+  return JSON.stringify([raceNo,selCondOverride || '',info.raceDate,info.distance,info.trackCond,info.raceClass,
+    Number(window._kvHistoryRevision || 0),rows]);
+}
 
 /**
  * 予想AIスコア計算（共通コア）
@@ -2162,6 +2170,9 @@ const YOSO_FACTOR_SCALE = { agariN: 2.5, comboN: 3.0, weightN: 2.5, winStrN: 2.5
 function computeYosoScored(raceNo, selCondOverride) {
   const data = allRacesData[raceNo];
   if (!data || !data.horses.length) return null;
+  const cacheKey = _yosoInputSignature(raceNo, data, selCondOverride);
+  if (_yosoScoreCache.has(cacheKey)) return _yosoScoreCache.get(cacheKey);
+  if (_yosoScoreCache.size > 24) _yosoScoreCache.clear();
 
   const { raceInfo, horses } = data;
   const raceDist     = raceInfo.distance ? String(raceInfo.distance).replace(/[^\d]/g, '') : '';
@@ -2261,9 +2272,10 @@ function computeYosoScored(raceNo, selCondOverride) {
 
     // ── ⑨ 4コーナー通過順補正（脚質適性） ──
     const _a4cr = Yoso.avg4C(histEx);
-    // ライブ版は表示用に丸めた値で閾値判定する（検証版は生値・仕様差）
+    // 表示は小数1桁に丸めるが、判定は検証時と同じ生値を使う。
+    // 表示丸めを特徴量へ戻すと閾値付近だけ本番順位が変わる train/serve skew になる。
     const avg4C = _a4cr.avg != null ? +_a4cr.avg.toFixed(1) : null;
-    const cornMod = Yoso.cornMod(avg4C, _a4cr.count);
+    const cornMod = Yoso.cornMod(_a4cr.avg, _a4cr.count);
 
     // ── ⑩ 調教師補正（現状は総合スコアに未加算・表示もなし） ──
     const trainerMod = Yoso.trainerMod(lookupTrainerStats(trainer));
@@ -2417,7 +2429,9 @@ function computeYosoScored(raceNo, selCondOverride) {
     if (b.totalScore == null) return -1;
     return b.totalScore - a.totalScore;
   });
-  return { scored, comboStats: _comboStats, raceDist, raceCond, raceCls, selCond };
+  const output = { scored, comboStats: _comboStats, raceDist, raceCond, raceCls, selCond };
+  _yosoScoreCache.set(cacheKey, output);
+  return output;
 }
 
 // ── 🏇 展開予想（予想隊列）──
@@ -2541,10 +2555,10 @@ function buildEvMonitorHtml(raceNo, selCond, scoredInput) {
   };
   const research = candidate ? `<div class="evb-row">
       <span class="evb-uma">${escapeHTML(candidate.uma)}</span><span class="evb-name">${escapeHTML(candidate.name)}</span>
-      <span class="evb-metric">T10単勝${Number(candidate.odds).toFixed(1)}倍 / 研究EV ${Number(candidate.ev) >= 0 ? '+' : ''}${Number(candidate.ev).toFixed(2)}</span>
+      <span class="evb-metric">T10単勝${Number(candidate.odds).toFixed(1)}倍 / 価値スコア ${Number(candidate.ev) >= 0 ? '+' : ''}${Number(candidate.ev).toFixed(2)}（勝率未校正）</span>
       <span class="evb-tag" style="background:#7c3aed">前向き検証のみ</span></div>` : '';
-  return `<div class="ev-monitor-bar skip"><div class="evb-head">💹 期待値判定
-      <span style="font-weight:600;font-size:11px;opacity:.85">能力とT10価格を別評価</span>
+  return `<div class="ev-monitor-bar skip"><div class="evb-head">💹 価格評価（検証中）
+      <span style="font-weight:600;font-size:11px;opacity:.85">能力とT10価格を別評価・EV数値は未校正</span>
       <span class="evb-tag" style="background:#64748b">見送り</span></div>
     ${research}
     <div style="margin-top:6px"><b>公開できる買い候補はありません。</b> 近似能力入力での過去確認は回収率104.2%でしたが、95%区間の下限が68.3%で、上位1件を除くと95.1%でした。</div>
@@ -3235,7 +3249,7 @@ function renderPredictionPanel(raceNo) {
 
   // 旧「手動指数×人気差」妙味は確率校正もT10価格固定もなく、期待値とは呼べないため撤去。
 
-  // ── ⚠️危険な1番人気バッジ（過剰人気検出・表示専用）──
+  // ── 1番人気の不安材料（価格を含む購入判断ではない）──
   //    検証（2026-07-04・1番人気2,386頭）：①手動指数4番手以下②壁馬（同クラス2走以上全て
   //    4着以下＋下級で好走歴）③前走楽逃げ好走（1角2番手以内・3着内・前半dev+0.8秒以上）の
   //    いずれか該当で複勝54.3% vs 該当なし78.7%（−24pt・5fold全て劣後・単勝ROI71% vs 83%）。
@@ -3272,7 +3286,7 @@ function renderPredictionPanel(raceNo) {
         }
       }
       if (_dfReasons.length) {
-        dangerFavBadge = `<div class="danger-fav-bar">⚠️ <b>危険な1番人気：${escapeHTML(_dfH.horseName)}</b>（${_dfReasons.join('・')}）＝過去のデータでは、こういうタイプの1番人気は3着以内に来る率54%（普通の1番人気は79%）<span class="dfb-sub">｜過去2,386レースの集計</span></div>`;
+        dangerFavBadge = `<div class="danger-fav-bar">⚠️ <b>1番人気の能力面の不安材料：${escapeHTML(_dfH.horseName)}</b>（${_dfReasons.join('・')}）＝過去の同条件では3着内54%（通常の1番人気79%）。価格を含む購入判断ではありません<span class="dfb-sub">｜過去2,386レースの集計</span></div>`;
         _pickDanger = { name: _dfH.horseName, reasons: _dfReasons.slice() };
       }
     }

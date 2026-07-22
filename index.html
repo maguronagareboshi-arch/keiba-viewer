@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' data: https://cdn.jsdelivr.net; img-src 'self' data: blob:; connect-src 'self' https://jcrcftvrsgmsewwdkqha.supabase.co https://keiba-proxydeploy.maguronagareboshi.workers.dev https://www.keiba.go.jp https://keiba.rakuten.co.jp https://www.keiba.or.jp https://cdn.jsdelivr.net; frame-src https://keiba-lv-st.jp; worker-src 'self'; manifest-src 'self'">
   <title>高知競馬ビューア</title>
   <!-- PWA（ホーム画面追加でアプリとして起動）。パスは相対＝github.io/keiba-viewer と独自ドメイン両対応 -->
   <link rel="manifest" href="manifest.webmanifest">
@@ -14,10 +16,8 @@
   <meta name="apple-mobile-web-app-title" content="高知競馬">
   <meta name="theme-color" content="#1a56a0">
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script defer src="modules/performance-observer.js"></script>
 <style id="dark-mode-css">
 /* ===== DARK MODE ===== */
 /* 背景に奥行き（左上からのラジアルグラデ） */
@@ -459,11 +459,10 @@ body.dark-mode .btn-primary{background:linear-gradient(135deg,#1d5fb8,#17498c)!i
 body.dark-mode .btn-primary:hover{background:linear-gradient(135deg,#2470d4,#1d5fb8)!important}
 
 /* ダークモードトグルボタン */
-#dark-mode-btn,#minimal-mode-btn,#sim-mode-btn{background:rgba(255,255,255,0.12);color:#e0e7ff;border:1px solid rgba(255,255,255,0.25);
+#dark-mode-btn,#sim-mode-btn{background:rgba(255,255,255,0.12);color:#e0e7ff;border:1px solid rgba(255,255,255,0.25);
   border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer;display:flex;align-items:center;
   gap:5px;backdrop-filter:blur(4px);transition:background .15s;white-space:nowrap;font-family:inherit;font-weight:600}
-#dark-mode-btn:hover,#minimal-mode-btn:hover,#sim-mode-btn:hover{background:rgba(255,255,255,0.22)}
-#minimal-mode-btn.active{background:rgba(255,255,255,0.28);color:#fff;border-color:rgba(255,255,255,0.5)}
+#dark-mode-btn:hover,#sim-mode-btn:hover{background:rgba(255,255,255,0.22)}
 /* 【開発用】管理者/閲覧者トグル（完成後は削除）。管理者=琥珀・閲覧者=グレー */
 #dev-admin-btn{background:rgba(245,158,11,0.85);color:#fff;border:1px solid rgba(245,158,11,0.6);
   border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:5px;
@@ -472,67 +471,6 @@ body.dark-mode .btn-primary:hover{background:linear-gradient(135deg,#2470d4,#1d5
 #dev-admin-btn:hover{background:rgba(245,158,11,1)}
 #dev-admin-btn.dev-admin-public{background:rgba(255,255,255,0.14);color:#cbd5e1;border-color:rgba(255,255,255,0.25)}
 #dev-admin-btn.dev-admin-public:hover{background:rgba(255,255,255,0.24)}
-</style>
-<style id="minimal-mode-css">
-/* ===== MINIMAL MODE ===== */
-/* ヘッダー: グラデ除去・フラット */
-body.minimal-mode .app-header{background:#1a56a0!important;box-shadow:none!important}
-/* カード: 影除去 → 細ボーダー・小角丸 */
-body.minimal-mode .search-card,body.minimal-mode .race-header-card,body.minimal-mode .saved-card,
-body.minimal-mode .loading-area,body.minimal-mode .progress-section,body.minimal-mode .race-tabs-section,
-body.minimal-mode .error-area,body.minimal-mode .deban-section,body.minimal-mode .saved-month-group,
-body.minimal-mode .ana-chart-card,body.minimal-mode .ana-chart-card--wide{
-  box-shadow:none!important;border-radius:4px!important;border:1px solid #dde3ea!important}
-/* 角丸統一（フラット化） */
-body.minimal-mode .btn{border-radius:3px!important}
-body.minimal-mode .form-input,body.minimal-mode input,body.minimal-mode select,body.minimal-mode textarea{border-radius:3px!important}
-body.minimal-mode .race-badge{border-radius:4px!important;width:44px!important;height:44px!important;font-size:17px!important}
-body.minimal-mode .collapsible-panel{box-shadow:none!important;border-radius:4px!important;border:1px solid #dde3ea!important}
-body.minimal-mode .progress-bar{border-radius:2px!important}
-body.minimal-mode .progress-bar-wrap{border-radius:2px!important}
-/* レースタブ: アンダーライン型に */
-body.minimal-mode .race-tabs-section{padding:0 12px!important;background:#fff!important}
-body.minimal-mode .race-tab{
-  border-radius:0!important;border:none!important;border-bottom:2px solid transparent!important;
-  background:transparent!important;color:#6b7280!important;padding:8px 10px!important;margin-bottom:-1px}
-body.minimal-mode .race-tab:hover{color:#1a56a0!important;border-bottom-color:#1a56a0!important;background:transparent!important}
-body.minimal-mode .race-tab.active{color:#1a56a0!important;border-bottom-color:#1a56a0!important;background:transparent!important}
-/* sidebar-mode タブバー（横バー）— 青背景を維持しつつフラット化 */
-body.minimal-mode #race-tabs-section.sidebar-mode{background:#1a56a0!important;border-radius:0!important;box-shadow:none!important;padding:4px 10px!important}
-body.minimal-mode #race-tabs-section.sidebar-mode .race-tab{
-  border-bottom:2px solid transparent!important;color:rgba(255,255,255,.65)!important;background:transparent!important;
-  border-radius:0!important;padding:6px 8px!important}
-body.minimal-mode #race-tabs-section.sidebar-mode .race-tab:hover{color:#fff!important;border-bottom-color:rgba(255,255,255,.5)!important}
-body.minimal-mode #race-tabs-section.sidebar-mode .race-tab.active{color:#fff!important;border-bottom-color:#fff!important;background:transparent!important}
-/* テーブルヘッダー: グラデ除去 */
-body.minimal-mode th{background:#f0f2f5!important;color:#374151!important;font-weight:600!important}
-body.minimal-mode .deban-table thead th{background:#f0f2f5!important;color:#374151!important}
-/* セクションタイトル: やや小さく */
-body.minimal-mode .section-title{font-size:13px!important;margin-bottom:10px!important}
-/* スペース削減 */
-body.minimal-mode .app-main{padding:10px 12px 36px!important;gap:10px!important}
-body.minimal-mode .search-card,body.minimal-mode .race-header-card,body.minimal-mode .saved-card{padding:13px 16px!important}
-/* バッジ・タグの角丸フラット化 */
-body.minimal-mode .race-meta span{border-radius:3px!important}
-body.minimal-mode .proxy-status,body.minimal-mode .progress-race-tag{border-radius:3px!important}
-body.minimal-mode .ninki-1,body.minimal-mode .ninki-2,body.minimal-mode .ninki-3{border-radius:2px!important}
-body.minimal-mode .pace-tag-high,body.minimal-mode .pace-tag-mid,body.minimal-mode .pace-tag-slow,body.minimal-mode .pace-tag-none{border-radius:2px!important}
-body.minimal-mode .waku-mini{border-radius:2px!important}
-body.minimal-mode .race-class-badge{border-radius:2px!important}
-body.minimal-mode .saved-race-tags .race-tag{border-radius:2px!important}
-/* hoverのtransition無効化（データ密集型ではアニメが邪魔） */
-body.minimal-mode .deban-table tbody tr:hover{transition:none!important}
-/* ダーク＋ミニマル組み合わせ */
-body.dark-mode.minimal-mode .search-card,body.dark-mode.minimal-mode .race-header-card,
-body.dark-mode.minimal-mode .saved-card,body.dark-mode.minimal-mode .deban-section,
-body.dark-mode.minimal-mode .race-tabs-section,body.dark-mode.minimal-mode .loading-area{
-  border-color:#1e3048!important;box-shadow:none!important}
-body.dark-mode.minimal-mode .race-tabs-section{background:#111827!important}
-body.dark-mode.minimal-mode th,body.dark-mode.minimal-mode .deban-table thead th{background:#0d1a2e!important;color:#7dd3fc!important}
-body.dark-mode.minimal-mode .race-tab{color:rgba(255,255,255,.5)!important;border-bottom-color:transparent!important}
-body.dark-mode.minimal-mode .race-tab:hover{color:#7dd3fc!important;border-bottom-color:#7dd3fc!important;background:transparent!important}
-body.dark-mode.minimal-mode .race-tab.active{color:#38bdf8!important;border-bottom-color:#38bdf8!important;background:transparent!important}
-body.dark-mode.minimal-mode #race-tabs-section.sidebar-mode .race-tab.active{color:#fff!important;border-bottom-color:#fff!important}
 </style>
 </head>
 <body class="kv-cockpit">
@@ -572,6 +510,7 @@ const KV_APP_CSS = [
       // 検索フォーム単一列版（高知固定・縦積み・幅上限で間延び防止）
       '.search-form--col{flex-direction:column;align-items:stretch;max-width:380px;gap:10px}',
       '.search-form--col .form-group{min-width:0}',
+      '.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}',
       '.search-btns--col{flex-direction:column;align-items:stretch;gap:8px;width:100%}',
       '.search-btns--col .btn{width:100%;justify-content:center}',
       // 管理者専用UI（非管理者=public-modeでは非表示）
@@ -1246,14 +1185,14 @@ const KV_APP_CSS = [
       'body.public-mode:not(.dark-mode) .pos-select{pointer-events:none;background:#f8fafc!important;color:#94a3b8!important;border-color:#e2e8f0!important}',
       'body.public-mode:not(.dark-mode) .lap-input{pointer-events:none;background:#f8fafc!important;color:#94a3b8!important;border-color:#e2e8f0!important}',
       'body.public-mode:not(.dark-mode) .threef-input{pointer-events:none;background:#f8fafc!important;color:#94a3b8!important;border-color:#e2e8f0!important}',
-      'body.public-mode:not(.dark-mode) input[type=text].form-input:not(.url-input),body.public-mode:not(.dark-mode) input[type=number].form-input{pointer-events:none;background:#f8fafc!important;color:#94a3b8!important}',
+      'body.public-mode:not(.dark-mode) .admin-write{pointer-events:none;background:#f8fafc!important;color:#94a3b8!important}',
       /* ダークモード時の閲覧無効化：色はdark-modeのルールに任せ、無効化はopacityのみで表現 */
       'body.public-mode.dark-mode .pace-input,body.public-mode.dark-mode .pace-select,body.public-mode.dark-mode .pos-select,body.public-mode.dark-mode .lap-input,body.public-mode.dark-mode .threef-input{pointer-events:none;opacity:.55}',
-      'body.public-mode.dark-mode input[type=text].form-input:not(.url-input),body.public-mode.dark-mode input[type=number].form-input{pointer-events:none;opacity:.55}',
+      'body.public-mode.dark-mode .admin-write{pointer-events:none;opacity:.55}',
       'body.public-mode .pace-btn,.public-mode .pace-btn-reset{pointer-events:none!important;opacity:.45!important}',
       // 閲覧者は「取得（表示のみ・書き込みなし）」は可・「保存/公式成績/コメント（書き込み）」は不可。
       // viewer-okを付けた取得系ボタンだけ無効化から除外する（B案・2026-07-04）
-      'body.public-mode .btn-primary:not(.viewer-ok),.public-mode .btn-secondary:not(.viewer-ok){pointer-events:none!important;opacity:.4!important}',
+      'body.public-mode .btn-primary.admin-write,body.public-mode .btn-secondary.admin-write{pointer-events:none!important;opacity:.4!important}',
       'body.public-mode #fetch-all-official-btn{pointer-events:none!important;opacity:.4!important}',
       'body.public-mode .search-btns .btn:not(.viewer-ok){pointer-events:none!important;opacity:.4!important}',
       'body.public-mode .url-input-row .btn:not(.viewer-ok){pointer-events:none!important;opacity:.4!important}',
@@ -2155,7 +2094,8 @@ const KV_APP_CSS = [
       'body.kv-cockpit .cockpit-ai-details>summary{padding:9px 11px;color:var(--kc-muted);font-size:11px;font-weight:700;cursor:pointer;list-style:none}',
       'body.kv-cockpit .cockpit-ai-details>summary::-webkit-details-marker{display:none}',
       'body.kv-cockpit .cockpit-ai-details-body{padding:10px;border-top:1px solid var(--kc-border)}',
-      '@media(max-width:640px){body.kv-cockpit .header-sub{display:block!important;margin-left:32px!important}body.kv-cockpit .cockpit-live-status{flex-direction:column;align-items:flex-end;gap:3px}body.kv-cockpit .cockpit-live-status span{padding:2px 5px;font-size:8px}body.kv-cockpit #cockpit-global-odds i{display:none}body.kv-cockpit #race-tabs-section.sidebar-mode .race-tabs{grid-template-columns:repeat(6,minmax(0,1fr))!important}body.kv-cockpit .cockpit-race-heading{align-items:flex-start}body.kv-cockpit .race-name{font-size:16px!important}body.kv-cockpit .cockpit-race-time>strong{font-size:12px}body.kv-cockpit .cockpit-race-meta{font-size:10px}body.kv-cockpit .cockpit-picks{grid-template-columns:1fr;gap:6px}body.kv-cockpit .cockpit-pick{min-height:64px;padding:9px 10px}body.public-mode.kv-cockpit .kv-vtabs{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}body.public-mode.kv-cockpit .kv-vtab{height:36px!important;padding:0 5px!important}body.kv-cockpit .cockpit-decision{grid-template-columns:1fr 1fr;gap:6px}.decision-risk{grid-column:1/-1;grid-row:2}.decision-action{text-align:right}body.kv-cockpit .cockpit-panel-head{align-items:flex-start}body.kv-cockpit .cockpit-table{min-width:620px}body.kv-cockpit .cockpit-value-note{align-items:flex-start;flex-wrap:wrap}body.kv-cockpit .cockpit-value-note small{width:100%;margin-left:36px}.kv-async-state{align-items:flex-start;flex-wrap:wrap}.kv-async-state .btn{width:100%;margin-left:0}.kv-fav-btn{width:38px;height:38px}.spr-l1{min-height:44px}.spr-more>summary{min-height:36px;display:flex;align-items:center}}',
+      '@media(max-width:640px){body.kv-cockpit .header-sub{display:block!important;margin-left:32px!important}body.kv-cockpit .cockpit-live-status{flex-direction:column;align-items:flex-end;gap:3px}body.kv-cockpit .cockpit-live-status span{padding:2px 5px;font-size:8px}body.kv-cockpit #cockpit-global-odds i{display:none}body.kv-cockpit #race-tabs-section.sidebar-mode .race-tabs{grid-template-columns:repeat(6,minmax(0,1fr))!important}body.kv-cockpit .cockpit-race-heading{align-items:flex-start}body.kv-cockpit .race-name{font-size:16px!important}body.kv-cockpit .cockpit-race-time>strong{font-size:12px}body.kv-cockpit .cockpit-race-meta{font-size:10px}body.kv-cockpit .cockpit-picks{grid-template-columns:1fr;gap:6px}body.kv-cockpit .cockpit-pick{min-height:64px;padding:9px 10px}body.public-mode.kv-cockpit .kv-vtabs{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}body.public-mode.kv-cockpit .kv-vtab{height:44px!important;padding:0 5px!important}body.kv-cockpit .cockpit-decision{grid-template-columns:1fr 1fr;gap:6px}.decision-risk{grid-column:1/-1;grid-row:2}.decision-action{text-align:right}body.kv-cockpit .cockpit-panel-head{align-items:flex-start}body.kv-cockpit .cockpit-table{min-width:620px}body.kv-cockpit .cockpit-value-note{align-items:flex-start;flex-wrap:wrap}body.kv-cockpit .cockpit-value-note small{width:100%;margin-left:36px}.kv-async-state{align-items:flex-start;flex-wrap:wrap}.kv-async-state .btn{width:100%;margin-left:0}.kv-fav-btn{width:44px;height:44px}.spr-l1{min-height:44px}.spr-more>summary{min-height:44px;display:flex;align-items:center}}',
+      '@media(max-width:640px){body.kv-cockpit .cockpit-live-status span{font-size:11px}body.kv-cockpit .cockpit-race-meta{font-size:12px}body.kv-cockpit .cockpit-table{min-width:0!important}body.kv-cockpit .cockpit-table thead{display:none}body.kv-cockpit .cockpit-table tbody,body.kv-cockpit .cockpit-table tr,body.kv-cockpit .cockpit-table td{display:block;width:auto}body.kv-cockpit .cockpit-table tr{margin:0 0 8px;padding:8px 10px;border:1px solid var(--kc-border);border-radius:8px;background:var(--kc-surface)}body.kv-cockpit .cockpit-table td{padding:5px 0;border:0!important;font-size:12px}body.kv-cockpit .cockpit-table td+td{padding-left:38px}body.kv-cockpit .cockpit-odds-table td{display:grid;grid-template-columns:72px 1fr;gap:8px;padding:4px 0}body.kv-cockpit .cockpit-odds-table td:nth-child(1)::before{content:"馬番"}body.kv-cockpit .cockpit-odds-table td:nth-child(2)::before{content:"馬名"}body.kv-cockpit .cockpit-odds-table td:nth-child(3)::before{content:"人気"}body.kv-cockpit .cockpit-odds-table td:nth-child(4)::before{content:"単勝"}body.kv-cockpit .cockpit-odds-table td:nth-child(5)::before{content:"AI"}body.kv-cockpit .cockpit-odds-table td::before{color:var(--kc-muted);font-size:11px;font-weight:700}}',
 ];
 (function kvInjectStyles(){
   if (document.getElementById('kv-styles')) return;
@@ -2224,18 +2164,18 @@ const KV_APP_CSS = [
 </header>
 
 <!-- 管理者ログインモーダル -->
-<div id="admin-login-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.55);backdrop-filter:blur(3px);align-items:center;justify-content:center">
+<div id="admin-login-modal" role="dialog" aria-modal="true" aria-labelledby="admin-login-title" aria-describedby="admin-login-help" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.55);backdrop-filter:blur(3px);align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:16px;padding:32px 28px;width:min(340px,90vw);box-shadow:0 20px 60px rgba(0,0,0,0.3);position:relative">
-    <button onclick="closeAdminLogin()" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:18px;color:#9ca3af;cursor:pointer">✕</button>
+    <button type="button" aria-label="管理者ログインを閉じる" onclick="closeAdminLogin()" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:18px;color:#9ca3af;cursor:pointer">✕</button>
     <div style="text-align:center;margin-bottom:20px">
       <div style="font-size:36px;margin-bottom:8px">🔐</div>
-      <h2 style="margin:0;font-size:18px;font-weight:700;color:#1a1a2e">管理者ログイン</h2>
-      <p style="margin:4px 0 0;font-size:12px;color:#6b7280">書き込みトークンを入力してください</p>
+      <h2 id="admin-login-title" style="margin:0;font-size:18px;font-weight:700;color:#1a1a2e">管理者ログイン</h2>
+      <p id="admin-login-help" style="margin:4px 0 0;font-size:12px;color:#6b7280">書き込みトークンを入力してください</p>
     </div>
     <form onsubmit="doAdminLogin();return false;" style="margin-bottom:0">
       <input type="text" name="username" value="admin" autocomplete="username" style="display:none" aria-hidden="true">
       <div style="margin-bottom:16px">
-        <input type="password" id="admin-pw-input" class="form-input"
+        <label for="admin-pw-input" class="sr-only">書き込みトークン</label><input type="password" id="admin-pw-input" class="form-input"
           placeholder="書き込みトークン"
           autocomplete="current-password"
           style="text-align:center;font-size:14px">
@@ -2249,7 +2189,7 @@ const KV_APP_CSS = [
       </button>
     </form>
     <p style="text-align:center;font-size:11px;color:#9ca3af;margin-top:14px;margin-bottom:0">
-      トークンはこの端末にのみ保存され、公開ソースには<br>含まれません。閲覧のみの方は入力不要です。
+      トークンはこのタブのセッション中だけ保持され、公開ソースには<br>含まれません。閲覧のみの方は入力不要です。
     </p>
   </div>
 </div>
@@ -2271,6 +2211,11 @@ const KV_APP_CSS = [
     </div>
   </section>
 
+  <section class="search-card hidden" id="next-race-home-card" aria-live="polite">
+    <h2 class="section-title"><i class="fas fa-bolt" style="color:#0ea5e9"></i> 次に見るレース</h2>
+    <div id="next-race-home-body"></div>
+  </section>
+
   <!-- 週間開催予定 -->
   <section class="search-card" id="weekly-schedule-card">
     <h2 class="section-title"><i class="fas fa-calendar-week"></i> 今週の開催予定（高知）
@@ -2286,7 +2231,7 @@ const KV_APP_CSS = [
     <h2 class="section-title"><i class="fas fa-star" style="color:#f59e0b"></i> お気に入り馬
       <span style="margin-left:auto;font-size:10px;font-weight:400;color:#9ca3af">この端末に保存</span>
     </h2>
-    <div id="favorite-horses-list" class="kv-favorite-list"><p class="kv-favorite-empty">出馬表の☆を押すと、ここから出走履歴へすぐ移動できます。</p></div>
+    <div id="favorite-horses-list" class="kv-favorite-list"><p class="kv-favorite-empty">出馬表の♡を押すと、ここにウォッチ中の馬を表示します。</p></div>
   </section>
 
   <!-- 検索フォーム -->
@@ -2354,7 +2299,7 @@ const KV_APP_CSS = [
       <span id="progress-label">取得中...</span>
       <span id="progress-count">0 / 12</span>
     </div>
-    <div class="progress-bar-wrap"><div class="progress-bar" id="progress-bar" style="width:0%"></div></div>
+    <div class="progress-bar-wrap" id="progress-bar-wrap" role="progressbar" aria-label="レース取得進捗" aria-valuemin="0" aria-valuemax="12" aria-valuenow="0"><div class="progress-bar" id="progress-bar" style="width:0%"></div></div>
     <div id="progress-race-status" class="progress-race-status"></div>
   </div>
 
@@ -3082,7 +3027,7 @@ function _kvAsyncStateHtml(kind, title, detail, retryJs) {
   const icon = isError ? 'fa-exclamation-triangle' : (kind === 'ai' ? 'fa-brain fa-pulse' : 'fa-cloud-download-alt fa-pulse');
   const retry = isError && retryJs
     ? `<button type="button" class="btn btn-primary btn-sm" onclick="${escapeHTML(retryJs)}"><i class="fas fa-redo"></i> 再試行</button>` : '';
-  return `<div class="kv-async-state${isError ? ' is-error' : ''}" data-state="${escapeHTML(kind)}"><i class="fas ${icon}"></i><span><strong>${escapeHTML(title)}</strong><small>${escapeHTML(detail || '')}</small></span>${retry}</div>`;
+  return `<div class="kv-async-state${isError ? ' is-error' : ''}" data-state="${escapeHTML(kind)}" role="${isError ? 'alert' : 'status'}" aria-live="${isError ? 'assertive' : 'polite'}"><i class="fas ${icon}" aria-hidden="true"></i><span><strong>${escapeHTML(title)}</strong><small>${escapeHTML(detail || '')}</small></span>${retry}</div>`;
 }
 
 function _kvSetRouteState(kind, title, detail) {
@@ -3109,17 +3054,11 @@ function _kvScheduleIdle(task, timeout = 4000) {
 }
 const CORS_PROXIES = [
   (url) => `https://keiba-proxydeploy.maguronagareboshi.workers.dev/?url=${encodeURIComponent(url)}`,
-  (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-  (url) => `https://thingproxy.freeboard.io/fetch/${url}`,
-  (url) => `https://cors.eu.org/${url}`,
-  (url) => `https://corsproxy.org/?${encodeURIComponent(url)}`,
-  (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}&v=1.7`,
 ];
 
 // セッション内プロキシ死活管理
 const _proxyHealth = CORS_PROXIES.map(() => ({ blockedUntil: 0 }));
+const _raceListPreferredPage = new Map();
 
 function _availableProxies() {
   const now = Date.now();
@@ -3134,30 +3073,38 @@ function _blockProxy(makeProxy, ms = 90000) {
   if (idx >= 0) _proxyHealth[idx].blockedUntil = Date.now() + ms;
 }
 
-// 並行プロキシ試行 + 429/502/503検出 + 3段リトライ
-async function fetchHtmlWithProxy(url, timeout = 12000) {
+// 公式サイトへの取得は自前Workerだけを使う。第三者の無料CORSプロキシへ
+// 閲覧レースや日付を送らず、障害時は明示的に失敗させて再試行できるようにする。
+async function fetchHtmlWithProxy(url, timeout = 12000, options) {
+  const firstPartyOnly = !!(options && options.firstPartyOnly);
   const RATE_LIMIT_RE = /Too Many Requests|Rate Limit|Access Denied|403 Forbidden/i;
-  const tryAll = (t) => Promise.any(_availableProxies().map(async (makeProxy) => {
-    const res = await fetch(makeProxy(url), { signal: AbortSignal.timeout(t), cache:'no-store' });
-    if (res.status === 429 || res.status === 503 || res.status === 502) {
-      _blockProxy(makeProxy, 90000);
-      throw new Error(`rate_limited:${res.status}`);
+  const candidates = firstPartyOnly ? [CORS_PROXIES[0]] : _availableProxies();
+  const tryBatch = async batch => {
+    const controllers = batch.map(() => new AbortController());
+    const timers = controllers.map(c => setTimeout(() => c.abort(), timeout));
+    try {
+      const html = await Promise.any(batch.map(async (makeProxy, i) => {
+        const res = await fetch(makeProxy(url), { signal:controllers[i].signal, cache:'no-store' });
+        if ([429,502,503].includes(res.status)) { _blockProxy(makeProxy, 90000); throw new Error(`rate_limited:${res.status}`); }
+        if (!res.ok) throw new Error(`HTTP:${res.status}`);
+        const body = await res.text();
+        if (!body || body.length < 200) throw new Error('empty');
+        if (RATE_LIMIT_RE.test(body)) { _blockProxy(makeProxy, 90000); throw new Error('content_blocked'); }
+        return body;
+      }));
+      controllers.forEach(c => c.abort());
+      return html;
+    } finally {
+      timers.forEach(clearTimeout);
+      controllers.forEach(c => c.abort());
     }
-    if (!res.ok) throw new Error(`HTTP:${res.status}`);
-    const html = await res.text();
-    if (!html || html.length < 200) throw new Error('empty');
-    if (RATE_LIMIT_RE.test(html)) { _blockProxy(makeProxy, 90000); throw new Error('content_blocked'); }
-    return html;
-  }));
-  // 全プロキシ失敗時のリトライ待機。以前は3+8+15＝最大26秒で「時々止まる」原因だった。
-  // 短縮＋段数削減で最大待機を約9秒に。先頭は自前Cloudflare Worker(無制限)なので通常は初回で成功する。
-  const WAITS = [1200, 3000, 5000];
-  for (let i = 0; i <= WAITS.length; i++) {
-    try { return await tryAll(timeout); } catch(e) {
-      if (i === WAITS.length) throw e;
-      await new Promise(r => setTimeout(r, WAITS[i]));
-    }
+  };
+  let lastError = null;
+  for (let i = 0; i < candidates.length; i += 2) {
+    try { return await tryBatch(candidates.slice(i, i + 2)); }
+    catch (e) { lastError = e; if (firstPartyOnly) break; }
   }
+  throw lastError || new Error('利用できる取得経路がありません');
 }
 
 let allRacesData = {};
@@ -3203,7 +3150,9 @@ function switchPage(pageId, _fromPop) {
     if (el) el.classList.toggle('page-hidden', id !== pageId);
   });
   document.querySelectorAll('.header-nav-btn, .kbn-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.page === pageId);
+    const active = btn.dataset.page === pageId;
+    btn.classList.toggle('active', active);
+    if (active) btn.setAttribute('aria-current','page'); else btn.removeAttribute('aria-current');
   });
   // 「その他」配下のページでは上下ナビの⋯をアクティブに
   const _morePages = ['jchg', 'saved', 'f3avg', 'psfhist', 'bets', 'aiseiseki'];
@@ -3947,26 +3896,9 @@ function _updateDarkModeBtn(isDark) {
   if (label) label.textContent = isDark ? 'ライト' : 'ダーク';
 }
 
-function toggleMinimalMode() {
-  // Race Cockpitへ外観を一本化。旧ブックマークレット等から呼ばれても安全な互換関数として残す。
-  document.body.classList.remove('minimal-mode');
-  localStorage.removeItem('minimalMode');
-  _updateMinimalBtn(false);
-}
-
-function _updateMinimalBtn(isMinimal) {
-  const btn   = document.getElementById('minimal-mode-btn');
-  const icon  = document.getElementById('minimal-mode-icon');
-  const label = document.getElementById('minimal-mode-label');
-  if (icon)  icon.textContent  = isMinimal ? '▣' : '▣';
-  if (label) label.textContent = isMinimal ? 'リッチ' : 'ミニマル';
-  if (btn)   btn.classList.toggle('active', isMinimal);
-}
-
 function initMinimalMode() {
   document.body.classList.remove('minimal-mode');
   localStorage.removeItem('minimalMode');
-  _updateMinimalBtn(false);
 }
 
 function _updateCockpitHeaderDate() {
@@ -3996,9 +3928,9 @@ function initDarkMode() {
 // ════════════════════════════════════════════════════════
 
 function isAdminMode() {
-  // 管理者＝この端末に書き込みトークンを保有している（＝データ取得/保存が可能）。トークンはlocalStorageのみ。
+  // 通常ログインはsessionStorage（タブ終了で破棄）。localStorageは旧版互換テストだけに残す。
   // ※旧・開発用トグル(kv_dev_admin)の優先判定は廃止（ログアウトが効かなくなる不具合の原因だったため）。
-  return !!localStorage.getItem('kv_write_token');
+  return !!(sessionStorage.getItem('kv_write_token') || localStorage.getItem('kv_write_token'));
 }
 
 /** 【開発用】管理者⇔閲覧者を手動トグル（完成後はこの関数とボタン・isAdminModeのdev分岐を削除） */
@@ -4058,10 +3990,24 @@ function _wireSecretAdminEntry() {
   }
 }
 
+let _adminLoginReturnFocus = null;
 function openAdminLogin() {
   const modal = document.getElementById('admin-login-modal');
   if (!modal) return;
+  _adminLoginReturnFocus = document.activeElement;
   modal.style.display = 'flex';
+  if (!modal._a11yWired) {
+    modal._a11yWired = true;
+    modal.addEventListener('keydown', event => {
+      if (event.key === 'Escape') { event.preventDefault(); closeAdminLogin(); return; }
+      if (event.key !== 'Tab') return;
+      const focusable = [...modal.querySelectorAll('button:not([disabled]),input:not([disabled]),[tabindex]:not([tabindex="-1"])')].filter(el => el.offsetParent !== null);
+      if (!focusable.length) return;
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    });
+  }
   setTimeout(() => { const inp = document.getElementById('admin-pw-input'); if (inp) inp.focus(); }, 80);
   const errEl = document.getElementById('admin-login-error');
   if (errEl) errEl.style.display = 'none';
@@ -4072,6 +4018,8 @@ function openAdminLogin() {
 function closeAdminLogin() {
   const modal = document.getElementById('admin-login-modal');
   if (modal) modal.style.display = 'none';
+  if (_adminLoginReturnFocus && typeof _adminLoginReturnFocus.focus === 'function') _adminLoginReturnFocus.focus();
+  _adminLoginReturnFocus = null;
 }
 
 async function doAdminLogin() {
@@ -4084,14 +4032,15 @@ async function doAdminLogin() {
   if (btn) { btn.disabled = true; btn.dataset._l = btn.innerHTML; btn.innerHTML = '確認中...'; }
   let ok = false;
   try {
-    const res = await fetch(`${WORKER_URL}/rest/v1/keiba_races?id=eq.__auth_probe__`, {
-      method: 'DELETE', headers: { 'X-Write-Token': token },
+    const res = await fetch(`${WORKER_URL}/auth/check`, {
+      method: 'GET', headers: { 'X-Write-Token': token }, signal:AbortSignal.timeout(10000),
     });
-    ok = (res.status !== 401 && res.status !== 403);
+    ok = res.ok;
   } catch (e) { ok = false; }
   if (btn) { btn.disabled = false; if (btn.dataset._l) btn.innerHTML = btn.dataset._l; }
   if (ok) {
-    localStorage.setItem('kv_write_token', token);
+    sessionStorage.setItem('kv_write_token', token);
+    localStorage.removeItem('kv_write_token');
     closeAdminLogin();
     applyModeUI();
     if (typeof _currentPage === 'string' && typeof switchPage === 'function') switchPage(_currentPage, true);
@@ -4103,6 +4052,7 @@ async function doAdminLogin() {
 
 function adminLogout() {
   if (!confirm('管理者モードからログアウトしますか？\n（この端末から書き込みトークンを削除します。データ閲覧は引き続き可能です）')) return;
+  sessionStorage.removeItem('kv_write_token');
   localStorage.removeItem('kv_write_token');
   localStorage.removeItem('kv_dev_admin');
   sessionStorage.removeItem('kv_admin_session');
@@ -4261,6 +4211,13 @@ async function fetchAllRaces() {
     targets = [1,2,3,4,5,6,7,8,9,10,11,12];
   }
 
+  // 画面で選ばれているレース→次レース→残りの順に取得し、最初の判断画面を先に使えるようにする。
+  const preferred = parseInt(currentRaceNo || document.getElementById('race-no-single')?.value, 10);
+  if (Number.isFinite(preferred) && targets.includes(preferred)) {
+    const priority = [preferred, preferred + 1].filter(rn => targets.includes(rn));
+    targets = [...new Set([...priority, ...targets])];
+  }
+
   // 2並行で取得（プロキシ負荷を分散しつつ高速化）
   const CONCURRENCY = 2, BATCH_GAP = 700, INNER_GAP = 400;
   let done = 0;
@@ -4284,6 +4241,11 @@ async function fetchAllRaces() {
           }
         }
         allRacesData[rn] = result;
+        addRaceTab(rn);
+        if (!document.querySelector('.race-tab.active')) {
+          switchRaceTab(rn);
+          switchPage('deban');
+        }
         updateProgressStatus(rn, true);
       } else {
         updateProgressStatus(rn, false);
@@ -4305,6 +4267,7 @@ async function fetchAllRaces() {
   }
   rebuildAllTabs(); switchRaceTab(obtained[0]);
   switchPage('deban');
+  renderNextRaceHomeCard();
 
   // 公式成績を自動取得（管理者のみ：Supabaseへ保存されるデータ入力操作のため）
   if (isAdminMode()) fetchAllHorsesOfficialData(true);
@@ -4326,6 +4289,19 @@ async function fetchRaceList(raceDate, babaCode) {
 
   // RaceMarkTable または DebaTable へのリンクからレース番号を収集
   const links = Array.from(doc.querySelectorAll('a[href*="RaceMarkTable"], a[href*="DebaTable"]'));
+  links.forEach(a => {
+    try {
+      const u = new URL(a.href, 'https://www.keiba.go.jp');
+      const rn = parseInt(u.searchParams.get('k_raceNo'));
+      if (rn >= 1 && rn <= 12) {
+        const key = `${raceDate}|${babaCode}|${rn}`;
+        const prior = _raceListPreferredPage.get(key) || '';
+        // 同じレースへのリンクが複数ある場合は、結果ページを常に優先する。
+        // DOM上のリンク順により出馬表へ上書きされると、確定済みレースでも結果を二重取得していた。
+        if (/RaceMark/i.test(u.pathname) || !prior) _raceListPreferredPage.set(key, u.pathname);
+      }
+    } catch(e) {}
+  });
   const nos = [...new Set(links.map(a => {
     try {
       const u = new URL(a.href, 'https://www.keiba.go.jp');
@@ -4741,6 +4717,14 @@ async function fetchOneRace(raceDate, raceNo, babaCode) {
   const raceDateObj = new Date(raceDate.replace(/\//g,'-')); raceDateObj.setHours(0,0,0,0);
   // 厳密に「明日以降」だけ未来扱い — 当日の終了済みレースも結果を取りに行く
   const isFuture = raceDateObj > today;
+  const listedPage = _raceListPreferredPage.get(`${raceDate}|${babaCode}|${raceNo}`) || '';
+
+  // RaceListが出馬表を指している未発走レースは、存在しない結果ページを先に取りに行かない。
+  if (listedPage.includes('/DebaTable')) {
+    const listed = await fetchDebaTableRace(raceDate, raceNo, babaCode);
+    if (listed) { listed.raceInfo._isDebaFallback = !isFuture; listed.raceInfo._isDebaTable = true; }
+    return listed;
+  }
 
   if (!isFuture) {
     // 今日・過去 → 競走成績（RaceMarkTable）を並行プロキシで試みる
@@ -5500,18 +5484,18 @@ function renderRaceContent(raceNo) {
     <div id="kv-tabbar-${raceNo}"
          style="position:relative;background:#f8fafc;border-bottom:2px solid #e2e8f0;height:44px;width:100%;box-sizing:border-box;overflow:hidden;">
       <!-- 左：タブボタン群（padding-rightでボタン領域を確保） -->
-      <div class="kv-vtabs">
-        <button id="tab-btn-yoso-${raceNo}" class="kv-vtab on" data-view="yoso"
+      <div class="kv-vtabs" role="tablist" aria-label="レース情報" onkeydown="onRaceTabKeydown(event,${raceNo})">
+        <button id="tab-btn-yoso-${raceNo}" class="kv-vtab on" data-view="yoso" role="tab" aria-selected="true" aria-controls="view-yoso-${raceNo}" tabindex="0"
                 onclick="switchViewTab(${raceNo},'yoso')">
           <i class="fas fa-star"></i>
           <span>AI予想</span>
         </button>
-        <button id="tab-btn-deban-${raceNo}" class="kv-vtab" data-view="deban"
+        <button id="tab-btn-deban-${raceNo}" class="kv-vtab" data-view="deban" role="tab" aria-selected="false" aria-controls="view-deban-${raceNo}" tabindex="-1"
                 onclick="switchViewTab(${raceNo},'deban')">
           <i class="fas fa-table"></i>
           <span>出馬表</span>
         </button>
-        <button id="tab-btn-odds-${raceNo}" class="kv-vtab" data-view="odds"
+        <button id="tab-btn-odds-${raceNo}" class="kv-vtab" data-view="odds" role="tab" aria-selected="false" aria-controls="view-odds-${raceNo}" tabindex="-1"
                 onclick="switchViewTab(${raceNo},'odds')">
           <i class="fas fa-chart-line"></i>
           <span>オッズ</span>
@@ -5542,7 +5526,7 @@ function renderRaceContent(raceNo) {
     </div>
 
     <!-- 出馬表ビュー -->
-    <div id="view-deban-${raceNo}">
+    <div id="view-deban-${raceNo}" role="tabpanel" aria-labelledby="tab-btn-deban-${raceNo}" hidden>
       <!-- 展開予想・乗り替わり診断（2026-07-11：予想AIタブから出馬表タブへ移設。馬柱表より上に配置） -->
       <div id="deban-extra-${raceNo}" style="padding:0 8px 8px;"></div>
       <div class="split-view-wrap">
@@ -5555,20 +5539,20 @@ function renderRaceContent(raceNo) {
             </div>
             <table class="deban-table" id="deban-table-${raceNo}">
               <thead><tr id="thead-row-${raceNo}">
-                <th class="col-chakujun sortable" onclick="sortTable(${raceNo},'chakujun')" title="着順でソート">着順</th>
-                <th class="col-waku sortable"     onclick="sortTable(${raceNo},'waku')"     title="枠番でソート">枠</th>
-                <th class="col-ninki sortable"    onclick="sortTable(${raceNo},'ninki')"    title="人気でソート">人気</th>
-                <th class="col-umano sortable"    onclick="sortTable(${raceNo},'umaBan')"   title="馬番でソート">馬番</th>
+                <th class="col-chakujun sortable" role="button" tabindex="0" aria-sort="none" onclick="sortTable(${raceNo},'chakujun')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();sortTable(${raceNo},'chakujun')}" title="着順でソート">着順</th>
+                <th class="col-waku sortable" role="button" tabindex="0" aria-sort="none" onclick="sortTable(${raceNo},'waku')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();sortTable(${raceNo},'waku')}" title="枠番でソート">枠</th>
+                <th class="col-ninki sortable" role="button" tabindex="0" aria-sort="none" onclick="sortTable(${raceNo},'ninki')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();sortTable(${raceNo},'ninki')}" title="人気でソート">人気</th>
+                <th class="col-umano sortable" role="button" tabindex="0" aria-sort="none" onclick="sortTable(${raceNo},'umaBan')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();sortTable(${raceNo},'umaBan')}" title="馬番でソート">馬番</th>
                 <th class="col-ai" title="AI独自の評価による印（予想AIタブと同一）">AI印</th>
                 <th class="col-mymark" title="自分の印（タップで◎○▲△☆✕を切替・✎でメモ・この端末に保存）">マイ印</th>
                 <th class="col-umaname">馬名</th>
                 <th class="col-recent" title="直近5走の着順（左が最新）。クリックで能力表タブへ">近5走</th>
                 <th class="col-belong">所属</th>
                 <th class="col-sexage">性齢</th>
-                <th class="col-kinryo sortable"   onclick="sortTable(${raceNo},'kinryo')"   title="斤量でソート">斤量</th>
+                <th class="col-kinryo sortable" role="button" tabindex="0" aria-sort="none" onclick="sortTable(${raceNo},'kinryo')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();sortTable(${raceNo},'kinryo')}" title="斤量でソート">斤量</th>
                 <th class="col-jockey">騎手</th>
                 <th class="col-trainer">調教師</th>
-                <th class="col-weight sortable"   onclick="sortTable(${raceNo},'weight')"   title="馬体重でソート">馬体重</th>
+                <th class="col-weight sortable" role="button" tabindex="0" aria-sort="none" onclick="sortTable(${raceNo},'weight')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();sortTable(${raceNo},'weight')}" title="馬体重でソート">馬体重</th>
                 <th class="col-odds">オッズ</th>
                 <th class="col-aiscore" title="予想AI総合スコアとフィールド内順位">AIスコア</th>
                 <th class="col-time sortable"     onclick="sortTable(${raceNo},'time')"     title="タイムでソート">タイム</th>
@@ -5615,7 +5599,7 @@ function renderRaceContent(raceNo) {
     </div>
 
     <!-- AI予想ビュー：AI予想ランキング＋狙い目/穴馬/買い得チェック/スコア解説（全員に表示）＋管理者詳細（旧予想AIパネル・折りたたみ初期閉・管理者のみ） -->
-    <div id="view-yoso-${raceNo}" style="display:none;padding:12px 14px 12px;">
+    <div id="view-yoso-${raceNo}" role="tabpanel" aria-labelledby="tab-btn-yoso-${raceNo}" style="display:none;padding:12px 14px 12px;">
       <div id="cockpit-ai-panel-${raceNo}" class="cockpit-ai-panel" aria-live="polite">
         <div class="cockpit-panel-empty"><i class="fas fa-spinner fa-spin"></i> AI判断を整理しています</div>
       </div>
@@ -5637,7 +5621,7 @@ function renderRaceContent(raceNo) {
     </div>
 
     <!-- オッズビュー -->
-    <div id="view-odds-${raceNo}" style="display:none;padding:12px 14px 12px;">
+    <div id="view-odds-${raceNo}" role="tabpanel" aria-labelledby="tab-btn-odds-${raceNo}" hidden style="display:none;padding:12px 14px 12px;">
       <div id="odds-panel-${raceNo}" class="cockpit-odds-panel">
         <div class="cockpit-panel-empty"><i class="fas fa-spinner fa-spin"></i> オッズを整理しています</div>
       </div>
@@ -5789,11 +5773,11 @@ function renderCockpitSummary(raceNo) {
   }
   const picks = {
     main: { mark:'◎', kind:'main', s:main, note: main ? `能力1位・${_cockpitReasonFor(main)}` : '能力評価なし' },
-    value: { mark:value ? '☆' : '—', kind:'value', s:value, note: value
+    value: { mark:value ? 'EV' : '—', kind:'value', s:value, note: value
       ? (valueResearchOnly
-        ? `前向き検証EV ${Number(valueMeta?.ev || 0) >= 0 ? '+' : ''}${Number(valueMeta?.ev || 0).toFixed(2)}・購入見送り`
+        ? `価値スコア ${Number(valueMeta?.ev || 0) >= 0 ? '+' : ''}${Number(valueMeta?.ev || 0).toFixed(2)}（未校正）・購入見送り`
         : `期待値指数 ${Number(valueMeta?.evCal || 0).toFixed(2)}`)
-      : '検証合格モデルなし・購入見送り' }
+      : '公正オッズ未校正・購入見送り' }
   };
   const cardHtml = p => {
     if (!p.s) return `<div class="cockpit-pick is-empty"><span class="cockpit-mark is-${p.kind}">${p.mark}</span><div class="cockpit-pick-copy"><strong>${p.kind === 'value' ? '見送り' : '候補なし'}</strong><small>${p.note}</small></div><span class="cockpit-odds">—</span></div>`;
@@ -5829,7 +5813,8 @@ function renderCockpitSummary(raceNo) {
   const action = valueResearchOnly ? '期待値候補あり（検証中・購入見送り）' : value ? '単勝の期待値候補あり' : '購入見送り';
   const confidenceEvidence = calibrated
     ? `<b>◎1着 ${(calibrated.winRate * 100).toFixed(1)}%・3着内 ${(calibrated.top3Rate * 100).toFixed(1)}%</b>（${escapeHTML(calibrated.band)} n=${calibrated.n}）<br>` : '';
-  const decisionHtml = `<div class="cockpit-decision"><span class="decision-chip is-${confidenceCls}" title="${escapeHTML(calibrated?.source || 'スコア差による暫定判定')}"><i class="fas fa-shield-alt"></i> 信頼度 ${confidence}</span><span class="decision-action"><i class="fas fa-gavel"></i> ${escapeHTML(action)}</span><span class="decision-risk">${confidenceEvidence}<b>不安材料:</b> ${escapeHTML(risks.join('・'))}</span><button type="button" class="btn btn-secondary btn-sm" onclick="switchViewTab(${raceNo},'yoso')">全印を見る</button></div>`;
+  const confidenceTitle = calibrated ? '同人気帯実績' : '能力順位差の暫定信頼度';
+  const decisionHtml = `<div class="cockpit-decision"><span class="decision-chip is-${confidenceCls}" title="${escapeHTML(calibrated?.source || 'スコア差による暫定判定')}"><i class="fas ${calibrated ? 'fa-chart-bar' : 'fa-shield-alt'}"></i> ${confidenceTitle} ${confidence}</span><span class="decision-action"><i class="fas fa-gavel"></i> ${escapeHTML(action)}</span><span class="decision-risk">${confidenceEvidence}<b>不安材料:</b> ${escapeHTML(risks.join('・'))}</span><button type="button" class="btn btn-secondary btn-sm viewer-ok" onclick="switchViewTab(${raceNo},'yoso')">全印を見る</button></div>`;
   if (dock) dock.innerHTML = cardHtml(picks.main) + opponentHtml + cardHtml(picks.value) + decisionHtml;
 
   if (panel) {
@@ -5845,7 +5830,7 @@ function renderCockpitSummary(raceNo) {
         ? (valueResearchOnly ? '能力確率に対してT10単勝価格が高い（前向き検証中）' : '校正勝率に対して単勝オッズが高い')
         : _cockpitReasonFor(s);
       const icon = idx === 0 ? 'fa-chart-line' : isValue ? 'fa-bullseye' : idx === 1 ? 'fa-route' : 'fa-layer-group';
-      const valueBadge = isValue ? `<span class="cockpit-value-badge">☆ ${valueResearchOnly ? '検証候補' : '妙味'}</span>` : '';
+      const valueBadge = isValue ? `<span class="cockpit-value-badge">EV ${valueResearchOnly ? '検証候補' : '妙味'}</span>` : '';
       return `<tr class="cockpit-rank-row is-${tone}">
         <td><div class="cockpit-horse"><span class="cockpit-rank-mark">${mark}</span><span class="cockpit-uma">${escapeHTML(h.umaBan || '—')}</span><span><b>${escapeHTML(h.horseName) || '—'}</b><small>能力AI ${idx + 1}位${valueBadge}</small></span></div></td>
         <td class="cockpit-market">${escapeHTML(market)}</td>
@@ -5858,7 +5843,7 @@ function renderCockpitSummary(raceNo) {
       const odds = parseFloat(h.odds), ninki = parseInt(h.ninki);
       const market = `${Number.isFinite(ninki) ? ninki + '人気' : '人気—'}・${Number.isFinite(odds) ? odds.toFixed(1) + '倍' : 'オッズ—'}`;
       const reason = valueResearchOnly ? '能力確率に対してT10単勝価格が高い（前向き検証中・購入推奨ではありません）' : '校正勝率に対して単勝オッズが高い';
-      valueNote = `<div class="cockpit-value-note"><span class="cockpit-rank-mark">☆</span><span><strong>${valueResearchOnly ? '期待値の検証候補' : '期待値候補'}</strong> ${escapeHTML(h.umaBan || '—')}番 ${escapeHTML(h.horseName) || '—'}<br><span style="color:var(--kc-muted)">${escapeHTML(reason)}</span></span><small>能力AI ${idx}位・${escapeHTML(market)}</small></div>`;
+      valueNote = `<div class="cockpit-value-note"><span class="cockpit-rank-mark">EV</span><span><strong>${valueResearchOnly ? '価格評価の検証候補' : '期待値候補'}</strong> ${escapeHTML(h.umaBan || '—')}番 ${escapeHTML(h.horseName) || '—'}<br><span style="color:var(--kc-muted)">${escapeHTML(reason)}</span></span><small>能力AI ${idx}位・${escapeHTML(market)}</small></div>`;
     }
     panel.innerHTML = `<div class="cockpit-panel-head"><div><h3>能力予想</h3><p>◎○▲△はオッズを見ない能力順。期待値はT10価格で別判定し、検証合格までは購入推奨しません</p></div><span>全印 ${marked.length}頭</span></div>
       <div class="table-wrapper"><table class="cockpit-table"><thead><tr><th>印・馬</th><th>市場</th><th>判断材料</th></tr></thead><tbody>${rows}</tbody></table></div>${valueNote}`;
@@ -5920,13 +5905,14 @@ function renderDebanExtra(raceNo) {
  * horseName: 馬名, curDist: 現在レースの距離
  */
 
-async function fetchLiveOdds(raceNo) {
+async function fetchLiveOdds(raceNo, options) {
+  const verifiedOnly = !!(options && options.verifiedOnly);
   const data = allRacesData[raceNo];
   if (!data) throw new Error('レースデータなし');
   const d = data.raceInfo.raceDate, baba = data.raceInfo.babaCode || currentBaba || '31';
   const requestNonce = Date.now();
   const url = `https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/OddsTanFuku?k_raceDate=${encodeURIComponent(d)}&k_raceNo=${raceNo}&k_babaCode=${baba}&kv_ts=${requestNonce}`;
-  const html = await fetchHtmlWithProxy(url, 14000);
+  const html = await fetchHtmlWithProxy(url, 14000, { firstPartyOnly:verifiedOnly });
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const table = [...doc.querySelectorAll('table')].find(t => t.textContent.includes('単勝オッズ'));
   if (!table) throw new Error('オッズ未発売');
@@ -5962,7 +5948,8 @@ async function fetchLiveOdds(raceNo) {
     // T10市場と誤認しないよう、race objectへ取得元・観測時刻・取得頭数を別メタとして残す。
     data._liveOddsObservedAt = new Date().toISOString();
     data._previousOddsObservedAt = previousObservedAt;
-    data._liveOddsSource = 'keiba.go.jp/OddsTanFuku';
+    data._liveOddsSource = verifiedOnly ? 'first_party_worker:keiba.go.jp/OddsTanFuku' : 'display_fallback:keiba.go.jp/OddsTanFuku';
+    data._liveOddsVerified = verifiedOnly;
     data._liveOddsRunnerCount = hit;
     data._liveOddsRequestNonce = requestNonce;
   }
@@ -6082,7 +6069,8 @@ async function _kvTickOpponentShadowCapture() {
   _kvOpponentCaptureBusy = true;
   let outcome = { saved:false, reason:'UNKNOWN' };
   try {
-    const fetched = await fetchLiveOdds(target.raceNo);
+    // 前向き検証は自前Worker経由だけを採用し、第三者proxyのキャッシュを公式T10と誤認しない。
+    const fetched = await fetchLiveOdds(target.raceNo, { verifiedOnly:true });
     _kvOddsAutoLast[target.raceNo] = Date.now();
     if (fetched !== target.data.horses.length) {
       outcome = { saved:false, reason:'INCOMPLETE_OFFICIAL_ODDS', fetchedRunnerCount:fetched };
@@ -6320,7 +6308,7 @@ function kvFavoriteHorses() {
 function kvIsFavoriteHorse(name) { return kvFavoriteHorses().some(x => x.name === name); }
 function kvFavoriteButtonHtml(name, compact) {
   const on = kvIsFavoriteHorse(name), esc = jsAttrEsc(name);
-  return `<button type="button" class="kv-fav-btn${on ? ' is-on' : ''}" data-favorite-horse="${escapeHTML(name)}" onclick="event.stopPropagation();kvToggleFavoriteHorse('${esc}')" aria-label="${on ? 'お気に入りから外す' : 'お気に入りに追加'}" title="${on ? 'お気に入りから外す' : 'お気に入りに追加'}">${on ? '★' : '☆'}</button>`;
+  return `<button type="button" class="kv-fav-btn${on ? ' is-on' : ''}" data-favorite-horse="${escapeHTML(name)}" onclick="event.stopPropagation();kvToggleFavoriteHorse('${esc}')" aria-label="${on ? 'お気に入りから外す' : 'お気に入りに追加'}" title="${on ? 'お気に入りから外す' : 'お気に入りに追加'}">${on ? '♥' : '♡'}</button>`;
 }
 function kvToggleFavoriteHorse(name) {
   const rows = kvFavoriteHorses(), idx = rows.findIndex(x => x.name === name);
@@ -6328,7 +6316,7 @@ function kvToggleFavoriteHorse(name) {
   try { localStorage.setItem(KV_FAVORITE_KEY, JSON.stringify(rows.slice(0, 50))); } catch(e) {}
   document.querySelectorAll('[data-favorite-horse]').forEach(btn => {
     if (btn.dataset.favoriteHorse !== name) return;
-    const on = idx < 0; btn.classList.toggle('is-on', on); btn.textContent = on ? '★' : '☆';
+    const on = idx < 0; btn.classList.toggle('is-on', on); btn.textContent = on ? '♥' : '♡';
     const label = on ? 'お気に入りから外す' : 'お気に入りに追加';
     btn.setAttribute('aria-label', label); btn.title = label;
   });
@@ -6340,11 +6328,40 @@ function kvOpenFavoriteHistory(name) {
   if (input) { input.value = name; input.focus(); }
   if (typeof kvCrossSearch === 'function') kvCrossSearch();
 }
+function kvOpenFavoriteRace(raceNo) {
+  switchPage('deban');
+  if (allRacesData[raceNo]) switchRaceTab(Number(raceNo));
+}
+function renderNextRaceHomeCard() {
+  const card = document.getElementById('next-race-home-card'), body = document.getElementById('next-race-home-body');
+  if (!card || !body) return;
+  const entries = Object.entries(allRacesData || {}).map(([raceNo,data]) => ({ raceNo:Number(raceNo), data }))
+    .filter(x => x.data?.horses?.length).sort((a,b) => a.raceNo - b.raceNo);
+  const next = entries.find(x => !x.data.horses.some(h => /^\d+$/.test(String(h.chakujun || '')))) || entries[0];
+  if (!next) { card.classList.add('hidden'); return; }
+  const info = next.data.raceInfo || {}, observed = Date.parse(next.data._liveOddsObservedAt || '');
+  const age = Number.isFinite(observed) ? Math.max(0, Math.round((Date.now() - observed) / 60000)) : null;
+  const oddsState = age == null ? 'オッズ未取得' : age <= 5 ? `オッズ${age}分前` : `オッズが古い（${age}分前）`;
+  const aiState = next.data._raceHistoryReady || _idbFullReady ? '能力評価を表示可能' : '能力データ準備中';
+  body.innerHTML = `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span class="race-badge">${next.raceNo}R</span><div style="flex:1;min-width:180px"><strong>${escapeHTML(info.raceName || `${next.raceNo}R`)}</strong><div style="font-size:12px;color:#64748b;margin-top:4px">${escapeHTML(info.postTime || info.hassouTime || '発走時刻—')}・${escapeHTML(info.distance || '')} ${escapeHTML(info.trackCond || '')}</div><div style="font-size:11px;color:${age != null && age > 5 ? '#d97706' : '#0f766e'};margin-top:3px">${oddsState}・${aiState}</div></div><button type="button" class="btn btn-primary viewer-ok" onclick="kvOpenFavoriteRace(${next.raceNo})">判断画面へ</button></div>`;
+  card.classList.remove('hidden');
+}
 function renderFavoriteHorsesPanel() {
   const el = document.getElementById('favorite-horses-list'); if (!el) return;
   const rows = kvFavoriteHorses();
-  if (!rows.length) { el.innerHTML = '<p class="kv-favorite-empty">出馬表の☆を押すと、ここから出走履歴へすぐ移動できます。</p>'; return; }
-  el.innerHTML = rows.map(x => `<div class="kv-favorite-item"><span style="color:#f59e0b">★</span><strong>${escapeHTML(x.name)}</strong><button type="button" class="btn btn-secondary btn-sm" onclick="kvOpenFavoriteHistory('${jsAttrEsc(x.name)}')"><i class="fas fa-history"></i> 出走履歴</button><button type="button" class="kv-fav-btn is-on" data-favorite-horse="${escapeHTML(x.name)}" onclick="kvToggleFavoriteHorse('${jsAttrEsc(x.name)}')" aria-label="お気に入りから外す">★</button></div>`).join('');
+  renderNextRaceHomeCard();
+  if (!rows.length) { el.innerHTML = '<p class="kv-favorite-empty">出馬表の♡を押すと、ここにウォッチ中の馬を表示します。</p>'; return; }
+  const todayStarts = new Map();
+  Object.entries(allRacesData || {}).forEach(([raceNo,data]) => (data?.horses || []).forEach(h => {
+    if (!h.horseName || todayStarts.has(h.horseName)) return;
+    const odds = parseFloat(h.odds), post = data.raceInfo?.postTime || data.raceInfo?.hassouTime || '';
+    todayStarts.set(h.horseName, { raceNo:Number(raceNo), odds:Number.isFinite(odds) ? odds : null, post });
+  }));
+  el.innerHTML = rows.map(x => {
+    const start = todayStarts.get(x.name);
+    const live = start ? `<span style="font-size:11px;color:#0f766e;font-weight:700">本日${start.raceNo}R${start.post ? ` ${escapeHTML(start.post)}` : ''}${start.odds ? `・単勝${start.odds.toFixed(1)}倍` : ''}</span><button type="button" class="btn btn-primary btn-sm viewer-ok" onclick="kvOpenFavoriteRace(${start.raceNo})">レースへ</button>` : '';
+    return `<div class="kv-favorite-item"><span style="color:#e11d48">♥</span><strong>${escapeHTML(x.name)}</strong>${live}<button type="button" class="btn btn-secondary btn-sm viewer-ok" onclick="kvOpenFavoriteHistory('${jsAttrEsc(x.name)}')"><i class="fas fa-history"></i> 履歴</button><button type="button" class="kv-fav-btn is-on" data-favorite-horse="${escapeHTML(x.name)}" onclick="kvToggleFavoriteHorse('${jsAttrEsc(x.name)}')" aria-label="お気に入りから外す">♥</button></div>`;
+  }).join('');
 }
 
 function renderHorseRows(raceNo, horses) {
@@ -6503,8 +6520,10 @@ function sortTable(raceNo, key) {
   if (thead) {
     thead.querySelectorAll('th.sortable').forEach(th => {
       th.classList.remove('sort-asc','sort-desc');
+      th.setAttribute('aria-sort','none');
       if (th.getAttribute('onclick') && th.getAttribute('onclick').includes(`'${key}'`)) {
         th.classList.add(dir === 'asc' ? 'sort-asc' : 'sort-desc');
+        th.setAttribute('aria-sort', dir === 'asc' ? 'ascending' : 'descending');
       }
     });
   }
@@ -6797,7 +6816,8 @@ function backfillFirst3fFrom1400m() {
     if (first3f < 33 || first3f > 46) continue;         // 異常値ガード
     lsWrite(k, { ...v, first3f: String(first3f) });
     // 手動保存を待たずSupabaseへも反映（管理者のみ・ベストエフォート。失敗してもローカル表示には影響しない）
-    if (canWriteServer) apiUpsert('keiba_races', k, { first3f: String(first3f) });
+    if (canWriteServer) apiUpsert('keiba_races', k, { first3f: String(first3f) })
+      .catch(e => console.warn('[backfillF3] サーバー反映失敗', k, e));
     count[dist]++;
   }
   const total = count[1300] + count[1400] + count[1600];
@@ -7001,6 +7021,18 @@ function toggleRaceMoreTabs(raceNo, force) {
   }
 }
 
+function onRaceTabKeydown(event, raceNo) {
+  if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+  const tabs = ['yoso','deban','odds'].map(view => document.getElementById(`tab-btn-${view}-${raceNo}`)).filter(Boolean);
+  if (!tabs.length) return;
+  const current = Math.max(0, tabs.indexOf(document.activeElement));
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
+    : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+  event.preventDefault();
+  tabs[next].focus();
+  switchViewTab(raceNo, tabs[next].dataset.view);
+}
+
 async function switchViewTab(raceNo, view) {
   const debanView   = document.getElementById(`view-deban-${raceNo}`);
   const kekkaView   = document.getElementById(`view-kekka-${raceNo}`);
@@ -7019,6 +7051,16 @@ async function switchViewTab(raceNo, view) {
 
   [debanView, kekkaView, abilityView, yosoView, oddsView].forEach(v => { if (v) v.style.display = 'none'; });
   [debanBtn, kekkaBtn, abilityBtn, yosoBtn, oddsBtn, moreBtn].forEach(b => { if (b) b.classList.remove('on'); });
+  const tabMap = { deban:[debanBtn,debanView], yoso:[yosoBtn,yosoView], odds:[oddsBtn,oddsView] };
+  Object.values(tabMap).forEach(([button,panel]) => {
+    if (button) { button.setAttribute('aria-selected','false'); button.tabIndex = -1; }
+    if (panel) panel.hidden = true;
+  });
+  if (tabMap[view]) {
+    const [button,panel] = tabMap[view];
+    if (button) { button.setAttribute('aria-selected','true'); button.tabIndex = 0; }
+    if (panel) panel.hidden = false;
+  }
   if (debanCtrl) debanCtrl.style.display = 'none';
   toggleRaceMoreTabs(raceNo, false);
 
@@ -8622,29 +8664,55 @@ async function renderHorseOddsHistory(containerId, raceDateSlash, raceNo, umaBan
 // Cloudflare Worker プロキシ（書き込み専用）
 // ★セキュリティ：書き込みトークンはソースにベタ書きしない（公開サイトのソースから盗まれ、
 //   誰でもDB全消去/改ざんが可能になるため・2026-07-08修正）。管理者が「管理者ログイン」で
-//   一度だけ入力し、その端末の localStorage(kv_write_token) にのみ保持する。閲覧者は書込不可。
+//   セッション中だけ sessionStorage(kv_write_token) に保持する。閲覧者は書込不可。
 // ============================================================
 const WORKER_URL = 'https://keiba-proxydeploy.maguronagareboshi.workers.dev';
-function getWriteToken() { return localStorage.getItem('kv_write_token') || ''; }
+function getWriteToken() { return sessionStorage.getItem('kv_write_token') || localStorage.getItem('kv_write_token') || ''; }
 
 /** Supabase REST API：upsert（INSERT OR UPDATE）— Worker 経由で書き込み */
 async function apiUpsert(table, id, payload) {
+  const token = getWriteToken();
+  if (!token) throw new Error('管理者認証がありません');
+  const body = { ...payload, id };
+  let res;
   try {
-    const body = { ...payload, id };
-    const res = await fetch(`${WORKER_URL}/rest/v1/${table}`, {
+    res = await fetch(`${WORKER_URL}/rest/v1/${table}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Write-Token': getWriteToken(),
-        'Prefer': 'resolution=merge-duplicates,return=minimal',
+        'X-Write-Token': token,
+        'Prefer': 'resolution=merge-duplicates,return=representation',
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15000),
     });
-    if (!res.ok) {
-      const err = await res.text();
-      console.warn(`[apiUpsert] ${table}/${id} エラー:`, err);
-    }
-  } catch(e) { console.warn(`[apiUpsert] ${table}/${id}`, e); }
+  } catch (cause) {
+    throw new Error(`${table}/${id} の通信に失敗しました`, { cause });
+  }
+  const raw = await res.text();
+  if (!res.ok) throw new Error(`${table}/${id} の保存に失敗しました（HTTP ${res.status}）${raw ? `: ${raw.slice(0, 240)}` : ''}`);
+  return raw ? (() => { try { return JSON.parse(raw); } catch (_) { return raw; } })() : true;
+}
+
+/** 1レースと全出走馬をDBトランザクションで保存する。RPC未導入時は成功扱いにしない。 */
+async function apiSaveRaceBundle(raceId, raceRow, horseRows) {
+  const token = getWriteToken();
+  if (!token) throw new Error('管理者認証がありません');
+  const expected = (horseRows || []).map(row => parseInt(row.uma_ban, 10)).filter(Number.isFinite).sort((a,b) => a-b);
+  if (!expected.length || new Set(expected).size !== expected.length) throw new Error('出走馬の馬番集合が不正です');
+  const res = await fetch(`${WORKER_URL}/rpc/save-keiba-race-bundle`, {
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-Write-Token':token},
+    body:JSON.stringify({ race_id:raceId, race:raceRow, horses:horseRows, expected_uma_ban:expected }),
+    signal:AbortSignal.timeout(20000),
+  });
+  const raw = await res.text();
+  if (!res.ok) throw new Error(`レース一括保存に失敗しました（HTTP ${res.status}）${raw ? `: ${raw.slice(0, 240)}` : ''}`);
+  let result = null;
+  try { result = raw ? JSON.parse(raw) : null; } catch (_) {}
+  const saved = Number(result?.saved_horses ?? result?.[0]?.saved_horses);
+  if (!Number.isFinite(saved) || saved !== expected.length) throw new Error(`保存頭数が一致しません（予定${expected.length}頭／保存${Number.isFinite(saved) ? saved : '不明'}頭）`);
+  return { savedHorses:saved, result };
 }
 // ============================================================
 // IndexedDB ストレージ層（容量制限なし・通常数百MB〜GB単位）
@@ -9000,6 +9068,7 @@ function idbPut(key, val) {
   if (old) _unindexStoredEntry(key, old);
   _idbCache[key] = val; // メモリキャッシュを即時更新
   _indexStoredEntry(key, val);
+  if (val && (val.type === 'horse' || val.type === 'race')) window._kvHistoryRevision = Number(window._kvHistoryRevision || 0) + 1;
   _savedGroupsDirty = true;
   if (val && (val.type === 'horse' || val.type === 'race') && window.kvResetVnextPartnerLiveIndex) {
     window.kvResetVnextPartnerLiveIndex();
@@ -9042,6 +9111,7 @@ function idbDelete(key) {
     if (_old) _unindexStoredEntry(key, _old);
     delete _idbCache[key];
   }
+  if (_old && (_old.type === 'horse' || _old.type === 'race')) window._kvHistoryRevision = Number(window._kvHistoryRevision || 0) + 1;
   _savedGroupsDirty = true;
   if (_old && (_old.type === 'horse' || _old.type === 'race') && window.kvResetVnextPartnerLiveIndex) {
     window.kvResetVnextPartnerLiveIndex();
@@ -9191,7 +9261,7 @@ async function _idbBulkPut(obj) {
 const _IDB_PAGE = 1000;          // 1ページあたり取得件数
 let _bgLoadActive = false;       // 背景読み込み中フラグ
 const _KV_FULL_SYNC_META_KEY = 'kv_full_sync_meta_v1';
-const _KV_FULL_SYNC_MAX_AGE = 12 * 60 * 60 * 1000; // 全履歴の再走査は最大でも12時間に1回
+const _KV_FULL_SYNC_MAX_AGE = 30 * 24 * 60 * 60 * 1000; // 日常更新はupdated_at差分、全走査は月1回だけ
 
 /** Supabase の1ページ分を取得（高知のみ・日付降順）。
  *  深いoffsetの並列取得はサーバー側で一時的な500を返すことがある（2026-07-15実測: 全157ページ中
@@ -9304,6 +9374,7 @@ async function _putHorseRowsBatch(rows, hydrate) {
     tx.oncomplete = resolve;
     tx.onerror = e => reject(e.target.error || new Error('馬データ一括保存失敗'));
   });
+  window._kvHistoryRevision = Number(window._kvHistoryRevision || 0) + 1;
   const warmPairs = pairs.filter(([key]) => hydrate || _idbFullReady || Object.prototype.hasOwnProperty.call(_idbCache || {}, key));
   if (warmPairs.length) _mergeIDBCachePairs(warmPairs);
   _idbTotalCount = Math.max(_idbTotalCount, Object.keys(_idbCache || {}).length);
@@ -9357,6 +9428,72 @@ async function _fetchTablePaged(table, afterId, onRows, onProgress) {
     await new Promise(resolve => setTimeout(resolve, 0));
   }
   return { total, incomplete: false, nextCursor: null };
+}
+
+/** updated_at + id の複合カーソルで変更行だけを同期する。 */
+async function _fetchTableUpdatedAfter(table, sinceIso, onRows) {
+  let updated = sinceIso, id = '', total = 0, newest = sinceIso;
+  while (true) {
+    const url = new URL(`${SUPABASE_URL}/rest/v1/${table}`);
+    url.searchParams.set('select','*'); url.searchParams.set('baba_code','eq.31');
+    url.searchParams.set('order','updated_at.asc,id.asc'); url.searchParams.set('limit',String(_IDB_PAGE));
+    if (id) url.searchParams.set('or', `(updated_at.gt.${updated},and(updated_at.eq.${updated},id.gt.${id}))`);
+    else url.searchParams.set('updated_at', `gt.${updated}`);
+    const res = await fetch(url.toString(), { headers:SUPABASE_HEADERS });
+    if (!res.ok) throw new Error(`${table} 差分同期 HTTP ${res.status}`);
+    const rows = await res.json();
+    if (!Array.isArray(rows) || !rows.length) break;
+    await onRows(rows); total += rows.length;
+    const last = rows[rows.length - 1]; updated = String(last.updated_at || updated); id = String(last.id || '');
+    if (Date.parse(updated) > Date.parse(newest)) newest = updated;
+    if (rows.length < _IDB_PAGE) break;
+    await new Promise(resolve => setTimeout(resolve, 0));
+  }
+  return { total, newest };
+}
+
+/** 他端末で削除された行をローカルにも反映する。月次全走査だけでは削除を検知できない。 */
+async function _fetchDeletionTombstones(sinceIso) {
+  let deleted = sinceIso, seq = 0, total = 0, newest = sinceIso;
+  while (true) {
+    const url = new URL(`${SUPABASE_URL}/rest/v1/keiba_delete_tombstones`);
+    url.searchParams.set('select','seq,entity,record_id,deleted_at');
+    url.searchParams.set('baba_code','eq.31');
+    url.searchParams.set('order','deleted_at.asc,seq.asc');
+    url.searchParams.set('limit',String(_IDB_PAGE));
+    if (seq) url.searchParams.set('or', `(deleted_at.gt.${deleted},and(deleted_at.eq.${deleted},seq.gt.${seq}))`);
+    else url.searchParams.set('deleted_at', `gt.${deleted}`);
+    const res = await fetch(url.toString(), { headers:SUPABASE_HEADERS });
+    if (!res.ok) throw new Error(`削除差分同期 HTTP ${res.status}`);
+    const rows = await res.json();
+    if (!Array.isArray(rows) || !rows.length) break;
+    for (const row of rows) {
+      const key = row.entity === 'race' ? `race_${row.record_id}` : String(row.record_id || '');
+      if (key) idbDelete(key);
+    }
+    total += rows.length;
+    const last = rows[rows.length - 1]; deleted = String(last.deleted_at || deleted); seq = Number(last.seq || 0);
+    if (Date.parse(deleted) > Date.parse(newest)) newest = deleted;
+    if (rows.length < _IDB_PAGE) break;
+    await new Promise(resolve => setTimeout(resolve, 0));
+  }
+  return { total, newest };
+}
+
+async function _runIncrementalSync(meta) {
+  const since = meta?.serverUpdatedAt || (meta?.at ? new Date(meta.at).toISOString() : null);
+  if (!since) return meta;
+  const [races,horses,deletions] = await Promise.all([
+    _fetchTableUpdatedAfter('keiba_races', since, rows => rows.forEach(_putRaceRow)),
+    _fetchTableUpdatedAfter('keiba_horses', since, rows => _putHorseRowsBatch(rows, false)),
+    _fetchDeletionTombstones(since),
+  ]);
+  const newest = [since,races.newest,horses.newest,deletions.newest].sort((a,b) => Date.parse(b) - Date.parse(a))[0];
+  const next = { ...meta, lastIncrementalAt:Date.now(), serverUpdatedAt:newest,
+    lastIncrementalRows:{ races:races.total, horses:horses.total, deletions:deletions.total } };
+  localStorage.setItem(_KV_FULL_SYNC_META_KEY, JSON.stringify(next));
+  if (races.total || horses.total || deletions.total) { loadSavedData(); _refreshSavedDebounced(); }
+  return next;
 }
 
 /** 日別設定（メモ・内外バイアス）を取得 */
@@ -9517,7 +9654,10 @@ async function initDB() {
   );
   if (_fullSyncFresh) {
     console.log(`[initDB] Phase2 省略（全履歴同期から${Math.round((Date.now() - _fullSyncMeta.at) / 60000)}分）`);
-    _kvScheduleIdle(() => loadWeeklySchedule(), 2500);
+    _kvScheduleIdle(async () => {
+      try { await Promise.all([loadWeeklySchedule(), _runIncrementalSync(_fullSyncMeta)]); }
+      catch(e) { console.warn('[initDB] 差分同期失敗:', e); }
+    }, 2500);
     return;
   }
 
@@ -9539,15 +9679,17 @@ async function initDB() {
         }
         return r;
       };
-      let _anyIncomplete = false;
+      let _anyIncomplete = false, _raceRows = 0, _horseRows = 0;
       if (!p1RaceDone) {
         const rr = await _pagedWithResume('keiba_races', rows => rows.forEach(_putRaceRow));
+        _raceRows = rr.total;
         if (rr.incomplete) _anyIncomplete = true;
       }
       if (!p1HorseDone) {
         const hr = await _pagedWithResume('keiba_horses',
           rows => _putHorseRowsBatch(rows, false),
           () => _refreshSavedDebounced());
+        _horseRows = hr.total;
         if (hr.incomplete) _anyIncomplete = true;
       }
       if (_anyIncomplete) {
@@ -9561,6 +9703,9 @@ async function initDB() {
           localStorage.setItem(_KV_FULL_SYNC_META_KEY, JSON.stringify({
             at: Date.now(),
             cacheSize: Object.keys(_idbCache || {}).length,
+            // 全走査中に更新された行を取りこぼさないよう5分重ねて次回差分同期する。
+            serverUpdatedAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+            manifest: { raceRows:_raceRows, horseRows:_horseRows, schema:2 },
           }));
         } catch(e) {}
       }
@@ -9646,20 +9791,22 @@ async function saveAllData() {
 
       const raceId=`race_${currentBaba}_${currentDate}_${rn}`;
       const raceRow={race_date:currentDate,race_no:rn,baba_code:currentBaba,race_name:info.raceName||'',distance:info.distance||'',race_class:info.raceClass||'',track_cond:info.trackCond||'',first3f:info.first3f||'',agari4f:info.agari4f||'',agari3f_race:info.agari3f_race||'',pace_type:info.paceType||'',memo:info.memo||'',lap_times:lapTimesJson};
-      await apiUpsert('keiba_races',raceId,raceRow);
-      lsWrite(raceId,{type:'race',...raceRow,paceType:info.paceType||'',lapTimes:info.lapTimes||null,_apiSaved:true,savedAt:new Date().toISOString()});
-      rc++;
-
+      const horseRows = [];
+      const localHorses = [];
       let raceHc = 0;
       const isDebaRace = !!(info._isDebaTable);
       for (const horse of (data.horses||[])) {
         if(!isDebaRace && !(horse.first3f||horse.paceType||horse.mukaeShoumen||horse.shoumenStraight||horse.chakujun||horse.postComment))continue;
         const horseId=`${currentBaba}_${currentDate}_${rn}_${horse.umaBan}`;
         const horseRow={race_date:currentDate,race_no:rn,baba_code:currentBaba,uma_ban:horse.umaBan,waku_ban:horse.wakuBan||'',horse_name:horse.horseName||'',belong:horse.belong||'',sex_age:horse.sexAge||'',kinryo:horse.kinryo||'',jockey:horse.jockey||'',trainer:horse.trainer||'',weight:horse.weight||'',chakujun:horse.chakujun||'',ninki:horse.ninki||'',odds:horse.odds||'',time:horse.time||'',diff:horse.diff||'',agari3f:horse.agari3f||'',corner:horse.corner||'',first3f:horse.first3f||'',pace_type:horse.paceType||'',mukae_shoumen:horse.mukaeShoumen||'',shoumen_straight:horse.shoumenStraight||'',post_comment:horse.postComment||'',lineage_login_code:horse.lineageLoginCode||''};
-        await apiUpsert('keiba_horses',horseId,horseRow);
-        lsWrite(horseId,{type:'horse',chakujun:horseRow.chakujun,wakuBan:horseRow.waku_ban,horseName:horseRow.horse_name,belong:horseRow.belong,sexAge:horseRow.sex_age,kinryo:horseRow.kinryo,jockey:horseRow.jockey,trainer:horseRow.trainer,weight:horseRow.weight,ninki:horseRow.ninki,odds:horseRow.odds,time:horseRow.time,diff:horseRow.diff,agari3f:horseRow.agari3f,corner:horseRow.corner,first3f:horseRow.first3f,paceType:horseRow.pace_type,mukaeShoumen:horseRow.mukae_shoumen,shoumenStraight:horseRow.shoumen_straight,postComment:horse.postComment||'',lineageLoginCode:horse.lineageLoginCode||'',savedAt:new Date().toISOString()});
-        hc++; raceHc++;
+        horseRows.push(horseRow);
+        localHorses.push([horseId,{type:'horse',chakujun:horseRow.chakujun,wakuBan:horseRow.waku_ban,horseName:horseRow.horse_name,belong:horseRow.belong,sexAge:horseRow.sex_age,kinryo:horseRow.kinryo,jockey:horseRow.jockey,trainer:horseRow.trainer,weight:horseRow.weight,ninki:horseRow.ninki,odds:horseRow.odds,time:horseRow.time,diff:horseRow.diff,agari3f:horseRow.agari3f,corner:horseRow.corner,first3f:horseRow.first3f,paceType:horseRow.pace_type,mukaeShoumen:horseRow.mukae_shoumen,shoumenStraight:horseRow.shoumen_straight,postComment:horse.postComment||'',lineageLoginCode:horse.lineageLoginCode||'',savedAt:new Date().toISOString()}]);
+        raceHc++;
       }
+      await apiSaveRaceBundle(raceId, raceRow, horseRows);
+      lsWrite(raceId,{type:'race',...raceRow,paceType:info.paceType||'',lapTimes:info.lapTimes||null,_apiSaved:true,savedAt:new Date().toISOString()});
+      localHorses.forEach(([horseId,row]) => lsWrite(horseId,row));
+      rc++; hc += raceHc;
 
       // 完了に変更
       if (item) {
@@ -9718,19 +9865,20 @@ async function _saveRaceDirect(date, baba, rn, parsed) {
   if (!info.paceType) { const p = paceFromDiff(info.first3f, info.agari3f_race); if (p) info.paceType = p; }
   const raceId = `race_${baba}_${date}_${rn}`;
   const raceRow = { race_date:date, race_no:rn, baba_code:baba, race_name:info.raceName||'', distance:info.distance||'', race_class:info.raceClass||'', track_cond:info.trackCond||'', first3f:info.first3f||'', agari4f:info.agari4f||'', agari3f_race:info.agari3f_race||'', pace_type:info.paceType||'', memo:info.memo||'', lap_times:'' };
-  // Supabase書き込みは全馬分をまとめて並列実行（逐次awaitだと1レース12往復＝一括取得最大のボトルネック）
-  const _jobs = [ apiUpsert('keiba_races', raceId, raceRow) ];
-  lsWrite(raceId, { type:'race', ...raceRow, paceType:info.paceType||'', lapTimes:null, _apiSaved:true, savedAt:new Date().toISOString() });
+  const horseRows = [];
+  const localHorses = [];
   let hc = 0;
   for (const h of (parsed.horses||[])) {
     if (h.umaBan == null) continue;
     const horseId = `${baba}_${date}_${rn}_${h.umaBan}`;
     const horseRow = { race_date:date, race_no:rn, baba_code:baba, uma_ban:h.umaBan, waku_ban:h.wakuBan||'', horse_name:h.horseName||'', belong:h.belong||'', sex_age:h.sexAge||'', kinryo:h.kinryo||'', jockey:h.jockey||'', trainer:h.trainer||'', weight:h.weight||'', chakujun:h.chakujun||'', ninki:h.ninki||'', odds:h.odds||'', time:h.time||'', diff:h.diff||'', agari3f:h.agari3f||'', corner:h.corner||'', first3f:h.first3f||'', pace_type:h.paceType||'', mukae_shoumen:h.mukaeShoumen||'', shoumen_straight:h.shoumenStraight||'', post_comment:h.postComment||'', lineage_login_code:h.lineageLoginCode||'' };
-    _jobs.push(apiUpsert('keiba_horses', horseId, horseRow));
-    lsWrite(horseId, { type:'horse', chakujun:horseRow.chakujun, wakuBan:horseRow.waku_ban, horseName:horseRow.horse_name, belong:horseRow.belong, sexAge:horseRow.sex_age, kinryo:horseRow.kinryo, jockey:horseRow.jockey, trainer:horseRow.trainer, weight:horseRow.weight, ninki:horseRow.ninki, odds:horseRow.odds, time:horseRow.time, diff:horseRow.diff, agari3f:horseRow.agari3f, corner:horseRow.corner, first3f:horseRow.first3f, paceType:horseRow.pace_type, mukaeShoumen:horseRow.mukae_shoumen, shoumenStraight:horseRow.shoumen_straight, postComment:h.postComment||'', lineageLoginCode:h.lineageLoginCode||'', savedAt:new Date().toISOString() });
+    horseRows.push(horseRow);
+    localHorses.push([horseId, { type:'horse', chakujun:horseRow.chakujun, wakuBan:horseRow.waku_ban, horseName:horseRow.horse_name, belong:horseRow.belong, sexAge:horseRow.sex_age, kinryo:horseRow.kinryo, jockey:horseRow.jockey, trainer:horseRow.trainer, weight:horseRow.weight, ninki:horseRow.ninki, odds:horseRow.odds, time:horseRow.time, diff:horseRow.diff, agari3f:horseRow.agari3f, corner:horseRow.corner, first3f:horseRow.first3f, paceType:horseRow.pace_type, mukaeShoumen:horseRow.mukae_shoumen, shoumenStraight:horseRow.shoumen_straight, postComment:h.postComment||'', lineageLoginCode:h.lineageLoginCode||'', savedAt:new Date().toISOString() }]);
     hc++;
   }
-  await Promise.all(_jobs);
+  await apiSaveRaceBundle(raceId, raceRow, horseRows);
+  lsWrite(raceId, { type:'race', ...raceRow, paceType:info.paceType||'', lapTimes:null, _apiSaved:true, savedAt:new Date().toISOString() });
+  localHorses.forEach(([horseId, row]) => lsWrite(horseId, row));
   return hc;
 }
 
@@ -10298,7 +10446,7 @@ function renderJockeyChangeAnalysis() {
       const st = jfSrcTr[r.tr] || {};
       const srcs = Object.keys(st).filter(A => st[A].n >= 2).map(A => ({ A, n: st[A].n, fuku: pct(st[A].f, st[A].n), win: pct(st[A].w, st[A].n) })).sort((a, b) => b.fuku - a.fuku || b.n - a.n);
       const verdict = (r.chg != null && r.cont != null)
-        ? (r.diff >= 5 ? `<b class="jc-hot">乗り替わりが買い</b>（乗替${r.chg}% ＞ 継続${r.cont}%）` : r.diff <= -5 ? `<b class="jc-cold">継続の方が良い</b>（継続${r.cont}% ＞ 乗替${r.chg}%）` : `ほぼ互角（乗替${r.chg}%・継続${r.cont}%）`)
+        ? (r.diff >= 5 ? `<b class="jc-hot">乗り替わり時に好走傾向</b>（乗替${r.chg}% ＞ 継続${r.cont}%）` : r.diff <= -5 ? `<b class="jc-cold">継続騎乗時に好走傾向</b>（継続${r.cont}% ＞ 乗替${r.chg}%）` : `ほぼ互角（乗替${r.chg}%・継続${r.cont}%）`)
         : (r.chg != null ? `乗替のみ ${r.chg}%（継続データなし）` : r.cont != null ? `継続のみ ${r.cont}%（乗替データなし）` : '—');
       const srcHtml = `<div class="jc-verdict">${r.tr}での判定：${verdict}</div>`
         + (srcs.length
@@ -10339,7 +10487,7 @@ function renderJockeyChangeAnalysis() {
         </div>
         ${jfPairPanels}
       </div>
-      <p style="font-size:10.5px;color:#9ca3af;margin-top:8px;line-height:1.6">※${jf}が各厩舎の馬に乗った時の成績。<b>乗替時</b>＝別の騎手からこの騎手へ替わった時、<b>継続時</b>＝前走から続けて乗った時。<b>差が＋なら「その厩舎ではこの騎手への乗り替わりが買い」</b>、−なら継続の方が信頼できます。厩舎タップで判定＋乗せ替え元（誰→${jf}）が見られます。</p>`;
+      <p style="font-size:10.5px;color:#9ca3af;margin-top:8px;line-height:1.6">※${jf}が各厩舎の馬に乗った時の成績。<b>乗替時</b>＝別の騎手からこの騎手へ替わった時、<b>継続時</b>＝前走から続けて乗った時。差が＋なら乗り替わり時、−なら継続騎乗時の好走率が高いという能力材料です。価格を含む購入判断ではありません。</p>`;
   } else if (tf) {
     // ── 厩舎ビュー：この厩舎の騎手別成績＋乗替パターン ──
     const mainJk = Object.entries(trJk).sort((a, b) => b[1].n - a[1].n)[0]?.[0];
@@ -10357,7 +10505,7 @@ function renderJockeyChangeAnalysis() {
         .map(([pk, v]) => ({ A: pk.split(' → ')[0], n: v.n, fuku: pct(v.f, v.n), win: pct(v.w || 0, v.n) }))
         .sort((a, b) => b.fuku - a.fuku || b.n - a.n);   // 複勝率の高い順＝上が良い/下が悪い（1件ノイズは除外）
       const srcHtml = srcs.length
-        ? `<div style="font-size:11px;font-weight:800;color:#64748b;margin-bottom:4px">誰から ${r.J} に乗り替わると良い／悪いか（複勝率の高い順・上=買い/下=消し・n≥2）</div>`
+        ? `<div style="font-size:11px;font-weight:800;color:#64748b;margin-bottom:4px">誰から ${r.J} に乗り替わると好走率が高い／低いか（複勝率順・n≥2）</div>`
           + srcs.map(s => `<div class="jc-src-item"><span class="jc-src-pair">${s.A} → <b>${r.J}</b></span><span class="jc-src-meta">勝率${s.win}%</span><span class="${cls(s.fuku)}" style="font-weight:800">複勝${s.fuku}%</span><span class="jc-src-meta">${s.n}件</span></div>`).join('')
         : '<div style="color:#9ca3af;font-size:11px">n≥2の乗せ替え元がありません（この厩舎はサンプル不足）</div>';
       return `<tr class="jc-jkrow" onclick="var d=document.getElementById('jcsrc-${i}');if(d){d.classList.toggle('hidden');this.classList.toggle('jc-open')}">
@@ -10400,7 +10548,7 @@ function renderJockeyChangeAnalysis() {
         .map(([pk, v]) => ({ A: pk.split(' → ')[0], n: v.n, fuku: pct(v.f, v.n), win: pct(v.w || 0, v.n) }))
         .sort((a, b) => b.fuku - a.fuku || b.n - a.n).slice(0, 20);
       const srcHtml = (srcs.length
-        ? `<div style="font-size:11px;font-weight:800;color:#64748b;margin-bottom:4px">誰から ${r.B} に乗り替わると良い／悪いか（n≥${_minSrcN}・複勝率の高い順・上=買い/下=消し）</div>`
+        ? `<div style="font-size:11px;font-weight:800;color:#64748b;margin-bottom:4px">誰から ${r.B} に乗り替わると好走率が高い／低いか（n≥${_minSrcN}・複勝率順）</div>`
           + srcs.map(s => `<div class="jc-src-item"><span class="jc-src-pair">${s.A} → <b>${r.B}</b></span><span class="jc-src-meta">勝率${s.win}%</span><span class="${cls(s.fuku)}" style="font-weight:800">複勝${s.fuku}%</span><span class="jc-src-meta">${s.n}件</span></div>`).join('')
         : `<div style="color:#9ca3af;font-size:11px">n≥${_minSrcN}の乗せ替え元データがありません</div>`)
         + `<div class="jc-src-meta" style="margin-top:6px;white-space:pre-line">${jkTip(r.B)}</div>`;
@@ -11480,260 +11628,7 @@ function evaluateForwardOpponentShadowSnapshots(modelId) {
       readyForFirstComparison:counts.settled>=200, productionEligible:false }, rows };
 }
 
-// ══════════════ 市場アンカー・オフセットロジットモデル（2026-07-10 本採用）══════════════
-// 【設計】従来の「加算スコアで順位付け」から、「市場オッズを土台にAIがそのズレだけ補正する」方式へ。
-// score_i = log(市場勝率_i) + Σ w_f・(x_f - mean_f)/sd_f 、これをレース内softmaxで確率化する。
-// 全16特徴量(現行のYoso補正)はそのまま使い、合成方法だけを変える（加算→オフセット付き学習係数）。
-// 【検証】3000R・日付順expanding-window walk-forward CV＋直近3ヶ月(284R)の完全未使用ホールドアウトで
-// 現行加算モデルと対決：holdout ◎勝率35.6%→42.3%(+6.7pt)・◎複勝64.4%→70.1%(+5.7pt)・
-// ◎回収78.9%→82.5%(+3.6pt)。walk-forward 4fold全てで一貫して現行を上回り、較正も低確率帯
-// （穴馬判定に直結する領域）で良好（予測7.2%→実際7.0%等）。分布型走力(上振れ度)は別途検証し
-// 効果確認できず不採用（高sd群ROI71.8% vs 低sd群70.7%・誤差範囲）。
-// KV_OFFSET_MODEL_DEFAULTは2026-07-10時点の全高知データ(3000R)で学習した出荷時係数。
-// 【2026-07-11】16→12特徴量に整理（condNew/winStrN/rakuN削除・rotN+takiNをrotTakiNへ統合）。
-// 根拠：高知全履歴12年13,576R（2014-2026）でexpanding-window walk-forward(3分割)+ホールドアウト検証。
-// 判定は必ず「16特徴量オフセットモデル(B)」対「候補(C)」で行う（旧・加算モデルとの比較は
-// 市場アンカー化そのものの効果が混ざるため判定に使わない＝2026-07-11のユーザー指摘で誤比較を修正）。
-// B↔Cの◎一致率96.5-98.7%（16→12はほぼ同じ馬を選ぶ）。不一致レースを含め◎勝率/複勝/回収の
-// 全指標でCがBを上回り（3fold中3fold・ホールドアウトも）採用基準クリア。「回収率改善モデル」
-// ではなく「同等以上の精度を保った整理」と位置付ける（本質的な回収率の課題は市場アンカー化
-// 自体のA→B効果＝◎勝率+4pt/回収-3.8pt。[[kochi-yoso-market-anchor-model]]参照、購入モデル分離で対応）。
-// condNewは係数ほぼ0、winStrN/rakuNはmarginNと相関0.25-0.46で包含関係
-// （winStrN発火の99.8%はmarginNも発火）、rotN/takiNは同時発火率0.12%でほぼ排他だが
-// takiN単体の係数が小さく単純和(rotTakiN)で同等以上の精度。
-const KV_OFFSET_MODEL_DEFAULT = {
-  trainedAt: '2026-07-11', races: 13576,
-  feats: ['base','distNew','clsN','cornN','trendN','weightN','agariN','comboN','marginN','jockeyChgN','cornConsistN','rotTakiN'],
-  w:    [0.3296, -0.0114, 0.0374, -0.0293, 0.0058, 0.0268, 0.0241, 0.0154, -0.0138, 0.0117, -0.0908, -0.0317],
-  mean: [41.207, -0.074, -0.002, -0.970, -0.027, -0.027, -1.144, 0.035, 0.001, 0.214, 0.005, -0.169],
-  sd:   [9.723, 0.404, 0.382, 1.371, 0.762, 0.096, 0.339, 0.558, 0.448, 1.638, 0.597, 0.403],
-};
-function getOffsetModelWeights() {
-  try {
-    const ls = lsRead();
-    for (const rec of [ls['offset_model_31'], ls['daySettings_31_offset-model']]) {
-      if (!rec || !rec.memo) continue;
-      const p = JSON.parse(rec.memo);
-      if (p && p.w && p.feats) return p;
-    }
-  } catch (e) {}
-  return KV_OFFSET_MODEL_DEFAULT;
-}
-function saveOffsetModelWeights(payload) {
-  const memo = JSON.stringify(payload);
-  lsWrite('offset_model_31', { type: 'offsetModel', memo });
-  apiUpsert('keiba_day_settings', '31_offset-model', { baba_code: '31', race_date: 'offset-model', memo }).catch(() => {});
-}
-
-// ══════════ 購入モデル専用：凍結済みシャドーモデル (2026-07-11 freeze) ══════════
-// 【分離の原則】通常予想(◎○▲の並び順)はKV_OFFSET_MODEL_DEFAULT(12特徴量・jockeyChgN込み)を使う。
-// 購入判定(EV一致シグナル)は必ずこのSHADOW_PURCHASE_MODEL(加算15特徴量+オフセット11特徴量・
-// jockeyChgN除外・agariN維持)を使い、本番ランキングモデル(offset12)を暗黙に購入判定へ流用しない。
-// 2026-07-11のユーザー指摘により明示的に分離。
-//
-// 【agariN=enabledの根拠（凍結前の再検証・2026-07-11）】
-// 「レース内softmaxでは全馬同じ固定値なら順位に影響しない」という指摘は理論上正しいが、agariNは
-// 完全な定数ではない：全体標準偏差0.346・レース内標準偏差平均0.175（レース内std=0のレースは
-// 14,776R中52.7%）・欠損率0%・値の種類360通り（89.2%が下限飽和値-1.25、7.7%が0、残り3.1%が
-// 連続値）・馬ごとのユニーク値数は中央値2（1種類のみの馬は6.2%）。レース内でagariNが完全に一定
-// (std=0)のレースでも◎が変わる例があるのは、agariN込み/除外で再学習した際に他の特徴量
-// （base/marginN/trendN等）の係数自体がシフトするため（agariN込みoffset11モデルの係数と比べ、
-// 除外後はbase 0.3911→0.3815・marginN -0.0018→-0.0067等、全項目が小さくシフトすることを実測で
-// 確認）。つまりagariN自身の係数がゼロ分散レースの順位を動かすのではなく、agariNが他特徴量と
-// 相関しているために除外時にその説明力が再配分される、という間接効果。
-const SHADOW_PURCHASE_MODEL = {
-  version: 'shadow_v1',
-  trainedThrough: '2026-07-05', races: 14776,
-  additive: {
-    feats: ['base','condNew','distNew','rotN','clsN','cornN','trendN','weightN','agariN','comboN','marginN','winStrN','takiN','cornConsistN','rakuN'],
-    w:    [1.5381, 0.0257, 0.0259, 0.0009, 0.1245, 0.1874, 0.0873, 0.0494, 0.046, 0.2719, 0.0528, -0.0226, -0.0025, -0.1103, 0.082],
-    mean: [40.9012, 0.003, -0.0735, -0.1825, -0.0014, -0.9774, -0.0269, -0.0273, -1.1399, 0.0284, -0.0034, 0.081, 0.0164, 0.0021, 0.1299],
-    sd:   [10.0024, 0.7684, 0.4003, 0.3825, 0.3802, 1.3648, 0.7613, 0.097, 0.3463, 0.5572, 0.4482, 0.1784, 0.0979, 0.5965, 0.6897],
-  },
-  offset: {
-    feats: ['base','distNew','clsN','cornN','trendN','weightN','agariN','comboN','marginN','cornConsistN','rotTakiN'],
-    w:    [0.3547, -0.0169, 0.0244, -0.1135, -0.0293, 0.0366, -0.0533, 0.0055, 0, -0.1042, -0.0565],
-    mean: [40.9012, -0.0735, -0.0014, -0.9774, -0.0269, -0.0273, -1.1399, 0.0284, -0.0034, 0.0021, -0.1661],
-    sd:   [10.0024, 0.4003, 0.3802, 1.3648, 0.7613, 0.097, 0.3463, 0.5572, 0.4482, 0.5965, 0.4008],
-  },
-};
-
-// 凍結チェックリスト（購入判定ルール一式）。ハッシュ対象はcoef/mean/sdだけでなく、欠損補完値
-// (0)・切片なしという設計・温度=1・オッズ正規化式・EV計算式・tie-break規則・適格条件も含む
-// （2026-07-11②ユーザー指摘：係数が同じでも運用ルールが変われば別モデル）。基準時計表
-// (STANDARD_TIMES)・クラス対応表(YOSO_CLASS_RANK)はモデル固有ではなくアプリ全体で共有される
-// 定数のため、ここでは再ハッシュせずcode_commit_shaでの提供を根拠とする。
-// 途中で1項目でも変更したら新しいversionを切り、シャドー件数は0から数え直すこと。
-const SHADOW_FREEZE_CONFIG = {
-  shadow_model_version: 'shadow_v1',
-  additive_coef_hash: 'sha256:a6b0394a9fb57aa22942960e6a2f0d5fb8d4806212bc2188305f4ad1b903e72',
-  offset_coef_hash: 'sha256:bafdc63b31f5fde242bc4f739e4e6357e88c172fc950064d9bd5ba4a69fcc83',
-  feature_schema_hash: 'sha256:c15e91b01ca36765d42026a6f8e3eb9f4f26d9c54eb604c296cf273fca7cfa3',
-  code_commit_sha: '8b6870b', // service_role専用書込み+ハッシュ拡張コミット
-  trained_through: '2026-07-05',
-  freeze_timestamp: '2026-07-11T02:57:39Z', // モデル・係数を固定した時刻
-  // 2026-07-11: 本番デプロイ・Supabaseテーブル作成(v2)・自動記録の実地検証(capture_shadow.py が
-  // service_roleキーで9頭ぶん正しく記録)・結果突合の実地検証(settle_shadow.pyを2026/07/05の
-  // 実データで検証：1着払戻・取消refunded・4着0円・未確定待機すべて正常)が完了したため確定。
-  // 7/11の全レースは動作確認に使用済みのため明示的に除外し、7/12 0時(JST)を境界とする。
-  shadow_start_at: '2026-07-12T00:00:00+09:00',
-  // race_start > shadow_start_atのレースのみ前向き集計の対象とする（freeze_timestampとは
-  // 意図的に分離：freeze時点ではDB/自動記録が未稼働だったため、そのまま開始時刻にはできない）。
-  odds_source: 'keiba.go.jp（OddsTanFukuページ・発走時刻付き）',
-  odds_cutoff_minutes: 10, // odds_observed_at <= scheduled_start_at - 10分を厳守。
-                            // 9分前以内のデータは使用禁止（capture_shadow.pyのMIN_BEFOREで実装）。
-  odds_min: 5,
-  odds_max: 30,
-  ev_additive_min: 0,
-  ev_offset_min: 0,
-  max_bets_per_race: 1,
-  tie_break: 'argmax over eligible horses of min(EV_additive, EV_offset)',
-  virtual_stake: 100,
-  jockeyChgN: 'disabled',
-  agariN: 'enabled',
-  missing_value_fill: 0, // 特徴量欠損時の補完値（(v||0)パターン）
-  intercept: 'none (softmax race-internal, intercept is redundant under normalization)',
-  temperature: 1.0,
-  odds_normalization: 'p_i = (1/odds_i) / sum_j(1/odds_j)',
-  ev_formula: 'EV_x = p_x * odds - 1',
-  eligibility: 'odds in [odds_min, odds_max) AND EV_additive>ev_additive_min AND EV_offset>ev_offset_min',
-  // 評価基準（100件は動作監査のみ・成績で変更禁止／200件で初回判定／不明確なら400件まで継続）
-  evaluation_at_100: '動作・漏洩・欠損の監査のみ。この時点の回収率で条件変更しない。',
-  evaluation_at_200: '初回成績判定。ROI/95%CI下限/最大DD/最大連敗/上位1・3件除外/月別収支/オッズ変化を確認。',
-  evaluation_at_400: '200件で不明確な場合のみ継続。',
-  pass_rule: 'ROI>100% かつ 日単位95%CI下限>=100% → 合格候補',
-  continue_rule: '(ROI>110% かつ CI下限<100%) または ROI 90〜110% → 400件まで継続',
-  fail_rule: 'ROI<90% → 不合格候補。設定変更・漏洩発覚 → 全件無効・バージョン更新',
-  // 【2026-07-11④ 逐次判定ルール（シャドーデータ0件の時点で制定＝事前登録・以後変更しない）】
-  // 通常の信頼区間を50件ごとに覗くと誤判定が増えるため、anytime-validな
-  // empirical-Bernstein信頼列(Waudby-Smith & Ramdas 2023)を採用。実装と動作特性シミュレーションは
-  // 他場/scraper/eval_shadow.py（シミュレーション結果: 真ROI170%相当でPASS到達23%/400件・
-  // 誤PASS 0%・誤STOP 0.2%＝保守的で、CSがPASSに届かないこと自体は不合格を意味しない。
-  // 最終判定の主役は400件時点の日単位ブートストラップのまま）。
-  sequential_method: 'empirical-Bernstein CS (WSR 2023, predictable plug-in), X=payout/stake∈[0,30], α=0.05両側',
-  sequential_checkpoints: '決済50件ごと(50,100,...,400)。返還はnに含めない。',
-  sequential_pass: 'CS下限>1.0がどこかのチェックポイントで成立 → 早期の合格候補（最終確認は400件ブートストラップ）',
-  sequential_stop: 'n>=100かつCS上限<1.0 → 早期の不合格候補',
-  sequential_final: '400件で従来の判定表を日単位ブートストラップで適用（400件で不明確なら保留判定とし、延長はしない）',
-};
-
-/**
- * 購入モデル専用のEV一致ピック計算。SHADOW_PURCHASE_MODELのみを使い、本番ランキング
- * モデル(KV_OFFSET_MODEL_DEFAULT/offset12)には一切依存しない（意図的な完全分離）。
- * scored: computeYosoScoredが返すscored配列（baseScore/condMod/distMod等を持つ）。
- * 戻り値: { pick, runners }。pickはEV一致で選ばれた1頭(なければnull)。
- * runnersは全頭ぶんのp_additive/p_offset/EV/非選択理由(non_selection_reason)を含み、
- * シャドーログの「全出走馬を記録する」要件にそのまま使える。
- */
-function computeShadowPurchasePick(scored) {
-  const runners = scored
-    .filter(s => s.horse && !isNaN(parseFloat(s.horse.odds)) && parseFloat(s.horse.odds) > 0)
-    .map(s => ({
-      s, odds: parseFloat(s.horse.odds),
-      featOffset: {
-        base: s.baseScore, distNew: s.distMod, clsN: s.classMod, cornN: s._cornModRaw,
-        trendN: s.trendMod, weightN: s.weightMod, agariN: s.agariMod, comboN: s.comboMod,
-        marginN: s.marginMod, cornConsistN: s.cornConsistMod, rotTakiN: (s.rotMod||0) + (s.takiMod||0),
-      },
-      featAdditive: {
-        base: s.baseScore, condNew: s.condMod, distNew: s.distMod, rotN: s.rotMod, clsN: s.classMod,
-        cornN: s._cornModRaw, trendN: s.trendMod, weightN: s.weightMod, agariN: s.agariMod,
-        comboN: s.comboMod, marginN: s.marginMod, winStrN: s.winStrMod, takiN: s.takiMod,
-        cornConsistN: s.cornConsistMod, rakuN: s.rakuMod || 0,
-      },
-    }));
-  if (runners.length < 2) return { pick: null, runners: [] };
-
-  const cfg = SHADOW_FREEZE_CONFIG;
-  const { probs: pOffset } = computeOffsetModelProbs(
-    runners.map(r => ({ odds: r.odds, feat: r.featOffset })), SHADOW_PURCHASE_MODEL.offset);
-  const { probs: pAdditive } = computeAdditiveModelProbs(
-    runners.map(r => ({ feat: r.featAdditive })), SHADOW_PURCHASE_MODEL.additive);
-
-  const rows = runners.map((r, i) => {
-    const evOffset = pOffset[i] * r.odds - 1;
-    const evAdditive = pAdditive[i] * r.odds - 1;
-    let reason = null;
-    if (!(r.odds >= cfg.odds_min && r.odds < cfg.odds_max)) reason = 'ODDS_OUT_OF_BAND';
-    else if (!(evOffset > cfg.ev_offset_min)) reason = 'EV_OFFSET_NOT_POSITIVE';
-    else if (!(evAdditive > cfg.ev_additive_min)) reason = 'EV_ADDITIVE_NOT_POSITIVE';
-    return {
-      s: r.s, horse: r.s.horse, odds: r.odds,
-      pOffset: pOffset[i], pAdditive: pAdditive[i], evOffset, evAdditive,
-      eligible: reason === null, reason,
-    };
-  });
-  let pick = null;
-  for (const r of rows) {
-    if (!r.eligible) continue;
-    r._floor = Math.min(r.evOffset, r.evAdditive);
-    if (!pick || r._floor > pick._floor) pick = r;
-  }
-  rows.forEach(r => { if (pick && r !== pick && r.eligible) r.reason = 'NOT_MAX_EV_FLOOR'; });
-  return { pick, runners: rows };
-}
-
-// 【2026-07-11 セキュリティ修正】シャドーログの書き込み関数(logShadowPredictions等)は
-// ここに置かない。index.htmlは全訪問者に配信される公開JSであり、そこに書いたfetch呼び出しは
-// 埋め込まれたSUPABASE_KEY(anon)をそのまま使うため、誰でも同じキーでkochi_shadow_predictions
-// へ偽レコードを挿入できてしまう（RLSのINSERTポリシーをanonに許可する限り原理的に防げない）。
-// 実際の書き込みはローカル自動化(他場/scraper/capture_shadow.py)からSUPABASE_SERVICE_KEY
-// （非公開・.env）で直接行う。ブラウザ側はcomputeShadowPurchasePick()で計算するだけに限定し、
-// Supabase側もkochi_shadow_predictions/kochi_shadow_resultsにanonのINSERTポリシーを作らない
-// （SELECTのみ許可）。UPDATE/DELETEはservice_role含め全ロールでDBトリガーにより拒否され、
-// 追記専用が構造的に保証される。
-
-/** オッズ配列から市場勝率を算出（1/オッズを正規化してオーバーラウンドを除去）。 */
-function computeMarketProbs(oddsArr) {
-  const invs = oddsArr.map(o => (o > 0) ? 1 / o : 0);
-  const sum = invs.reduce((a, b) => a + b, 0);
-  return invs.map(v => sum > 0 ? v / sum : 1 / oddsArr.length);
-}
-/**
- * 市場アンカーモデルで各馬の最終勝率を計算する。
- * runners: [{odds, feat:{base,condNew,...}}, ...]（featはKV_OFFSET_MODEL_DEFAULT.featsと同じキー）
- * オッズが無い/不足する馬がいる場合は呼び出し側でフォールバック（従来の加算モデル）を使うこと。
- * 戻り値: { probs:[...], marketProbs:[...] }（両方ともrunnersと同じ順）
- */
-function computeOffsetModelProbs(runners, model) {
-  model = model || getOffsetModelWeights();
-  const marketProbs = computeMarketProbs(runners.map(r => r.odds));
-  const scores = runners.map((r, i) => {
-    let s = Math.log(Math.max(marketProbs[i], 1e-6));
-    for (let f = 0; f < model.feats.length; f++) {
-      const k = model.feats[f];
-      const v = (r.feat[k] || 0);
-      s += ((v - model.mean[f]) / model.sd[f]) * model.w[f];
-    }
-    return s;
-  });
-  const mx = Math.max(...scores);
-  const ex = scores.map(s => Math.exp(s - mx));
-  const sum = ex.reduce((a, b) => a + b, 0);
-  return { probs: ex.map(e => e / sum), marketProbs };
-}
-/**
- * 加算モデル（市場オフセットなし）で各馬の勝率を計算する。購入モデル(SHADOW_PURCHASE_MODEL.additive)専用。
- * runners: [{feat:{base,...}}, ...]（featはmodel.featsと同じキー）
- * 戻り値: probs:[...]（runnersと同じ順）
- */
-function computeAdditiveModelProbs(runners, model) {
-  const scores = runners.map(r => {
-    let s = 0;
-    for (let f = 0; f < model.feats.length; f++) {
-      const k = model.feats[f];
-      const v = (r.feat[k] || 0);
-      s += ((v - model.mean[f]) / model.sd[f]) * model.w[f];
-    }
-    return s;
-  });
-  const mx = Math.max(...scores);
-  const ex = scores.map(s => Math.exp(s - mx));
-  const sum = ex.reduce((a, b) => a + b, 0);
-  return { probs: ex.map(e => e / sum) };
-}
-
-
+// 旧市場アンカー／購入shadow実装は research/purchase-model-archive へ退避済み。
 // ── 向正面 × 直線 組み合わせ好走率による SI 補正（日別） ──
 // 同じ開催日・同じ競馬場の全馬を使い、その日のポジション有利不利を計算する
 const _dayPosCache = new Map();
@@ -13050,6 +12945,7 @@ async function _kvRefreshTodayAllRaces(date, baba) {
           if (currentRaceNo === rn) { switchRaceTab(rn); try { renderPredictionPanel(rn); } catch (e) {} }
           _kvOddsAutoLast[rn] = Date.now();
           _kvSetOddsAutoNote(rn, '自動更新');
+          renderNextRaceHomeCard();
         }
       } catch (e) { console.warn('[today bulk refresh]', rn, e); }
     }));
@@ -13069,24 +12965,26 @@ async function deleteSavedDay(event, date, baba) {
   });
   // Supabase サーバー削除（Worker 経由）
   const del = async (table, id) => {
-    try {
-      await fetch(`${WORKER_URL}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Write-Token': getWriteToken(),
-        },
-      });
-    } catch(e) { console.warn('[delete]', table, id, e); }
+    const res = await fetch(`${WORKER_URL}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: {'Content-Type':'application/json','X-Write-Token':getWriteToken()},
+      signal:AbortSignal.timeout(15000),
+    });
+    if (!res.ok) throw new Error(`${table}/${id} の削除に失敗しました（HTTP ${res.status}）`);
   };
-  await Promise.all([...raceKeys.map(k=>del('keiba_races',k)),...horseKeys.map(k=>del('keiba_horses',k))]);
+  try {
+    await Promise.all([...raceKeys.map(k=>del('keiba_races',k)),...horseKeys.map(k=>del('keiba_horses',k))]);
+  } catch (e) {
+    alert(`サーバー削除に失敗したため、端末データは残しました。\n${e.message || e}`);
+    return;
+  }
   // IndexedDB から削除（旧 localStorage.setItem は不使用）
   [...raceKeys,...horseKeys].forEach(k=>idbDelete(k));
   loadSavedData();
 }
 
 function showProgress(show){document.getElementById('progress-section').classList.toggle('hidden',!show);if(show)document.getElementById('progress-race-status').innerHTML='';}
-function updateProgress(done,total,rn){document.getElementById('progress-bar').style.width=Math.round((done/total)*100)+'%';document.getElementById('progress-count').textContent=`${done} / ${total}`;document.getElementById('progress-label').textContent=rn?`${rn}R を取得中...`:`完了（${Object.keys(allRacesData).length}R取得）`;}
+function updateProgress(done,total,rn){document.getElementById('progress-bar').style.width=Math.round((done/total)*100)+'%';const wrap=document.getElementById('progress-bar-wrap');if(wrap){wrap.setAttribute('aria-valuemax',String(total));wrap.setAttribute('aria-valuenow',String(done));}document.getElementById('progress-count').textContent=`${done} / ${total}`;document.getElementById('progress-label').textContent=rn?`${rn}R を取得中...`:`完了（${Object.keys(allRacesData).length}R取得）`;}
 function updateProgressStatus(rn,ok){const tag=document.createElement('span');tag.className=`progress-race-tag ${ok?'tag-ok':'tag-fail'}`;tag.textContent=`${rn}R`;document.getElementById('progress-race-status').appendChild(tag);}
 function showLoading(show, kind, detail){
   const area=document.getElementById('loading'); if(!area)return;
@@ -13322,25 +13220,27 @@ async function saveOneRace(raceNo) {
 
     const raceId = `race_${currentBaba}_${currentDate}_${raceNo}`;
     const raceRow = { race_date: currentDate, race_no: raceNo, baba_code: currentBaba, race_name: info.raceName||'', distance: info.distance||'', race_class: info.raceClass||'', track_cond: info.trackCond||'', first3f: info.first3f||'', agari4f: info.agari4f||'', agari3f_race: info.agari3f_race||'', pace_type: info.paceType||'', memo: info.memo||'', lap_times: lapTimesJson };
-    await apiUpsert('keiba_races', raceId, raceRow);
-    lsWrite(raceId, { type:'race', ...raceRow, paceType: info.paceType||'', lapTimes: info.lapTimes||null, _apiSaved: true, savedAt: new Date().toISOString() });
-
+    const horseRows = [];
+    const localHorses = [];
     let hc = 0;
     const isDebaOne = !!(info._isDebaTable);
     for (const horse of (data.horses || [])) {
       if (!isDebaOne && !(horse.first3f || horse.paceType || horse.mukaeShoumen || horse.shoumenStraight || horse.chakujun || horse.postComment)) continue;
       const horseId = `${currentBaba}_${currentDate}_${raceNo}_${horse.umaBan}`;
       const horseRow = { race_date: currentDate, race_no: raceNo, baba_code: currentBaba, uma_ban: horse.umaBan, waku_ban: horse.wakuBan||'', horse_name: horse.horseName||'', belong: horse.belong||'', sex_age: horse.sexAge||'', kinryo: horse.kinryo||'', jockey: horse.jockey||'', trainer: horse.trainer||'', weight: horse.weight||'', chakujun: horse.chakujun||'', ninki: horse.ninki||'', odds: horse.odds||'', time: horse.time||'', diff: horse.diff||'', agari3f: horse.agari3f||'', corner: horse.corner||'', first3f: horse.first3f||'', pace_type: horse.paceType||'', mukae_shoumen: horse.mukaeShoumen||'', shoumen_straight: horse.shoumenStraight||'', post_comment: horse.postComment||'', lineage_login_code: horse.lineageLoginCode||'' };
-      await apiUpsert('keiba_horses', horseId, horseRow);
-      lsWrite(horseId, { type:'horse', chakujun:horseRow.chakujun, wakuBan:horseRow.waku_ban, horseName:horseRow.horse_name, belong:horseRow.belong, sexAge:horseRow.sex_age, kinryo:horseRow.kinryo, jockey:horseRow.jockey, trainer:horseRow.trainer, weight:horseRow.weight, ninki:horseRow.ninki, odds:horseRow.odds, time:horseRow.time, diff:horseRow.diff, agari3f:horseRow.agari3f, corner:horseRow.corner, first3f:horseRow.first3f, paceType:horseRow.pace_type, mukaeShoumen:horseRow.mukae_shoumen, shoumenStraight:horseRow.shoumen_straight, postComment:horse.postComment||'', lineageLoginCode:horse.lineageLoginCode||'', savedAt:new Date().toISOString() });
+      horseRows.push(horseRow);
+      localHorses.push([horseId, { type:'horse', chakujun:horseRow.chakujun, wakuBan:horseRow.waku_ban, horseName:horseRow.horse_name, belong:horseRow.belong, sexAge:horseRow.sex_age, kinryo:horseRow.kinryo, jockey:horseRow.jockey, trainer:horseRow.trainer, weight:horseRow.weight, ninki:horseRow.ninki, odds:horseRow.odds, time:horseRow.time, diff:horseRow.diff, agari3f:horseRow.agari3f, corner:horseRow.corner, first3f:horseRow.first3f, paceType:horseRow.pace_type, mukaeShoumen:horseRow.mukae_shoumen, shoumenStraight:horseRow.shoumen_straight, postComment:horse.postComment||'', lineageLoginCode:horse.lineageLoginCode||'', savedAt:new Date().toISOString() }]);
       hc++;
     }
+    await apiSaveRaceBundle(raceId, raceRow, horseRows);
+    lsWrite(raceId, { type:'race', ...raceRow, paceType: info.paceType||'', lapTimes: info.lapTimes||null, _apiSaved: true, savedAt: new Date().toISOString() });
+    localHorses.forEach(([horseId, row]) => lsWrite(horseId, row));
 
     if (st) { st.textContent = `✅ ${raceNo}R 保存完了（${hc}頭）`; setTimeout(() => { st.textContent = ''; }, 3000); }
     if (btn) { btn.disabled = false; btn.innerHTML = `<i class="fas fa-check-circle"></i> ${raceNo}R 保存済み`; btn.style.background = '#16a34a'; setTimeout(() => { btn.innerHTML = `<i class="fas fa-save"></i> ${raceNo}R だけ保存`; btn.style.background = '#1a56a0'; btn.disabled = false; }, 3000); }
   } catch(e) {
     console.error('[saveOneRace]', e);
-    if (st) st.textContent = `❌ ${raceNo}R 保存失敗`;
+    if (st) st.textContent = `❌ ${raceNo}R 保存失敗: ${e.message || e}`;
     if (btn) { btn.disabled = false; btn.innerHTML = `<i class="fas fa-save"></i> ${raceNo}R だけ保存`; }
   }
 }
