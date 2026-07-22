@@ -4555,11 +4555,13 @@ async function kvTodayMode() {
     : Object.values(lsRead()).some(v => v.type === 'race' && v.race_date === today && v.baba_code === '31');
   if (!hasToday) return; // 本日の保存データなし＝通常起動
   try { sessionStorage.setItem('kv_todayJumped', '1'); } catch (e) {}
-  // 発走時刻が未取得ならRaceListから副次取得（完了後にタブへ自動反映）
-  if (!Object.keys(_kvReadRaceTimes()[today] || {}).length) {
-    fetchRaceList(today, '31').catch(() => {});
-  }
-  await restoreFromSaved(today, '31');
+  // まず保存済み出馬表を即表示する。RaceListは並行取得し、発走時刻が揃った後に
+  // 「次のレース」だけ選び直すことで、時刻通信を初画面のブロッカーにしない。
+  const raceListJob = !Object.keys(_kvReadRaceTimes()[today] || {}).length
+    ? fetchRaceList(today, '31').catch(() => null)
+    : Promise.resolve(null);
+  await restoreFromSaved(today, '31', true);
+  await raceListJob;
   const next = _kvNextRaceNo();
   if (next != null) switchRaceTab(next);
   const st = document.getElementById('save-status');
@@ -5203,6 +5205,10 @@ function addRaceTab(raceNo) {
 function rebuildAllTabs() { document.getElementById('race-tabs').innerHTML=''; Object.keys(allRacesData).map(Number).sort((a,b)=>a-b).forEach(addRaceTab); try{_kvDecorateRaceTabs();}catch(e){} }
 function switchRaceTab(raceNo) {
   currentRaceNo=raceNo;
+  // 当日は、開いたレースと次レースだけを非同期で最新化する。全12Rの一斉取得は行わない。
+  if (currentDate === _kvTodaySlash() && currentBaba === '31') {
+    _kvRefreshTodayPriorityRaces(currentDate, currentBaba, raceNo).catch(e => console.warn('[today priority refresh]', e));
+  }
   document.querySelectorAll('.race-tab').forEach(b=>b.classList.toggle('active',parseInt(b.dataset.raceNo)===raceNo));
   _kvSyncRaceHash(raceNo);
   const area=document.getElementById('race-content-area');
@@ -5474,9 +5480,9 @@ function renderRaceContent(raceNo) {
   pickDock.className='cockpit-picks';
   pickDock.setAttribute('aria-label', 'AI注目馬');
   pickDock.innerHTML=`
-    <div class="cockpit-pick is-loading"><span class="cockpit-mark">◎</span><span>AI本命を計算中</span></div>
-    <div class="cockpit-pick is-loading"><span class="cockpit-mark is-second">○</span><span>○▲△ 相手候補を計算中</span></div>
-    <div class="cockpit-pick is-loading"><span class="cockpit-mark is-value">—</span><span>T10期待値判定を準備中</span></div>`;
+    <div class="cockpit-pick is-loading"><span class="cockpit-mark">◎</span><span>保存済みのAI本命を確認中</span></div>
+    <div class="cockpit-pick is-loading"><span class="cockpit-mark is-second">○</span><span>保存済みの○▲△を確認中</span></div>
+    <div class="cockpit-pick is-loading"><span class="cockpit-mark is-value">—</span><span>T10期待値記録を確認中</span></div>`;
   section.appendChild(pickDock);
   const tSec=document.createElement('div'); tSec.className='deban-section cockpit-race-panel';
   tSec.innerHTML=`
@@ -5648,25 +5654,11 @@ function renderRaceContent(raceNo) {
   if (!_idbFullReady) {
     _ensureRaceHorseHistory(raceNo).catch(e => console.warn('[race horse history]', e));
   }
-  // AI・分析用の全履歴は出馬表を先に描画した後で準備する。
-  // 履歴未準備のまま暫定スコアを表示せず、完了後に正しい印と近5走へ差し替える。
+  // 全履歴がすでにメモリへ載っている端末だけ、重い分析パネルも描画する。
+  // 通常閲覧では約15万件の全履歴を自動展開しない。保存済みAIは上の軽量モジュールで
+  // 先に表示し、端末での再計算は利用者が明示した時だけ kvRefreshPrediction() が行う。
   if (_idbFullReady && typeof window.computeYosoScored === 'function') {
     _renderRaceHistoryPanels(raceNo);
-  } else {
-    setTimeout(() => {
-      _ensureRaceIntelligence().then(() => {
-        if (!document.getElementById(`race-section-${raceNo}`) || !allRacesData[raceNo]) return;
-        const freshHorses = [...allRacesData[raceNo].horses].sort((a,b) => {
-          const ca=parseInt(a.chakujun)||999, cb=parseInt(b.chakujun)||999;
-          return ca!==cb ? ca-cb : (parseInt(a.umaBan)||0)-(parseInt(b.umaBan)||0);
-        });
-        renderHorseRows(raceNo, freshHorses);
-        _renderRaceHistoryPanels(raceNo);
-      }).catch(() => {
-        const dock = document.getElementById(`cockpit-picks-${raceNo}`);
-        if (dock) dock.innerHTML = '<div class="cockpit-panel-empty"><i class="fas fa-exclamation-circle"></i> AI用履歴を準備できませんでした</div>';
-      });
-    }, 0);
   }
   setTimeout(() => renderOddsPanel(raceNo), 0);
   _updateCockpitRaceStatus(raceNo);
@@ -7033,6 +7025,44 @@ function onRaceTabKeydown(event, raceNo) {
   switchViewTab(raceNo, tabs[next].dataset.view);
 }
 
+/**
+ * 共有・端末の事前計算がない時にだけ表示する軽量な待機状態。
+ * 自動で全履歴を展開せず、利用者が必要な時だけ最新計算を選べるようにする。
+ */
+function _kvRenderAiOnDemandState(raceNo) {
+  const dock = document.getElementById(`cockpit-picks-${raceNo}`);
+  const panel = document.getElementById(`cockpit-ai-panel-${raceNo}`);
+  const action = `<button type="button" class="btn btn-primary btn-sm viewer-ok" onclick="kvRefreshPrediction(${raceNo})"><i class="fas fa-bolt"></i> 端末データで最新計算</button>`;
+  const html = `<div class="cockpit-panel-empty"><i class="fas fa-database"></i><strong style="display:block;margin:5px 0 2px">保存済みAI予想がありません</strong><span style="display:block;margin-bottom:10px">必要な場合だけ全履歴を読み込み、最新の印を計算します</span>${action}</div>`;
+  if (dock) dock.innerHTML = html;
+  if (panel) panel.innerHTML = html;
+}
+
+/** 利用者の明示操作でのみ、全履歴を使った最新AI予想を計算する。 */
+async function kvRefreshPrediction(raceNo) {
+  const target = document.getElementById(`cockpit-ai-panel-${raceNo}`);
+  const dock = document.getElementById(`cockpit-picks-${raceNo}`);
+  const loading = _kvAsyncStateHtml('ai', 'AI予想を最新計算中', '端末の過去データを準備しています。この操作をした時だけ全履歴を読み込みます');
+  if (target) target.innerHTML = loading;
+  if (dock) dock.innerHTML = loading;
+  try {
+    await _ensureRaceIntelligence();
+    const data = allRacesData[raceNo];
+    if (!data || !document.getElementById(`race-section-${raceNo}`)) return;
+    const freshHorses = [...data.horses].sort((a,b) => {
+      const ca=parseInt(a.chakujun)||999, cb=parseInt(b.chakujun)||999;
+      return ca!==cb ? ca-cb : (parseInt(a.umaBan)||0)-(parseInt(b.umaBan)||0);
+    });
+    renderHorseRows(raceNo, freshHorses);
+    _renderRaceHistoryPanels(raceNo);
+    renderPredictionPanel(raceNo);
+  } catch (e) {
+    const errorHtml = _kvAsyncStateHtml('error', 'AI計算に失敗しました', '端末の過去データを準備できませんでした', `kvRefreshPrediction(${raceNo})`);
+    if (target) target.innerHTML = errorHtml;
+    if (dock) dock.innerHTML = errorHtml;
+  }
+}
+
 async function switchViewTab(raceNo, view) {
   const debanView   = document.getElementById(`view-deban-${raceNo}`);
   const kekkaView   = document.getElementById(`view-kekka-${raceNo}`);
@@ -7097,11 +7127,15 @@ async function switchViewTab(raceNo, view) {
       if (window.kvAiHydrateServerDay) await window.kvAiHydrateServerDay(allRacesData[raceNo]?.raceInfo?.raceDate);
       showedCached = !!window.kvAiRenderCachedPrediction?.(raceNo);
     } catch (e) {}
-    if (target && !_idbFullReady && !showedCached) target.innerHTML = _kvAsyncStateHtml('ai', 'AI予想を計算中', '過去走・馬場・騎手・厩舎を統合しています');
-    try { await _ensureRaceIntelligence(); }
-    catch (e) { if (target) target.innerHTML = _kvAsyncStateHtml('error','AI計算に失敗しました','過去データを準備できませんでした',`switchViewTab(${raceNo},'yoso')`); return; }
-    if (yosoView && yosoView.style.display === 'none') return;
-    renderPredictionPanel(raceNo);
+    // 共有／端末の事前計算が表示できた時は、それを即時表示の正本とする。
+    // 保存済み予想を見せた直後に全15万件を自動展開すると体感速度を失うため、ここでは待たない。
+    if (showedCached) return;
+    if (_idbFullReady && typeof window.computeYosoScored === 'function') {
+      if (yosoView && yosoView.style.display === 'none') return;
+      renderPredictionPanel(raceNo);
+      return;
+    }
+    _kvRenderAiOnDemandState(raceNo);
   } else if (view === 'odds') {
     if (oddsView) oddsView.style.display = '';
     if (oddsBtn) oddsBtn.classList.add('on');
@@ -9605,7 +9639,7 @@ async function initDB() {
       if (dayRaces) dayRaces.forEach(_putRaceRow);
       if (dayHorses) await _putHorseRowsBatch(dayHorses, true);
       loadSavedData();
-      const opened = window._kvDeepLink ? await _kvTryDeepLink() : false;
+      const opened = window._kvDeepLink ? await _kvTryDeepLink() : (dayRaces?.length ? await kvTodayMode().then(() => true) : false);
       if (opened || dayRaces?.length) _kvSetRouteState(null);
       else if (window._kvDeepLink) _kvSetRouteState('error', '出馬表の取得に失敗しました', '通信状態を確認して再試行してください');
     } catch(e) {
@@ -12876,8 +12910,8 @@ async function restoreFromSaved(date, baba, silent) {
   // 馬0頭で保存されたレース（パース不具合期にレース情報だけ保存された残骸）はライブ再取得で埋める
   const _emptyRns = Object.keys(allRacesData).map(Number).filter(rn => !allRacesData[rn].horses.length);
   if (_emptyRns.length) _refetchEmptyRaces(date, baba, _emptyRns);
-  // 当日カードは保存スナップショットが古い可能性があるため、全レースを背景でライブ最新化
-  _kvRefreshTodayAllRaces(date, baba);
+  // 手動で当日カードを開いた時も、表示中レース＋次レースだけを最新化する。
+  if (!silent) _kvRefreshTodayPriorityRaces(date, baba, currentRaceNo).catch(e => console.warn('[today priority refresh]', e));
 }
 
 // 保存に馬が無いレースをライブ再取得して差し替える（restoreFromSavedの補修）
@@ -12911,46 +12945,43 @@ async function _refetchEmptyRaces(date, baba, rns) {
   if (st) { st.textContent = fixed ? `✅ 保存に馬が無かった ${fixed}レースを再取得しました` : ''; setTimeout(()=>{ if(st.textContent.startsWith('✅')) st.textContent=''; }, 4000); }
 }
 
-// 当日データの自動最新化（2026-07-12 ユーザー指摘）：restoreFromSavedは保存済み
-// （＝過去の取得時点）のスナップショットを表示するため、前日以前に取り込んだデータの
-// ままだと馬場状態やオッズが古く見える。当日のカードを開いた時、バックグラウンドで
-// 全レースをライブ再取得（fetchOneRace＝DebaTable/RaceMarkTableからオッズ・馬場状態・
-// 確定結果を含めて最新化）し、メモ/ペース/ラップ等の入力値は保持する。日付ごとに
-// セッション内1回のみ（既存のsettle-fetchティッカーが以後の継続的な最新化を担う）。
-const _kvTodayBulkRefreshed = {};
-async function _kvRefreshTodayAllRaces(date, baba) {
+// 当日データの優先最新化：保存スナップショットを即表示した後、利用者が見ているレースと
+// その次のレースだけをライブ再取得する。全12R一斉取得による通信・DOM更新の集中を避け、
+// 他レースはタブを開いた時に同じ経路で更新する。レース単位でセッション中1回に限定する。
+const _kvTodayRaceRefreshed = {};
+async function _kvRefreshTodayPriorityRaces(date, baba, preferredRaceNo) {
   if (date !== _kvTodaySlash() || baba !== '31') return;
-  const key = `${date}_${baba}`;
-  if (_kvTodayBulkRefreshed[key]) return;
-  _kvTodayBulkRefreshed[key] = true;
   const rns = Object.keys(allRacesData).map(Number).sort((a, b) => a - b);
-  const CONCURRENCY = 2, GAP = 500;
-  for (let i = 0; i < rns.length; i += CONCURRENCY) {
-    if (date !== currentDate || baba !== currentBaba) return;   // 別の日へ移ったら中止
-    const batch = rns.slice(i, i + CONCURRENCY);
-    await Promise.all(batch.map(async rn => {
-      try {
-        const result = await fetchOneRace(date, rn, baba);
-        if (date !== currentDate || baba !== currentBaba) return;
-        if (result && result.horses && result.horses.length) {
-          const prev = allRacesData[rn];
-          if (prev && prev.raceInfo) {
-            result.raceInfo.memo = prev.raceInfo.memo || result.raceInfo.memo;
-            result.raceInfo.paceType = prev.raceInfo.paceType || result.raceInfo.paceType;
-            if (prev.raceInfo.lapTimes && prev.raceInfo.lapTimes.some(v => v != null)) result.raceInfo.lapTimes = prev.raceInfo.lapTimes;
-          }
-          _sanDeep(result);
-          allRacesData[rn] = result;
-          document.getElementById(`race-section-${rn}`)?.remove();
-          if (currentRaceNo === rn) { switchRaceTab(rn); try { renderPredictionPanel(rn); } catch (e) {} }
-          _kvOddsAutoLast[rn] = Date.now();
-          _kvSetOddsAutoNote(rn, '自動更新');
-          renderNextRaceHomeCard();
+  if (!rns.length) return;
+  const primary = rns.includes(parseInt(preferredRaceNo)) ? parseInt(preferredRaceNo) : (_kvNextRaceNo() || rns[0]);
+  const primaryIndex = Math.max(0, rns.indexOf(primary));
+  const targets = [...new Set([primary, rns[primaryIndex + 1]].filter(Number.isFinite))]
+    .filter(rn => !_kvTodayRaceRefreshed[`${date}_${baba}_${rn}`]);
+  targets.forEach(rn => { _kvTodayRaceRefreshed[`${date}_${baba}_${rn}`] = true; });
+  await Promise.all(targets.map(async rn => {
+    try {
+      const result = await fetchOneRace(date, rn, baba);
+      if (date !== currentDate || baba !== currentBaba) return;
+      if (result && result.horses && result.horses.length) {
+        const prev = allRacesData[rn];
+        if (prev && prev.raceInfo) {
+          result.raceInfo.memo = prev.raceInfo.memo || result.raceInfo.memo;
+          result.raceInfo.paceType = prev.raceInfo.paceType || result.raceInfo.paceType;
+          if (prev.raceInfo.lapTimes && prev.raceInfo.lapTimes.some(v => v != null)) result.raceInfo.lapTimes = prev.raceInfo.lapTimes;
         }
-      } catch (e) { console.warn('[today bulk refresh]', rn, e); }
-    }));
-    if (i + CONCURRENCY < rns.length) await new Promise(r => setTimeout(r, GAP));
-  }
+        _sanDeep(result);
+        allRacesData[rn] = result;
+        document.getElementById(`race-section-${rn}`)?.remove();
+        if (currentRaceNo === rn) switchRaceTab(rn);
+        _kvOddsAutoLast[rn] = Date.now();
+        _kvSetOddsAutoNote(rn, '自動更新');
+        renderNextRaceHomeCard();
+      }
+    } catch (e) {
+      delete _kvTodayRaceRefreshed[`${date}_${baba}_${rn}`];
+      console.warn('[today priority refresh]', rn, e);
+    }
+  }));
 }
 
 async function deleteSavedDay(event, date, baba) {

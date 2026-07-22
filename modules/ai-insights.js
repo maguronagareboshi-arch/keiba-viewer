@@ -211,7 +211,7 @@
     if (gap < 2) risks.push('上位評価が接近');
     if (!value) risks.push('明確な妙味なし');
     if (!risks.length) risks.push('大きな不安材料なし');
-    const decision = `<div class="cockpit-decision"><span class="decision-chip is-${confidence.className}" title="${esc(confidence.source)}"><i class="fas fa-chart-bar"></i> 同人気帯実績 ${confidence.label}</span><span class="decision-action"><i class="fas fa-gavel"></i> ${esc(snapshotAction(confidence, !!value))}</span><span class="decision-risk"><b>${confidenceHtml(confidence)}</b><br>不安材料: ${esc(risks.join('・'))}</span><button type="button" class="btn btn-secondary btn-sm viewer-ok" onclick="switchViewTab(${raceNo},'yoso')">最新計算へ</button></div>`;
+    const decision = `<div class="cockpit-decision"><span class="decision-chip is-${confidence.className}" title="${esc(confidence.source)}"><i class="fas fa-chart-bar"></i> 同人気帯実績 ${confidence.label}</span><span class="decision-action"><i class="fas fa-gavel"></i> ${esc(snapshotAction(confidence, !!value))}</span><span class="decision-risk"><b>${confidenceHtml(confidence)}</b><br>不安材料: ${esc(risks.join('・'))}</span><button type="button" class="btn btn-secondary btn-sm viewer-ok" onclick="kvRefreshPrediction(${raceNo})">端末データで最新計算</button></div>`;
     if (dock) dock.innerHTML = card(main, '◎', 'main', `能力1位・${main.reason}`) + opponentHtml + (value ? card(value, '☆', 'value', snapshot.value.note) : '') + decision;
     if (panel) {
       const time = new Date(snapshot.computedAt), stamp = Number.isNaN(time.getTime()) ? '' : time.toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});

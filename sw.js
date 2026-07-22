@@ -1,4 +1,4 @@
-const CACHE = 'kochi-viewer-v2';
+const CACHE = 'kochi-viewer-v3';
 const CORE = [
   './', './index.html', './manifest.webmanifest',
   './modules/ai-analysis.js', './modules/ai-insights.js', './modules/value-t10-shadow.js',
