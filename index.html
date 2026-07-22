@@ -9699,6 +9699,7 @@ async function initDB() {
   _kvScheduleIdle(async () => {
     // 先に軽い週間予定を表示し、その後で大きい全履歴同期へ進む
     try { await loadWeeklySchedule(); } catch(e) { console.warn('[weekly schedule]', e); }
+    const _runOwnedFullSync = async () => {
     _setBgLoadIndicator(true);
     try {
       // 途中失敗(incomplete)時は失敗地点(nextCursor)から1回だけ自動再開する
@@ -9758,6 +9759,21 @@ async function initDB() {
     // 補完で1400mデータが増えたので、馬場傾向の前残り傾向パネルを最新で再描画
     if (_bfCount > 0 && typeof renderTrackTrend === 'function') {
       try { renderTrackTrend(); } catch(e) {}
+    }
+    };
+
+    // 複数タブが同時に約90MBの全履歴を取得すると、出馬表や馬比較の通信まで競合する。
+    // Web Locks対応ブラウザでは同期担当を1タブだけに限定する。取得結果は共有IndexedDBへ
+    // 保存されるため、他タブは次回の必要時・再読込時に同じデータを利用できる。
+    if (navigator.locks?.request) {
+      const didRun = await navigator.locks.request('kochi-full-history-sync-v1', { ifAvailable:true }, async lock => {
+        if (!lock) return false;
+        await _runOwnedFullSync();
+        return true;
+      });
+      if (!didRun) console.log('[initDB] Phase2 省略（別タブが全履歴を同期中）');
+    } else {
+      await _runOwnedFullSync();
     }
   }, 5000);
 }
