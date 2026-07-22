@@ -2976,6 +2976,23 @@ const _kvLibSpecs = {
     src: 'modules/ai-insights.js',
     ready: () => window.kvAiInsightsReady === true,
   },
+  vnextPartnerScorer: {
+    src: 'modules/partner-vnext-shadow.js',
+    ready: () => !!window.KvVnextPartnerShadow?.scoreRace && !!window.KvVnextPartnerShadow?.buildRawFeatures,
+  },
+  vnextMarketBlend: {
+    src: 'modules/partner-vnext-market-blend.js',
+    ready: () => !!window.KvVnextMarketBlend?.scoreRace,
+  },
+  vnextPartnerLive: {
+    src: 'modules/partner-vnext-live.js',
+    ready: () => typeof window.kvEnsureVnextPartnerShadowRegistered === 'function',
+  },
+  valueT10Shadow: {
+    src: 'modules/value-t10-shadow.js',
+    ready: () => typeof window.kvComputeT10ValueShadow === 'function' &&
+      typeof window.kvCaptureT10ValueShadow === 'function',
+  },
 };
 
 function _kvLoadLibrary(key) {
@@ -3042,8 +3059,21 @@ function _ensureAiAnalysisModule() {
 
 function _ensureAiInsightsModule() { return _kvLoadLibrary('aiInsights'); }
 
+function _ensureVnextPartnerShadowModule() {
+  return _kvLoadLibrary('vnextPartnerScorer')
+    .then(() => _kvLoadLibrary('vnextMarketBlend'))
+    .then(() => _kvLoadLibrary('vnextPartnerLive'))
+    .then(() => { if (window.kvEnsureVnextPartnerShadowRegistered) window.kvEnsureVnextPartnerShadowRegistered(); });
+}
+
+function _ensureValueT10ShadowModule() { return _kvLoadLibrary('valueT10Shadow'); }
+
 function _ensureRaceIntelligence() {
-  return Promise.all([_ensureFullIDBCache(), _ensureAiAnalysisModule()]);
+  const _t10 = (() => { try { return window.KV_T10_PARTNER_ROLLOUT_ENABLED === true && localStorage.getItem('kv_t10_partner_rollout_disabled_v1') !== '1'; } catch(e) { return false; } })();
+  const _admin = typeof isAdminMode === 'function' && isAdminMode();
+  const partnerShadow = (_admin || _t10) ? _ensureVnextPartnerShadowModule() : Promise.resolve();
+  const valueShadow = _admin ? _ensureValueT10ShadowModule() : Promise.resolve();
+  return Promise.all([_ensureFullIDBCache(), _ensureAiAnalysisModule(), partnerShadow, valueShadow]);
 }
 
 /** 通信・AI計算・失敗を同じスピナー文言にせず、利用者が待つ理由と次の操作を判断できる状態表示。 */
@@ -3108,7 +3138,7 @@ function _blockProxy(makeProxy, ms = 90000) {
 async function fetchHtmlWithProxy(url, timeout = 12000) {
   const RATE_LIMIT_RE = /Too Many Requests|Rate Limit|Access Denied|403 Forbidden/i;
   const tryAll = (t) => Promise.any(_availableProxies().map(async (makeProxy) => {
-    const res = await fetch(makeProxy(url), { signal: AbortSignal.timeout(t) });
+    const res = await fetch(makeProxy(url), { signal: AbortSignal.timeout(t), cache:'no-store' });
     if (res.status === 429 || res.status === 503 || res.status === 502) {
       _blockProxy(makeProxy, 90000);
       throw new Error(`rate_limited:${res.status}`);
@@ -4317,7 +4347,7 @@ async function fetchRaceList(raceDate, babaCode) {
         if (m) { timeMap[rn] = `${m[1].padStart(2,'0')}:${m[2]}`; break; }
       }
     });
-    if (Object.keys(timeMap).length) _kvSaveRaceTimes(raceDate, timeMap);
+    if (Object.keys(timeMap).length) _kvSaveRaceTimes(raceDate, timeMap, babaCode);
   } catch(e) { console.warn('[fetchRaceList] 発走時刻パース失敗:', e); }
 
   if (nos.length > 0) {
@@ -4351,16 +4381,22 @@ async function checkRaceListExists(raceDate, babaCode) {
 // 自動選択・タブにハイライト表示する。時刻はRaceListページから副次取得（localStorage保持・14日で破棄）。
 const KV_RACETIMES_KEY = 'kv_raceTimes';
 function _kvReadRaceTimes() { try { return JSON.parse(localStorage.getItem(KV_RACETIMES_KEY) || '{}'); } catch (e) { return {}; } }
-function _kvSaveRaceTimes(dateYmd, map) {
+function _kvRaceTimeKey(dateYmd, babaCode) { return `${String(babaCode || currentBaba || '31')}|${dateYmd}`; }
+function _kvSaveRaceTimes(dateYmd, map, babaCode) {
   const all = _kvReadRaceTimes();
-  all[dateYmd] = Object.assign(all[dateYmd] || {}, map);
+  const key = _kvRaceTimeKey(dateYmd, babaCode);
+  all[key] = Object.assign(all[key] || {}, map);
   const lim = new Date(); lim.setDate(lim.getDate() - 14);
   const limStr = `${lim.getFullYear()}/${String(lim.getMonth() + 1).padStart(2, '0')}/${String(lim.getDate()).padStart(2, '0')}`;
-  Object.keys(all).forEach(d => { if (d < limStr) delete all[d]; });
+  Object.keys(all).forEach(k => { const d = k.includes('|') ? k.slice(k.indexOf('|') + 1) : k; if (d < limStr) delete all[k]; });
   try { localStorage.setItem(KV_RACETIMES_KEY, JSON.stringify(all)); } catch (e) {}
   try { _kvDecorateRaceTabs(); } catch (e) {}
 }
-function _kvGetRaceTime(dateYmd, raceNo) { const m = _kvReadRaceTimes()[dateYmd]; return m ? (m[raceNo] || '') : ''; }
+function _kvGetRaceTime(dateYmd, raceNo, babaCode) {
+  const all = _kvReadRaceTimes(), baba = String(babaCode || currentBaba || '31');
+  const m = all[_kvRaceTimeKey(dateYmd, baba)] || (babaCode == null && baba === '31' ? all[dateYmd] : null);
+  return m ? (m[raceNo] || '') : '';
+}
 function _kvTodayYmd() { const t = new Date(); return `${t.getFullYear()}/${String(t.getMonth() + 1).padStart(2, '0')}/${String(t.getDate()).padStart(2, '0')}`; }
 
 /** 「次のレース」＝発走時刻がまだ（2分後まで許容）の最初のレース。時刻不明なら結果未確定の最初のレース。当日以外はnull。 */
@@ -4369,7 +4405,8 @@ function _kvNextRaceNo() {
   if (!rns.length) return null;
   const today = _kvTodayYmd();
   if (!rns.some(rn => allRacesData[rn]?.raceInfo?.raceDate === today)) return null;
-  const times = _kvReadRaceTimes()[today] || {};
+  const allTimes = _kvReadRaceTimes();
+  const times = allTimes[_kvRaceTimeKey(today, currentBaba)] || (String(currentBaba) === '31' ? allTimes[today] : null) || {};
   const now = new Date(); const nowMin = now.getHours() * 60 + now.getMinutes();
   for (const rn of rns) {
     const tm = times[rn]; if (!tm) continue;
@@ -5455,7 +5492,7 @@ function renderRaceContent(raceNo) {
   pickDock.innerHTML=`
     <div class="cockpit-pick is-loading"><span class="cockpit-mark">◎</span><span>AI本命を計算中</span></div>
     <div class="cockpit-pick is-loading"><span class="cockpit-mark is-second">○</span><span>○▲△ 相手候補を計算中</span></div>
-    <div class="cockpit-pick is-loading"><span class="cockpit-mark is-value">☆</span><span>妙味候補を計算中</span></div>`;
+    <div class="cockpit-pick is-loading"><span class="cockpit-mark is-value">—</span><span>T10期待値判定を準備中</span></div>`;
   section.appendChild(pickDock);
   const tSec=document.createElement('div'); tSec.className='deban-section cockpit-race-panel';
   tSec.innerHTML=`
@@ -5719,7 +5756,7 @@ function _cockpitReasonFor(scoredHorse) {
   return scoredHorse.baseScore != null ? '基礎走力を評価' : '総合評価上位';
 }
 
-/** サンプルの◎・○・☆注目カードと、◎○▲△××の全印表を既存予想コアの結果だけで描画する。 */
+/** 能力印と期待値を混ぜず、◎○▲△××と検証中のT10価値候補を分けて描画する。 */
 function renderCockpitSummary(raceNo) {
   const dock = document.getElementById(`cockpit-picks-${raceNo}`);
   const panel = document.getElementById(`cockpit-ai-panel-${raceNo}`);
@@ -5734,33 +5771,32 @@ function renderCockpitSummary(raceNo) {
     return;
   }
 
+  // 印は市場人気で上書きせず、オッズ非依存の能力スコア順を一貫して使う。
   const main = scored[0] || null;
   const opponents = scored.slice(1, 4);
-  const used = new Set([main, ...opponents].map(s => s?.horse?.horseName).filter(Boolean));
-  let value = null, valueKind = 'rank', valueMeta = null;
-  try {
-    const ev = computeEvBets(raceNo, result?.selCond);
-    const evPick = ev?.runners?.find(r => r.inWindow && !used.has(r.name));
-    if (evPick) {
-      value = scored.find(s => s.horse.horseName === evPick.name) || null;
-      if (value) { valueKind = 'ev'; valueMeta = evPick; }
-    }
-  } catch(e) {}
-  if (!value) {
-    const gapCands = scored.slice(2).map((s, idx) => {
-      const aiRank = idx + 3, popularity = parseInt(s.horse.ninki);
-      return { s, gap: Number.isFinite(popularity) ? popularity - aiRank : -99, odds: parseFloat(s.horse.odds) || 0 };
-    }).filter(x => !used.has(x.s.horse.horseName) && x.gap >= 2 && x.odds >= 5).sort((a, b) => b.gap - a.gap || b.odds - a.odds);
-    if (gapCands[0]) { value = gapCands[0].s; valueKind = 'gap'; }
+  let value = null, valueMeta = null, valueResearchOnly = false;
+  // 新モデルは管理者の前向き検証だけに表示する。能力印の順序や公開の買い判断は変更しない。
+  if (!value && typeof isAdminMode === 'function' && isAdminMode() &&
+      typeof window.kvComputeT10ValueShadow === 'function') {
+    try {
+      const shadow = window.kvComputeT10ValueShadow(raceNo, scored);
+      const c = shadow?.candidate;
+      if (c) {
+        value = scored.find(s => parseInt(s.horse?.umaBan) === parseInt(c.uma)) || null;
+        if (value) { valueMeta = c; valueResearchOnly = true; }
+      }
+    } catch(e) { console.warn('[cockpit value shadow]', e); }
   }
   const picks = {
-    main: { mark:'◎', kind:'main', s:main, note: main ? `軸候補・${_cockpitReasonFor(main)}` : '軸候補なし' },
-    value: { mark:'☆', kind:'value', s:value, note: value
-      ? (valueKind === 'ev' ? `お得度 ${Number(valueMeta?.evCal || 0).toFixed(2)}倍` : 'AI評価が人気を上回る')
-      : '現在は明確な妙味なし' }
+    main: { mark:'◎', kind:'main', s:main, note: main ? `能力1位・${_cockpitReasonFor(main)}` : '能力評価なし' },
+    value: { mark:value ? '☆' : '—', kind:'value', s:value, note: value
+      ? (valueResearchOnly
+        ? `前向き検証EV ${Number(valueMeta?.ev || 0) >= 0 ? '+' : ''}${Number(valueMeta?.ev || 0).toFixed(2)}・購入見送り`
+        : `期待値指数 ${Number(valueMeta?.evCal || 0).toFixed(2)}`)
+      : '検証合格モデルなし・購入見送り' }
   };
   const cardHtml = p => {
-    if (!p.s) return `<div class="cockpit-pick is-empty"><span class="cockpit-mark is-${p.kind}">${p.mark}</span><div class="cockpit-pick-copy"><strong>候補なし</strong><small>${p.note}</small></div><span class="cockpit-odds">—</span></div>`;
+    if (!p.s) return `<div class="cockpit-pick is-empty"><span class="cockpit-mark is-${p.kind}">${p.mark}</span><div class="cockpit-pick-copy"><strong>${p.kind === 'value' ? '見送り' : '候補なし'}</strong><small>${p.note}</small></div><span class="cockpit-odds">—</span></div>`;
     const h = p.s.horse, odds = parseFloat(h.odds), ninki = parseInt(h.ninki);
     const market = `${Number.isFinite(ninki) ? ninki + '人気 ' : ''}${Number.isFinite(odds) ? odds.toFixed(1) : '—'}`;
     return `<button type="button" class="cockpit-pick is-${p.kind}" onclick="switchViewTab(${raceNo},'yoso')">
@@ -5787,9 +5823,10 @@ function renderCockpitSummary(raceNo) {
   if (scoreGap < 2) risks.push('上位評価が接近');
   if (main && parseFloat(main.horse?.odds) > 0 && parseFloat(main.horse.odds) < 2) risks.push('本命に人気集中');
   if (!oddsReady) risks.push('オッズ未取得');
-  if (!value) risks.push('明確な妙味なし');
+  if (valueResearchOnly) risks.push('期待値モデルは前向き検証中');
+  else if (!value) risks.push('検証合格した期待値モデルなし');
   if (!risks.length) risks.push('大きな不安材料なし');
-  const action = valueKind === 'ev' && value ? '買い候補あり' : confidence === '高' ? '軸＋相手を検討' : confidence === '中' ? '相手を絞って検討' : '見送り寄り';
+  const action = valueResearchOnly ? '期待値候補あり（検証中・購入見送り）' : value ? '単勝の期待値候補あり' : '購入見送り';
   const confidenceEvidence = calibrated
     ? `<b>◎1着 ${(calibrated.winRate * 100).toFixed(1)}%・3着内 ${(calibrated.top3Rate * 100).toFixed(1)}%</b>（${escapeHTML(calibrated.band)} n=${calibrated.n}）<br>` : '';
   const decisionHtml = `<div class="cockpit-decision"><span class="decision-chip is-${confidenceCls}" title="${escapeHTML(calibrated?.source || 'スコア差による暫定判定')}"><i class="fas fa-shield-alt"></i> 信頼度 ${confidence}</span><span class="decision-action"><i class="fas fa-gavel"></i> ${escapeHTML(action)}</span><span class="decision-risk">${confidenceEvidence}<b>不安材料:</b> ${escapeHTML(risks.join('・'))}</span><button type="button" class="btn btn-secondary btn-sm" onclick="switchViewTab(${raceNo},'yoso')">全印を見る</button></div>`;
@@ -5804,11 +5841,13 @@ function renderCockpitSummary(raceNo) {
       const odds = parseFloat(h.odds), ninki = parseInt(h.ninki);
       const market = `${Number.isFinite(ninki) ? ninki + '人気' : '人気—'} ${Number.isFinite(odds) ? odds.toFixed(1) : '—'}`;
       const isValue = s === value;
-      const reason = isValue && valueKind === 'ev' ? 'AIの勝率に対してオッズが高い' : isValue && valueKind === 'gap' ? '人気よりAI順位が高い' : _cockpitReasonFor(s);
+      const reason = isValue
+        ? (valueResearchOnly ? '能力確率に対してT10単勝価格が高い（前向き検証中）' : '校正勝率に対して単勝オッズが高い')
+        : _cockpitReasonFor(s);
       const icon = idx === 0 ? 'fa-chart-line' : isValue ? 'fa-bullseye' : idx === 1 ? 'fa-route' : 'fa-layer-group';
-      const valueBadge = isValue ? '<span class="cockpit-value-badge">☆ 妙味</span>' : '';
+      const valueBadge = isValue ? `<span class="cockpit-value-badge">☆ ${valueResearchOnly ? '検証候補' : '妙味'}</span>` : '';
       return `<tr class="cockpit-rank-row is-${tone}">
-        <td><div class="cockpit-horse"><span class="cockpit-rank-mark">${mark}</span><span class="cockpit-uma">${escapeHTML(h.umaBan || '—')}</span><span><b>${escapeHTML(h.horseName) || '—'}</b><small>AI ${idx + 1}位${valueBadge}</small></span></div></td>
+        <td><div class="cockpit-horse"><span class="cockpit-rank-mark">${mark}</span><span class="cockpit-uma">${escapeHTML(h.umaBan || '—')}</span><span><b>${escapeHTML(h.horseName) || '—'}</b><small>能力AI ${idx + 1}位${valueBadge}</small></span></div></td>
         <td class="cockpit-market">${escapeHTML(market)}</td>
         <td><i class="fas ${icon}"></i> ${escapeHTML(reason)}</td>
       </tr>`;
@@ -5818,10 +5857,10 @@ function renderCockpitSummary(raceNo) {
       const h = value.horse, idx = scored.indexOf(value) + 1;
       const odds = parseFloat(h.odds), ninki = parseInt(h.ninki);
       const market = `${Number.isFinite(ninki) ? ninki + '人気' : '人気—'}・${Number.isFinite(odds) ? odds.toFixed(1) + '倍' : 'オッズ—'}`;
-      const reason = valueKind === 'ev' ? 'AIの勝率に対してオッズが高い' : '人気よりAI順位が高い';
-      valueNote = `<div class="cockpit-value-note"><span class="cockpit-rank-mark">☆</span><span><strong>妙味候補</strong> ${escapeHTML(h.umaBan || '—')}番 ${escapeHTML(h.horseName) || '—'}<br><span style="color:var(--kc-muted)">${escapeHTML(reason)}</span></span><small>AI ${idx}位・${escapeHTML(market)}</small></div>`;
+      const reason = valueResearchOnly ? '能力確率に対してT10単勝価格が高い（前向き検証中・購入推奨ではありません）' : '校正勝率に対して単勝オッズが高い';
+      valueNote = `<div class="cockpit-value-note"><span class="cockpit-rank-mark">☆</span><span><strong>${valueResearchOnly ? '期待値の検証候補' : '期待値候補'}</strong> ${escapeHTML(h.umaBan || '—')}番 ${escapeHTML(h.horseName) || '—'}<br><span style="color:var(--kc-muted)">${escapeHTML(reason)}</span></span><small>能力AI ${idx}位・${escapeHTML(market)}</small></div>`;
     }
-    panel.innerHTML = `<div class="cockpit-panel-head"><div><h3>AI予想</h3><p>AI順位どおりの全印。☆は印と分けて妙味を表示</p></div><span>全印 ${marked.length}頭</span></div>
+    panel.innerHTML = `<div class="cockpit-panel-head"><div><h3>能力予想</h3><p>◎○▲△はオッズを見ない能力順。期待値はT10価格で別判定し、検証合格までは購入推奨しません</p></div><span>全印 ${marked.length}頭</span></div>
       <div class="table-wrapper"><table class="cockpit-table"><thead><tr><th>印・馬</th><th>市場</th><th>判断材料</th></tr></thead><tbody>${rows}</tbody></table></div>${valueNote}`;
   }
 }
@@ -5881,34 +5920,32 @@ function renderDebanExtra(raceNo) {
  * horseName: 馬名, curDist: 現在レースの距離
  */
 
-/**
- * 単勝オッズ・馬体重・人気を公式OddsTanFukuページから取得して出馬表に反映。
- * 開催日はリアルタイム更新、過去日は確定値。発売前はエラー（ボタン側で案内表示）。
- */
 async function fetchLiveOdds(raceNo) {
   const data = allRacesData[raceNo];
   if (!data) throw new Error('レースデータなし');
   const d = data.raceInfo.raceDate, baba = data.raceInfo.babaCode || currentBaba || '31';
-  const url = `https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/OddsTanFuku?k_raceDate=${encodeURIComponent(d)}&k_raceNo=${raceNo}&k_babaCode=${baba}`;
+  const requestNonce = Date.now();
+  const url = `https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/OddsTanFuku?k_raceDate=${encodeURIComponent(d)}&k_raceNo=${raceNo}&k_babaCode=${baba}&kv_ts=${requestNonce}`;
   const html = await fetchHtmlWithProxy(url, 14000);
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const table = [...doc.querySelectorAll('table')].find(t => t.textContent.includes('単勝オッズ'));
   if (!table) throw new Error('オッズ未発売');
   const previousOdds = new Map(data.horses.map(h => [parseInt(h.umaBan), parseFloat(h.odds)]));
   const previousObservedAt = data._liveOddsObservedAt || null;
-  // 行構成: [0]枠 [1]馬番 [2]馬名 [3]単勝 [4-5]複勝 [6]性齢 [7]馬体重 [8]斤量 ...
-  let hit = 0;
+  const seenOdds = new Set();
   for (const tr of [...table.querySelectorAll('tr')].slice(1)) {
     const c = [...tr.querySelectorAll('td,th')].map(x => (x.textContent || '').trim());
     if (c.length < 8) continue;
     const uma = parseInt(c[1]);
     if (isNaN(uma)) continue;
+    if (seenOdds.has(uma)) continue;
     const h = data.horses.find(x => parseInt(x.umaBan) === uma);
     if (!h) continue;
     const odds = parseFloat(c[3]);
     if (!isNaN(odds) && odds > 0) {
+      seenOdds.add(uma);
       const prev = previousOdds.get(uma);
-      h.odds = String(odds); hit++;
+      h.odds = String(odds);
       if (Number.isFinite(prev) && prev > 0) {
         const pct = ((odds - prev) / prev) * 100;
         h._oddsMove = { previous:prev, current:odds, percent:pct, direction:odds < prev ? 'shorter' : odds > prev ? 'longer' : 'flat' };
@@ -5917,7 +5954,7 @@ async function fetchLiveOdds(raceNo) {
     const wt = (c[7] || '').split(/\s/)[0];
     if (wt && /^\d{3}/.test(wt) && !h.weight) h.weight = _sanDeep(wt);
   }
-  // 人気をオッズ昇順から導出（公式の確定人気が既にあれば触らない）
+  const hit = seenOdds.size;
   const _byOdds = data.horses.filter(h => parseFloat(h.odds) > 0).sort((a, b) => parseFloat(a.odds) - parseFloat(b.odds));
   _byOdds.forEach((h, i) => { if (!h.ninki) h.ninki = String(i + 1); });
   if (hit > 0) {
@@ -5927,6 +5964,7 @@ async function fetchLiveOdds(raceNo) {
     data._previousOddsObservedAt = previousObservedAt;
     data._liveOddsSource = 'keiba.go.jp/OddsTanFuku';
     data._liveOddsRunnerCount = hit;
+    data._liveOddsRequestNonce = requestNonce;
   }
   return hit;
 }
@@ -6013,16 +6051,14 @@ function _kvOpponentCaptureSlot(minutesBeforeStart) {
   return null;
 }
 
-/**
- * 管理者が各レースを開くかどうかに依存せず、ロード済み当日高知の全レースをT15/T10で捕捉する。
- * 1枠6試行・30秒間隔・同時1通信。公開利用者ではopponentShadowEnabled()がfalseなので通信もしない。
- */
 async function _kvTickOpponentShadowCapture() {
   if (typeof computeYosoScored !== 'function') return;
-  if (_kvOpponentCaptureBusy || typeof opponentShadowEnabled !== 'function' || !opponentShadowEnabled()) return;
+  const opponentOn = typeof opponentShadowEnabled === 'function' && opponentShadowEnabled();
+  const valueOn = typeof kvCaptureT10ValueShadow === 'function' && typeof isAdminMode === 'function' && isAdminMode();
+  if (_kvOpponentCaptureBusy || (!opponentOn && !valueOn)) return;
   if (String(currentBaba || '') !== '31' || currentDate !== _kvTodaySlash()) return;
-  if (typeof computeYosoScored !== 'function' || typeof computeOpponentShadow !== 'function' ||
-      typeof recordForwardOpponentShadowSnapshot !== 'function') return;
+  if (opponentOn && (typeof computeOpponentShadow !== 'function' ||
+      typeof recordForwardOpponentShadowSnapshot !== 'function')) return;
   const candidates = Object.keys(allRacesData).map(Number).filter(Number.isFinite).map(raceNo => {
     const data = allRacesData[raceNo];
     if (!data || !data.raceInfo || data.raceInfo.raceDate !== currentDate || !Array.isArray(data.horses)) return null;
@@ -6032,6 +6068,7 @@ async function _kvTickOpponentShadowCapture() {
   }).filter(Boolean).sort((a,b) => Number(a.tm.minutesBeforeStart) - Number(b.tm.minutesBeforeStart));
 
   const target = candidates.find(c => {
+    if (!opponentOn && c.slot !== 't10') return false;
     const audit = typeof getOpponentShadowCaptureAudit === 'function'
       ? getOpponentShadowCaptureAudit(currentDate, c.raceNo, c.slot) : null;
     const retryKey = `${currentDate}|${c.raceNo}|${c.slot}`;
@@ -6054,13 +6091,31 @@ async function _kvTickOpponentShadowCapture() {
       if (!computed || !Array.isArray(computed.scored)) {
         outcome = { saved:false, reason:'SCORING_UNAVAILABLE', fetchedRunnerCount:fetched };
       } else {
-        const shadow = computeOpponentShadow(target.raceNo, computed.scored);
-        if (!shadow) {
-          outcome = { saved:false, reason:'MODEL_GATE_REJECTED', fetchedRunnerCount:fetched };
-        } else {
-          const recorded = recordForwardOpponentShadowSnapshot(target.raceNo, shadow);
-          outcome = { ...recorded, saved:recorded.saved || recorded.reason === 'DUPLICATE',
-            fetchedRunnerCount:fetched };
+        if (opponentOn) {
+          const shadow = computeOpponentShadow(target.raceNo, computed.scored);
+          if (!shadow) {
+            outcome = { saved:false, reason:'MODEL_GATE_REJECTED', fetchedRunnerCount:fetched };
+          } else {
+            const recorded = recordForwardOpponentShadowSnapshot(target.raceNo, shadow);
+            outcome = { ...recorded, saved:recorded.saved || recorded.reason === 'DUPLICATE',
+              fetchedRunnerCount:fetched };
+          }
+        }
+        if (typeof kvCaptureVnextPartnerShadow === 'function') {
+          try { kvCaptureVnextPartnerShadow(target.raceNo, computed.scored); }
+          catch (e) { console.warn('[vnextPartnerShadow capture]', e); }
+        }
+        if (typeof kvCaptureVnextMarketBlendShadow === 'function') {
+          try { kvCaptureVnextMarketBlendShadow(target.raceNo, computed.scored); }
+          catch (e) { console.warn('[vnextMarketBlendShadow capture]', e); }
+        }
+        if (typeof kvCaptureT10ValueShadow === 'function') {
+          try {
+            const valueRecorded = kvCaptureT10ValueShadow(target.raceNo, computed.scored);
+            if (!opponentOn) outcome = { ...valueRecorded,
+              saved:valueRecorded.saved || valueRecorded.reason === 'DUPLICATE', fetchedRunnerCount:fetched };
+          }
+          catch (e) { console.warn('[valueT10Shadow capture]', e); }
         }
       }
     }
@@ -6297,23 +6352,30 @@ function renderHorseRows(raceNo, horses) {
   const _isAdminView = (typeof isAdminMode === 'function' && isAdminMode());
   const _historyReady = _idbFullReady || !!allRacesData[raceNo]?._raceHistoryReady;
   const _aiReady = _idbFullReady;
-  // AI印・スコア（予想AIパネルと同じ共通コアで算出）
   const _cy = (_aiReady && typeof computeYosoScored === 'function') ? computeYosoScored(raceNo, null) : null;
-  // 実際に表示する既定馬場の予想だけを、管理者端末へ発走前スナップショットとして追記保存。
-  // computeYosoScored内部では呼ばないため、過去成績の再計算や仮想馬場選択は記録されない。
   if (_cy && typeof recordForwardRankingSnapshot === 'function') {
     try { recordForwardRankingSnapshot(raceNo, _cy); } catch (e) { console.warn('[aiPredictionSnapshot hook]', e); }
   }
   if (_cy && window.kvAiCachePrediction) {
     try { window.kvAiCachePrediction(raceNo, _cy); } catch (e) { console.warn('[aiPrecalc hook]', e); }
   }
-  // 相手選びは別モデル・別台帳。候補登録＋管理者shadow flagの両方が有効な時だけ、
-  // 既定馬場の前向き結果を記録する（主印scoredはコピー入力のため変更されない）。
   if (_cy && typeof computeOpponentShadow === 'function' && typeof recordForwardOpponentShadowSnapshot === 'function') {
     try {
       const _opShadow = computeOpponentShadow(raceNo, _cy.scored);
       if (_opShadow) recordForwardOpponentShadowSnapshot(raceNo, _opShadow);
     } catch (e) { console.warn('[opponentShadowSnapshot hook]', e); }
+  }
+  if (_cy && typeof window.kvCaptureVnextPartnerShadow === 'function') {
+    try { window.kvCaptureVnextPartnerShadow(raceNo, _cy.scored); }
+    catch (e) { console.warn('[vnextPartnerShadow hook]', e); }
+  }
+  if (_cy && typeof window.kvCaptureVnextMarketBlendShadow === 'function') {
+    try { window.kvCaptureVnextMarketBlendShadow(raceNo, _cy.scored); }
+    catch (e) { console.warn('[vnextMarketBlendShadow hook]', e); }
+  }
+  if (_cy && typeof window.kvCaptureT10ValueShadow === 'function') {
+    try { window.kvCaptureT10ValueShadow(raceNo, _cy.scored); }
+    catch (e) { console.warn('[valueT10Shadow hook]', e); }
   }
   const _AI_MARKS = ['◎', '○', '▲', '△', '×', '×'];
   const _aiMap = {};
@@ -8693,6 +8755,7 @@ function _idbStartupDate() {
 
 function _mergeIDBCachePairs(pairs) {
   if (!_idbCache) _idbCache = {};
+  let vnextDirty = false;
   for (const [key, valRaw] of pairs || []) {
     if (key == null || valRaw == null) continue;
     const val = _sanDeep(valRaw);
@@ -8700,8 +8763,10 @@ function _mergeIDBCachePairs(pairs) {
     if (old) _unindexStoredEntry(key, old);
     _idbCache[key] = val;
     _indexStoredEntry(key, val);
+    if (val && (val.type === 'horse' || val.type === 'race')) vnextDirty = true;
   }
   _savedGroupsDirty = true;
+  if (vnextDirty && window.kvResetVnextPartnerLiveIndex) window.kvResetVnextPartnerLiveIndex();
 }
 
 async function _readIDBPrefix(prefix) {
@@ -8727,7 +8792,7 @@ async function _ensureDayCacheLoaded(baba, date) {
     _readIDBPrefix(`race_${baba}_${date}_`),
     _readIDBPrefix(`${baba}_${date}_`),
     _readIDBPrefix(`payout_${baba}_${date}_`),
-    _readIDBPrefix(`aiPrecalc_v1|${baba}|${String(date).replace(/\D/g,'')}|`),
+    _readIDBPrefix(`aiPrecalc_v2|${baba}|${String(date).replace(/\D/g,'')}|`),
   ]);
   chunks.forEach(_mergeIDBCachePairs);
   _idbLoadedDays.add(dayKey);
@@ -8755,6 +8820,7 @@ async function _ensureFullIDBCache() {
     _rebuildStoredIndexes(result);
     _savedGroupsDirty = true;
     _horseHistCache.clear();
+    if (window.kvResetVnextPartnerLiveIndex) window.kvResetVnextPartnerLiveIndex();
     _idbFullReady = true;
     console.log(`[IDB] AI・分析用の全履歴を準備 ${keys.length}件`);
     return result;
@@ -8851,7 +8917,7 @@ async function loadIDBCache() {
       _idbPrefixRange('race_'),
       _idbPrefixRange(`31_${startupDate}_`),
       _idbPrefixRange(`payout_31_${startupDate}_`),
-      _idbPrefixRange(`aiPrecalc_v1|31|${String(startupDate).replace(/\D/g,'')}|`),
+      _idbPrefixRange(`aiPrecalc_v2|31|${String(startupDate).replace(/\D/g,'')}|`),
     ];
     const chunkPromises = ranges.map(async range => {
       const [keys, values] = await Promise.all([
@@ -8935,6 +9001,9 @@ function idbPut(key, val) {
   _idbCache[key] = val; // メモリキャッシュを即時更新
   _indexStoredEntry(key, val);
   _savedGroupsDirty = true;
+  if (val && (val.type === 'horse' || val.type === 'race') && window.kvResetVnextPartnerLiveIndex) {
+    window.kvResetVnextPartnerLiveIndex();
+  }
   // 馬場差キャッシュを無効化（デバウンス：連続書き込み時は1回だけ実行）
   if (!_cacheInvalidateTimer) {
     _cacheInvalidateTimer = setTimeout(() => {
@@ -8967,12 +9036,16 @@ function idbPut(key, val) {
 
 /** キー1件を IDB から削除する（非同期・ノーウェイト） */
 function idbDelete(key) {
+  let _old = null;
   if (_idbCache) {
-    const _old = _idbCache[key];
+    _old = _idbCache[key];
     if (_old) _unindexStoredEntry(key, _old);
     delete _idbCache[key];
   }
   _savedGroupsDirty = true;
+  if (_old && (_old.type === 'horse' || _old.type === 'race') && window.kvResetVnextPartnerLiveIndex) {
+    window.kvResetVnextPartnerLiveIndex();
+  }
   window._comboStatsCache = null;
   window._comboStatsAllCache = null;
   window._evMapsCache = null;
@@ -9875,7 +9948,12 @@ async function _fetchRefundPayoutsDay(date) {
       const pay = parsePay(c[2]);
       if (pay == null) continue;
       const combo = c[1] || '';
-      if (mode === '単勝') rec.tan = { uma: parseInt(combo), pay };
+      if (mode === '単勝') {
+        const item = { uma: parseInt(combo), pay };
+        if (!rec.tan) rec.tan = item;
+        else if (Array.isArray(rec.tan)) rec.tan.push(item);
+        else rec.tan = [rec.tan, item];
+      }
       else if (mode === '複勝') (rec.fuku = rec.fuku || []).push({ uma: parseInt(combo), pay });
       else if (mode === '馬連複') rec.umaren = { combo: parseCombo(combo), pay };
       else if (mode === '馬連単') rec.umatan = { combo: parseCombo(combo), pay };
@@ -10740,10 +10818,10 @@ function buildRankingModelIdentity() {
   };
 }
 
-function _aiPredictionTimeMeta(raceDate, raceNo) {
+function _aiPredictionTimeMeta(raceDate, raceNo, babaCode) {
   const today = (typeof _kvTodayYmd === 'function') ? _kvTodayYmd() : '';
   if (!raceDate || (today && raceDate < today)) return null;
-  const hhmm = (typeof _kvGetRaceTime === 'function') ? _kvGetRaceTime(raceDate, raceNo) : '';
+  const hhmm = (typeof _kvGetRaceTime === 'function') ? _kvGetRaceTime(raceDate, raceNo, babaCode) : '';
   const post = hhmm && typeof _kvPostDate === 'function' ? _kvPostDate(raceDate, hhmm) : null;
   if (post && post.getTime() <= Date.now()) return null; // 発走後は「予想時点」として保存しない
   return {
@@ -10815,10 +10893,10 @@ function listForwardRankingSnapshots() {
     .map(([key,v]) => ({ key, ...v })).sort((a,b) => String(a.capturedAt).localeCompare(String(b.capturedAt)));
 }
 
-// ══════════════ 相手選びシャドーモデル（管理者限定・未採用）══════════════
-// 主印（computeYosoScored / totalScore / sort）から完全に分離した実験用の受け口。
+// ══════════════ 相手選びモデル（管理者shadow＋監査済みT10限定表示）══════════════
+// 主印（computeYosoScored / totalScore / sort）から完全に分離した受け口。
 // 2026-07-18以降は、実UI◎を固定して「T10単勝市場の上位2頭」と現行○▲を前向き比較する。
-// 公開利用者はisAdminMode()で必ず遮断され、◎○▲△の計算・sortには一切関与しない。
+// 保存と未採用候補の表示は管理者限定。採用済みblendも表示用○▲だけで、主印計算・sortには関与しない。
 // 単勝オッズ・人気は「穴相手」の過小評価検証に必要だが、オッズ非依存の主印台帳へ混ぜず、
 // opponentShadowSnapshot の marketAtCapture に予想時点値として分離保存する。
 var KV_OPPONENT_SHADOW_DEFAULT = true;
@@ -10882,9 +10960,10 @@ function getActiveOpponentShadowModel() {
   return _activeOpponentShadowModelId ? (_opponentShadowModels.get(_activeOpponentShadowModelId) || null) : null;
 }
 
-function _opponentShadowInput(raceNo, scored) {
+function _opponentShadowInput(raceNo, scored, options) {
   const data = allRacesData[raceNo];
   if (!data || !data.raceInfo || !Array.isArray(scored)) return null;
+  const includeVnext = !!(options && options.includeVnext);
   // predictorへ原配列・horse参照を渡さない。候補側のバグで主印の順や値を変えられない契約。
   const runners = scored.map((s, idx) => ({
     u: parseInt(s.horse && s.horse.umaBan) || null,
@@ -10895,6 +10974,8 @@ function _opponentShadowInput(raceNo, scored) {
     ninki: Number.isFinite(Number(s.horse && s.horse.ninki)) && Number(s.horse.ninki) > 0 ? Number(s.horse.ninki) : null,
     aiProb: s.aiProb == null || !Number.isFinite(Number(s.aiProb)) ? null : Number(s.aiProb),
     marketProb: s.marketProb == null || !Number.isFinite(Number(s.marketProb)) ? null : Number(s.marketProb),
+    vnextRaw: includeVnext && typeof window.kvVnextRawForScored === 'function'
+      ? window.kvVnextRawForScored(raceNo, s) : undefined,
     x: {
       baseScore: s.baseScore, condMod: s.condMod, distMod: s.distMod, rotMod: s.rotMod,
       classMod: s.classMod, cornModRaw: s._cornModRaw, cornMod: s.cornMod, trendMod: s.trendMod,
@@ -10923,7 +11004,7 @@ function _opponentShadowInput(raceNo, scored) {
   }));
   try {
     Object.freeze(clean.raceInfo); Object.freeze(clean.market);
-    clean.runners.forEach(r => { Object.freeze(r.x); Object.freeze(r); });
+    clean.runners.forEach(r => { Object.freeze(r.x); if (r.vnextRaw) Object.freeze(r.vnextRaw); Object.freeze(r); });
     Object.freeze(clean.runners); if (clean.anchor) Object.freeze(clean.anchor); Object.freeze(clean);
   } catch (e) {}
   return clean;
@@ -10953,11 +11034,13 @@ function _normalizeOpponentShadowPicks(raw, role, byUma, used) {
   return out;
 }
 
-function computeOpponentShadow(raceNo, scored) {
+function computeOpponentShadow(raceNo, scored, modelId) {
   if (!opponentShadowEnabled()) return null;
-  const registered = getActiveOpponentShadowModel();
+  const registered = modelId ? (_opponentShadowModels.get(String(modelId)) || null) : getActiveOpponentShadowModel();
   if (!registered) return null;
-  const input = _opponentShadowInput(raceNo, scored);
+  const input = _opponentShadowInput(raceNo, scored, {
+    includeVnext: registered.model?.config?.requiresVnextFeatures === true,
+  });
   if (!input || !input.anchor || input.runners.length < 4) return null;
   const cfg = registered.model.config || {};
   const cutoff = Number(cfg.captureCutoffMinutes);
@@ -11099,7 +11182,9 @@ function recordForwardOpponentShadowSnapshot(raceNo, shadow) {
     }
     lsWrite(key, {
       type: 'opponentShadowSnapshot', schema: OPPONENT_SHADOW_SNAPSHOT_SCHEMA,
-      capturePolicy: 'verified-live-market-at-or-before-model-cutoff', status: 'shadow_unadopted', exactEv: false,
+      capturePolicy: cfg.requiresFreshMarket === true
+        ? 'verified-live-market-at-or-before-model-cutoff' : 'prestart-market-free-shadow',
+      status: 'shadow_unadopted', exactEv: false,
       babaCode: baba, raceDate, raceNo: parseInt(raceNo), capturedAt: new Date().toISOString(),
       scheduledStartAt: tm.scheduledStartAt, minutesBeforeStart: tm.minutesBeforeStart, timing: tm.timing,
       rankingModelFingerprint: rankingModel.fingerprint,
@@ -11289,7 +11374,7 @@ function evaluateForwardOpponentShadowSnapshots(modelId) {
     const cutoff = wanted === KV_FORWARD_OPPONENT_MODEL_ID ? 10 : (Number(cfg.captureCutoffMinutes) || 0);
     const mb = Number(s.minutesBeforeStart);
     if (s.timing !== 'verified_prestart' || !Number.isFinite(mb) || mb < cutoff) { rejectedTiming++; return; }
-    if (wanted === KV_FORWARD_OPPONENT_MODEL_ID) {
+    if (wanted === KV_FORWARD_OPPONENT_MODEL_ID || cfg.requiresFreshMarket === true) {
       const capturedMs = Date.parse(s.capturedAt), observedMs = Date.parse(s.marketObservedAt);
       const ageMinutes = (capturedMs - observedMs) / 60000;
       if (s.marketSource !== 'keiba.go.jp/OddsTanFuku' || !Number.isFinite(capturedMs) ||
@@ -11332,12 +11417,14 @@ function evaluateForwardOpponentShadowSnapshots(modelId) {
     const candidate = (s.mainline || []).map(p => parseInt(p.u)).filter(Boolean).slice(0,2);
     const anchor = parseInt(s.anchor);
     const baselineRanks = (s.baselineMainline || []).map(p => Number(p.currentRank)).slice(0,2);
-    const expectedCandidate = marketRows.filter(r => parseInt(r.u) !== anchor && Number.isFinite(Number(r.odds)) && Number(r.odds) > 0)
+    const expectedMarketCandidate = marketRows.filter(r => parseInt(r.u) !== anchor && Number.isFinite(Number(r.odds)) && Number(r.odds) > 0)
       .slice().sort((a,b) => Number(a.odds) - Number(b.odds) || parseInt(a.u) - parseInt(b.u))
       .slice(0,2).map(r => parseInt(r.u));
+    const requiresExactMarketTop2 = wanted === KV_FORWARD_OPPONENT_MODEL_ID;
     if (!anchor || baseline.length !== 2 || candidate.length !== 2 ||
         baselineRanks[0] !== 2 || baselineRanks[1] !== 3 ||
-        candidate.join(',') !== expectedCandidate.join(',') ||
+        new Set(candidate).size !== candidate.length || candidate.includes(anchor) ||
+        (requiresExactMarketTop2 && candidate.join(',') !== expectedMarketCandidate.join(',')) ||
         !statuses.has(anchor) || baseline.some(u => !statuses.has(u)) || candidate.some(u => !statuses.has(u))) {
       counts.invalid++; return;
     }

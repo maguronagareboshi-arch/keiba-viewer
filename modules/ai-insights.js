@@ -3,8 +3,9 @@
 (function (global) {
   'use strict';
 
-  const PRECALC_SCHEMA = 'ai_prediction_precalc/v1';
-  const PRECALC_PREFIX = 'aiPrecalc_v1';
+  // v2: 期待値なしでも「軸＋相手を検討」と買わせる旧判断を廃止。
+  const PRECALC_SCHEMA = 'ai_prediction_precalc/v2';
+  const PRECALC_PREFIX = 'aiPrecalc_v2';
   const SERVER_TABLE = 'keiba_ai_predictions';
   const MARKS = ['◎', '○', '▲', '△', '×', '×'];
   const serverCache = new Map();
@@ -66,17 +67,8 @@
     return typeof _aiFingerprint === 'function' ? _aiFingerprint(rows) : JSON.stringify(rows);
   }
   function findValuePick(raceNo, result, scored) {
-    try {
-      if (typeof computeEvBets === 'function') {
-        const ev = computeEvBets(raceNo, result && result.selCond);
-        const pick = ev && ev.runners && ev.runners.filter(r => r.inWindow)
-          .sort((a, b) => Number(b.evCal || 0) - Number(a.evCal || 0))[0];
-        const row = pick && scored.find(s => s.horse && s.horse.horseName === pick.name);
-        if (row) return { u:parseInt(row.horse.umaBan, 10) || null, kind:'ev', note:`推定期待値 ${Number(pick.evCal || 0).toFixed(2)}` };
-      }
-    } catch (_) {}
-    // AI順位が人気を上回るだけでは期待値とは呼ばない。較正済み勝率×現在オッズで
-    // EV条件を満たした馬だけを「☆期待値候補」として出す。
+    // 旧EVモデルは最終オッズ混入のため廃止。新T10モデルは管理者のforward shadowへ隔離し、
+    // 公開・共有キャッシュには候補を保存しない。
     return null;
   }
 
@@ -192,7 +184,7 @@
     return `${Number.isFinite(ninki) ? ninki + '人気' : '人気—'}${Number.isFinite(odds) ? ' ' + odds.toFixed(1) : ''}`;
   }
   function snapshotAction(confidence, hasValue) {
-    return hasValue ? '買い候補あり' : confidence.label === '高' ? '軸＋相手を検討' : confidence.label === '中' ? '相手を絞って検討' : '見送り寄り';
+    return hasValue ? '単勝の期待値候補あり' : '見送り';
   }
   function confidenceHtml(confidence) {
     return `◎1着 ${(confidence.winRate * 100).toFixed(1)}%・3着内 ${(confidence.top3Rate * 100).toFixed(1)}%（${esc(confidence.band)} n=${confidence.n}）`;
@@ -214,12 +206,12 @@
     if (!value) risks.push('明確な妙味なし');
     if (!risks.length) risks.push('大きな不安材料なし');
     const decision = `<div class="cockpit-decision"><span class="decision-chip is-${confidence.className}" title="${esc(confidence.source)}"><i class="fas fa-shield-alt"></i> 信頼度 ${confidence.label}</span><span class="decision-action"><i class="fas fa-gavel"></i> ${esc(snapshotAction(confidence, !!value))}</span><span class="decision-risk"><b>${confidenceHtml(confidence)}</b><br>不安材料: ${esc(risks.join('・'))}</span><button type="button" class="btn btn-secondary btn-sm" onclick="switchViewTab(${raceNo},'yoso')">最新計算へ</button></div>`;
-    if (dock) dock.innerHTML = card(main, '◎', 'main', `軸候補・${main.reason}`) + opponentHtml + (value ? card(value, '☆', 'value', snapshot.value.note) : card(null)) + decision;
+    if (dock) dock.innerHTML = card(main, '◎', 'main', `能力1位・${main.reason}`) + opponentHtml + (value ? card(value, '☆', 'value', snapshot.value.note) : '') + decision;
     if (panel) {
       const time = new Date(snapshot.computedAt), stamp = Number.isNaN(time.getTime()) ? '' : time.toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
       const tableRows = rows.slice(0, 6).map(row => `<tr class="cockpit-rank-row"><td><div class="cockpit-horse"><span class="cockpit-rank-mark">${row.mark}</span><span class="cockpit-uma">${esc(row.u)}</span><span><b>${esc(row.name)}</b><small>AI ${row.rank}位</small></span></div></td><td class="cockpit-market">${esc(marketText(row, liveByU.get(row.u)))}</td><td><i class="fas fa-layer-group"></i> ${esc(row.reason)}</td></tr>`).join('');
       const sourceLabel = snapshot.cacheSource === 'server' ? '共有事前計算' : '端末の事前計算';
-      panel.innerHTML = `<div class="cockpit-panel-head"><div><h3>AI予想</h3><p>保存済みの事前計算を先に表示。最新値は裏で照合します</p></div><span><i class="fas fa-bolt"></i> ${sourceLabel} ${esc(stamp)}</span></div><div class="table-wrapper"><table class="cockpit-table"><thead><tr><th>印・馬</th><th>市場</th><th>判断材料</th></tr></thead><tbody>${tableRows}</tbody></table></div>`;
+      panel.innerHTML = `<div class="cockpit-panel-head"><div><h3>能力予想</h3><p>◎○▲△はオッズ非依存。期待値候補がなければ購入は見送り</p></div><span><i class="fas fa-bolt"></i> ${sourceLabel} ${esc(stamp)}</span></div><div class="table-wrapper"><table class="cockpit-table"><thead><tr><th>印・馬</th><th>市場</th><th>判断材料</th></tr></thead><tbody>${tableRows}</tbody></table></div>`;
     }
     return true;
   }

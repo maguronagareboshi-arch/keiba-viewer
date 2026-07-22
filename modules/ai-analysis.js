@@ -2022,9 +2022,8 @@ const Yoso = {
 
 // ══════════════ 統一SI計算（コード監査③ 2026-07-10）══════════════
 // 【問題】本番(computeYosoScored)は馬アンカー馬場差+ペース補正+ポジション補正を使うが、
-// バックテスト(runYosoBacktest)とEV特徴量(_evHorseFeatures)は当日バイアスのみの簡易版を
-// 使っており、検証していたのは実際にライブで動いているモデルとは別物だった。
-// 3経路すべてがこの1つの関数を呼ぶことで、検証結果が本番の実態を反映するようにする。
+// 旧バックテストは当日バイアスだけの簡易版で、本番モデルと不一致だった。
+// 現在は共通計算を通し、検証対象とライブ入力のずれを防ぐ。
 // h は getHorseHistory系が返す過去走エントリ1件（babaCode/raceDate/raceNo/time/distance/
 // raceClass/trackCond/kinryo/first3f/mukaeShoumen/shoumenStraight/fromOfficialを持つ）。
 // useAnchor=trueで馬アンカー馬場差(2026-07-02採用のCV合格版)、falseで当日バイアスのみ。
@@ -2409,46 +2408,9 @@ function computeYosoScored(raceNo, selCondOverride) {
     scored.forEach(s => { s.relSIMod = 0; });
   }
 
-  // ── 市場アンカーモデル（2026-07-10本採用・2026-07-11に16→12特徴量へ整理）──
-  // 印(◎○▲)の順位はこのモデルで決定する。全出走馬のオッズが揃っている時のみ有効。
-  // 「市場の織り込み済み確率(log)＋各種補正の学習係数」をレース内softmaxで確率化したものは、
-  // expanding-window walk-forward CV・完全未使用ホールドアウトの両方で、従来の加算totalScore順
-  // より一貫して的中率・回収率が上回ると検証済み。totalScore自体は内訳表示用にそのまま残す
-  // （表示される数値は変えない。変わるのは印の並び順のみ）。オッズが未発売/不足の間は
-  // 従来通りtotalScore順にフォールバックする。
-  // 【2026-07-11 16→12特徴量整理】3135R(直近3年)でユーザー指摘の全項目を個別・複合アブレーション
-  // 検証（expanding-window walk-forward+ホールドアウト）：condNew(係数+0.004でほぼ無風)・
-  // winStrN/rakuN(marginNと相関0.25-0.46で包含関係・削除してもmarginN単独で情報を維持)を削除、
-  // rotN+takiN(同時発火率0.12%でほぼ排他だがtakiN単独価値小)を1本化(rotTakiN)。
-  // 統合12項目は探索5分割中4分割で改善・ホールドアウトも◎勝率/複勝/回収/対数尤度の全指標で改善。
-  const _omRunners = scored
-    .filter(s => s.totalScore != null)
-    .map(s => {
-      const o = parseFloat(s.horse.odds);
-      return (!isNaN(o) && o > 0) ? {
-        s, odds: o,
-        feat: {
-          base: s.baseScore, distNew: s.distMod, clsN: s.classMod, cornN: s._cornModRaw,
-          trendN: s.trendMod, weightN: s.weightMod, agariN: s.agariMod, comboN: s.comboMod,
-          marginN: s.marginMod, jockeyChgN: s.jockeyChgMod, cornConsistN: s.cornConsistMod,
-          rotTakiN: s.rotMod + s.takiMod,
-        },
-      } : null;
-    });
-  const _omReady = _omRunners.every(r => r != null) && _omRunners.length >= 5;
-  if (_omReady) {
-    const _om = computeOffsetModelProbs(_omRunners.map(r => ({ odds: r.odds, feat: r.feat })), getOffsetModelWeights());
-    _omRunners.forEach((r, i) => { r.s.marketProb = _om.marketProbs[i]; r.s.aiProb = _om.probs[i]; });
-  }
-  scored._offsetModelUsed = _omReady;
-
-  // 【2026-07-13】印の並び順は常にtotalScore（オッズ非依存のAI単独評価）で決定する。
-  // 市場アンカーモデル(aiProb)による並び替えは2026-07-10〜07-12に試験採用していたが、
-  // ホールドアウト検証で「◎的中率はやや上がるが人気馬と同義に近づき、穴馬(単勝10倍+)の
-  // 捕捉率が事前印33%→市場アンカー版25%に低下」「市場との乖離が大きい馬を昇格させる
-  // ハイブリッド案も改善せず」と判明したため、印の並びからは撤去（ユーザー承認2026-07-13）。
-  // aiProb/marketProb自体はcomputeOffsetModelProbsで引き続き算出し、🔭穴馬チェック
-  // (buildLongshotHtml)等の独立したバッジ機能でのみ使用する。
+  // 旧市場アンカー確率は公開印にも期待値判定にも使わなくなったため、ここでは計算しない。
+  // 能力順位は常にtotalScore、価格評価は独立したT10前向きshadowへ分離する。
+  scored._offsetModelUsed = false;
   scored.sort((a, b) => {
     if (a.totalScore == null && b.totalScore == null) return 0;
     if (a.totalScore == null) return 1;
@@ -2532,211 +2494,13 @@ function buildPaceFormationHtml(raceNo) {
     </details>`;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
- * 💹 EVモニター（中穴×傾斜・単勝）— ウォークフォワード検証で唯一「継続100%超」
- *    だった買い方をライブ提示する。
- *  戦略＝単勝オッズ10〜20倍 かつ モデル勝率×オッズ>1.0 の馬を、EVに応じた傾斜額で
- *        単勝1点買い（実払戻検証：2021-26 全年100%超・計129%／傾斜166%・上位除外でも頑健）。
- *  モデル＝レース単位・条件付きロジット（16特徴量+log(オッズ)・z正規化・全14,653R学習）。
- *  ★特徴量は runYosoBacktest と同一定義で再計算する。computeYosoScored のライブ base は
- *    アンカー＋ペース＋ポジション補正の「仕様差」があり訓練分布とズレるため、ここでは
- *    backtest と厳密一致の“非アンカー・当日バイアスのみ”base／“ペース伸縮前”cornN を使う。
- *  ※市場を入力に持つモデルのため最終オッズで最も正確。ライブ変動オッズでの実効は
- *    前向きペーパートレードで検証中（memory: kochi-walkforward-ml-verdict）。
- * ═══════════════════════════════════════════════════════════════════════════ */
-const KV_EV_MODEL = {
-  FN: ['base','condNew','distNew','rotN','clsN','cornN','trendN','weightN','agariN','comboN','marginN','winStrN','jockeyChgN','takiN','cornConsistN','rakuN'],
-  mean:    [38.993818,0.012664,-0.067212,-0.174736,-0.000893,-0.931007,-0.025287,-0.025957,-1.086338,-0.090458,-0.280095,0.008352,0.199378,0.014728,0.003027,0.124291,3.02541],
-  std:     [13.07071,1.113188,0.544827,0.376235,0.371473,1.349301,0.740008,0.094795,0.415427,0.543692,0.427872,0.062987,1.594666,0.092843,0.582292,0.675127,1.490624],
-  weights: [0.173133,0.008697,-0.007631,-0.006132,0.039985,0.100385,0.039914,0.033711,0.112903,0.115689,0.004005,0.007881,-0.008765,-0.013328,-0.037066,0.022714,-1.299585],
-  oddsLo: 10, oddsHi: 20,                              // 中穴帯（この帯でのみ買い推奨を出す）
-  evCalLo: 1.5, evCalHi: 2.0,                          // 買い推奨の閾値＝キャリブレーション後EVがこの窓に入る時だけ（下記2026-07-09検証）
-  stakeK: 300000, stakeMin: 1000, stakeCap: 30000,   // 傾斜額 = clamp(K×(EV−1))・上限＝プール自己インパクトの実務天井
-  invLo: 1.05, invHi: 1.6,                            // 学習ドメイン（Σ1/oddsの健全域）
-  // 体重ガード（2026-07-07採用）：今日の馬体重が「その馬の好走時(3着内)平均」から極端に乖離した馬をEV買いから除外。
-  //   生EDA(各12,000頭超)：好走時比 +12kg超の太目=勝率6.1%・−8kg超のガレ=7.3%（標準帯10.8%）＝ほぼ半減。
-  //   体重を持たないモデルはこの馬のEVを過大評価する（EVの罠）。年別WFで除外するとEV買いROI 130→140%（全6年100%超維持）。
-  wDevFuto: 12, wDevGare: -8,
-  // 【2026-07-09 確率キャリブレーション採用】楽天の実払戻データ(2023/10-2026/07・286日/3,007R)で検証した結果、
-  //   このsoftmax確率pは自信があるほど過大評価(40%予測→実際51.7%)という体系的な歪みがあった(Brier 0.0675)。
-  //   下記アンカーは「予測確率ビンの中央値→そのビンの実勝率」の実測値(区分線形補間、範囲外は最終区間の比率で外挿)。
-  //   補正後の p×odds を calEvLo〜calEvHi の狭い窓に絞ったところ、286日を前半/後半に分けた両方の期間で
-  //   独立に黒字(前半119.1%・後半157.4%・通算136.5%、n=119、100円均一賭け)を確認できた検証済みの窓。
-  //   他の券種(複勝・馬連・ワイド・馬単・3連複・3連単)は同じ手法で網羅的に探索したが有意なポケットは見つからず、
-  //   このpCal窓は現時点で「唯一の実配当ベースで再現性のあるエッジ」。単勝10-20倍以外では絶対に使わないこと。
-  calAnchors: [[0.025,0.017],[0.075,0.064],[0.125,0.121],[0.175,0.149],[0.25,0.222],[0.35,0.311],[0.55,0.517]]
-};
-
-/** KV_EV_MODEL.calAnchorsによる区分線形補間で、softmax確率の過大評価を補正する（2026-07-09採用・上記メモ参照）。 */
-function _calibrateEvP(p) {
-  const A = KV_EV_MODEL.calAnchors;
-  const pts = [[0, 0], ...A, [1, A[A.length - 1][1] / A[A.length - 1][0]]];
-  for (let i = 0; i < pts.length - 1; i++) {
-    const a = pts[i], b = pts[i + 1];
-    if (p >= a[0] && p <= b[0]) { const t = (p - a[0]) / (b[0] - a[0] || 1e-9); return a[1] + t * (b[1] - a[1]); }
-  }
-  return p;
-}
-
-/** EV特徴量用の全IDB集計マップ（backtestと同一材料）。データ変更時は _evMapsCache=null で無効化。 */
-function _evGetMaps() {
-  if (window._evMapsCache) return window._evMapsCache;
-  const lsData = lsRead();
-  const winnerSIMap = {}, officialByHorse = new Map();
-  for (const k in lsData) {
-    const v = lsData[k];
-    if (!v) continue;
-    if (k.startsWith('official_') && v.type === 'official' && v.horseName && v.races && v.races.length) officialByHorse.set(v.horseName, v.races);
-    if (v.type !== 'horse') continue;
-    if (parseInt(v.chakujun) === 1 && v.time) {
-      const wp = k.split('_');
-      if (wp.length >= 4 && wp[0] === '31') {
-        const wrk = `${wp[0]}_${wp[1]}_${wp[2]}`;
-        if (winnerSIMap[wrk] == null) {
-          const wb = getDayBiasForDate(wp[0], wp[1]) ?? null;
-          const rc = lsData[`race_${wp[0]}_${wp[1]}_${parseInt(wp[2])}`] || {};
-          const wsi = calcSpeedIndex(v.time, rc.distance || '', rc.race_class || '', rc.track_cond || v.trackCond || '', wb, v.kinryo, null);
-          if (wsi != null) winnerSIMap[wrk] = wsi;
-        }
-      }
-    }
-  }
-  const getAgRef = (d, raceDate, raceNo) => getAgariRefAsOf(d, raceDate, raceNo);
-  return (window._evMapsCache = { getAgRef, winnerSIMap, officialByHorse });
-}
-
-/** 1頭ぶんのEV特徴量ベクトル（16項目・backtest定義と厳密一致）。base算出不可（真のデビュー馬）は null。 */
-function _evHorseFeatures(hName, entry, ctx, maps) {
-  const { raceDate, rNo, raceCls, raceDist, rdistNum, curCR, selCond } = ctx;
-  const fullHist = getHorseHistory(hName);
-  const preHist = fullHist.filter(h => h.raceDate < raceDate || (h.raceDate === raceDate && parseInt(h.raceNo) < rNo));
-  const kochiPre = preHist.filter(h => h.babaCode === '31');
-  const otherPre = preHist.filter(h => h.babaCode !== '31');
-
-  // 【2026-07-10】computeHorseSI()に統一（③）。ライブ/バックテストと同じ計算。
-  const _siForBT = h => computeHorseSI(h, false, { predictionDate: raceDate, predictionRaceNo: rNo, caller: '_evHorseFeatures' });
-  const { list: siList } = Yoso.buildSIList(kochiPre, otherPre, _siForBT);
-  let base = Yoso.baseFromSIList(siList);
-  if (base == null) { base = Yoso.estimateTransferScore(preHist, raceCls, hName, maps.officialByHorse); if (base == null) return null; }
-
-  const allSIcd = Yoso.siWithCondList(preHist, h => getDayBiasForDate(h.babaCode, h.raceDate) ?? null);
-  const gAvg = allSIcd.length ? allSIcd.reduce((s, x) => s + x.si, 0) / allSIcd.length : null;
-  const cSIs = allSIcd.filter(x => x.cond === selCond).map(x => x.si);
-  const cAvg = cSIs.length ? cSIs.reduce((a, b) => a + b, 0) / cSIs.length : null;
-  const condNew = Yoso.condMod(cAvg, gAvg, cSIs.length);
-
-  const ndSIs = allSIcd.filter(x => x.dist && rdistNum && Math.abs(x.dist - rdistNum) <= 100).map(x => x.si);
-  const ndAvg = ndSIs.length ? ndSIs.reduce((a, b) => a + b, 0) / ndSIs.length : null;
-  const distNew = Yoso.distExtAdj(Yoso.distMod(ndAvg, gAvg, ndSIs.length), preHist[0] ? getDistNum(preHist[0].distance) : null, rdistNum);
-
-  const rotN = preHist[0] ? Yoso.rotMod(raceDate, preHist[0].raceDate) : 0;
-  const clsN = preHist[0] ? Yoso.classMod(curCR, preHist[0].raceClass) : 0;
-  const _a4cB = Yoso.avg4C(preHist);
-  const cornN = Yoso.cornMod(_a4cB.avg, _a4cB.count);           // ペース伸縮前の生値（scanData準拠）
-  const trendN = Yoso.trendMod(siList);
-  const weightN = Yoso.weightMod(Yoso.weightChange(entry.weight, preHist[0]?.weight));
-  const agariN = Yoso.agariMod(maps.getAgRef(rdistNum, raceDate, rNo), Yoso.agariAvg(preHist, rdistNum));
-  const comboN = Yoso.comboMod(getComboStatsAsOf((entry.jockey || '').trim(), (entry.trainer || '').trim(), raceDate, rNo), ctx.fieldSize);
-  const marginN = Yoso.marginMod(Yoso.marginAvgGap(preHist));
-
-  let winStrN = 0;
-  if (marginN > 0 && preHist.length >= 1 && parseInt(preHist[0].chakujun) > 1) {
-    const _ph0 = preHist[0];
-    const _wSI = maps.winnerSIMap[`${_ph0.babaCode}_${_ph0.raceDate}_${_ph0.raceNo}`];
-    if (_wSI != null && siList.length >= 2) winStrN = Yoso.winStrMod(_wSI - siList.reduce((s, v) => s + v, 0) / siList.length);
-  }
-
-  let jockeyChgN = 0;
-  if (entry.jockey && preHist.length >= 1) {
-    const _pj = (preHist[0].jockey || '').trim(), _cj = (entry.jockey || '').trim();
-    if (_pj && _pj !== _cj) jockeyChgN = jockeyChangeModAsOfSafe(_cj, _pj, raceDate, rNo);
-  }
-  const takiN = preHist.length >= 2 ? Yoso.takiMod(raceDate, preHist[0].raceDate, preHist[1].raceDate) : 0;
-  const cornConsistN = Yoso.cornConsistMod(Yoso.cornConsistAvg(preHist));
-  const rakuN = rakuShoBonus(kochiPre[0]);
-
-  return [base, condNew, distNew, rotN, clsN, cornN, trendN, weightN, agariN, comboN, marginN, winStrN, jockeyChgN, takiN, cornConsistN, rakuN];
-}
-
-/** その馬の「好走時(3着内)平均馬体重」を当該レースより前の高知成績から算出（リーク無し）。無ければ null。 */
-function _evWeightNorm(hName, raceDate, rNo) {
-  const hist = getHorseHistory(hName).filter(h =>
-    (h.raceDate < raceDate || (h.raceDate === raceDate && parseInt(h.raceNo) < rNo)));
-  const pw = s => { const m = String(s || '').match(/(\d{3})/); const w = m ? parseInt(m[1]) : NaN; return (w >= 300 && w <= 700) ? w : NaN; };
-  const itm = [], all = [];
-  for (const h of hist) { const w = pw(h.weight); if (isNaN(w)) continue; all.push(w); if (parseInt(h.chakujun) <= 3) itm.push(w); }
-  if (itm.length >= 1) return itm.reduce((a, b) => a + b, 0) / itm.length;
-  if (all.length >= 2) return all.reduce((a, b) => a + b, 0) / all.length;
-  return null;
-}
-
-/**
- * 💹 EVベット算出。戻り値 { runners:[{uma,name,odds,p,ev,inWindow,stake,weightDev,weightWarn}], invSum, inDomain, nOdds }｜不能は null。
- * selCond 省略時はレースの馬場状態を使用。weightWarn＝好走時比で極端な太目/ガレ（EVの罠・買い除外）。
- */
-function computeEvBets(raceNo, selCond) {
+// 旧EV APIは停止済み。公開買い判定は返さず、T10価値モデルを別系統で前向き監査する。
+function computeEvBets(raceNo) {
   const data = allRacesData[raceNo];
-  if (!data || !data.horses.length) return null;
-  const raceInfo = data.raceInfo;
-  const M = KV_EV_MODEL;
-  const ctx = {
-    raceDate: raceInfo.raceDate || '',
-    rNo: parseInt(raceNo),
-    raceCls: raceInfo.raceClass || raceInfo.race_class || '',
-    raceDist: String(raceInfo.distance || '').replace(/[^\d]/g, ''),
-    selCond: selCond || raceInfo.trackCond || raceInfo.track_cond || '良',
-  };
-  ctx.rdistNum = parseInt(ctx.raceDist) || 0;
-  ctx.curCR = YOSO_CLASS_RANK[getEffectiveClass(ctx.raceCls)] || 0;
-  ctx.fieldSize = data.horses.length;
-  const maps = _evGetMaps();
-
-  // オッズが有効な出走馬でレースを構成
-  const cand = data.horses
-    .map(h => ({ h, uma: parseInt(h.umaBan), odds: parseFloat(h.odds) }))
-    .filter(x => !isNaN(x.uma) && !isNaN(x.odds) && x.odds > 0);
-  if (cand.length < 5) return { runners: [], invSum: 0, inDomain: false, nOdds: cand.length };
-
-  const invSum = cand.reduce((s, x) => s + 1 / x.odds, 0);
-  const inDomain = invSum >= M.invLo && invSum <= M.invHi;
-
-  const scored = [];
-  for (const c of cand) {
-    const feat = _evHorseFeatures(c.h.horseName || '', c.h, ctx, maps);
-    if (!feat) continue; // 真のデビュー馬はプールから除外（scanDataと同じ扱い）
-    feat.push(Math.log(c.odds)); // 17項目め = log(オッズ)
-    let sc = 0;
-    for (let f = 0; f < feat.length; f++) sc += M.weights[f] * ((feat[f] - M.mean[f]) / M.std[f]);
-    scored.push({ uma: c.uma, name: c.h.horseName || '', odds: c.odds, sc, h: c.h });
-  }
-  if (scored.length < 5) return { runners: [], invSum, inDomain, nOdds: cand.length };
-
-  const mx = Math.max(...scored.map(s => s.sc));
-  let Z = 0; scored.forEach(s => { s.e = Math.exp(s.sc - mx); Z += s.e; });
-  const _pw = s => { const m = String(s || '').match(/(\d{3})/); const w = m ? parseInt(m[1]) : NaN; return (w >= 300 && w <= 700) ? w : NaN; };
-  const runners = scored.map(s => {
-    const p = s.e / Z;
-    const ev = p * s.odds;
-    // 体重ガード：今日の馬体重が好走時平均から極端に乖離した馬はEVの罠として買い除外
-    let weightDev = null, weightWarn = null;
-    const curW = _pw(s.h.weight);
-    if (!isNaN(curW)) {
-      const norm = _evWeightNorm(s.h.horseName || '', ctx.raceDate, ctx.rNo);
-      if (norm != null) {
-        weightDev = Math.round((curW - norm) * 10) / 10;
-        if (weightDev >= M.wDevFuto) weightWarn = 'futo';
-        else if (weightDev <= M.wDevGare) weightWarn = 'gare';
-      }
-    }
-    const pCal = _calibrateEvP(p);           // 過大評価を補正した確率（2026-07-09採用）
-    const evCal = pCal * s.odds;             // 補正後EV＝実配当ベースで検証済みの買い判定に使う値
-    const evOk = s.odds >= M.oddsLo && s.odds < M.oddsHi && evCal >= M.evCalLo && evCal < M.evCalHi;
-    const inWindow = evOk && !weightWarn;                   // 買い推奨＝検証済みの補正後EV窓かつ体重ガード通過
-    let stake = 0;
-    if (inWindow) stake = Math.max(M.stakeMin, Math.min(M.stakeCap, Math.round(M.stakeK * (evCal - 1) / 100) * 100));
-    return { uma: s.uma, name: s.name, odds: s.odds, p, ev, pCal, evCal, inWindow, stake, weightDev, weightWarn, evOk };
-  }).sort((a, b) => b.ev - a.ev);
-  return { runners, invSum, inDomain, nOdds: cand.length };
+  if (!data || !Array.isArray(data.horses) || !data.horses.length) return null;
+  return { runners:[], invSum:0, inDomain:false,
+    nOdds:data.horses.filter(h => Number.isFinite(parseFloat(h.odds)) && parseFloat(h.odds) > 0).length,
+    status:'retired_legacy_ev_model', publicEligible:false };
 }
 
 /** EVモニターのライブオッズ取得→パネル再描画（予想パネル専用の取得ボタン用）。 */
@@ -2758,283 +2522,33 @@ async function fetchOddsForEv(raceNo) {
   _updateCockpitRaceStatus(raceNo);
 }
 
-/** 💹 EVモニターのHTML。オッズ未取得なら取得ボタン、該当なしは見送り、該当ありは傾斜額つきで提示。 */
-function buildEvMonitorHtml(raceNo, selCond) {
-  let res;
-  try { res = computeEvBets(raceNo, selCond); } catch (e) { console.warn('[ev]', e); return ''; }
-  if (!res) return '';
-  const M = KV_EV_MODEL;
-  const _yen = n => '¥' + n.toLocaleString('en-US');
-  const _head = (tag, tagBg) => `<div class="evb-head">💹 買い時チェック<span style="font-weight:600;font-size:11px;opacity:.85">単勝が「お得」かの判定</span>${tag ? `<span class="evb-tag" style="${tagBg ? 'background:' + tagBg : ''}">${tag}</span>` : ''}</div>`;
-
-  // オッズ未取得
-  if (res.nOdds < 5) {
-    return `<div class="ev-monitor-bar skip">${_head('', '')}
-      <div style="margin-top:6px">単勝オッズが未取得です。取得すると「AIが見積もる勝つ確率」に対してオッズが十分おいしいかを判定します。
-        <button type="button" id="ev-fetch-btn-${raceNo}" class="evb-fetch" style="margin-left:6px" onclick="fetchOddsForEv(${raceNo})">💹 オッズを取得して判定</button></div></div>`;
+/** 公開EVモニター。合格モデルがない間は買い候補を出さず、管理者だけshadow候補を確認できる。 */
+function buildEvMonitorHtml(raceNo, selCond, scoredInput) {
+  let shadow = null;
+  const admin = typeof isAdminMode === 'function' && isAdminMode();
+  if (admin && typeof window.kvComputeT10ValueShadow === 'function' && Array.isArray(scoredInput)) {
+    try { shadow = window.kvComputeT10ValueShadow(raceNo, scoredInput); } catch (e) { console.warn('[value shadow]', e); }
   }
-
-  const bets = res.runners.filter(r => r.inWindow);
-  const warned = res.runners.filter(r => r.evOk && r.weightWarn);  // 買い得だが体重ガードで除外
-  const cautionHtml = !res.inDomain
-    ? `<div class="evb-sub" style="color:#b45309">⚠️ オッズがまだ固まっていない時間帯の可能性があります（発売直後など）。締切前にもう一度オッズを取り直して確認するのがおすすめです。</div>`
-    : '';
-  const _wLabel = r => r.weightWarn === 'futo' ? `馬体重が普段より+${r.weightDev}kgと重い` : `馬体重が普段より${r.weightDev}kgと軽い`;
-  const warnHtml = warned.length
-    ? `<div class="evb-sub">⚖️ 数字はお得でも馬体重が普段と大きく違うため対象外にした馬：${warned.map(r => `<b>${escapeHTML(r.name)}</b>（${r.odds.toFixed(1)}倍／${_wLabel(r)}）`).join('　')}<br><span style="opacity:.8">こういう馬は過去データで勝率が大きく落ちるため買いから外しています。</span></div>`
-    : '';
-
-  if (bets.length) {
-    const rows = bets.map(b => `
-      <div class="evb-row">
-        <span class="evb-uma">${escapeHTML(b.uma)}</span>
-        <span class="evb-name">${escapeHTML(b.name) || '—'}</span>
-        <span class="evb-metric">単勝${b.odds.toFixed(1)}倍 / AIの見立てでは勝率${(b.pCal * 100).toFixed(1)}% / お得度<b>${b.evCal.toFixed(2)}倍</b></span>
-        <span class="evb-stake">${_yen(b.stake)}</span>
-      </div>`).join('');
-    const total = bets.reduce((s, b) => s + b.stake, 0);
-    return `<div class="ev-monitor-bar${res.inDomain ? '' : ' caution'}">${_head('勝負', '')}
-      ${rows}
-      <div class="evb-sub">「お得度」＝AIの勝率で見た払戻の期待倍率（1.00より大きいほどオッズが勝率に対して高くおいしい）。金額はお得なほど多め（上限${_yen(M.stakeCap)}）・単勝のみ。合計 <b>${_yen(total)}</b>。<br>
-        この条件（単勝${M.oddsLo}〜${M.oddsHi}倍の中穴でお得度が高い馬）は、過去286日ぶんの実際の配当で検証して期間を分けても黒字（回収率 約136%）でした。ただし該当例はまだ多くないので、金額は控えめに。</div>
-      ${warnHtml}${cautionHtml}</div>`;
-  }
-
-  // 該当なし＝見送り。参考に最上位の馬を1頭示す。
-  const top = res.runners[0];
-  const refWhy = warned.length
-    ? `候補だった${escapeHTML(warned[0].name)}は${_wLabel(warned[0])}ため見送り`
-    : top
-      ? (top.odds < M.oddsLo ? `いちばんお得なのは${escapeHTML(top.name)}ですが単勝${top.odds.toFixed(1)}倍と人気になりすぎ（狙い目は${M.oddsLo}〜${M.oddsHi}倍の中穴）`
-        : top.odds >= M.oddsHi ? `いちばんお得なのは${escapeHTML(top.name)}ですが単勝${top.odds.toFixed(1)}倍の大穴すぎて対象外（狙い目は${M.oddsLo}〜${M.oddsHi}倍）`
-        : `中穴（${M.oddsLo}〜${M.oddsHi}倍）に「オッズが勝率より十分高い馬」がいません`)
-      : '';
-  return `<div class="ev-monitor-bar skip">${_head('見送り', '#64748b')}
-    <div style="margin-top:5px">このレースに「買って得」といえる単勝はありません＝<b>見送り推奨</b>。${refWhy ? '<br><span style="font-size:11px;opacity:.85">' + refWhy + '</span>' : ''}</div>
-    ${warned.length ? warnHtml : ''}${cautionHtml}</div>`;
-}
-
-/** 🔭 穴馬チェック（2026-07-10本採用）：市場アンカーモデルのAI推定確率(aiProb)が
- * 市場の織り込み確率(marketProb)よりどれだけ高いか＝ratioで中〜大穴の妙味を検出（表示専用）。
- * 上のEVモニター(computeEvBets/KV_EV_MODEL)とは別系統のモデル・検証。
- * 検証（3000R expanding-window walk-forward CV＋直近3ヶ月ホールドアウト）：
- * 単勝8〜30倍・ratio≥1.25は n=231・回収率 約109.7%（合格）。
- * 単勝30倍以上・ratio≥1.5は方向は同じだが n=24 と少なく、買い推奨ではなく参考表示にとどめる。 */
-function buildLongshotHtml(scored) {
-  if (!scored || !scored._offsetModelUsed) return '';
-  const cands = scored
-    .filter(s => s.totalScore != null && s.aiProb != null && s.marketProb != null && s.marketProb > 0)
-    .map(s => ({ s, odds: parseFloat(s.horse.odds), ratio: s.aiProb / s.marketProb }))
-    .filter(c => !isNaN(c.odds));
-  // 1レース最大1頭（ratio最大のみ）：候補を絞るほど規律が保てるため。検証時(n=231)も大半が1R1頭だった。
-  const mid = cands.filter(c => c.odds >= 8 && c.odds < 30 && c.ratio >= 1.25).sort((a, b) => b.ratio - a.ratio).slice(0, 1);
-  const big = cands.filter(c => c.odds >= 30 && c.ratio >= 1.5).sort((a, b) => b.ratio - a.ratio).slice(0, 1);
-  if (!mid.length && !big.length) return '';
-  const midRows = mid.map(c => `
-      <div class="evb-row">
-        <span class="evb-uma">${escapeHTML(c.s.horse.umaBan) || '—'}</span>
-        <span class="evb-name">${escapeHTML(c.s.horse.horseName) || '—'}</span>
-        <span class="evb-metric">単勝${c.odds.toFixed(1)}倍 / オッズの人気度よりAIの評価が${Math.round((c.ratio - 1) * 100)}%高い</span>
-      </div>`).join('');
-  const midHtml = mid.length ? `
-    <div class="evb-head">🔭 穴馬チェック<span style="font-weight:600;font-size:11px;opacity:.85">単勝8〜30倍でオッズより評価が高い馬</span></div>
-    ${midRows}
-    <div class="evb-sub">過去データの検証（該当231件）では平均回収率 約110%。オッズは発売直後で不安定なことがあるため、締切前にもう一度見直すのがおすすめです。</div>` : '';
-  const bigHtml = big.length ? `
-    <div class="evb-sub" style="margin-top:${mid.length ? '8px' : '0'}">🔭 参考：単勝30倍以上でさらにズレが大きい馬＝${big.map(c => `<b>${escapeHTML(c.s.horse.horseName)}</b>（${c.odds.toFixed(1)}倍）`).join('・')}。傾向は同じ方向ですが該当例がまだ少なく、買い推奨ではなく参考情報です。</div>` : '';
-  return `<div class="ev-monitor-bar">${midHtml}${bigHtml}</div>`;
-}
-
-// ── 🧠 AI予想レポート（ルールベース予想エンジン・無料/オフライン）─────────────
-// チャット予想の手順をJS化：当日バイアス×脚質整合(全印一貫)・コメント癖辞書(位置取り照合つき)・
-// 持ち時計比較・展開シミュレーション(気性難の代替シナリオ)・危険な人気馬/穴の根拠明示・自己チェック。
-// 指数本体(computeYosoScored)には一切手を触れない表示レイヤー。
-const _YR_QUIRKS = [
-  { k: 'sand',  re: /砂を被|揉まれ/, label: '砂を被ると嫌がる', neg: true },
-  { k: 'gate',  re: /ゲート.{0,6}(失敗|遅れ|うるさい|駐立)|出負け|出遅れ/, label: 'ゲート難', neg: true },
-  { k: 'kisho', re: /気難し|ムラがあ|真面目では|集中力|気合が入りにくい|遊んでい/, label: '気性に課題', neg: true },
-  { k: 'zubu',  re: /ズブ|反応が鈍|進む気が無/, label: 'ズブい・反応が鈍い', neg: true },
-  { k: 'front', re: /前に行った方|先行した方|逃げれて楽/, label: '前向きな競馬が合う' },
-  { k: 'wet',   re: /雨馬場の方|湿った(方|馬場)が良/, label: '湿った馬場が良い' },
-  { k: 'dry',   re: /乾いた馬場|普通の馬場の方/, label: '乾いた馬場が良い' },
-  { k: 'distLong', re: /距離は?長い|mは長い/, label: '距離が長い(厩舎談)', neg: true },
-  { k: 'late',  re: /終いは(確実|伸び)|一脚は使|よく追い込/, label: '終いは確実' },
-  { k: 'good',  re: /調子は良|状態は良|良化|走りは良かった/, label: '状態は良さそう' },
-];
-const _YR_CLS = { 'A': 5, 'B': 4, 'C1': 3, 'C2': 2, 'C3': 1 };
-function _yrSec(t) { const m = String(t || '').match(/(\d+):(\d+\.\d)/); return m ? parseInt(m[1]) * 60 + parseFloat(m[2]) : null; }
-function _yrWet(c) { return c === '不良' || c === '重' || c === '稍重'; }
-function _yrC1(cn) { const v = parseInt(String(cn || '').split('-')[0]); return isNaN(v) || v < 1 ? null : v; }
-
-function _yrProfile(h, ctx) {
-  const name = h.horseName || '';
-  let hist = [];
-  try { hist = getHorseHistoryBefore(name, ctx.date, ctx.rno).filter(x => x.babaCode === '31').slice(0, 5); } catch (e) {}
-  const c1s = hist.map(r => _yrC1(r.corner)).filter(v => v != null);
-  const avgC1 = c1s.length ? c1s.reduce((a, b) => a + b, 0) / c1s.length : null;
-  let style = '不明', styleCls = 'mid';
-  if (avgC1 != null) { style = avgC1 <= 2.4 ? '逃げ' : avgC1 <= 4.5 ? '先行' : avgC1 <= 7 ? '中団' : '後方'; styleCls = avgC1 <= 4.5 ? 'front' : avgC1 <= 7 ? 'mid' : 'back'; }
-  const jizai = c1s.length >= 3 && Math.min(...c1s) <= 2 && Math.max(...c1s) >= 6;
-  const atDist = hist.filter(r => String(r.distance || '').replace(/[^\d]/g, '') === ctx.dist);
-  const distTimes = atDist.map(r => _yrSec(r.time)).filter(v => v);
-  const wetRuns = hist.filter(r => _yrWet(r.trackCond));
-  const wetTop3 = wetRuns.filter(r => parseInt(r.chakujun) <= 3).length;
-  const quirks = {};
-  hist.slice(0, 4).forEach((r, i) => { const cm = r.postComment || ''; if (!cm) return;
-    _YR_QUIRKS.forEach(q => { if (q.re.test(cm) && !quirks[q.k]) quirks[q.k] = { label: q.label, neg: !!q.neg, recent: i < 2 }; }); });
-  // 教訓②:「距離長い」コメントは同距離の敗戦の位置取りと照合＝前で試していなければ「未知」扱い
-  if (quirks.distLong) { const frontTried = atDist.some(r => { const c = _yrC1(r.corner); return c != null && c <= 4; });
-    if (!frontTried) quirks.distLong.unknown = true; }
-  const wm = String(h.weight || '').match(/(\d{3})\(([+-]?\d+)\)/);
-  const lastCls = hist[0] ? (_YR_CLS[getEffectiveClass(hist[0].raceClass)] || null) : null;
-  const nowCls = _YR_CLS[getEffectiveClass(ctx.cls)] || null;
-  return { h, name, uma: h.umaBan, hist, nHist: hist.length, style, styleCls, jizai, avgC1,
-    distBest: distTimes.length ? Math.min(...distTimes) : null, distTop3: atDist.filter(r => parseInt(r.chakujun) <= 3).length, distN: atDist.length,
-    wetN: wetRuns.length, wetTop3, quirks, wDelta: wm ? +wm[2] : null,
-    clsUp: (lastCls != null && nowCls != null) ? nowCls - lastCls : 0,
-    lastCh: hist[0] ? (parseInt(hist[0].chakujun) || null) : null,
-    ninki: parseInt(h.ninki) || null, odds: parseFloat(h.odds) || null };
-}
-
-function _yrBuild(raceNo) {
-  const data = allRacesData[raceNo]; if (!data || !data.horses.length) return null;
-  const ri = data.raceInfo;
-  const ctx = { date: ri.raceDate, rno: parseInt(raceNo), dist: String(ri.distance || '').replace(/[^\d]/g, ''),
-    cls: ri.raceClass || '', cond: ri.trackCond || '', isFinal: /ファイナル/.test(ri.raceName || '') };
-  // ── 当日バイアス（このレースより前の確定Rのみ＝結果リーク防止）──
-  let fN = 0, fH = 0, mN = 0, mH = 0, bN = 0, bH = 0, favHit = 0, favN = 0, resR = 0;
-  Object.keys(allRacesData).map(Number).filter(rn => rn < ctx.rno).forEach(rn => {
-    let has = false;
-    (allRacesData[rn].horses || []).forEach(x => { const ch = parseInt(x.chakujun); if (isNaN(ch)) return; has = true;
-      const c1 = _yrC1(x.corner); if (c1 != null) { if (c1 <= 3) { fN++; if (ch <= 3) fH++; } else if (c1 <= 7) { mN++; if (ch <= 3) mH++; } else { bN++; if (ch <= 3) bH++; } }
-      if (parseInt(x.ninki) === 1) { favN++; if (ch <= 3) favHit++; } });
-    if (has) resR++;
-  });
-  const frontRate = fN >= 8 ? Math.round(100 * fH / fN) : null;
-  const backRate = bN >= 5 ? Math.round(100 * bH / bN) : null;
-  const biasMode = frontRate == null ? 'unknown' : frontRate >= 52 ? 'front' : frontRate <= 35 ? 'back' : 'flat';
-  // ── AI指数・EV ──
-  let aiMap = {}, aiOk = false;
-  try { computeYosoScored(raceNo).scored.forEach((s, i) => { aiMap[s.horse.horseName] = { rank: i + 1, sc: s.totalScore }; if (s.totalScore != null) aiOk = true; }); } catch (e) {}
-  let evList = [];
-  try { const er = computeEvBets(raceNo); if (er && er.runners) evList = er.runners; } catch (e) {}
-  // ── 各馬プロファイル＋調整スコア ──
-  const ps = data.horses.map(h => _yrProfile(h, ctx));
-  const fieldBest = Math.min(...ps.map(p => p.distBest).filter(v => v), Infinity);
-  const wetToday = _yrWet(ctx.cond);
-  ps.forEach(p => {
-    const ai = aiMap[p.name] || {};
-    p.aiRank = ai.rank || 99; p.aiSc = ai.sc;
-    let adj = 0, hardNeg = 0; const plus = [], minus = [], notes = [];
-    // 教訓⑤: バイアスは全馬に適用。ただし6/27全11Rのバックテストで「後方馬でも2-3着頻発」＝沈めすぎ厳禁(教訓⑦)。
-    //   バイアスは軽い加減点(soft)に留め、消しに落とすのは"実質的な減点"(hardNeg)だけにする。
-    if (biasMode === 'front') { if (p.styleCls === 'front') { adj += 2; plus.push('前有利の馬場×' + p.style + '脚質が合致'); }
-      else if (p.styleCls === 'back') { adj -= 1.5; minus.push('前有利の今日、後方脚質はやや不利'); } }
-    else if (biasMode === 'back') { if (p.styleCls === 'back') { adj += 1.5; plus.push('差し優勢の馬場×追い込み脚質'); }
-      else if (p.styleCls === 'front') { adj -= 1; minus.push('差し優勢の今日、前はやや苦しい'); } }
-    if (p.jizai) { adj += 1; plus.push('位置取り自在（教訓⑥：番手戦法で差し切れる型）'); }
-    if (wetToday) { if (p.wetTop3 >= 2) { adj += 1.5; plus.push('渋った馬場【' + p.wetTop3 + '好走】実績'); }
-      if (p.quirks.wet) { adj += 1; plus.push('厩舎談「湿った馬場が良い」×今日' + ctx.cond); }
-      if (p.quirks.dry) { adj -= 2; hardNeg++; minus.push('厩舎談「乾いた馬場が良い」×今日' + ctx.cond); } }
-    if (p.distBest != null && isFinite(fieldBest)) { const d = +(p.distBest - fieldBest).toFixed(1);
-      p.timeDef = d;
-      if (d <= 0.05) { adj += 1.5; plus.push('当該距離の持ち時計がメンバー最速'); }
-      else if (d >= 1.2) { adj -= 2; hardNeg++; minus.push('持ち時計がメンバー最速比+' + d + '秒不足'); } }
-    if (p.quirks.sand && parseInt(p.h.wakuBan) <= 4 && p.styleCls !== 'front') { adj -= 2.5; hardNeg++; minus.push('砂被りNG×内枠×先行力不足は致命的'); }
-    if (p.quirks.gate && p.quirks.gate.recent) { adj -= 1.5; hardNeg++; minus.push('直近にゲート難'); }
-    if (p.quirks.kisho) { adj -= 1; minus.push('気性に課題（ムラ駆け注意）'); }
-    if (p.quirks.zubu) { adj -= 1; minus.push('ズブさ・反応の鈍さ'); }
-    if (p.quirks.distLong && !p.quirks.distLong.unknown) { adj -= 1.5; hardNeg++; minus.push('厩舎が距離長いと明言'); }
-    if (p.quirks.distLong && p.quirks.distLong.unknown) { notes.push('「距離長い」談あるが前付けは未試行＝未知（教訓②）'); }
-    if (p.quirks.front && biasMode === 'front') { adj += 1; plus.push('前向きな競馬が合う×前有利'); }
-    if (p.quirks.late) { plus.push('終いは確実（3着紐の価値）'); }
-    if (p.quirks.good) { plus.push('陣営コメントの状態良し'); }
-    if (p.wDelta != null && Math.abs(p.wDelta) >= 10) { adj -= 2; hardNeg++; minus.push('馬体重' + (p.wDelta > 0 ? '+' : '') + p.wDelta + 'kgの大幅変動'); }
-    if (p.clsUp > 0) { adj -= 1; hardNeg++; minus.push('昇級戦'); }
-    if (p.clsUp < 0) { adj += 1.5; plus.push('降級で相手弱化'); }
-    if (p.nHist <= 1) { notes.push('高知' + p.nHist + '走のみ＝データ不足（転入直後）'); }
-    p.adj = adj; p.plus = plus; p.minus = minus; p.notes = notes; p.hardMinus = hardNeg > 0;
-    p.final = (p.aiSc != null ? p.aiSc : 0) + adj;
-  });
-  // 教訓⑨（6/27バックテスト）: 高知データ不足でも人気上位の馬を消しに落とさない＝市場を尊重してフロア。
-  //   R3・R7で無データの1番人気が実1着だが最下位評価だった→データが無い時こそ市場に敬意。
-  const _sf = ps.filter(p => p.aiSc != null).map(p => p.final).sort((a, b) => b - a);
-  const _floor4 = _sf.length ? _sf[Math.min(3, _sf.length - 1)] : 0;
-  ps.forEach(p => { if (p.ninki && p.ninki <= 2 && (p.aiSc == null || p.nHist <= 1) && p.final < _floor4) { p.final = _floor4 + 0.2; if (!p.notes.some(n => /市場評価を尊重/.test(n))) p.notes.push('高知データ不足だが' + p.ninki + '人気＝市場評価を尊重しフロア適用（教訓⑨）'); } });
-  // ── 印（AI指数＋調整の総合順）──
-  ps.sort((a, b) => b.final - a.final);
-  const MK = ['◎', '○', '▲', '△', '△'];
-  ps.forEach((p, i) => { p.mark = i < 5 ? MK[i] : '消し'; });
-  // ☆穴: EVモデルが評価する15倍以上（教訓④）を1頭（印下位から昇格）
-  const hole = ps.find(p => { if (p.mark !== '消し' && p.mark !== '△') return false; const ev = evList.find(r => r.name === p.name);
-    return ev && p.odds >= 15 && ev.ev >= 0.55 && (p.styleCls === 'front' || p.quirks.late || biasMode !== 'front'); });
-  if (hole) hole.mark = '☆';
-  // ── 展開（教訓③: 気性難逃げ馬の代替シナリオ）──
-  const nige = ps.filter(p => p.avgC1 != null && (p.avgC1 <= 2.4 || p.hist.slice(0, 3).some(r => _yrC1(r.corner) === 1)));
-  const senko = ps.filter(p => p.styleCls === 'front' && !nige.includes(p));
-  let paceTxt, paceWarn = '';
-  if (nige.length >= 3) paceTxt = 'ハイ寄り（逃げ' + nige.length + '頭で先行争い激化）';
-  else if (nige.length === 2) paceTxt = '平均〜ややハイ（' + nige.map(p => p.name).join('と') + 'のハナ争い）';
-  else if (nige.length === 1) { paceTxt = 'スロー〜平均（' + nige[0].name + 'の単騎逃げ濃厚＝前残り警戒）';
-    if (nige[0].quirks.kisho) paceWarn = '⚠️ 逃げ候補' + nige[0].name + 'は気性に課題＝行けなかった場合は隊列一変・別の先行馬の楽逃げまで想定（教訓③）'; }
-  else paceTxt = 'スロー（明確な逃げ馬不在＝position争い）';
-  // ── 危険な人気馬（2-5人気で「実質減点(hardMinus)あり×エンジン評価が人気より2枚以上下」）──
-  //   6/27バックテスト: 旧条件は誤検知3/4（バイアス沈めの副作用で好走馬を危険視）。hardMinus必須＋1人気除外で精度化。
-  const danger = ps.filter((p, idx) => p.ninki && p.ninki >= 2 && p.ninki <= 5 && p.hardMinus && (idx + 1) >= p.ninki + 2)
-    .sort((a, b) => a.ninki - b.ninki)[0] || null;
-  return { ctx, ri, ps, biasMode, frontRate, backRate, resR, favHit, favN, paceTxt, paceWarn, nige, senko, hole, danger, evList, aiOk };
-}
-
-function renderYosoReport(raceNo) {
-  const host = document.getElementById('yoso-report-' + raceNo); if (!host) return;
-  const R = _yrBuild(raceNo);
-  if (!R) { host.innerHTML = '<div class="yr-panel">データがありません</div>'; return; }
-  if (!R.aiOk) { host.innerHTML = '<div class="yr-panel">各馬の過去データが不足しています（「データ自動取得」を先に実行してください）</div>'; return; }
-  const esc = s => String(s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
-  const biasTxt = R.biasMode === 'unknown' ? '不明（確定レース不足＝過去データ中心で判断）'
-    : R.biasMode === 'front' ? '前有利（1角3番手内の複勝' + R.frontRate + '%）'
-    : R.biasMode === 'back' ? '差し優勢（前の複勝' + R.frontRate + '%と低調）' : 'フラット（前' + R.frontRate + '%）';
-  const mkCls = m => m === '◎' ? 'yr-mk-h' : m === '○' ? 'yr-mk-t' : m === '▲' || m === '△' ? 'yr-mk-s' : m === '☆' ? 'yr-mk-x' : 'yr-mk-k';
-  const horseHtml = R.ps.map((p, i) => {
-    const tags = [];
-    if (p.plus.length) tags.push('<span class="yr-tag yr-tag--p">+' + p.plus.length + '</span>');
-    if (p.minus.length) tags.push('<span class="yr-tag yr-tag--m">-' + p.minus.length + '</span>');
-    tags.push('<span class="yr-tag">' + p.style + '</span>');
-    if (p.ninki) tags.push('<span class="yr-tag">' + p.ninki + '人気</span>');
-    const body =
-      (p.plus.length ? '<div class="yr-plus">＋ ' + p.plus.map(esc).join('／') + '</div>' : '') +
-      (p.minus.length ? '<div class="yr-minus">− ' + p.minus.map(esc).join('／') + '</div>' : '') +
-      (Object.keys(p.quirks).length ? '<div class="yr-quirk">癖：' + Object.values(p.quirks).map(q => esc(q.label)).join('・') + '</div>' : '') +
-      (p.notes.length ? '<div>※ ' + p.notes.map(esc).join('／') + '</div>' : '') +
-      '<div style="color:#94a3b8">AI指数' + (p.aiSc != null ? p.aiSc.toFixed(1) : '—') + '（' + p.aiRank + '位）・補正' + (p.adj >= 0 ? '+' : '') + p.adj.toFixed(1) + (p.timeDef != null ? '・時計差+' + p.timeDef + 's' : '') + '</div>';
-    return '<details class="yr-horse"' + (i < 3 ? ' open' : '') + '><summary><span class="yr-mark ' + mkCls(p.mark) + '">' + p.mark + '</span><span class="yr-uma">' + p.uma + '</span><span class="yr-hname">' + esc(p.name) + '</span><span style="font-size:11px;color:#94a3b8">' + esc(p.h.jockey || '') + '</span><span class="yr-tags">' + tags.join('') + '</span></summary><div class="yr-hbody">' + body + '</div></details>';
-  }).join('');
-  const top5 = R.ps.slice(0, 5);
-  const m1 = top5[0], m2 = top5[1], m3 = top5[2];
-  const holeTxt = R.hole ? R.hole.uma + ' ' + R.hole.name + '（' + R.hole.odds + '倍）— ' + (R.hole.plus[0] || 'EVモデルが能力を認める過小評価（教訓④）') : 'なし（該当馬不在）';
-  const himo = [...new Set(top5.slice(2).map(p => p.uma).concat(R.hole ? [R.hole.uma] : []))].filter(u => u !== m1.uma && u !== m2.uma);
-  const buys = R.ctx.isFinal
-    ? '<div class="yr-buy"><b>ファイナル警戒（教訓①）</b>：人気軸を疑い広く。3連複 ' + m1.uma + '-（' + m2.uma + ',' + m3.uma + '）-（印全部＋☆）／ワイド ' + m1.uma + '-☆</div>'
-    : '<div class="yr-buy"><b>堅め</b>：馬複 ' + m1.uma + '-' + m2.uma + '　<b>本線</b>：馬単 ' + m1.uma + '→' + m2.uma + '・3連複 ' + m1.uma + '-' + m2.uma + '-（' + himo.join(',') + '）　<b>穴</b>：' + (R.hole ? 'ワイド ' + m1.uma + '-' + R.hole.uma : '3連単2列目に△を厚く') + '</div>';
-  // 自己チェック（教訓⑤: 上位印とバイアスの整合を機械検証）
-  const mism = top5.slice(0, 3).filter(p => R.biasMode === 'front' && p.styleCls === 'back');
-  const selfck = '自己チェック：' +
-    (R.biasMode !== 'unknown' ? '上位3頭の脚質は' + top5.slice(0, 3).map(p => p.style).join('/') + (mism.length ? '——' + mism.map(p => p.name).join('・') + 'は後方脚質だが時計/終い根拠で残置（要注意）' : '＝当日バイアスと整合✓') : '当日バイアス不明のため過去データ中心で判断') +
-    '／コメントは位置取りと照合済（教訓②）' + (R.ctx.isFinal ? '／ファイナル＝荒れ前提で紐を拡張（教訓①）' : '') +
-    (R.danger ? '／危険視した' + R.danger.ninki + '人気の根拠：' + esc(R.danger.minus[0] || '') : '') + '。';
-  host.innerHTML = '<div class="yr-panel">' +
-    '<div class="yr-head"><span class="yr-title">🧠 AI予想レポート</span><span class="yr-note">ルールエンジン（端末内で計算・通信なし）／これは支援情報で的中を保証しません</span></div>' +
-    '<div class="yr-sec">■ レース概要</div><div class="yr-kv"><span>距離 <b>' + R.ctx.dist + 'm</b></span><span>クラス <b>' + esc(R.ctx.cls || '—') + '</b></span><span>馬場 <b>' + esc(R.ctx.cond || '—') + '</b></span><span>想定ペース <b>' + esc(R.paceTxt) + '</b></span><span>馬場傾向 <b>' + biasTxt + '</b></span>' + (R.favN ? '<span>本日1人気 <b>' + R.favHit + '/' + R.favN + '3着内</b></span>' : '') + '</div>' +
-    (R.ctx.isFinal ? '<div class="yr-warn">⚠️ ファイナルレース＝実力接近で大荒れ名物。人気を鵜呑みにしない（教訓①）</div>' : '') +
-    (R.paceWarn ? '<div class="yr-warn">' + esc(R.paceWarn) + '</div>' : '') +
-    '<div class="yr-sec">■ 展開予想</div><div style="font-size:12.5px">逃げ候補：' + (R.nige.length ? R.nige.map(p => esc(p.name)).join('・') : 'なし') + '／先行：' + (R.senko.length ? R.senko.map(p => esc(p.name)).join('・') : '—') + '</div>' +
-    '<div class="yr-sec">■ 各馬評価（タップで根拠）</div>' + horseHtml +
-    '<div class="yr-sec">■ 最終順位予想</div><div style="font-size:12.5px">' + top5.map((p, i) => (i + 1) + '位 ' + p.uma + ' ' + esc(p.name)).join('　→　') + '</div>' +
-    '<div class="yr-sec">■ 買い目候補</div>' + buys +
-    '<div class="yr-sec">■ 危険な人気馬</div><div style="font-size:12.5px">' + (R.danger ? '<b>' + esc(R.danger.name) + '（' + R.danger.ninki + '人気' + R.danger.odds + '倍）</b>：' + R.danger.minus.map(esc).join('・') : '上位人気に明確な減点なし') + '</div>' +
-    '<div class="yr-sec">■ 狙いたい穴馬</div><div style="font-size:12.5px">' + esc(holeTxt) + '</div>' +
-    '<div class="yr-selfcheck">' + selfck + '</div>' +
-    '</div>';
+  const candidate = shadow && shadow.candidate;
+  const reasonJa = {
+    SHADOW_CANDIDATE:'期待値の検証候補を記録', NO_QUALIFYING_VALUE:'該当馬なし',
+    WAIT_FOR_T10:'発走10分前まで待機', T10_WINDOW_CLOSED:'T10記録時間を通過',
+    NOT_VERIFIED_PRESTART:'発走時刻を確認できません', STALE_OR_UNVERIFIED_MARKET:'公式オッズが古いか未確認',
+    RUNNER_UNIVERSE_MISMATCH:'出走馬とオッズの頭数が不一致', INCOMPLETE_T10_MARKET:'全頭オッズ未取得',
+    INCOMPLETE_ABILITY_UNIVERSE:'全頭の能力評価が未完成', NO_RACE:'レースデータなし',
+    NOT_KOCHI:'高知以外は対象外', NO_RANKING_MODEL_IDENTITY:'能力モデルの版を確認できません',
+    INCOMPLETE_AUDIT_INPUT:'監査用入力が不完全',
+  };
+  const research = candidate ? `<div class="evb-row">
+      <span class="evb-uma">${escapeHTML(candidate.uma)}</span><span class="evb-name">${escapeHTML(candidate.name)}</span>
+      <span class="evb-metric">T10単勝${Number(candidate.odds).toFixed(1)}倍 / 研究EV ${Number(candidate.ev) >= 0 ? '+' : ''}${Number(candidate.ev).toFixed(2)}</span>
+      <span class="evb-tag" style="background:#7c3aed">前向き検証のみ</span></div>` : '';
+  return `<div class="ev-monitor-bar skip"><div class="evb-head">💹 期待値判定
+      <span style="font-weight:600;font-size:11px;opacity:.85">能力とT10価格を別評価</span>
+      <span class="evb-tag" style="background:#64748b">見送り</span></div>
+    ${research}
+    <div style="margin-top:6px"><b>公開できる買い候補はありません。</b> 近似能力入力での過去確認は回収率104.2%でしたが、95%区間の下限が68.3%で、上位1件を除くと95.1%でした。</div>
+    <div class="evb-sub">新モデルは条件を変えず前向きに200件収集します。合格するまでは候補が出ても購入推奨・金額表示には使いません。◎○▲△はオッズ非依存の能力順です。${admin && shadow ? ` 検証状態: ${escapeHTML(reasonJa[shadow.reason] || shadow.reason || (candidate ? '候補を記録対象' : '該当なし'))}` : ''}</div></div>`;
 }
 
 // ══ Phase3-1 新出馬表プレビュー（管理者限定β・feature flag・読み取り専用・独立名前空間 kvx*）══
@@ -3485,8 +2999,10 @@ function renderPredictionPanel(raceNo) {
   // スコア計算は共通コア computeYosoScored に委譲（出馬表のAI印列と同一の結果）
   const { scored, comboStats: _comboStats, raceDist } = computeYosoScored(raceNo, container._selCond);
   container._scored = scored; // デバッグ・検証用（リファクタ時のスコア一致確認に使用）
+  // 印は市場人気で上書きしない。能力を測るscored順と、価格を測るEV判定を分離する。
+  const displayScored = scored;
   // 🎯狙い目カード用：各バッジが実際に採用した馬を捕捉（カードと詳細バッジの不一致を防ぐ）
-  let _pickDanger = null, _pickSleeper = null, _pickValue = null;
+  let _pickDanger = null, _pickSleeper = null;
 
   // ── マーク割り当て（◎○▲△××）──
   const MARKS = ['◎', '○', '▲', '△', '×', '×'];
@@ -3494,7 +3010,7 @@ function renderPredictionPanel(raceNo) {
 
   // 馬名→印 マップ（レース後照合用）
   const horseMarkMap = {};
-  scored.forEach((s, idx) => { horseMarkMap[s.horse.horseName] = MARKS[idx] || ''; });
+  displayScored.forEach((s, idx) => { horseMarkMap[s.horse.horseName] = MARKS[idx] || ''; });
   const horseScoreMap = {};
   scored.forEach(s => { horseScoreMap[s.horse.horseName] = s.totalScore; });
 
@@ -3505,7 +3021,7 @@ function renderPredictionPanel(raceNo) {
     tableHtml = buildAfterMatchHtml(scored, horses);
   } else if (_displayMode === 'simple') {
     // ── レース前予想モード（基本表示：印・馬番・馬名・騎手・走力SI・総合スコア） ──
-    const simpleRows = scored.map((s, idx) => {
+    const simpleRows = displayScored.map((s, idx) => {
       const mark = MARKS[idx] || '';
       const mCol = markColors[mark] || '#6b7280';
       const ts   = s.totalScore != null ? s.totalScore.toFixed(1) : '—';
@@ -3529,7 +3045,7 @@ function renderPredictionPanel(raceNo) {
     }).join('');
     tableHtml = `<table style="width:100%;border-collapse:collapse;font-size:12px;">
       <thead><tr style="background:#1a1a2e;color:#fff;font-size:11px;">
-        <th style="padding:7px 8px;text-align:center" title="オッズを使わない、AI独自の評価で並べた印（発表前後で変わりません）">AI印</th>
+        <th style="padding:7px 8px;text-align:center" title="オッズを入力しない能力AIの総合スコア順">AI印</th>
         <th style="padding:7px 6px;text-align:center">馬番</th>
         <th style="padding:7px 8px;text-align:left">馬名</th>
         <th style="padding:7px 8px;text-align:left">騎手</th>
@@ -3546,7 +3062,7 @@ function renderPredictionPanel(raceNo) {
     // その差が全部「その他」に吸収されて実態と違う内訳になっていた。
     const _mlWDisp = getMlLiveWeights();
     const _effDisp = k => (_mlWDisp && _mlWDisp.eff[k] != null) ? _mlWDisp.eff[k] : (typeof YOSO_FACTOR_SCALE!=='undefined' && YOSO_FACTOR_SCALE[k]!=null ? YOSO_FACTOR_SCALE[k] : 1);
-    const rows = scored.map((s, idx) => {
+    const rows = displayScored.map((s, idx) => {
       const mark  = MARKS[idx] || '';
       const mCol  = markColors[mark] || '#6b7280';
       const bs    = s.baseScore != null ? s.baseScore.toFixed(1) : '—';
@@ -3603,7 +3119,7 @@ function renderPredictionPanel(raceNo) {
     }).join('');
     tableHtml = `<table style="width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap;">
       <thead><tr style="background:#1a1a2e;color:#fff;font-size:11px;">
-        <th style="padding:6px 8px;text-align:center;min-width:32px" title="オッズを使わない、AI独自の評価で並べた印（発表前後で変わりません）">AI印</th>
+        <th style="padding:6px 8px;text-align:center;min-width:32px" title="オッズを入力しない能力AIの総合スコア順">AI印</th>
         <th style="padding:6px 4px;text-align:center">馬番</th>
         <th style="padding:6px 8px;text-align:left">馬名</th>
         <th style="padding:6px 8px;text-align:left">騎手</th>
@@ -3637,7 +3153,7 @@ function renderPredictionPanel(raceNo) {
       ['展開','paceCtxMod','paceCtxN','脚質と展開の相性'],
       ['相対SI','relSIMod',null,'メンバー内での相対走力'],
     ];
-    const _omdRows = scored.map((s, idx) => {
+    const _omdRows = displayScored.map((s, idx) => {
       let _sum = 0;
       const cells = _omdComponents.map(([label, key, effKey]) => {
         const raw = s[key] || 0;
@@ -3667,6 +3183,8 @@ function renderPredictionPanel(raceNo) {
     ? 'background:#e2e8f0;color:#374151'
     : 'background:#0e7490;color:#fff';
   const displayBtnHtml  = `<button type="button" onclick="var p=document.getElementById('yoso-panel-${raceNo}');p._displayMode=(p._displayMode||'simple')==='simple'?'detail':'simple';renderPredictionPanel(${raceNo})" style="padding:4px 10px;${displayBtnStyle};border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">${displayBtnLabel}</button>`;
+
+  const t10RolloutBadge = '';
 
   // ── ペース×馬場 前残り/前崩れ判定バッジ ──
   let paceBiasBadge = '';
@@ -3715,36 +3233,7 @@ function renderPredictionPanel(raceNo) {
     }
   }
 
-  // ── 💰単勝妙味バッジ（手動等倍指数ベースの妙味検出器・表示専用）──
-  //    妙味は「指数と市場の不一致」から生まれ、学習重みは市場寄りに収束するため、
-  //    妙味判定は印とは独立に従来の手動等倍指数で行う（💎PSFバッジと同じ「別指数のバッジ」方式）。
-  //    検証（全馬オッズ揃い・コールドスタート期除く2025/03以降169R）：手動指数の軸が
-  //    「標準帯(差2.5〜6)×単勝3〜10倍」のとき単勝ROI約101%（全◎平均88%比で+13pt）。
-  let valueBetBadge = '';
-  {
-    const _mvArr = scored.filter(s => s.totalScore != null && s.baseScore != null);
-    if (_mvArr.length >= 2) {
-      // 手動等倍スコアの再構成（学習重み適用前の従来totalScoreと同じ合成：15項目＋相対SI・cornModはペース伸縮後）
-      const _manOf = s => s.baseScore + s.condMod + s.distMod + s.trendMod + s.comboMod + s.rotMod + s.classMod + s.cornMod + s.weightMod + s.agariMod + s.marginMod + s.winStrMod + s.jockeyChgMod + s.takiMod + s.cornConsistMod + (s.rakuMod || 0) + (s.relSIMod || 0);
-      const _mv = _mvArr.map(s => ({ s, sc: _manOf(s) })).sort((a, b) => b.sc - a.sc);
-      const _vgap = _mv[0].sc - _mv[1].sc;
-      const _vh = _mv[0].s.horse;
-      const _vod = parseFloat(_vh?.odds);
-      if (_vgap >= 2.5 && _vgap < 6 && !isNaN(_vod) && _vod >= 3 && _vod < 10) {
-        const _isTop = scored[0] && scored[0].horse === _vh;
-        const _vnin = parseInt(_vh?.ninki);
-        let _sub = '';
-        if (!isNaN(_vnin) && _vnin >= 2) {
-          const _favNames = horses
-            .filter(h => { const n = parseInt(h.ninki); return !isNaN(n) && h.horseName !== _vh.horseName; })
-            .sort((a, b) => parseInt(a.ninki) - parseInt(b.ninki)).slice(0, 2).map(h => h.horseName);
-          if (_favNames.length) _sub = `<span class="vbb-sub">｜馬単 ${escapeHTML(_vh.horseName)}→（${_favNames.map(escapeHTML).join('・')}）も過去の検証では回収率104%（当たり外れの波は大きめ）</span>`;
-        }
-        valueBetBadge = `<div class="value-bet-bar">💰 <b>単勝妙味${escapeHTML(_isTop ? 'ゾーン' : '：' + _vh.horseName)}</b>（AIの評価${_isTop ? 'トップ＝◎' : 'は高いが◎とは別の馬'}・単勝${_vod.toFixed(1)}倍）＝AIの評価に対してオッズが高め。過去の同条件では平均より回収率が良い帯です${_sub}</div>`;
-        _pickValue = { name: _vh.horseName, odds: _vod, isTop: _isTop };
-      }
-    }
-  }
+  // 旧「手動指数×人気差」妙味は確率校正もT10価格固定もなく、期待値とは呼べないため撤去。
 
   // ── ⚠️危険な1番人気バッジ（過剰人気検出・表示専用）──
   //    検証（2026-07-04・1番人気2,386頭）：①手動指数4番手以下②壁馬（同クラス2走以上全て
@@ -3802,26 +3291,8 @@ function renderPredictionPanel(raceNo) {
     }
   }
 
-  // ── 🔵市場は買っているバッジ（モデル低評価×市場上位・表示専用）──
-  //    残差分析（scanData 2,715R）：モデルが外した勝馬の27%はモデル4番手以下。共通点は
-  //    「低SIのベテランを市場が推している」で、指数化できる特徴は無い（市場の私的情報）。
-  //    実測：モデル6番手以下でも最終1-2番人気なら複勝45.4%・3-4番人気で33.2%。純能力指数は
-  //    汚さず、市場のクロスチェックとして表示（"人気薄→急に人気"の内部情報系を人間に知らせる）。
-  let marketBackBadge = '';
-  {
-    const _mb = scored
-      .map((s, idx) => ({ s, rank: idx + 1, nk: parseInt(s.horse?.ninki) }))
-      .filter(x => x.rank >= 6 && x.s.totalScore != null && !isNaN(x.nk) && x.nk >= 1 && x.nk <= 4)
-      .sort((a, b) => a.nk - b.nk)
-      .slice(0, 3);
-    if (_mb.length) {
-      const _items = _mb.map(x => {
-        const _fk = x.nk <= 2 ? '45%' : '33%';
-        return `<b>${escapeHTML(x.s.horse.horseName)}</b>（AI${x.rank}番手→${x.nk}番人気・この型は複勝${_fk}）`;
-      }).join('　');
-      marketBackBadge = `<div class="market-back-bar">🔵 <b>AIは低評価でも人気の馬</b>：${_items}<span class="mbb-sub">｜AIがまだ能力を測れていない可能性あり。直前で急に人気が上がった馬は特に要注意（関係者しか知らない好材料があることも）</span></div>`;
-    }
-  }
+  // 「AI低評価でも市場上位」を買う表示は、T10の券種間支持監査で回収エッジが
+  // 再現しなかったため撤去。人気の強さと期待値を混同しない。
 
   // ── ⚡穴馬激走バッジ（指数下位の2-3着ライン候補・表示専用）──
   //    残差分析（指数6番手以下66,979頭・2026-07-07）：下位馬のベース複勝率11.4%に対し
@@ -3907,8 +3378,7 @@ function renderPredictionPanel(raceNo) {
     ? `<div class="admin-only" style="margin-bottom:8px;font-size:10px;color:#9ca3af">🧠 学習重み適用中（${_mlWNote.races}R学習・${(_mlWNote.trainedAt || '').slice(0, 10)}）— 精度検証の二段基準クリア済み。補正項を学習済み実効倍率で合成しています。</div>`
     : '';
 
-  // ── 🎯 このレースの狙い目カード（◎/中穴妙味/穴/危険を1枚に束ねた見どころ）──
-  //    既存バッジが採用した馬（_pickDanger/_pickSleeper/_pickValue）とEVモニターを再利用＝詳細と矛盾しない。
+  // 能力評価と購入判断を分離。価格を評価していない穴候補は買い材料にしない。
   let pickSummary = '';
   if (_viewMode !== 'after') {
     const _hm = scored[0];
@@ -3922,25 +3392,21 @@ function renderPredictionPanel(raceNo) {
       try { const _er = computeEvBets(raceNo, container._selCond); if (_er && _er.runners) _evPick = _er.runners.find(r => r.inWindow) || null; } catch (e) {}
       const _row = (label, color, body) => `<div class="ps-row"><span class="ps-tag" style="background:${color}">${label}</span><span class="ps-body">${body}</span></div>`;
       let _rows = _row('本命', '#dc2626', `◎ <b>${escapeHTML(_hm.horse.horseName)}</b> <span class="ps-mut">${_confIcon}${_confTxt}${_g != null ? '（差' + (_g >= 0 ? '+' : '') + _g + '）' : ''}</span>`);
-      if (_evPick) _rows += _row('妙味', '#7c3aed', `中穴 <b>${escapeHTML(_evPick.name)}</b> <span class="ps-mut">単勝${_evPick.odds.toFixed(1)}倍｜AIの見立てよりオッズが高くお得</span>`);
-      else if (_pickValue) _rows += _row('妙味', '#7c3aed', `<b>${escapeHTML(_pickValue.name)}</b> <span class="ps-mut">単勝${_pickValue.odds.toFixed(1)}倍・AI評価とオッズのズレ</span>`);
-      if (_pickSleeper) _rows += _row('穴', '#0891b2', `2-3着に <b>${escapeHTML(_pickSleeper.name)}</b> <span class="ps-mut">${_pickSleeper.idx + 1}番手・${escapeHTML(_pickSleeper.why.join('＋'))}</span>`);
+      if (_evPick) _rows += _row('期待値', '#7c3aed', `単勝候補 <b>${escapeHTML(_evPick.name)}</b> <span class="ps-mut">${_evPick.odds.toFixed(1)}倍｜校正勝率に対して価格が高い</span>`);
+      else _rows += _row('購入', '#64748b', `<b>見送り</b> <span class="ps-mut">検証条件を満たす期待値候補なし</span>`);
       if (_pickDanger) _rows += _row('危険', '#b45309', `⚠️ <b>${escapeHTML(_pickDanger.name)}</b> <span class="ps-mut">${escapeHTML(_pickDanger.reasons.join('・'))}</span>`);
       const _line = `${_confTxt === '断然' ? '本命◎が抜けています' : _confTxt === '接戦' ? '上位が僅差で頭は割れそう' : '標準的な力関係'}。`
-        + (_evPick ? `中穴妙味は${escapeHTML(_evPick.name)}（${_evPick.odds.toFixed(1)}倍）。` : _pickValue ? `妙味は${escapeHTML(_pickValue.name)}。` : '明確な中穴妙味は薄めです。')
-        + (_pickSleeper ? `穴なら${escapeHTML(_pickSleeper.name)}を2-3着に。` : '')
+        + (_evPick ? `単勝の期待値候補は${escapeHTML(_evPick.name)}（${_evPick.odds.toFixed(1)}倍）。` : '購入判定は見送りです。')
         + (_pickDanger ? `人気の${escapeHTML(_pickDanger.name)}は割引が必要。` : '');
-      pickSummary = `<div class="pick-summary"><div class="ps-head">🎯 このレースの狙い目<button class="ps-copy" onclick="_copyPickText(this)" title="狙い目をコピー">📋</button></div>${_rows}<div class="ps-line">${_line}</div></div>`;
+      pickSummary = `<div class="pick-summary"><div class="ps-head">🧭 能力評価と購入判断<button class="ps-copy" onclick="_copyPickText(this)" title="判断をコピー">📋</button></div>${_rows}<div class="ps-line">${_line}</div></div>`;
     }
   }
 
-  // 閲覧者にも表示する部分（狙い目カード・買い得チェック・穴馬チェック・スコア解説）。
-  // 計算は既存のcomputeYosoScored/computeEvBets/buildEvMonitorHtml/buildLongshotHtmlをそのまま使い、二重計算しない。
+  // 閲覧者にも表示する部分。購入判断は1つの期待値モニターへ集約する。
   if (pubExtra) {
     pubExtra.innerHTML = `
       ${pickSummary}
-      ${buildEvMonitorHtml(raceNo, container._selCond)}
-      ${buildLongshotHtml(scored)}
+      ${buildEvMonitorHtml(raceNo, container._selCond, scored)}
       ${raceHasResult ? `
       <details class="yoso-public-aftermatch">
         <summary>📊 結果と照合（AIの印は当たったか）</summary>
@@ -3959,7 +3425,7 @@ function renderPredictionPanel(raceNo) {
           <b>🔧 その他</b> … 細かい加点・減点の合計。出走間隔／クラスが上がった・下がった／馬体重の増減／ゴール前の伸び脚／勝った相手の強さ／騎手の乗り替わり／休み明け何戦目か、などです。<br><br>
           <span style="color:#b45309">※「騎手」の数字は参考表示で、スコアには足していません</span>（騎手の影響は「コンビ」と「乗り替わり」で反映済み）。<br>
           印の意味：◎いちばん期待 ○二番手 ▲三番手 △おさえ ×評価低め。「転入」＝他の競馬場から来たばかりで参考値、「推定」＝データが少なくクラスから推定した値です。<br><br>
-          <b>🧭 印の並び順について</b> … 印（◎○▲…）は<b>単勝オッズに関係なく、「総合スコア」の高い順</b>に決まります（オッズ非依存のAI単独評価）。市場のオッズから推定した確率（AI推定確率）は🔭穴馬チェックの妙味判定にのみ使い、印の並び順には影響しません。
+          <b>🧭 能力と期待値の分離</b> … ◎○▲△はオッズを入力にせず「総合スコア」の高い順です。人気だから印を上げることはしません。T10期待値モデルは管理者端末で前向き検証し、合格するまでは購入を見送ります。
         </div>
       </details>`;
   }
@@ -3984,27 +3450,25 @@ function renderPredictionPanel(raceNo) {
       ${displayBtnHtml}
       ${afterBtnHtml}
       <span style="margin-left:auto"></span>
-      <button type="button" class="yr-btn" onclick="renderYosoReport(${raceNo});setTimeout(()=>{document.getElementById('yoso-report-${raceNo}')?.scrollIntoView({behavior:'smooth',block:'start'})},50)" title="バイアス×脚質×コメント癖×持ち時計から予想レポートを生成（端末内計算・無料）">🧠 AI予想レポート</button>
       <button type="button" class="admin-only" onclick="runYosoBacktest(${raceNo})" title="過去全レースで予想精度を検証（約10秒）" style="padding:4px 10px;background:#f3f4f6;color:#374151;border:1px solid #e2e8f0;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer">📈 精度検証</button>
       <button type="button" id="yoso-fetch-all-btn-${raceNo}" class="admin-only" onclick="_kvLoadLibrary('adminHorse').then(()=>fetchAllByNameForRace(${raceNo}))" style="padding:4px 12px;background:#1a56a0;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;"><i class="fas fa-download"></i> データ自動取得</button>
       <span id="yoso-fetch-status-${raceNo}" class="admin-only" style="font-size:11px;color:#6b7280;white-space:nowrap;"></span>
     </div>
     ${mlNote}
+    ${t10RolloutBadge}
     ${confidenceBadge}
     ${dangerFavBadge}
     ${legWarnBadge}
-    ${marketBackBadge}
     ${anaBadge}
     ${condFitBadge}
     ${paceBiasBadge}
     ${opponentShadowHtml}
     <div style="overflow-x:auto;">${tableHtml}</div>
-    <div id="yoso-backtest-${raceNo}"></div>
-    <div id="yoso-report-${raceNo}"></div>`;
+    <div id="yoso-backtest-${raceNo}"></div>`;
   // 【Phase3-1 hook・seam A案】確定scored(totalScore降順・sort済)＋既存印マップを、パネルinnerHTML反映直後に
   // 新UIへ1回だけ渡す。既存パネルの出力・状態は不変、二重計算なし（同じscored/horseMarkMapを渡す）。
   // 例外は kvxSafeRenderDebanV2 内部で隔離し、既存renderPredictionPanelを絶対に失敗させない。
-  if (window.kvxSafeRenderDebanV2) window.kvxSafeRenderDebanV2(raceNo, scored, horseMarkMap, _rd0);
+  if (window.kvxSafeRenderDebanV2) window.kvxSafeRenderDebanV2(raceNo, displayScored, horseMarkMap, _rd0);
 }
 
 // ── 精度バックテスト（旧 vs 新 ◎的中率比較） ──
