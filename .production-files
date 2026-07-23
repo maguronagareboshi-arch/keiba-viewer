@@ -11,9 +11,11 @@ manifest.webmanifest
 modules/admin-horse-data.js
 modules/ai-analysis.js
 modules/ai-insights.js
+modules/era-drift-shadow.js
 modules/partner-vnext-live.js
 modules/partner-vnext-market-blend.js
 modules/partner-vnext-shadow.js
 modules/performance-observer.js
+modules/probability-calibration.js
 modules/value-t10-shadow.js
 sw.js

@@ -474,6 +474,13 @@
     return recordForwardOpponentShadowSnapshot(raceNo, shadow);
   }
 
+  // 画面に出す相手候補は、T10市場モデルではなくオッズ非依存の能力モデルを明示指定する。
+  // active model は既存のT10収集契約で使うため変更せず、両実験の台帳を混同しない。
+  function computeAbilityShadow(raceNo, scored) {
+    if (!ensureRegistered() || typeof computeOpponentShadow !== 'function') return null;
+    return computeOpponentShadow(raceNo, scored, MODEL_ID);
+  }
+
   function captureBlend(raceNo, scored) {
     if (!ensureRegistered() || typeof computeOpponentShadow !== 'function' ||
         typeof recordForwardOpponentShadowSnapshot !== 'function') return { saved:false, reason:'BLEND_NOT_READY' };
@@ -486,6 +493,7 @@
   root.kvVnextMarketBlendModelId = BLEND_MODEL_ID;
   root.kvVnextRawForScored = rawForRunner;
   root.kvEnsureVnextPartnerShadowRegistered = ensureRegistered;
+  root.kvComputeVnextPartnerShadow = computeAbilityShadow;
   root.kvCaptureVnextPartnerShadow = capture;
   root.kvCaptureVnextMarketBlendShadow = captureBlend;
   root.kvT10PartnerRolloutEnabled = rolloutEnabled;

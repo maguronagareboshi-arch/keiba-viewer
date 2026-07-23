@@ -4,6 +4,57 @@
 // ============================================================
 let ana3fChart = null;
 
+if (!document.getElementById('opponent-shadow-style')) {
+  const style = document.createElement('style');
+  style.id = 'opponent-shadow-style';
+  style.textContent = '.opponent-shadow-card{margin:0 0 10px;padding:10px 12px;border:1.5px dashed #7c3aed;border-radius:9px;background:#faf5ff;color:#4c1d95;font-size:12px;overflow-wrap:anywhere}' +
+    'body.dark-mode .opponent-shadow-card{background:#17132a;color:#ddd6fe;border-color:#8b5cf6}' +
+    'body.kv-cockpit .opponent-shadow-card{background:var(--kc-surface-2);color:var(--kc-text);border-color:#8b5cf6}' +
+    '.probability-calibration-card{margin:0 0 10px;padding:10px 12px;border:1.5px dashed #0891b2;border-radius:9px;background:#ecfeff;color:#164e63;font-size:12px;overflow-wrap:anywhere}' +
+    '.probability-calibration-row{display:grid;grid-template-columns:32px minmax(100px,1fr) 88px 98px;gap:7px;padding:4px 0}' +
+    '@media(max-width:480px){.probability-calibration-row{grid-template-columns:28px minmax(70px,1fr) 70px 80px;gap:4px;font-size:10.5px}}' +
+    'body.dark-mode .probability-calibration-card,body.kv-cockpit .probability-calibration-card{background:var(--kc-surface-2,#082f49);color:var(--kc-text,#cffafe);border-color:#06b6d4}';
+  document.head.appendChild(style);
+}
+
+function buildOpponentShadowHtml(raceNo, shadow) {
+  if (!opponentShadowEnabled() || !shadow || shadow.schema !== OPPONENT_SHADOW_RESULT_SCHEMA) return '';
+  const fmt = arr => arr.length ? arr.map(p => {
+    const why = p.reasons.length ? ` <span style="color:#64748b">${escapeHTML(p.reasons.join('・'))}</span>` : '';
+    const prob = p.probability != null ? ` <span style="color:#475569">相手指数 ${(p.probability * 100).toFixed(1)}（未校正）</span>` : '';
+    return `<span style="display:inline-block;margin-right:10px"><b>${escapeHTML(p.u)} ${escapeHTML(p.name)}</b>${prob}${why}</span>`;
+  }).join('') : '<span style="color:#94a3b8">該当なし</span>';
+  const baseline = (shadow.baselineMainline || []).length
+    ? shadow.baselineMainline.map((p, index) => `<span style="display:inline-block;margin-right:10px"><b>${index === 0 ? '○' : '▲'} ${escapeHTML(p.u)} ${escapeHTML(p.name)}</b></span>`).join('')
+    : '<span style="color:#94a3b8">比較不能</span>';
+  const abilityOnly = !Array.isArray(shadow.model.marketInputs) || shadow.model.marketInputs.length === 0;
+  const title = abilityOnly ? '○▲専用・能力モデル' : '相手選びモデル';
+  const note = abilityOnly
+    ? 'オッズを使わず、近走・距離馬場適性・騎手厩舎・休養・位置取りから◎以外の3着内候補を再順位付け。'
+    : '市場入力を含む比較モデル。';
+  return `<div id="opponent-shadow-${parseInt(raceNo)}" class="opponent-shadow-card" data-model-fingerprint="${escapeHTML(shadow.model.fingerprint)}">
+    <div style="font-weight:800;margin-bottom:6px">🧪 ${title}・影予想 <span style="font-size:10px;color:#7c3aed">管理者限定・未採用・主印未変更</span></div>
+    <div style="margin:4px 0"><b>軸：</b>◎ ${escapeHTML(shadow.anchor.u)} ${escapeHTML(shadow.anchor.name)}</div>
+    <div style="margin:4px 0"><b>現行○▲：</b>${baseline}</div>
+    <div style="margin:4px 0"><b>影の○▲（相手本線）：</b>${fmt(shadow.mainline)}</div>
+    ${shadow.longshot.length ? `<div style="margin:4px 0"><b>穴相手（参考）：</b>${fmt(shadow.longshot)}</div>` : ''}
+    <div style="margin-top:6px;font-size:10px;color:#6b7280">${note} 主印・期待値判定・買い目には未反映。model ${escapeHTML(shadow.model.id)} / ${escapeHTML(shadow.model.fingerprint)}</div>
+  </div>`;
+}
+
+function buildProbabilityCalibrationHtml(calibrated) {
+  if (typeof isAdminMode !== 'function' || !isAdminMode() ||
+      !calibrated || calibrated.schema !== 'kochi_probability_calibration/v1') return '';
+  const marks = ['◎','○','▲','△','×','×'];
+  const rows = calibrated.rows.slice(0, 6).map((row,index) =>
+    `<div class="probability-calibration-row" style="border-top:${index?'1px solid rgba(100,116,139,.2)':'0'}"><b>${marks[index] || ''}${escapeHTML(row.u)}</b><span>${escapeHTML(row.name)}</span><span>勝率 <b>${(row.winProbability*100).toFixed(1)}%</b></span><span>3着内 <b>${(row.top3Probability*100).toFixed(1)}%</b></span></div>`
+  ).join('');
+  return `<div class="probability-calibration-card admin-only" data-model-fingerprint="${escapeHTML(calibrated.model.fingerprint)}">
+    <div style="font-weight:800;margin-bottom:5px">🧭 校正確率・影表示 <span style="font-size:10px;color:#0891b2">市場不使用・順位不変・未採用</span></div>
+    ${rows}<div style="margin-top:6px;font-size:10px;color:#64748b">勝率合計100%／3着内率合計300%。期待値・買い目には未反映。前向き200レースで再監査します。</div>
+  </div>`;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // save-status の変化で分析セレクトを更新
   const saveStatus = document.getElementById('save-status');
@@ -2536,14 +2587,41 @@ async function fetchOddsForEv(raceNo) {
   _updateCockpitRaceStatus(raceNo);
 }
 
-/** 公開EVモニター。合格モデルがない間は買い候補を出さず、管理者だけshadow候補を確認できる。 */
-function buildEvMonitorHtml(raceNo, selCond, scoredInput) {
+/** T10価格・前向き成績・資金ゲートを同じ判定へ統合する。公開側は常に安全な見送りへ倒す。 */
+function buildUnifiedPurchaseDecision(raceNo, scoredInput) {
   let shadow = null;
+  let evaluation = null;
   const admin = typeof isAdminMode === 'function' && isAdminMode();
   if (admin && typeof window.kvComputeT10ValueShadow === 'function' && Array.isArray(scoredInput)) {
     try { shadow = window.kvComputeT10ValueShadow(raceNo, scoredInput); } catch (e) { console.warn('[value shadow]', e); }
   }
-  const candidate = shadow && shadow.candidate;
+  if (admin && shadow && typeof window.KvT10ValueShadow?.evaluateSnapshots === 'function') {
+    try {
+      evaluation = window.KvT10ValueShadow.evaluateSnapshots(
+        shadow.rankingModelFingerprint ? { rankingModelFingerprint:shadow.rankingModelFingerprint } : undefined
+      );
+    } catch (e) { console.warn('[value shadow evaluation]', e); }
+  }
+  if (admin && typeof window.KvT10ValueShadow?.buildPurchaseDecision === 'function') {
+    try { return { shadow, evaluation, decision:window.KvT10ValueShadow.buildPurchaseDecision(shadow, evaluation) }; }
+    catch (e) { console.warn('[purchase decision]', e); }
+  }
+  return { shadow:null, evaluation:null, decision:{
+    schema:'kochi_purchase_decision/v1', status:'awaiting_input', reason:'VALUE_MODEL_NOT_AVAILABLE',
+    candidate:null, action:'SKIP', actionLabel:'見送り', productionEligible:false,
+    funding:{ recommendedStakeYen:0, bankrollExposurePct:0, researchLedgerUnitYen:100,
+      method:'flat_research_accounting_only' },
+    evidence:{ settledSelections:0, firstReviewAt:200, remainingToFirstReview:200,
+      statisticalGatePassed:false, reviewReady:false, roi:null, roiWithoutTopPayout:null, dayBootstrap95:null },
+  }};
+}
+
+/** 公開購入モニター。能力順位と研究候補を混同せず、最終行動と資金額を1か所に表示する。 */
+function buildEvMonitorHtml(raceNo, selCond, scoredInput, purchaseView) {
+  const view = purchaseView || buildUnifiedPurchaseDecision(raceNo, scoredInput);
+  const shadow = view.shadow, decision = view.decision;
+  const admin = typeof isAdminMode === 'function' && isAdminMode();
+  const candidate = admin ? decision.candidate : null;
   const reasonJa = {
     SHADOW_CANDIDATE:'期待値の検証候補を記録', NO_QUALIFYING_VALUE:'該当馬なし',
     WAIT_FOR_T10:'発走10分前まで待機', T10_WINDOW_CLOSED:'T10記録時間を通過',
@@ -2551,18 +2629,25 @@ function buildEvMonitorHtml(raceNo, selCond, scoredInput) {
     RUNNER_UNIVERSE_MISMATCH:'出走馬とオッズの頭数が不一致', INCOMPLETE_T10_MARKET:'全頭オッズ未取得',
     INCOMPLETE_ABILITY_UNIVERSE:'全頭の能力評価が未完成', NO_RACE:'レースデータなし',
     NOT_KOCHI:'高知以外は対象外', NO_RANKING_MODEL_IDENTITY:'能力モデルの版を確認できません',
-    INCOMPLETE_AUDIT_INPUT:'監査用入力が不完全',
+    INCOMPLETE_AUDIT_INPUT:'監査用入力が不完全', VALUE_MODEL_NOT_AVAILABLE:'価格モデル未読込',
+    FORWARD_VALIDATION_INCOMPLETE:'前向き検証が未完了',
+    STATISTICAL_GATE_PASSED_MANUAL_REVIEW_REQUIRED:'統計基準通過・手動審査待ち',
   };
   const research = candidate ? `<div class="evb-row">
       <span class="evb-uma">${escapeHTML(candidate.uma)}</span><span class="evb-name">${escapeHTML(candidate.name)}</span>
       <span class="evb-metric">T10単勝${Number(candidate.odds).toFixed(1)}倍 / 価値スコア ${Number(candidate.ev) >= 0 ? '+' : ''}${Number(candidate.ev).toFixed(2)}（勝率未校正）</span>
       <span class="evb-tag" style="background:#7c3aed">前向き検証のみ</span></div>` : '';
-  return `<div class="ev-monitor-bar skip"><div class="evb-head">💹 価格評価（検証中）
-      <span style="font-weight:600;font-size:11px;opacity:.85">能力とT10価格を別評価・EV数値は未校正</span>
-      <span class="evb-tag" style="background:#64748b">見送り</span></div>
+  const settled = Number(decision.evidence?.settledSelections || 0);
+  const firstReview = Number(decision.evidence?.firstReviewAt || 200);
+  const remaining = Number(decision.evidence?.remainingToFirstReview || Math.max(0, firstReview - settled));
+  const auditLine = admin ? ` 前向き記録 ${settled}/${firstReview}件${remaining ? `（初回審査まで残り${remaining}件）` : '（初回審査水準）'}。` : '';
+  return `<div class="ev-monitor-bar skip" data-purchase-status="${escapeHTML(decision.status)}"><div class="evb-head">💹 購入可否・資金配分
+      <span style="font-weight:600;font-size:11px;opacity:.85">能力評価とT10価格を分離して最終統合</span>
+      <span class="evb-tag" style="background:#64748b">${escapeHTML(decision.actionLabel)}</span>
+      <span class="evb-stake" style="background:#64748b">${Number(decision.funding?.recommendedStakeYen || 0).toLocaleString()}円</span></div>
     ${research}
-    <div style="margin-top:6px"><b>公開できる買い候補はありません。</b> 近似能力入力での過去確認は回収率104.2%でしたが、95%区間の下限が68.3%で、上位1件を除くと95.1%でした。</div>
-    <div class="evb-sub">新モデルは条件を変えず前向きに200件収集します。合格するまでは候補が出ても購入推奨・金額表示には使いません。◎○▲△はオッズ非依存の能力順です。${admin && shadow ? ` 検証状態: ${escapeHTML(reasonJa[shadow.reason] || shadow.reason || (candidate ? '候補を記録対象' : '該当なし'))}` : ''}</div></div>`;
+    <div style="margin-top:6px"><b>現在の購入判断は見送り、実購入への配分は0円です。</b> 研究候補が出ても、前向き成績の不確実性が解消するまでは買い推奨へ昇格しません。過去の近似確認は回収率104.2%でも、上位1件を除くと95.1%でした。</div>
+    <div class="evb-sub">100円は成績比較用の仮想集計単位で、推奨金額ではありません。未校正勝率、激走条件、人気順位だけから金額を計算しません。${auditLine}${admin ? ` 判定理由: ${escapeHTML(reasonJa[decision.reason] || reasonJa[shadow?.reason] || decision.reason)}` : ''}</div></div>`;
 }
 
 // ══ Phase3-1 新出馬表プレビュー（管理者限定β・feature flag・読み取り専用・独立名前空間 kvx*）══
@@ -3043,6 +3128,14 @@ function judgeLongshotCandidate(facts) {
     return { ...detail, status:'long_layoff', label:'高知出走間隔に注意',
       cautions:[...redRiskReasons, `高知出走間隔${Math.round(restDays)}日`] };
   }
+  // 赤信号を1個でも消す強い除外は、直近年度の単勝回収率を99.28%→92.85%へ
+  // 悪化させた。履歴質不足と直近崩れが同時の準候補だけを狭く除外する。
+  // この厳格フィルターは候補の約3.6%を除き、2024-26年の複勝率
+  // 16.63%→16.95%、単勝回収率99.28%→100.61%だった（最終人気で事後評価）。
+  if (!primary && supports.length >= 2 && redRiskReasons.length >= 2) {
+    return { ...detail, status:'failure_filtered', label:'凡走フィルター除外',
+      candidate:false, filtered:true, preFilterStatus:'secondary' };
+  }
   if (primary && supports.length >= 1) {
     return { ...detail, status:'strong', label:'激走候補', candidate:true };
   }
@@ -3100,6 +3193,7 @@ function buildLongshotCandidateHtml(rows, options) {
   const esc = value => typeof escapeHTML === 'function' ? escapeHTML(value) : String(value == null ? '' : value);
   const candidates = list.filter(row => row && row.decision && row.decision.candidate)
     .sort(_longshotCandidateSort);
+  const filtered = list.filter(row => row?.decision?.status === 'failure_filtered');
   const marketWord = opts.finalMarket ? '確定人気' : '現在人気';
   if (candidates.length) {
     const hasStrong = candidates.some(row => row.decision.status === 'strong');
@@ -3116,7 +3210,8 @@ function buildLongshotCandidateHtml(rows, options) {
       return `<span class="lsj-item" data-longshot-state="${d.status}" data-longshot-risk="${red}"><b>${esc(row.umaBan || '—')}番 ${esc(row.name || '—')}</b><span>${marketWord}${d.marketRank}位・${badge}${deep}</span><span class="lsj-risk is-${riskLevel}">凡走警戒 ${riskLabel}</span><small>激走材料：${why}</small>${redDetail}${yellow}</span>`;
     }).join('');
     const extra = candidates.length > 3 ? `<span class="lsj-more">ほか${candidates.length - 3}頭</span>` : '';
-    return `<div class="ana-run-bar longshot-judge ${hasStrong ? 'is-strong' : 'is-secondary'}" data-longshot-state="${hasStrong ? 'strong' : 'secondary'}"><span class="lsj-title">⚡ <b>${hasStrong ? '激走候補' : '激走準候補'}</b></span><span class="lsj-list">${items}${extra}</span><button type="button" class="kvi-info" onclick="this.closest('.ana-run-bar').classList.toggle('kvi-open')" title="判定条件を表示">?</button><span class="arb-sub kvi-hidden">激走材料と凡走の反証を別々に表示します。赤信号は履歴質9位以下と直近崩れ、黄信号は高知間隔31〜60日・高知履歴20走以上です。赤信号でも一律除外せず、期待値と購入可否は取得時点のオッズで別判定します。</span></div>`;
+    const filteredNote = filtered.length ? `<span class="lsj-more">凡走フィルター除外${filtered.length}頭</span>` : '';
+    return `<div class="ana-run-bar longshot-judge ${hasStrong ? 'is-strong' : 'is-secondary'}" data-longshot-state="${hasStrong ? 'strong' : 'secondary'}"><span class="lsj-title">⚡ <b>${hasStrong ? '激走候補' : '激走準候補'}</b></span><span class="lsj-list">${items}${extra}${filteredNote}</span><button type="button" class="kvi-info" onclick="this.closest('.ana-run-bar').classList.toggle('kvi-open')" title="判定条件を表示">?</button><span class="arb-sub kvi-hidden">激走材料と凡走の反証を別々に表示します。履歴質9位以下と直近崩れが同時の準候補だけを凡走フィルターで除外します。赤信号1個は期待値を落としたため候補に残し、価格と購入可否は取得時点のオッズで別判定します。</span></div>`;
   }
   const waiting = list.some(row => row?.decision?.status === 'awaiting_popularity');
   const insufficient = list.some(row => row?.decision?.status === 'insufficient_history');
@@ -3127,6 +3222,10 @@ function buildLongshotCandidateHtml(rows, options) {
   if (layoff.length) {
     const names = layoff.slice(0, 3).map(row => `<b>${esc(row.umaBan || '—')}番 ${esc(row.name || '—')}</b>`).join('、');
     return `<div class="ana-run-bar longshot-judge is-risk" data-longshot-state="long_layoff"><span class="lsj-title">⚡ <b>激走判定：候補なし</b></span><span>${names}は高知出走間隔61日以上のため見送り</span></div>`;
+  }
+  if (filtered.length) {
+    const names = filtered.slice(0, 3).map(row => `<b>${esc(row.umaBan || '—')}番 ${esc(row.name || '—')}</b>`).join('、');
+    return `<div class="ana-run-bar longshot-judge is-risk" data-longshot-state="failure_filtered"><span class="lsj-title">🛡️ <b>凡走フィルター</b></span><span>${names}を除外（履歴質不足＋直近崩れ）</span><button type="button" class="kvi-info" onclick="this.closest('.ana-run-bar').classList.toggle('kvi-open')" title="判定条件を表示">?</button><span class="arb-sub kvi-hidden">赤信号2個が同時の準候補だけを除外します。赤信号1個は回収率を落とすため除外しません。</span></div>`;
   }
   return `<div class="ana-run-bar longshot-judge is-none" data-longshot-state="${insufficient ? 'insufficient_history' : 'out'}"><span class="lsj-title">⚡ <b>激走判定：該当馬なし</b></span><span>${insufficient ? '一部の馬は過去走データ不足' : '現在6番人気以下で十分な根拠が重なった馬はいません'}</span></div>`;
 }
@@ -3663,6 +3762,8 @@ function renderPredictionPanel(raceNo) {
     : '';
 
   // 能力評価と購入判断を分離。価格を評価していない穴候補は買い材料にしない。
+  const _purchaseView = buildUnifiedPurchaseDecision(raceNo, scored);
+  const _purchaseDecision = _purchaseView.decision;
   let pickSummary = '';
   if (_viewMode !== 'after') {
     const _hm = scored[0];
@@ -3672,12 +3773,11 @@ function renderPredictionPanel(raceNo) {
       const _thHi2 = _cw2?.tiers?.c2 ?? 6, _thLo2 = _cw2?.tiers?.c1 ?? 2.5;
       let _confTxt = '標準', _confIcon = '⚪';
       if (_g != null) { if (_g >= _thHi2) { _confTxt = '断然'; _confIcon = '🟢'; } else if (_g < _thLo2) { _confTxt = '接戦'; _confIcon = '🟡'; } }
-      let _evPick = null;
-      try { const _er = computeEvBets(raceNo, container._selCond); if (_er && _er.runners) _evPick = _er.runners.find(r => r.inWindow) || null; } catch (e) {}
+      const _evPick = (typeof isAdminMode === 'function' && isAdminMode()) ? _purchaseDecision.candidate : null;
       const _row = (label, color, body) => `<div class="ps-row"><span class="ps-tag" style="background:${color}">${label}</span><span class="ps-body">${body}</span></div>`;
       let _rows = _row('本命', '#dc2626', `◎ <b>${escapeHTML(_hm.horse.horseName)}</b> <span class="ps-mut">${_confIcon}${_confTxt}${_g != null ? '（差' + (_g >= 0 ? '+' : '') + _g + '）' : ''}</span>`);
-      if (_evPick) _rows += _row('期待値', '#7c3aed', `単勝候補 <b>${escapeHTML(_evPick.name)}</b> <span class="ps-mut">${_evPick.odds.toFixed(1)}倍｜校正勝率に対して価格が高い</span>`);
-      else _rows += _row('購入', '#64748b', `<b>見送り</b> <span class="ps-mut">検証条件を満たす期待値候補なし</span>`);
+      if (_evPick) _rows += _row('研究候補', '#7c3aed', `<b>${escapeHTML(_evPick.name)}</b> <span class="ps-mut">T10単勝${Number(_evPick.odds).toFixed(1)}倍｜前向き検証のみ</span>`);
+      _rows += _row('購入', '#64748b', `<b>${escapeHTML(_purchaseDecision.actionLabel)}・${Number(_purchaseDecision.funding?.recommendedStakeYen || 0).toLocaleString()}円</b> <span class="ps-mut">検証合格と手動審査までは資金を配分しません</span>`);
       if (_pickDanger) _rows += _row('危険', '#b45309', `⚠️ <b>${escapeHTML(_pickDanger.name)}</b> <span class="ps-mut">${escapeHTML(_pickDanger.reasons.join('・'))}</span>`);
       if (_pickSleeper) {
         const _riskLabel = _pickSleeper.redRiskCount >= 2 ? '高' : _pickSleeper.redRiskCount === 1 ? '中' : '低';
@@ -3686,7 +3786,7 @@ function renderPredictionPanel(raceNo) {
         _rows += _row('激走', '#a21caf', `⚡ <b>${escapeHTML(_pickSleeper.umaBan || '—')}番 ${escapeHTML(_pickSleeper.name)}</b> <span class="ps-mut">${_pickSleeper.marketRank}人気・${_pickSleeper.status === 'strong' ? '候補' : '準候補'}｜凡走警戒${_riskLabel}${_riskWhy}${_yellowWhy}（期待値未判定）</span>`);
       }
       const _line = `${_confTxt === '断然' ? '本命◎が抜けています' : _confTxt === '接戦' ? '上位が僅差で頭は割れそう' : '標準的な力関係'}。`
-        + (_evPick ? `単勝の期待値候補は${escapeHTML(_evPick.name)}（${_evPick.odds.toFixed(1)}倍）。` : '購入判定は見送りです。')
+        + (_evPick ? `${escapeHTML(_evPick.name)}は価格の研究候補ですが、購入判定は見送りです。` : '購入判定は見送りです。')
         + (_pickDanger ? `人気の${escapeHTML(_pickDanger.name)}は割引が必要。` : '')
         + (_pickSleeper ? `${escapeHTML(_pickSleeper.name)}は激走条件に一致し、凡走警戒は${_pickSleeper.redRiskCount >= 2 ? '高' : _pickSleeper.redRiskCount === 1 ? '中' : '低'}です。購入には価格判定が必要です。` : '');
       pickSummary = `<div class="pick-summary"><div class="ps-head">🧭 能力評価と購入判断<button class="ps-copy" onclick="_copyPickText(this)" title="判断をコピー">📋</button></div>${_rows}<div class="ps-line">${_line}</div></div>`;
@@ -3697,7 +3797,7 @@ function renderPredictionPanel(raceNo) {
   if (pubExtra) {
     pubExtra.innerHTML = `
       ${pickSummary}
-      ${buildEvMonitorHtml(raceNo, container._selCond, scored)}
+      ${buildEvMonitorHtml(raceNo, container._selCond, scored, _purchaseView)}
       ${raceHasResult ? `
       <details class="yoso-public-aftermatch">
         <summary>📊 結果と照合（AIの印は当たったか）</summary>
@@ -3721,13 +3821,29 @@ function renderPredictionPanel(raceNo) {
       </details>`;
   }
 
-  // 実験合格前の相手モデルは、管理者の予想AIパネル内だけにshadow表示する。
-  // predictorには投影コピーを渡すため、ここで呼んでもscored/印/ソート順は変更されない。
-  const _opponentShadow = (_viewMode !== 'after' && typeof computeOpponentShadow === 'function')
-    ? computeOpponentShadow(raceNo, scored) : null;
-  container._opponentShadow = _opponentShadow;
-  const opponentShadowHtml = (typeof buildOpponentShadowHtml === 'function')
-    ? buildOpponentShadowHtml(raceNo, _opponentShadow) : '';
+  // 能力shadowの初回索引生成は全履歴を走査するため、現行印を描画してからidle時に別枠へ差し込む。
+  // 公開画面・終了後表示ではスロット自体を作らない。
+  const _opponentShadowAvailable = _viewMode !== 'after' &&
+    typeof isAdminMode === 'function' && isAdminMode() &&
+    typeof window.kvComputeVnextPartnerShadow === 'function' &&
+    typeof buildOpponentShadowHtml === 'function';
+  const _opponentShadowDate = String(raceInfo.raceDate || '');
+  const _opponentShadowToken = Number(container._opponentShadowRenderToken || 0) + 1;
+  container._opponentShadowRenderToken = _opponentShadowToken;
+  container._opponentShadow = null;
+  const opponentShadowHtml = _opponentShadowAvailable
+    ? `<div id="opponent-shadow-slot-${raceNo}" class="admin-only" aria-live="polite"><div style="margin-bottom:10px;padding:9px 12px;border:1px dashed #a78bfa;border-radius:8px;color:#7c3aed;font-size:11px">🧪 ○▲専用の影予想を準備中…</div></div>`
+    : '';
+  const _eraDriftAvailable = _viewMode !== 'after' &&
+    typeof isAdminMode === 'function' && isAdminMode() &&
+    typeof window.KvEraDriftShadow?.computeLive === 'function' &&
+    typeof window.KvEraDriftShadow?.buildAdminHtml === 'function';
+  const eraDriftHtml = _eraDriftAvailable
+    ? `<div id="era-drift-shadow-slot-${raceNo}" class="admin-only" aria-live="polite"><div style="margin-bottom:10px;padding:9px 12px;border:1px dashed #5eead4;border-radius:8px;color:#0f766e;font-size:11px">🗓️ 年度ドリフト補正を準備中…</div></div>`
+    : '';
+  const probabilityCalibrationHtml = _viewMode !== 'after' && typeof isAdminMode === 'function' && isAdminMode() &&
+    window.KvProbabilityCalibration?.calibrateScored
+    ? buildProbabilityCalibrationHtml(window.KvProbabilityCalibration.calibrateScored(scored)) : '';
 
   container.innerHTML = `
     <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -3753,6 +3869,8 @@ function renderPredictionPanel(raceNo) {
     ${anaBadge}
     ${condFitBadge}
     ${paceBiasBadge}
+    ${probabilityCalibrationHtml}
+    ${eraDriftHtml}
     ${opponentShadowHtml}
     <div style="overflow-x:auto;">${tableHtml}</div>
     <div id="yoso-backtest-${raceNo}"></div>`;
@@ -3760,6 +3878,43 @@ function renderPredictionPanel(raceNo) {
   // 新UIへ1回だけ渡す。既存パネルの出力・状態は不変、二重計算なし（同じscored/horseMarkMapを渡す）。
   // 例外は kvxSafeRenderDebanV2 内部で隔離し、既存renderPredictionPanelを絶対に失敗させない。
   if (window.kvxSafeRenderDebanV2) window.kvxSafeRenderDebanV2(raceNo, displayScored, horseMarkMap, _rd0);
+
+  if (_opponentShadowAvailable) {
+    const _renderOpponentShadow = () => {
+      const slot = document.getElementById(`opponent-shadow-slot-${raceNo}`);
+      const currentRace = allRacesData && allRacesData[raceNo];
+      if (!slot || container._opponentShadowRenderToken !== _opponentShadowToken ||
+          String(currentRace?.raceInfo?.raceDate || '') !== _opponentShadowDate) return;
+      try {
+        const shadow = window.kvComputeVnextPartnerShadow(raceNo, scored);
+        if (container._opponentShadowRenderToken !== _opponentShadowToken) return;
+        container._opponentShadow = shadow;
+        const html = buildOpponentShadowHtml(raceNo, shadow);
+        slot.innerHTML = html || '<div style="margin-bottom:10px;padding:9px 12px;border:1px dashed #cbd5e1;border-radius:8px;color:#64748b;font-size:11px">○▲専用の影予想を作成できません（履歴・出走馬・発走時刻を確認）</div>';
+      } catch (e) {
+        console.warn('[vnextPartnerShadow render]', e);
+        slot.innerHTML = '<div style="margin-bottom:10px;padding:9px 12px;border:1px dashed #cbd5e1;border-radius:8px;color:#64748b;font-size:11px">○▲専用の影予想を作成できません</div>';
+      }
+    };
+    if (typeof _kvScheduleIdle === 'function') _kvScheduleIdle(_renderOpponentShadow, 1200);
+    else setTimeout(_renderOpponentShadow, 0);
+  }
+  if (_eraDriftAvailable) {
+    const _renderEraDrift = () => {
+      const slot = document.getElementById(`era-drift-shadow-slot-${raceNo}`);
+      if (!slot || container._opponentShadowRenderToken !== _opponentShadowToken) return;
+      try {
+        const shadow = window.KvEraDriftShadow.computeLive(raceNo, scored);
+        const evaluation = window.KvEraDriftShadow.evaluateStored();
+        slot.innerHTML = window.KvEraDriftShadow.buildAdminHtml(shadow, evaluation) || '';
+      } catch (e) {
+        console.warn('[eraDriftShadow render]', e);
+        slot.innerHTML = '<div style="margin-bottom:10px;padding:9px 12px;border:1px dashed #cbd5e1;border-radius:8px;color:#64748b;font-size:11px">年度ドリフト補正を作成できません</div>';
+      }
+    };
+    if (typeof _kvScheduleIdle === 'function') _kvScheduleIdle(_renderEraDrift, 1300);
+    else setTimeout(_renderEraDrift, 0);
+  }
 }
 
 // ── 精度バックテスト（旧 vs 新 ◎的中率比較） ──

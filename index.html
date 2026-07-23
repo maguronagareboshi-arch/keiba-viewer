@@ -2915,7 +2915,7 @@ const _kvLibSpecs = {
     ready: () => typeof window.fetchAllByNameForRace === 'function' && typeof window.storeOfficialRacesAsHorseEntries === 'function',
   },
   aiAnalysis: {
-    src: 'modules/ai-analysis.js?v=20260723-risk1',
+    src: 'modules/ai-analysis.js?v=20260723-purchase1',
     ready: () => typeof window.computeYosoScored === 'function' && typeof window.renderPredictionPanel === 'function' && typeof window.renderAnalysis === 'function',
   },
   aiInsights: {
@@ -2931,11 +2931,21 @@ const _kvLibSpecs = {
     ready: () => !!window.KvVnextMarketBlend?.scoreRace,
   },
   vnextPartnerLive: {
-    src: 'modules/partner-vnext-live.js',
-    ready: () => typeof window.kvEnsureVnextPartnerShadowRegistered === 'function',
+    src: 'modules/partner-vnext-live.js?v=20260723-partner1',
+    ready: () => typeof window.kvEnsureVnextPartnerShadowRegistered === 'function' &&
+      typeof window.kvComputeVnextPartnerShadow === 'function',
+  },
+  eraDriftShadow: {
+    src: 'modules/era-drift-shadow.js?v=20260723-v2',
+    ready: () => typeof window.kvCaptureEraDriftShadow === 'function' &&
+      window.KvEraDriftShadow?.contract?.status === 'forward_shadow_only',
+  },
+  probabilityCalibration: {
+    src: 'modules/probability-calibration.js?v=20260723-v1',
+    ready: () => typeof window.KvProbabilityCalibration?.calibrateScored === 'function',
   },
   valueT10Shadow: {
-    src: 'modules/value-t10-shadow.js',
+    src: 'modules/value-t10-shadow.js?v=20260723-purchase1',
     ready: () => typeof window.kvComputeT10ValueShadow === 'function' &&
       typeof window.kvCaptureT10ValueShadow === 'function' && typeof window.kvPersistT10DecisionLedger === 'function',
   },
@@ -3009,7 +3019,13 @@ function _ensureVnextPartnerShadowModule() {
   return _kvLoadLibrary('vnextPartnerScorer')
     .then(() => _kvLoadLibrary('vnextMarketBlend'))
     .then(() => _kvLoadLibrary('vnextPartnerLive'))
-    .then(() => { if (window.kvEnsureVnextPartnerShadowRegistered) window.kvEnsureVnextPartnerShadowRegistered(); });
+    .then(() => _kvLoadLibrary('eraDriftShadow'))
+    .then(() => {
+      if (window.kvEnsureVnextPartnerShadowRegistered) window.kvEnsureVnextPartnerShadowRegistered();
+      if (typeof isAdminMode === 'function' && isAdminMode() && window.KvEraDriftShadow?.hydrateServerSnapshots) {
+        window.KvEraDriftShadow.hydrateServerSnapshots().catch(() => {});
+      }
+    });
 }
 
 function _ensureValueT10ShadowModule() { return _kvLoadLibrary('valueT10Shadow'); }
@@ -3019,7 +3035,8 @@ function _ensureRaceIntelligence() {
   const _admin = typeof isAdminMode === 'function' && isAdminMode();
   const partnerShadow = (_admin || _t10) ? _ensureVnextPartnerShadowModule() : Promise.resolve();
   const valueShadow = _admin ? _ensureValueT10ShadowModule() : Promise.resolve();
-  return Promise.all([_ensureFullIDBCache(), _ensureAiAnalysisModule(), partnerShadow, valueShadow]);
+  const calibration = _admin ? _kvLoadLibrary('probabilityCalibration') : Promise.resolve();
+  return Promise.all([_ensureFullIDBCache(), _ensureAiAnalysisModule(), partnerShadow, valueShadow, calibration]);
 }
 
 /** 通信・AI計算・失敗を同じスピナー文言にせず、利用者が待つ理由と次の操作を判断できる状態表示。 */
@@ -6111,6 +6128,10 @@ async function _kvTickOpponentShadowCapture() {
           try { kvCaptureVnextPartnerShadow(target.raceNo, computed.scored); }
           catch (e) { console.warn('[vnextPartnerShadow capture]', e); }
         }
+        if (typeof kvCaptureEraDriftShadow === 'function') {
+          try { kvCaptureEraDriftShadow(target.raceNo, computed.scored); }
+          catch (e) { console.warn('[eraDriftShadow capture]', e); }
+        }
         if (typeof kvCaptureVnextMarketBlendShadow === 'function') {
           try { kvCaptureVnextMarketBlendShadow(target.raceNo, computed.scored); }
           catch (e) { console.warn('[vnextMarketBlendShadow capture]', e); }
@@ -6405,13 +6426,34 @@ function renderHorseRows(raceNo, horses) {
       if (_opShadow) recordForwardOpponentShadowSnapshot(raceNo, _opShadow);
     } catch (e) { console.warn('[opponentShadowSnapshot hook]', e); }
   }
-  if (_cy && typeof window.kvCaptureVnextPartnerShadow === 'function') {
-    try { window.kvCaptureVnextPartnerShadow(raceNo, _cy.scored); }
-    catch (e) { console.warn('[vnextPartnerShadow hook]', e); }
+  if (_cy && (typeof window.kvCaptureVnextPartnerShadow === 'function' ||
+      typeof window.kvCaptureVnextMarketBlendShadow === 'function')) {
+    const _partnerCaptureDate = String(allRacesData[raceNo]?.raceInfo?.raceDate || '');
+    const _partnerCaptureScored = _cy.scored;
+    const _partnerTokens = renderHorseRows._partnerTokens || (renderHorseRows._partnerTokens = {});
+    const _partnerCaptureToken = _partnerTokens[raceNo] = (_partnerTokens[raceNo] || 0) + 1;
+    const _capturePartnerShadows = () => {
+      if (_partnerTokens[raceNo] !== _partnerCaptureToken ||
+          String(allRacesData[raceNo]?.raceInfo?.raceDate || '') !== _partnerCaptureDate) return;
+      if (typeof window.kvCaptureVnextPartnerShadow === 'function') {
+        try { window.kvCaptureVnextPartnerShadow(raceNo, _partnerCaptureScored); }
+        catch (e) { console.warn('[vnextPartnerShadow hook]', e); }
+      }
+      if (typeof window.kvCaptureVnextMarketBlendShadow === 'function') {
+        try { window.kvCaptureVnextMarketBlendShadow(raceNo, _partnerCaptureScored); }
+        catch (e) { console.warn('[vnextMarketBlendShadow hook]', e); }
+      }
+    };
+    if (typeof _kvScheduleIdle === 'function') _kvScheduleIdle(_capturePartnerShadows, 1600);
+    else setTimeout(_capturePartnerShadows, 0);
   }
-  if (_cy && typeof window.kvCaptureVnextMarketBlendShadow === 'function') {
-    try { window.kvCaptureVnextMarketBlendShadow(raceNo, _cy.scored); }
-    catch (e) { console.warn('[vnextMarketBlendShadow hook]', e); }
+  if (_cy && typeof window.kvCaptureEraDriftShadow === 'function') {
+    try { window.kvCaptureEraDriftShadow(raceNo, _cy.scored); }
+    catch (e) { console.warn('[eraDriftShadow hook]', e); }
+  }
+  if (_cy && window.KvProbabilityCalibration?.captureForward) {
+    try { window.KvProbabilityCalibration.captureForward(raceNo, _cy.scored); }
+    catch (e) { console.warn('[probabilityCalibration hook]', e); }
   }
   if (_cy && typeof window.kvCaptureT10ValueShadow === 'function') {
     try { window.kvCaptureT10ValueShadow(raceNo, _cy.scored); }
@@ -11093,11 +11135,7 @@ function _aiPredictionTimeMeta(raceDate, raceNo, babaCode) {
   };
 }
 
-/**
- * 管理者端末のIndexedDBへ、現行ランキングを追記専用で保存する。
- * computeYosoScored()内部からは呼ばない（過去再計算を当時予想と誤記録しないため）。
- * 同じ入力・同じモデルの再描画は同一キーとなり、異なる入力だけが別revisionとして残る。
- */
+// 現行ランキングの発走前receipt。過去再計算はここへ入れない。
 function recordForwardRankingSnapshot(raceNo, computed) {
   try {
     if (typeof isAdminMode !== 'function' || !isAdminMode()) return { saved: false, reason: 'NOT_ADMIN' };
@@ -11155,12 +11193,6 @@ function listForwardRankingSnapshots() {
     .map(([key,v]) => ({ key, ...v })).sort((a,b) => String(a.capturedAt).localeCompare(String(b.capturedAt)));
 }
 
-// ══════════════ 相手選びモデル（管理者shadow＋監査済みT10限定表示）══════════════
-// 主印（computeYosoScored / totalScore / sort）から完全に分離した受け口。
-// 2026-07-18以降は、実UI◎を固定して「T10単勝市場の上位2頭」と現行○▲を前向き比較する。
-// 保存と未採用候補の表示は管理者限定。採用済みblendも表示用○▲だけで、主印計算・sortには関与しない。
-// 単勝オッズ・人気は「穴相手」の過小評価検証に必要だが、オッズ非依存の主印台帳へ混ぜず、
-// opponentShadowSnapshot の marketAtCapture に予想時点値として分離保存する。
 var KV_OPPONENT_SHADOW_DEFAULT = true;
 try {
   if (typeof window.KV_OPPONENT_SHADOW_ENABLED !== 'boolean') {
@@ -11180,10 +11212,6 @@ function opponentShadowEnabled() {
   } catch (e) { return false; }
 }
 
-/**
- * 実験モデルを登録する。descriptor は計算契約だけを持ち、関数本体や端末状態はfingerprintに含めない。
- * descriptor.activate=true の候補だけが有効になる。登録だけでは主印・公開画面へ一切影響しない。
- */
 function registerOpponentShadowModel(descriptor, predictor) {
   if (!descriptor || typeof descriptor !== 'object' || !descriptor.id || !descriptor.version) {
     throw new Error('opponent shadow descriptor requires id and version');
@@ -11202,7 +11230,6 @@ function registerOpponentShadowModel(descriptor, predictor) {
   };
   const model = { ...contract, fingerprint: _aiFingerprint(contract), status: 'shadow_unadopted' };
   _opponentShadowModels.set(id, { model, predictor });
-  // 同じIDのpredictor差し替え時に旧結果を再利用しない。
   for (const k of _opponentShadowResultCache.keys()) if (k.startsWith(model.fingerprint + '|')) _opponentShadowResultCache.delete(k);
   if (descriptor.activate === true) _activeOpponentShadowModelId = id;
   return model;
@@ -11226,7 +11253,6 @@ function _opponentShadowInput(raceNo, scored, options) {
   const data = allRacesData[raceNo];
   if (!data || !data.raceInfo || !Array.isArray(scored)) return null;
   const includeVnext = !!(options && options.includeVnext);
-  // predictorへ原配列・horse参照を渡さない。候補側のバグで主印の順や値を変えられない契約。
   const runners = scored.map((s, idx) => ({
     u: parseInt(s.horse && s.horse.umaBan) || null,
     name: String((s.horse && s.horse.horseName) || ''),
@@ -11236,6 +11262,8 @@ function _opponentShadowInput(raceNo, scored, options) {
     ninki: Number.isFinite(Number(s.horse && s.horse.ninki)) && Number(s.horse.ninki) > 0 ? Number(s.horse.ninki) : null,
     aiProb: s.aiProb == null || !Number.isFinite(Number(s.aiProb)) ? null : Number(s.aiProb),
     marketProb: s.marketProb == null || !Number.isFinite(Number(s.marketProb)) ? null : Number(s.marketProb),
+    isTransfer: s.isTransfer === true,
+    isEstimatedScore: s.isEstimatedScore === true,
     vnextRaw: includeVnext && typeof window.kvVnextRawForScored === 'function'
       ? window.kvVnextRawForScored(raceNo, s) : undefined,
     x: {
@@ -11340,6 +11368,13 @@ function computeOpponentShadow(raceNo, scored, modelId) {
       model: registered.model,
       target: registered.model.target,
       anchor: { u: input.anchor.u, name: input.anchor.name, currentRank: input.anchor.currentRank },
+      inputDiagnostics: {
+        runnerCount: input.runners.length,
+        transferCount: input.runners.filter(r => r.isTransfer).length,
+        estimatedScoreCount: input.runners.filter(r => r.isEstimatedScore).length,
+        missingVnextFeatureCount: registered.model?.config?.requiresVnextFeatures === true
+          ? input.runners.filter(r => !r.vnextRaw).length : 0,
+      },
       baselineMainline: input.runners.filter(r => r.u !== input.anchor.u).slice(0, 2)
         .map(r => ({ u: r.u, name: r.name, currentRank: r.currentRank })),
       marketMeta: input.market,
@@ -11351,23 +11386,6 @@ function computeOpponentShadow(raceNo, scored, modelId) {
     console.warn('[opponentShadow]', e);
     return null;
   }
-}
-
-function buildOpponentShadowHtml(raceNo, shadow) {
-  if (!opponentShadowEnabled() || !shadow || shadow.schema !== OPPONENT_SHADOW_RESULT_SCHEMA) return '';
-  const fmt = arr => arr.length ? arr.map(p => {
-    const why = p.reasons.length ? ` <span style="color:#64748b">${escapeHTML(p.reasons.join('・'))}</span>` : '';
-    const prob = p.probability != null ? ` <span style="color:#475569">${(p.probability * 100).toFixed(1)}%</span>` : '';
-    return `<span style="display:inline-block;margin-right:10px"><b>${escapeHTML(p.u)} ${escapeHTML(p.name)}</b>${prob}${why}</span>`;
-  }).join('') : '<span style="color:#94a3b8">該当なし</span>';
-  return `<div id="opponent-shadow-${parseInt(raceNo)}" data-model-fingerprint="${escapeHTML(shadow.model.fingerprint)}"
-    style="margin-bottom:10px;padding:10px 12px;border:1.5px dashed #7c3aed;border-radius:9px;background:#faf5ff;color:#4c1d95;font-size:12px">
-    <div style="font-weight:800;margin-bottom:6px">🧪 相手選び shadow <span style="font-size:10px;color:#7c3aed">管理者限定・未採用</span></div>
-    <div style="margin:4px 0"><b>軸：</b>◎ ${escapeHTML(shadow.anchor.u)} ${escapeHTML(shadow.anchor.name)}</div>
-    <div style="margin:4px 0"><b>相手本線：</b>${fmt(shadow.mainline)}</div>
-    <div style="margin:4px 0"><b>穴相手：</b>${fmt(shadow.longshot)}</div>
-    <div style="margin-top:6px;font-size:10px;color:#6b7280">主印には未反映。組合せオッズ未使用のため、穴相手は厳密な馬券期待値ではなく過小評価候補です。model ${escapeHTML(shadow.model.id)} / ${escapeHTML(shadow.model.fingerprint)}</div>
-  </div>`;
 }
 
 function recordForwardOpponentShadowSnapshot(raceNo, shadow) {
@@ -11426,10 +11444,9 @@ function recordForwardOpponentShadowSnapshot(raceNo, shadow) {
     const pickData = {
       anchor: shadow.anchor.u,
       baselineMainline: (shadow.baselineMainline || []).map(p => ({ u: p.u, currentRank: p.currentRank })),
-      // lsWrite/_sanDeepは保存値をin-place sanitiseするため、shadow結果の配列参照を渡さない。
-      // ここを共有すると初回保存後に表示結果が変わり、同一入力が別revisionになる。
       mainline: shadow.mainline.map(p => ({ u: p.u, score: p.score, probability: p.probability, reasons: p.reasons.slice() })),
       longshot: shadow.longshot.map(p => ({ u: p.u, score: p.score, probability: p.probability, reasons: p.reasons.slice() })),
+      inputDiagnostics: JSON.parse(JSON.stringify(shadow.inputDiagnostics || {})),
     };
     const inputFingerprint = _aiFingerprint({
       rankingModel: rankingModel.fingerprint, opponentModel: shadow.model.fingerprint,
@@ -11475,7 +11492,6 @@ function getOpponentShadowCaptureAudit(raceDate, raceNo, slot) {
   return lsRead()[_opponentShadowCaptureAuditKey(raceDate, raceNo, slot)] || null;
 }
 
-/** 保存の成否だけをレース×捕捉枠で更新する運用監査。着順・払戻は一切入れない。 */
 function recordOpponentShadowCaptureAudit(raceNo, slot, timingMeta, outcome) {
   try {
     if (!opponentShadowEnabled()) return { saved:false, reason:'NOT_ENABLED_OR_ADMIN' };
@@ -11525,14 +11541,15 @@ function listOpponentShadowCaptureAudits() {
   return Object.entries(lsRead()).filter(([,v]) => v && v.type === 'opponentShadowCaptureAudit')
     .map(([key,v]) => ({ key, ...v })).sort((a,b) => String(a.lastAttemptAt).localeCompare(String(b.lastAttemptAt)));
 }
-function summarizeOpponentShadowCollection(raceDate) {
+function summarizeOpponentShadowCollection(raceDate, modelId) {
   const wantedDate = String(raceDate || currentDate || (typeof _kvTodaySlash === 'function' ? _kvTodaySlash() : ''));
+  const wantedModelId = String(modelId || KV_FORWARD_OPPONENT_MODEL_ID);
   const rows = listOpponentShadowCaptureAudits().filter(r => r.raceDate === wantedDate && r.slot === 't10');
   const reasons = {};
   rows.forEach(r => { reasons[r.lastReason || 'UNKNOWN'] = Number(reasons[r.lastReason || 'UNKNOWN'] || 0) + 1; });
   const snapshots = listForwardOpponentShadowSnapshots().filter(s => s.raceDate === wantedDate &&
-    s.opponentModel && s.opponentModel.id === KV_FORWARD_OPPONENT_MODEL_ID);
-  return { schema:'opponent_shadow_collection_summary/v1', raceDate:wantedDate,
+    s.opponentModel && s.opponentModel.id === wantedModelId);
+  return { schema:'opponent_shadow_collection_summary/v1', raceDate:wantedDate, modelId:wantedModelId,
     t10Attempted:rows.length, t10Saved:rows.filter(r => r.saved).length,
     t10Failed:rows.filter(r => !r.saved).length, reasons, snapshots:snapshots.length,
     appMustRemainOpen:true };
@@ -11548,9 +11565,6 @@ function refreshOpponentShadowCollectionStatus(raceDate) {
   return summary;
 }
 
-// ── 前向き相手本線v1：実UI◎は固定し、T10単勝市場の上位2頭だけを比較候補にする ──
-// complete-v3で market_10m はhistory-proxy baselineを明確に上回ったが、実UI◎との比較ではない。
-// その差を事後解釈せずに確認するための「新しい前向き仮説」であり、本番印・購入推奨ではない。
 const KV_FORWARD_OPPONENT_MODEL_ID = 'kochi-t10-market-mainline-v1';
 const KV_FORWARD_OPPONENT_MODEL_DESCRIPTOR = {
   id: KV_FORWARD_OPPONENT_MODEL_ID,
@@ -11610,11 +11624,6 @@ function _opponentForwardResultStatus(row) {
 }
 function _opponentForwardRate(n, d) { return d > 0 ? n / d : null; }
 
-/**
- * 保存済みshadowを、確定結果とread-onlyで突合する。
- * 同一レースの複数revisionは「10分前以上で最も10分に近い」1件だけを採用する。
- * T10時点にいた取消・除外馬が結果時点で消えたレースは、市場順位の後知恵を避けるため丸ごと除外する。
- */
 function evaluateForwardOpponentShadowSnapshots(modelId) {
   const wanted = String(modelId || KV_FORWARD_OPPONENT_MODEL_ID);
   const db = lsRead();
@@ -11663,9 +11672,11 @@ function evaluateForwardOpponentShadowSnapshots(modelId) {
   selected.forEach(s => {
     const marketRows = Array.isArray(s.marketAtCapture) ? s.marketAtCapture : [];
     const universe = marketRows.map(r => parseInt(r.u)).filter(Boolean);
-    const completeMarket = universe.length === marketRows.length && new Set(universe).size === universe.length &&
-      marketRows.every(r => Number.isFinite(Number(r.odds)) && Number(r.odds) > 0);
-    if (!completeMarket) { counts.invalid++; return; }
+    const config = s.opponentModel?.config || {};
+    const requiresMarket = wanted === KV_FORWARD_OPPONENT_MODEL_ID || config.requiresFreshMarket === true;
+    const completeUniverse = universe.length === marketRows.length && new Set(universe).size === universe.length;
+    const completeOdds = marketRows.every(r => Number.isFinite(Number(r.odds)) && Number(r.odds) > 0);
+    if (!completeUniverse || (requiresMarket && !completeOdds)) { counts.invalid++; return; }
     const statuses = new Map();
     universe.forEach(u => {
       const key = `${s.babaCode}_${s.raceDate}_${parseInt(s.raceNo)}_${u}`;

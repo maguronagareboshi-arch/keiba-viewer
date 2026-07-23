@@ -1,7 +1,9 @@
-const CACHE = 'kochi-viewer-v6';
+const CACHE = 'kochi-viewer-v11';
 const CORE = [
   './', './index.html', './manifest.webmanifest',
-  './modules/ai-analysis.js', './modules/ai-insights.js', './modules/value-t10-shadow.js',
+  './modules/ai-analysis.js?v=20260723-purchase1', './modules/ai-insights.js', './modules/value-t10-shadow.js?v=20260723-purchase1',
+  './modules/era-drift-shadow.js?v=20260723-v2',
+  './modules/probability-calibration.js?v=20260723-v1',
   './modules/performance-observer.js',
 ];
 

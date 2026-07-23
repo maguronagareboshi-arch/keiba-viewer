@@ -814,9 +814,49 @@
         productionEligible:false, required:'ROI>100, day-bootstrap CI lower bound>=100, and ROI without top payout>=100; production promotion is always manual' }, rows };
   }
 
+  /*
+   * 能力・価格・前向き成績を、最終的な購入可否へ集約する安全側の判定。
+   * このモデルは forward-shadow 専用なので、候補や統計ゲートの状態にかかわらず
+   * 実購入額は常に0円。100円は成績集計の仮想単位であり、購入推奨額ではない。
+   */
+  function buildPurchaseDecision(valueResult, evaluation) {
+    const result = valueResult && typeof valueResult === 'object' ? valueResult : null;
+    const audit = evaluation && typeof evaluation === 'object' ? evaluation : null;
+    const candidate = result && result.ok && result.candidate ? cleanJson(result.candidate) : null;
+    const settled = Math.max(0, Number(audit?.counts?.settledSelections) || 0);
+    const firstReviewAt = Math.max(1, Number(audit?.reviewGate?.firstReviewAt) || 200);
+    const statisticalGatePassed = audit?.status === 'ok' && audit?.reviewGate?.passesStatisticalGate === true;
+    let status = 'awaiting_input';
+    let reason = String(result?.reason || 'VALUE_MODEL_NOT_AVAILABLE');
+    if (result?.ok && !candidate) status = 'no_candidate';
+    if (candidate) status = statisticalGatePassed ? 'manual_review_required' : 'research_candidate';
+    if (status === 'no_candidate') reason = 'NO_QUALIFYING_VALUE';
+    else if (status === 'research_candidate') reason = 'FORWARD_VALIDATION_INCOMPLETE';
+    else if (status === 'manual_review_required') reason = 'STATISTICAL_GATE_PASSED_MANUAL_REVIEW_REQUIRED';
+    const decision = {
+      schema:'kochi_purchase_decision/v1', modelId:MODEL.modelId, modelFingerprint,
+      status, reason, candidate,
+      action:'SKIP', actionLabel:'見送り', productionEligible:false,
+      funding:Object.freeze({ recommendedStakeYen:0, bankrollExposurePct:0,
+        researchLedgerUnitYen:100, method:'flat_research_accounting_only' }),
+      evidence:Object.freeze({ settledSelections:settled, firstReviewAt,
+        remainingToFirstReview:Math.max(0, firstReviewAt - settled),
+        statisticalGatePassed, reviewReady:audit?.reviewGate?.ready === true,
+        roi:Number.isFinite(Number(audit?.metrics?.roi)) ? Number(audit.metrics.roi) : null,
+        roiWithoutTopPayout:Number.isFinite(Number(audit?.metrics?.roiWithoutTopPayout)) ? Number(audit.metrics.roiWithoutTopPayout) : null,
+        dayBootstrap95:Array.isArray(audit?.metrics?.dayBootstrap95)
+          ? Object.freeze(audit.metrics.dayBootstrap95.slice(0,2).map(Number)) : null }),
+      safeguards:Object.freeze([
+        'forward_shadow_only', 'no_automatic_promotion',
+        'uncalibrated_probability_not_used_for_staking', 'longshot_signal_not_purchase_evidence',
+      ]),
+    };
+    return Object.freeze(decision);
+  }
+
   return Object.freeze({ contract:MODEL, modelFingerprint, softmax, scoreRace, computeLive, captureLive, persistDecisionLedger,
     settleDecisionLedgerRow, summarizeSettlements, syncMissingPayouts, refreshDecisionLedgerMonitor,
     decisionLedgerSchema:DECISION_LEDGER_SCHEMA,
     snapshotSchema:SNAPSHOT_SCHEMA, snapshotKeyPrefix:SNAPSHOT_KEY_PREFIX,
-    listSnapshots, validateSnapshot, evaluateSnapshots, tanPayouts, dayBootstrap95 });
+    listSnapshots, validateSnapshot, evaluateSnapshots, buildPurchaseDecision, tanPayouts, dayBootstrap95 });
 });
