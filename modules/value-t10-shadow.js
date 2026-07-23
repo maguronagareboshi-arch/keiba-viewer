@@ -488,6 +488,45 @@
       roi:stake ? 100*returned/stake : null, longshot };
   }
 
+  async function syncMissingPayouts(ledger, db, options) {
+    const fetchDay = options?.fetchDay || (root && root._fetchRefundPayoutsDay);
+    const read = options?.read || (root && root.lsRead), write = options?.write || (root && root.lsWrite);
+    const admin = options?.admin ?? (typeof root?.isAdminMode === 'function' && root.isAdminMode());
+    if (!admin || typeof fetchDay !== 'function' || typeof read !== 'function' || typeof write !== 'function') {
+      return { status:'unavailable', attemptedDays:0, savedRaces:0, failedDates:[], skippedDates:[] };
+    }
+    const source = db || read(), dates = [];
+    for (const row of Array.isArray(ledger) ? ledger : []) {
+      const payload=row?.payload, race=payload?.race, selected=uma(payload?.components?.value?.data?.selected);
+      if (!race || payload.schema !== DECISION_LEDGER_SCHEMA || !selected) continue;
+      if (source[`payout_31_${race.raceDate}_${Number(race.raceNo)}`]) continue;
+      if (settleDecisionLedgerRow(row,source).status !== 'settled') continue;
+      if (!dates.includes(race.raceDate)) dates.push(race.raceDate);
+    }
+    let attemptedDays=0, savedRaces=0; const failedDates=[], skippedDates=[];
+    for (const raceDate of dates.slice(0,3)) {
+      const auditKey=`t10PayoutAuto_v1|31|${raceDate.replace(/\D/g,'')}`, prior=read()[auditKey];
+      const last=Date.parse(prior?.lastAttemptAt), waitMs=prior?.status === 'failed' ? 15*60000 : 6*3600000;
+      if (Number.isFinite(last) && Date.now()-last < waitMs) { skippedDates.push(raceDate); continue; }
+      attemptedDays++; const attemptedAt=new Date().toISOString();
+      try {
+        const day=await fetchDay(raceDate), raceNos=Object.keys(day || {});
+        if (!raceNos.length) throw new Error('PAYOUT_NOT_PUBLISHED');
+        for (const raceNo of raceNos) {
+          write(`payout_31_${raceDate}_${raceNo}`,{ type:'payout',race_date:raceDate,race_no:Number(raceNo),
+            baba_code:'31',...day[raceNo],savedAt:new Date().toISOString(),source:'keiba.go.jp/RefundMoneyList:auto' });
+          savedRaces++;
+        }
+        write(auditKey,{ type:'t10PayoutAutoAudit',raceDate,status:'saved',lastAttemptAt:attemptedAt,savedRaces:raceNos.length });
+      } catch (error) {
+        failedDates.push(raceDate);
+        write(auditKey,{ type:'t10PayoutAutoAudit',raceDate,status:'failed',lastAttemptAt:attemptedAt,
+          reason:String(error && error.message || error).slice(0,160) });
+      }
+    }
+    return { status:failedDates.length ? 'partial' : 'ok', attemptedDays, savedRaces, failedDates, skippedDates };
+  }
+
   let monitorPromise = null, monitorAt = 0;
   async function refreshDecisionLedgerMonitor(force) {
     if (monitorPromise) return monitorPromise;
@@ -501,7 +540,9 @@
         const url = `${config.url}/rest/v1/keiba_value_t10_ledger?select=*&baba_code=eq.31&order=race_date.desc,race_no.desc&limit=500`;
         const response = await fetch(url,{ headers:config.headers });
         if (!response.ok) throw new Error(`HTTP_${response.status}`);
-        const ledger = await response.json(), db = typeof root.lsRead === 'function' ? root.lsRead() : {};
+        const ledger = await response.json(); let db = typeof root.lsRead === 'function' ? root.lsRead() : {};
+        const payoutSync = await syncMissingPayouts(ledger,db);
+        if (typeof root.lsRead === 'function') db=root.lsRead();
         const settlements = ledger.map(row => settleDecisionLedgerRow(row,db));
         const summary = summarizeSettlements(settlements), statusCounts = {};
         ledger.forEach(row => { statusCounts[row.status] = (statusCounts[row.status] || 0)+1; });
@@ -522,9 +563,11 @@
             `価値候補 ${summary.hits}/${summary.selections}的中・ROI ${roi}（払戻${summary.payoutReady}件）<br>`+
             `激走候補 複勝${pct(summary.longshot.candidateTop3,summary.longshot.candidates)} `+
             `／候補外${pct(summary.longshot.rejectedTop3,summary.longshot.rejected)}　`+
-            `保存状態 ${Object.entries(statusCounts).map(([k,v])=>`${k}:${v}`).join(' / ')}`;
+            `保存状態 ${Object.entries(statusCounts).map(([k,v])=>`${k}:${v}`).join(' / ')}<br>`+
+            `払戻自動取得 ${payoutSync.savedRaces ? `${payoutSync.savedRaces}R保存` : '追加なし'}`+
+            `${payoutSync.failedDates.length ? `／未公表・取得失敗 ${payoutSync.failedDates.join('、')}` : ''}`;
         }
-        monitorAt=Date.now(); return { ledger, settlements, summary, statusCounts };
+        monitorAt=Date.now(); return { ledger, settlements, summary, statusCounts, payoutSync };
       } catch (error) {
         if (el) el.innerHTML=`<span style="color:#b91c1c">T10台帳の取得失敗：${String(error && error.message || error).slice(0,120)}</span>`;
         return { error:String(error && error.message || error) };
@@ -772,7 +815,7 @@
   }
 
   return Object.freeze({ contract:MODEL, modelFingerprint, softmax, scoreRace, computeLive, captureLive, persistDecisionLedger,
-    settleDecisionLedgerRow, summarizeSettlements, refreshDecisionLedgerMonitor,
+    settleDecisionLedgerRow, summarizeSettlements, syncMissingPayouts, refreshDecisionLedgerMonitor,
     decisionLedgerSchema:DECISION_LEDGER_SCHEMA,
     snapshotSchema:SNAPSHOT_SCHEMA, snapshotKeyPrefix:SNAPSHOT_KEY_PREFIX,
     listSnapshots, validateSnapshot, evaluateSnapshots, tanPayouts, dayBootstrap95 });
