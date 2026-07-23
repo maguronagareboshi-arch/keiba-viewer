@@ -21,6 +21,64 @@
     return typeof escapeHTML === 'function' ? escapeHTML(value) : String(value == null ? '' : value)
       .replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
+  function installDecisionStyles() {
+    if (!global.document || !document.head || typeof document.createElement !== 'function' || document.getElementById('kv-decision-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'kv-decision-styles';
+    style.textContent = `body.kv-cockpit .cockpit-opponent-role{display:inline-flex;align-items:center;width:max-content;margin-top:2px;padding:1px 5px;border:1px solid rgba(59,130,246,.25);border-radius:999px;background:rgba(59,130,246,.08);color:var(--kc-primary);font-size:8px;font-weight:900}body.kv-cockpit .cockpit-market-gap{display:inline-flex;align-items:center;margin-left:5px;padding:1px 5px;border-radius:999px;background:rgba(8,145,178,.1);color:#0891b2;font-size:8px;font-weight:900;white-space:nowrap}body.kv-cockpit .cockpit-market-gap.is-over{background:rgba(245,158,11,.12);color:#b45309}body.kv-cockpit .cockpit-buy-line{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;margin-top:9px;padding:10px 12px;border:1px solid var(--kc-border);border-radius:8px;background:var(--kc-surface);color:var(--kc-text);font-size:11px}body.kv-cockpit .cockpit-buy-line>strong{color:var(--kc-primary);font-size:11px}body.kv-cockpit .cockpit-buy-line-main{font-weight:900}body.kv-cockpit .cockpit-buy-line-main b{color:#0891b2;font-size:14px}body.kv-cockpit .cockpit-buy-line small{color:var(--kc-muted);text-align:right}body.kv-cockpit .cockpit-buy-line.is-pass{border-color:rgba(8,145,178,.45);background:rgba(8,145,178,.06)}body.kv-cockpit .cockpit-buy-line.is-wait{border-style:dashed}@media(max-width:640px){body.kv-cockpit .cockpit-buy-line{grid-template-columns:1fr;gap:4px}body.kv-cockpit .cockpit-buy-line small{text-align:left}}`;
+    document.head.appendChild(style);
+  }
+  installDecisionStyles();
+  function marketMeta(scored, scoredHorse, aiRank) {
+    const horse = scoredHorse?.horse || scoredHorse || {};
+    let marketRank = parseInt(horse.ninki, 10);
+    if (!Number.isFinite(marketRank) || marketRank < 1) {
+      const oddsOrder = (scored || []).filter(s => parseFloat((s?.horse || s || {}).odds) > 0).slice().sort((a, b) => {
+        const ah = a?.horse || a || {}, bh = b?.horse || b || {};
+        return parseFloat(ah.odds) - parseFloat(bh.odds) || (parseInt(ah.umaBan || ah.u, 10) || 0) - (parseInt(bh.umaBan || bh.u, 10) || 0);
+      });
+      const found = oddsOrder.indexOf(scoredHorse);
+      marketRank = found >= 0 ? found + 1 : null;
+    }
+    const rank = Number(aiRank) || ((scored || []).indexOf(scoredHorse) + 1);
+    return { aiRank:rank > 0 ? rank : null, marketRank:Number.isFinite(marketRank) ? marketRank : null,
+      gap:Number.isFinite(marketRank) && rank > 0 ? marketRank - rank : null };
+  }
+  function marketGapHtml(scored, scoredHorse, aiRank) {
+    const meta = marketMeta(scored, scoredHorse, aiRank);
+    if (!Number.isFinite(meta.marketRank) || !Number.isFinite(meta.aiRank)) return '';
+    const gapText = meta.gap > 0 ? `+${meta.gap}` : String(meta.gap);
+    return `<span class="cockpit-market-gap${meta.gap >= 3 ? '' : ' is-over'}" title="AI能力順位と単勝市場順位の差">AI${meta.aiRank}位→市場${meta.marketRank}位（${gapText}）</span>`;
+  }
+  function opponentRole(scored, scoredHorse, opponentIndex) {
+    const main = scored?.[0], aiRank = (scored || []).indexOf(scoredHorse) + 1;
+    const scoreGap = main ? Number(main.totalScore) - Number(scoredHorse?.totalScore) : null;
+    const market = marketMeta(scored, scoredHorse, aiRank);
+    const pace = Number(scoredHorse?.paceCtxMod || 0), front = Number(scoredHorse?.cornMod || 0);
+    const finish = Number(scoredHorse?.agariMod || 0), trend = Number(scoredHorse?.trendMod || 0);
+    if (Number.isFinite(market.gap) && market.gap >= 3) return { label:'市場見落とし候補', detail:'能力順位が市場より上' };
+    if (opponentIndex === 0) return scoreGap != null && scoreGap < 2
+      ? { label:'逆転候補', detail:'◎との能力差が小さい' } : { label:'相手軸', detail:'能力評価2位で安定側' };
+    if (front > Math.max(finish, pace) && front > .15) return { label:'前残り補完', detail:'先行力を評価' };
+    if (Math.max(finish, pace) > .15) return { label:'展開逆転', detail:finish >= pace ? '末脚で補完' : '展開適性で補完' };
+    if (trend > .15) return { label:'上昇補完', detail:'近走上向きを評価' };
+    return opponentIndex === 1 ? { label:'展開補完', detail:'◎○と異なる結果を補完' } : { label:'押さえ', detail:'能力上位を広く確保' };
+  }
+  function buyLineHtml(shadow, candidate) {
+    const contract = global.KvT10ValueShadow?.contract;
+    const probability = Number(candidate?.probability), currentOdds = Number(candidate?.odds);
+    const evMin = Number(contract?.gates?.evMin);
+    if (candidate && probability > 0 && currentOdds > 0 && Number.isFinite(evMin)) {
+      const minimumOdds = (1 + evMin) / probability, pass = currentOdds >= minimumOdds;
+      return `<div class="cockpit-buy-line ${pass ? 'is-pass' : 'is-wait'}"><strong><i class="fas fa-tag"></i> 参考買いライン</strong><span class="cockpit-buy-line-main">現在 <b>${currentOdds.toFixed(1)}倍</b> ／ 検証基準 ${minimumOdds.toFixed(1)}倍以上 ${pass ? '・ライン超え' : '・ライン未満'}</span><small>T10前向き検証中<br>購入推奨ではありません</small></div>`;
+    }
+    const labels = { WAIT_FOR_T10:'発走10分前の公式オッズで判定します', T10_WINDOW_CLOSED:'T10判定時間を過ぎています',
+      NO_QUALIFYING_VALUE:'検証基準を満たす価格の馬はいません', STALE_OR_UNVERIFIED_MARKET:'公式T10オッズの確認待ちです',
+      INCOMPLETE_T10_MARKET:'全頭のT10オッズが揃っていません', RUNNER_UNIVERSE_MISMATCH:'出走馬の整合確認待ちです',
+      NOT_EVALUATED:'価格モデルは前向き検証中です' };
+    const reason = String(shadow?.reason || 'NOT_EVALUATED');
+    return `<div class="cockpit-buy-line is-wait"><strong><i class="fas fa-tag"></i> 参考買いライン</strong><span class="cockpit-buy-line-main">${esc(labels[reason] || '価格判定の条件が揃っていません')}</span><small>能力印とは分離<br>条件不足時は見送り</small></div>`;
+  }
   function dateKey(value) { return String(value || '').replace(/\D/g, ''); }
   function racePrefix(date) { return `${PRECALC_PREFIX}|31|${dateKey(date)}|`; }
   function cacheKey(date, raceNo, fingerprint) {
@@ -189,6 +247,20 @@
     const odds = parseFloat(live && live.odds) || parseFloat(row.odds);
     return `${Number.isFinite(ninki) ? ninki + '人気' : '人気—'}${Number.isFinite(odds) ? ' ' + odds.toFixed(1) : ''}`;
   }
+  function cachedMarketGap(row, live) {
+    const aiRank = parseInt(row && row.rank, 10), marketRank = parseInt(live && live.ninki, 10) || parseInt(row && row.ninki, 10);
+    if (!Number.isFinite(aiRank) || !Number.isFinite(marketRank)) return { html:'', gap:null };
+    const gap = marketRank - aiRank, gapText = gap > 0 ? `+${gap}` : String(gap);
+    return { gap, html:`<span class="cockpit-market-gap${gap >= 3 ? '' : ' is-over'}" title="AI能力順位と単勝市場順位の差">AI${aiRank}位→市場${marketRank}位（${gapText}）</span>` };
+  }
+  function cachedOpponentRole(row, live, opponentIndex, main) {
+    const market = cachedMarketGap(row, live);
+    if (market.gap >= 3) return { label:'市場見落とし候補', detail:'能力順位が市場より上' };
+    const scoreGap = Number(main && main.totalScore) - Number(row && row.totalScore);
+    if (opponentIndex === 0) return Number.isFinite(scoreGap) && scoreGap < 2
+      ? { label:'逆転候補', detail:'◎との能力差が小さい' } : { label:'相手軸', detail:'能力評価2位で安定側' };
+    return opponentIndex === 1 ? { label:'展開補完', detail:'◎○と異なる結果を補完' } : { label:'押さえ', detail:'能力上位を広く確保' };
+  }
   function snapshotAction(confidence, hasValue) {
     return hasValue ? '単勝の期待値候補あり' : '見送り';
   }
@@ -205,7 +277,7 @@
     const rows = snapshot.runners, main = rows[0], opponents = rows.slice(1, 4), value = snapshot.value && rows.find(r => r.u === snapshot.value.u);
     const confidence = confidenceForPopularity((liveByU.get(main.u) || main).ninki);
     const card = (row, mark, kind, note) => row ? `<button type="button" class="cockpit-pick is-${kind}" onclick="switchViewTab(${raceNo},'yoso')"><span class="cockpit-mark is-${kind}">${mark}</span><span class="cockpit-pick-copy"><strong>${esc(row.u || '—')}番 ${esc(row.name)}</strong><small>${esc(note)}</small></span><span class="cockpit-odds">${esc(marketText(row, liveByU.get(row.u)))}</span></button>` : '';
-    const opponentHtml = `<button type="button" class="cockpit-pick is-opponents" onclick="switchViewTab(${raceNo},'yoso')"><span class="cockpit-mark is-second">○</span><span class="cockpit-opponent-list"><span class="cockpit-opponent-head">相手候補</span>${opponents.map((r, i) => `<span class="cockpit-opponent-line"><span class="cockpit-opponent-mark">${['○','▲','△'][i]}</span><b>${esc(r.u)}番 ${esc(r.name)}</b><small>${esc(marketText(r, liveByU.get(r.u)))}</small></span>`).join('')}</span></button>`;
+    const opponentHtml = `<button type="button" class="cockpit-pick is-opponents" onclick="switchViewTab(${raceNo},'yoso')"><span class="cockpit-mark is-second">○</span><span class="cockpit-opponent-list"><span class="cockpit-opponent-head">相手候補・役割</span>${opponents.map((r, i) => { const live = liveByU.get(r.u), role = cachedOpponentRole(r, live, i, main); return `<span class="cockpit-opponent-line"><span class="cockpit-opponent-mark">${['○','▲','△'][i]}</span><b>${esc(r.u)}番 ${esc(r.name)}<span class="cockpit-opponent-role" title="${esc(role.detail)}">${esc(role.label)}</span></b><small>${esc(marketText(r, live))}</small></span>`; }).join('')}</span></button>`;
     const risks = [];
     const gap = rows[1] ? Number(main.totalScore) - Number(rows[1].totalScore) : 0;
     if (gap < 2) risks.push('上位評価が接近');
@@ -215,9 +287,10 @@
     if (dock) dock.innerHTML = card(main, '◎', 'main', `能力1位・${main.reason}`) + opponentHtml + (value ? card(value, '☆', 'value', snapshot.value.note) : '') + decision;
     if (panel) {
       const time = new Date(snapshot.computedAt), stamp = Number.isNaN(time.getTime()) ? '' : time.toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
-      const tableRows = rows.slice(0, 6).map(row => `<tr class="cockpit-rank-row"><td><div class="cockpit-horse"><span class="cockpit-rank-mark">${row.mark}</span><span class="cockpit-uma">${esc(row.u)}</span><span><b>${esc(row.name)}</b><small>AI ${row.rank}位</small></span></div></td><td class="cockpit-market">${esc(marketText(row, liveByU.get(row.u)))}</td><td><i class="fas fa-layer-group"></i> ${esc(row.reason)}</td></tr>`).join('');
+      const tableRows = rows.slice(0, 6).map((row, index) => { const live = liveByU.get(row.u), role = index > 0 && index < 4 ? cachedOpponentRole(row, live, index - 1, main) : null, gap = cachedMarketGap(row, live); return `<tr class="cockpit-rank-row"><td><div class="cockpit-horse"><span class="cockpit-rank-mark">${row.mark}</span><span class="cockpit-uma">${esc(row.u)}</span><span><b>${esc(row.name)}</b><small>AI ${row.rank}位${role ? `<span class="cockpit-opponent-role" title="${esc(role.detail)}">${esc(role.label)}</span>` : ''}</small></span></div></td><td class="cockpit-market">${esc(marketText(row, live))}${gap.html}</td><td><i class="fas fa-layer-group"></i> ${esc(row.reason)}</td></tr>`; }).join('');
       const sourceLabel = snapshot.cacheSource === 'server' ? '共有事前計算' : '端末の事前計算';
-      panel.innerHTML = `<div class="cockpit-panel-head"><div><h3>能力予想</h3><p>◎○▲△はオッズ非依存。期待値候補がなければ購入は見送り</p></div><span><i class="fas fa-bolt"></i> ${sourceLabel} ${esc(stamp)}</span></div><div class="table-wrapper"><table class="cockpit-table"><thead><tr><th>印・馬</th><th>市場</th><th>判断材料</th></tr></thead><tbody>${tableRows}</tbody></table></div>`;
+      const buyLine = typeof global._cockpitBuyLineHtml === 'function' ? global._cockpitBuyLineHtml(null, null) : '';
+      panel.innerHTML = `<div class="cockpit-panel-head"><div><h3>能力予想</h3><p>◎○▲△はオッズ非依存。市場との差と相手の役割を後から重ねています</p></div><span><i class="fas fa-bolt"></i> ${sourceLabel} ${esc(stamp)}</span></div><div class="table-wrapper"><table class="cockpit-table"><thead><tr><th>印・馬</th><th>市場・評価差</th><th>判断材料</th></tr></thead><tbody>${tableRows}</tbody></table></div>${buyLine}`;
     }
     return true;
   }
@@ -262,6 +335,10 @@
   }
 
   global.KV_AI_INSIGHTS_SHIPPED = INSIGHTS;
+  global._cockpitMarketMeta = marketMeta;
+  global._cockpitMarketGapHtml = marketGapHtml;
+  global._cockpitOpponentRole = opponentRole;
+  global._cockpitBuyLineHtml = buyLineHtml;
   global.kvAiGetCalibratedConfidence = confidenceForPopularity;
   global.kvAiCachePrediction = cachePrediction;
   global.kvAiGetCachedPrediction = getCachedPrediction;

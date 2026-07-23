@@ -1,4 +1,4 @@
-const CACHE = 'kochi-viewer-v3';
+const CACHE = 'kochi-viewer-v5';
 const CORE = [
   './', './index.html', './manifest.webmanifest',
   './modules/ai-analysis.js', './modules/ai-insights.js', './modules/value-t10-shadow.js',
@@ -23,6 +23,15 @@ self.addEventListener('fetch', event => {
     // Never save an arbitrary page as index.html. Doing so allowed legacy
     // Monbetsu/Ooi pages to replace the Kochi home screen in the offline cache.
     event.respondWith(fetch(request).catch(() => caches.match('./index.html')));
+    return;
+  }
+  if (url.pathname.includes('/data/3f/') || url.pathname.includes('/data/replay/')) {
+    // 計測値は同じ日付・ファイル名のまま再較正されることがあるためネットワーク優先。
+    // オフライン時だけ直近の検証済みコピーへフォールバックする。
+    event.respondWith(fetch(request).then(response => {
+      if (response.ok) caches.open(CACHE).then(cache => cache.put(request, response.clone()));
+      return response;
+    }).catch(() => caches.match(request)));
     return;
   }
   event.respondWith(caches.match(request).then(cached => {

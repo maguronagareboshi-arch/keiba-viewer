@@ -2983,6 +2983,258 @@ function buildAfterMatchHtml(scored, horses) {
   </div>`;
 }
 
+// ============================================================
+// 激走候補判定（確定6番人気以下の長期集計をライブ表示へ接続）
+// ============================================================
+// 判定は「能力AIの順位」と分離する。人気はその時点の全頭単勝オッズから毎回作り直し、
+// 過去走の特徴は対象レースより前だけで計算する。期待値・購入推奨とは呼ばない。
+function judgeLongshotCandidate(facts) {
+  const f = facts && typeof facts === 'object' ? facts : {};
+  const finite = value => {
+    if (value === null || value === undefined || value === '' || typeof value === 'boolean') return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  };
+  const marketRank = finite(f.marketRank);
+  const base = {
+    candidate:false, supportCount:0, reasons:[], cautions:[],
+    marketRank:Number.isInteger(marketRank) && marketRank > 0 ? marketRank : null,
+  };
+  if (base.marketRank == null) return { ...base, status:'awaiting_popularity', label:'人気取得待ち' };
+  if (base.marketRank < 6) return { ...base, status:'out', label:'人気条件外', reasonCode:'market_top5' };
+  if (f.historyReady === false) return { ...base, status:'insufficient_history', label:'履歴不足' };
+
+  const qualityRank = finite(f.historyQualityRank);
+  const priorStarts = finite(f.priorStartCount) || 0;
+  const careerRate = finite(f.careerTop3Rate);
+  const distanceStarts = finite(f.sameDistanceStartCount) || 0;
+  const distanceRate = finite(f.sameDistanceTop3Rate);
+  const comboStarts = finite(f.comboStartCount) || 0;
+  const comboRate = finite(f.comboTop3Rate);
+  const restDays = finite(f.restDays);
+  const primary = qualityRank != null && qualityRank <= 3;
+  const supports = [];
+  if (priorStarts >= 5 && careerRate != null && careerRate >= 0.40) supports.push('通算複勝40%以上');
+  if (distanceStarts >= 3 && distanceRate != null && distanceRate >= 0.40) supports.push('同距離複勝40%以上');
+  if (comboStarts >= 10 && comboRate != null && comboRate >= 0.30) supports.push('騎手×厩舎30%以上');
+  const reasons = primary ? ['過去走の質がメンバー上位3頭', ...supports] : [...supports];
+  const detail = { ...base, primary, supportCount:supports.length, reasons,
+    historyQualityRank:qualityRank, restDays };
+
+  // 61日以上は独立して大幅なマイナス（集計上の3着内率6.37%）。候補表示を止めて注意にする。
+  if (restDays != null && restDays >= 61) {
+    return { ...detail, status:'long_layoff', label:'高知出走間隔に注意',
+      cautions:[`高知出走間隔${Math.round(restDays)}日`] };
+  }
+  if (primary && supports.length >= 1) {
+    return { ...detail, status:'strong', label:'激走候補', candidate:true };
+  }
+  if (primary || supports.length >= 2) {
+    return { ...detail, status:'secondary', label:'激走準候補', candidate:true };
+  }
+  return { ...detail, status:'out', label:'条件不足', reasonCode:'weak_evidence' };
+}
+
+function _ensureLongshotCandidateStyles() {
+  if (typeof document === 'undefined' || document.getElementById('kv-longshot-candidate-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'kv-longshot-candidate-styles';
+  style.textContent = `
+    .ana-run-bar.longshot-judge{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+    .longshot-judge .lsj-title{white-space:nowrap}.longshot-judge .lsj-list{display:flex;gap:7px;flex:1;flex-wrap:wrap}
+    .longshot-judge .lsj-item{display:grid;gap:1px;min-width:180px;padding:5px 8px;border:1px solid currentColor;border-radius:7px;background:rgba(255,255,255,.46)}
+    .longshot-judge .lsj-item>span,.longshot-judge .lsj-item>small{font-size:10px;font-weight:600;opacity:.86}
+    .longshot-judge .lsj-deep{display:inline-flex;margin-left:5px;padding:0 4px;border-radius:999px;background:#86198f;color:#fff;font-size:8px}
+    .longshot-judge .lsj-more{align-self:center;font-size:10px;opacity:.8}
+    .ana-run-bar.longshot-judge.is-secondary{background:#fff7ed;border-color:#ea580c;color:#9a3412}
+    .ana-run-bar.longshot-judge.is-pending,.ana-run-bar.longshot-judge.is-none{background:#f8fafc;border-color:#cbd5e1;color:#475569;font-weight:500}
+    .ana-run-bar.longshot-judge.is-risk{background:#fffbeb;border-color:#d97706;color:#92400e}
+    body.dark-mode .ana-run-bar.longshot-judge.is-pending,body.dark-mode .ana-run-bar.longshot-judge.is-none{background:#111c2b!important;border-color:#475569!important;color:#cbd5e1!important}
+    body.dark-mode .ana-run-bar.longshot-judge.is-risk{background:#2a1a00!important;border-color:#b45309!important;color:#fcd34d!important}
+    @media(max-width:640px){.longshot-judge .lsj-list{display:grid;width:100%}.longshot-judge .lsj-item{min-width:0}.longshot-judge .kvi-info{margin-left:auto}}
+  `;
+  document.head.appendChild(style);
+}
+
+function buildLongshotCandidateHtml(rows, options) {
+  if (typeof _ensureLongshotCandidateStyles === 'function') _ensureLongshotCandidateStyles();
+  const list = Array.isArray(rows) ? rows : [];
+  const opts = options && typeof options === 'object' ? options : {};
+  const esc = value => typeof escapeHTML === 'function' ? escapeHTML(value) : String(value == null ? '' : value);
+  const candidates = list.filter(row => row && row.decision && row.decision.candidate)
+    .sort((a, b) => (a.decision.status === 'strong' ? -1 : 0) - (b.decision.status === 'strong' ? -1 : 0)
+      || a.decision.marketRank - b.decision.marketRank || (a.umaBan || 99) - (b.umaBan || 99));
+  const marketWord = opts.finalMarket ? '確定人気' : '現在人気';
+  if (candidates.length) {
+    const hasStrong = candidates.some(row => row.decision.status === 'strong');
+    const items = candidates.slice(0, 3).map(row => {
+      const d = row.decision;
+      const badge = d.status === 'strong' ? '激走候補' : '準候補';
+      const why = d.reasons.map(esc).join('＋');
+      const deep = d.marketRank >= 10 ? '<span class="lsj-deep">深い人気薄</span>' : '';
+      return `<span class="lsj-item" data-longshot-state="${d.status}"><b>${esc(row.umaBan || '—')}番 ${esc(row.name || '—')}</b><span>${marketWord}${d.marketRank}位・${badge}${deep}</span><small>${why}</small></span>`;
+    }).join('');
+    const extra = candidates.length > 3 ? `<span class="lsj-more">ほか${candidates.length - 3}頭</span>` : '';
+    return `<div class="ana-run-bar longshot-judge ${hasStrong ? 'is-strong' : 'is-secondary'}" data-longshot-state="${hasStrong ? 'strong' : 'secondary'}"><span class="lsj-title">⚡ <b>${hasStrong ? '激走候補' : '激走準候補'}</b></span><span class="lsj-list">${items}${extra}</span><button type="button" class="kvi-info" onclick="this.closest('.ana-run-bar').classList.toggle('kvi-open')" title="判定条件を表示">?</button><span class="arb-sub kvi-hidden">市場6番人気以下を対象に、過去走の相手・頭数を補正した質、通算成績、同距離成績、騎手×厩舎を照合しています。61日以上の高知出走間隔は候補から外します。期待値と購入可否はオッズ水準を含む別判定です。</span></div>`;
+  }
+  const waiting = list.some(row => row?.decision?.status === 'awaiting_popularity');
+  const insufficient = list.some(row => row?.decision?.status === 'insufficient_history');
+  const layoff = list.filter(row => row?.decision?.status === 'long_layoff');
+  if (waiting) {
+    return '<div class="ana-run-bar longshot-judge is-pending" data-longshot-state="awaiting_popularity"><span class="lsj-title">⚡ <b>激走判定：人気取得待ち</b></span><span>全頭の単勝オッズ取得後に判定します</span></div>';
+  }
+  if (layoff.length) {
+    const names = layoff.slice(0, 3).map(row => `<b>${esc(row.umaBan || '—')}番 ${esc(row.name || '—')}</b>`).join('、');
+    return `<div class="ana-run-bar longshot-judge is-risk" data-longshot-state="long_layoff"><span class="lsj-title">⚡ <b>激走判定：候補なし</b></span><span>${names}は高知出走間隔61日以上のため見送り</span></div>`;
+  }
+  return `<div class="ana-run-bar longshot-judge is-none" data-longshot-state="${insufficient ? 'insufficient_history' : 'out'}"><span class="lsj-title">⚡ <b>激走判定：該当馬なし</b></span><span>${insufficient ? '一部の馬は過去走データ不足' : '現在6番人気以下で十分な根拠が重なった馬はいません'}</span></div>`;
+}
+
+const _longshotFactsCache = new Map();
+const _longshotFieldSizeCache = new Map();
+let _longshotCacheRevision = null;
+
+function _longshotStarter(row) {
+  if (!row || typeof row !== 'object') return false;
+  const finish = parseInt(row.chakujun);
+  if (Number.isFinite(finish) && finish >= 1 && finish <= 20) return true;
+  return /中止|失格/.test(`${row.chakujun || ''} ${row.diff || ''}`);
+}
+
+function _longshotFieldSize(run, store) {
+  const key = `${run.babaCode}|${run.raceDate}|${run.raceNo}`;
+  if (_longshotFieldSizeCache.has(key)) return _longshotFieldSizeCache.get(key);
+  let size = 0;
+  try {
+    const entry = typeof _raceDayIndexEntry === 'function'
+      ? _raceDayIndexEntry(run.babaCode, run.raceDate, run.raceNo, false) : null;
+    if (entry && entry.horseKeys) {
+      for (const horseKey of entry.horseKeys) if (_longshotStarter(store[horseKey])) size++;
+    }
+  } catch (_) {}
+  if (size < 2) size = Math.max(parseInt(run.umaBan) || 0, parseInt(run.chakujun) || 0, 6);
+  _longshotFieldSizeCache.set(key, size);
+  return size;
+}
+
+function _longshotDirectRaw(raceNo, scoredRunner, selectedCondition, store) {
+  const race = allRacesData[raceNo];
+  const horse = scoredRunner?.horse;
+  if (!race || !horse || !horse.horseName) return null;
+  const raceDate = race.raceInfo?.raceDate;
+  const history = getHorseHistoryBefore(horse.horseName, raceDate, raceNo)
+    .filter(run => run.babaCode === '31' && _longshotStarter(run));
+  const last5 = history.slice(0, 5);
+  const finishPct = last5.map(run => {
+    const finish = parseInt(run.chakujun);
+    if (!Number.isFinite(finish) || finish < 1) return null;
+    const fieldSize = _longshotFieldSize(run, store);
+    return Math.min(1, Math.max(0, (finish - 1) / Math.max(fieldSize - 1, 1)));
+  }).filter(Number.isFinite);
+  const top3 = runs => runs.filter(run => {
+    const finish = parseInt(run.chakujun);
+    return Number.isFinite(finish) && finish <= 3;
+  }).length;
+  const currentDistance = getDistNum(race.raceInfo?.distance);
+  const sameDistance = history.filter(run => currentDistance && getDistNum(run.distance) === currentDistance);
+  const condition = selectedCondition || race.raceInfo?.trackCond || race.raceInfo?.track_cond || '';
+  const sameCondition = history.filter(run => condition && run.trackCond === condition);
+  const combo = getComboStatsAsOf(scoredRunner.jockey, scoredRunner.trainer, raceDate, parseInt(raceNo));
+  let restDays = history[0] ? dateDiffDays(raceDate, history[0].raceDate) : null;
+  if (!Number.isFinite(restDays) || restDays < 0 || restDays >= 999) restDays = null;
+  return {
+    prior_start_count:history.length,
+    history_quality_sample_count:finishPct.length,
+    history_finish_quality_proxy:finishPct.length ? 1 - finishPct.reduce((sum, value) => sum + value, 0) / finishPct.length : null,
+    career_top3_rate:history.length ? top3(history) / history.length : null,
+    same_distance_start_count:sameDistance.length,
+    same_distance_top3_rate:sameDistance.length ? top3(sameDistance) / sameDistance.length : null,
+    same_condition_start_count:sameCondition.length,
+    same_condition_top3_rate:sameCondition.length ? top3(sameCondition) / sameCondition.length : null,
+    jockey_trainer_prior_start_count:combo?.total || 0,
+    jockey_trainer_prior_top3_rate:combo?.total ? combo.place / combo.total : null,
+    rest_days:restDays,
+  };
+}
+
+function _longshotMarketRanks(horses) {
+  const rows = Array.isArray(horses) ? horses : [];
+  const validOdds = rows.filter(horse => Number.isFinite(parseFloat(horse?.odds)) && parseFloat(horse.odds) > 0);
+  const completeOdds = rows.length >= 6 && validOdds.length === rows.length;
+  const oddsRank = new Map();
+  if (completeOdds) {
+    [...validOdds].sort((a, b) => parseFloat(a.odds) - parseFloat(b.odds)
+      || (parseInt(a.umaBan) || 99) - (parseInt(b.umaBan) || 99))
+      .forEach((horse, index) => oddsRank.set(String(horse.umaBan), index + 1));
+  }
+  const allDirect = rows.length >= 6 && rows.every(horse => Number.isInteger(parseInt(horse?.ninki)) && parseInt(horse.ninki) > 0);
+  return horse => {
+    const key = String(horse?.umaBan);
+    if (completeOdds) return { rank:oddsRank.get(key) || null, source:'current_odds' };
+    const direct = parseInt(horse?.ninki);
+    return { rank:allDirect && Number.isInteger(direct) && direct > 0 ? direct : null, source:allDirect ? 'saved_popularity' : 'unavailable' };
+  };
+}
+
+function computeLongshotCandidateRows(raceNo, scored, selectedCondition) {
+  const race = allRacesData[raceNo];
+  if (!race || !Array.isArray(scored) || !scored.length) return [];
+  const revision = Number(window._kvHistoryRevision || 0);
+  if (_longshotCacheRevision !== revision) {
+    _longshotCacheRevision = revision;
+    _longshotFactsCache.clear();
+    _longshotFieldSizeCache.clear();
+  }
+  const condition = selectedCondition || race.raceInfo?.trackCond || race.raceInfo?.track_cond || '';
+  const runnerFingerprint = scored.map(row => `${row.horse?.umaBan || ''}:${row.horse?.horseName || ''}`).join('|');
+  const cacheKey = `${race.raceInfo?.raceDate || ''}|${raceNo}|${condition}|${revision}|${runnerFingerprint}`;
+  let factRows = _longshotFactsCache.get(cacheKey);
+  if (!factRows) {
+    const store = lsRead();
+    factRows = scored.map(scoredRunner => {
+      let raw = null;
+      try { if (typeof window.kvVnextRawForScored === 'function') raw = window.kvVnextRawForScored(raceNo, scoredRunner); } catch (_) {}
+      if (!raw) raw = _longshotDirectRaw(raceNo, scoredRunner, condition, store);
+      return { scoredRunner, raw };
+    });
+    const ordered = factRows.filter(row => Number.isFinite(Number(row.raw?.history_finish_quality_proxy)))
+      .sort((a, b) => Number(b.raw.history_finish_quality_proxy) - Number(a.raw.history_finish_quality_proxy)
+        || (parseInt(a.scoredRunner.horse?.umaBan) || 99) - (parseInt(b.scoredRunner.horse?.umaBan) || 99));
+    ordered.forEach((row, index) => { row.historyQualityRank = index + 1; });
+    _longshotFactsCache.set(cacheKey, factRows);
+    if (_longshotFactsCache.size > 24) _longshotFactsCache.delete(_longshotFactsCache.keys().next().value);
+  }
+  const marketFor = _longshotMarketRanks(race.horses);
+  return factRows.map(row => {
+    const horse = row.scoredRunner.horse;
+    const market = marketFor(horse);
+    const raw = row.raw || {};
+    const facts = {
+      marketRank:market.rank,
+      historyReady:Number(raw.prior_start_count || 0) >= 2 && Number(raw.history_quality_sample_count != null ? raw.history_quality_sample_count : (raw.prior_start_count || 0)) >= 2,
+      historyQualityRank:row.historyQualityRank,
+      priorStartCount:raw.prior_start_count,
+      careerTop3Rate:raw.career_top3_rate,
+      sameDistanceStartCount:raw.same_distance_start_count,
+      sameDistanceTop3Rate:raw.same_distance_top3_rate,
+      comboStartCount:raw.jockey_trainer_prior_start_count,
+      comboTop3Rate:raw.jockey_trainer_prior_top3_rate,
+      restDays:raw.rest_days,
+    };
+    return { name:horse.horseName || '', umaBan:parseInt(horse.umaBan) || null,
+      scoredRunner:row.scoredRunner, marketSource:market.source, facts,
+      decision:judgeLongshotCandidate(facts) };
+  });
+}
+
+function buildLongshotCockpitHtml(raceNo, scored) {
+  const race = allRacesData[raceNo];
+  if (!race || !Array.isArray(scored) || !scored.length) return '';
+  const rows = computeLongshotCandidateRows(raceNo, scored, null);
+  const finalMarket = (race.horses || []).filter(horse => /^\d+$/.test(String(horse.chakujun || ''))).length >= 3;
+  return buildLongshotCandidateHtml(rows, { finalMarket });
+}
+
 function renderPredictionPanel(raceNo) {
   const _rd0 = (allRacesData[raceNo] && allRacesData[raceNo].raceInfo && allRacesData[raceNo].raceInfo.raceDate) || null;   // 【Phase3-1】render開始時の日付context（displayKey用）
   const container = document.getElementById(`yoso-panel-${raceNo}`);
@@ -3308,51 +3560,18 @@ function renderPredictionPanel(raceNo) {
   // 「AI低評価でも市場上位」を買う表示は、T10の券種間支持監査で回収エッジが
   // 再現しなかったため撤去。人気の強さと期待値を混同しない。
 
-  // ── ⚡穴馬激走バッジ（指数下位の2-3着ライン候補・表示専用）──
-  //    残差分析（指数6番手以下66,979頭・2026-07-07）：下位馬のベース複勝率11.4%に対し
-  //    ①騎手×厩舎コンボ好調(comboN≥0.5)=24.1% ②逃げ先行型(cornN≥1)=21.0%
-  //    ③前走展開不利の免罪(paceCtxN>0)=20.3% と該当馬は複勝率が約2倍。
-  //    指数への組み込みはWFで正味+63頭/7909Rと微小のため、印は汚さずライン構築の人間支援に使う。
-  let anaBadge = '';
-  if (scored.length >= 7) {
-    // 前走展開文脈（backtest paceCtxN と同一定義・直近3走のうち高知走のみ）
-    const _paceCtxLive = hName => {
-      let tough = false, gifted = false, excused = false;
-      const _ld = lsRead();
-      for (const h of getHorseHistoryBefore(hName, raceInfo.raceDate, raceNo).slice(0, 3)) {
-        if (h.babaCode !== '31') continue;
-        const rrec = _ld[`race_31_${escapeHTML(h.raceDate)}_${h.raceNo}`];
-        if (!rrec || !rrec.first3f) continue;
-        const pd = getPaceDevLabelAsOf(rrec.distance, rrec.race_class, rrec.track_cond, rrec.first3f, h.raceDate, parseInt(h.raceNo));
-        if (!pd) continue;
-        const c1 = parseInt(String(h.corner || '').split('-')[0]);
-        const ch = parseInt(h.chakujun);
-        if (isNaN(c1) || c1 <= 0 || isNaN(ch)) continue;
-        if (pd.dev <= -0.6 && c1 <= 3 && ch <= 3) tough = true;
-        if (pd.dev <= -1.0 && c1 >= 6 && ch <= 3) gifted = true;
-        if (pd.dev <= -1.0 && c1 <= 3 && ch >= 4) excused = true;
-      }
-      return (tough ? 0.5 : 0) + (gifted ? -0.4 : 0) + (excused ? 0.4 : 0);
-    };
-    const _anaHits = [];
-    scored.forEach((s, idx) => {
-      if (idx < 5 || s.totalScore == null) return;   // 指数6番手以下のみ
-      const why = [];
-      const cm = Yoso.comboMod(getComboStatsAsOf(s.jockey, s.trainer, raceInfo.raceDate, parseInt(raceNo)), scored.length);
-      if (cm >= 0.5) why.push('厩舎コンボ好調');
-      if (s.cornMod >= 1) why.push('逃げ先行型');
-      let pcv = 0;
-      try { pcv = _paceCtxLive(s.horse.horseName || ''); } catch (e) {}
-      if (pcv > 0) why.push('前走展開不利の免罪');
-      if (why.length) _anaHits.push({ s, idx, why, nSig: why.length });
-    });
-    if (_anaHits.length) {
-      _anaHits.sort((a, b) => b.nSig - a.nSig || a.idx - b.idx);
-      _pickSleeper = { name: _anaHits[0].s.horse.horseName, idx: _anaHits[0].idx, why: _anaHits[0].why.slice() };
-      const _items = _anaHits.slice(0, 3).map(x =>
-        `<b>${escapeHTML(x.s.horse.horseName)}</b>（${x.idx + 1}番手・${x.why.join('＋')}）`).join('　');
-      anaBadge = `<div class="ana-run-bar">⚡ <b>穴馬の条件一致</b>：${_items}<button type="button" class="kvi-info" onclick="this.closest('.ana-run-bar').classList.toggle('kvi-open')" title="説明を表示">?</button><span class="arb-sub kvi-hidden">｜対象レースより前のデータだけで特徴を照合した参考候補です。オッズとの比較前なので、期待値ありとはまだ判定しません。</span></div>`;
-    }
+  // ── ⚡激走候補判定──
+  // 旧「AI指数6番手以下＋脚質等」の表示は、今回確認した市場6番人気以下の条件と別物なので廃止。
+  // 最新の全頭単勝順位を入口に、未来情報を含まない履歴だけで候補・準候補・見送りを判定する。
+  const _longshotRows = computeLongshotCandidateRows(raceNo, scored, selCond);
+  const anaBadge = buildLongshotCandidateHtml(_longshotRows, { finalMarket:raceHasResult });
+  const _longshotTop = _longshotRows.filter(row => row.decision?.candidate)
+    .sort((a, b) => (a.decision.status === 'strong' ? -1 : 0) - (b.decision.status === 'strong' ? -1 : 0)
+      || a.decision.marketRank - b.decision.marketRank)[0] || null;
+  if (_longshotTop) {
+    _pickSleeper = { name:_longshotTop.name, umaBan:_longshotTop.umaBan,
+      marketRank:_longshotTop.decision.marketRank, status:_longshotTop.decision.status,
+      why:_longshotTop.decision.reasons.slice() };
   }
 
   // ── 🔍距離/馬場実績ありバッジ（近走不振でも条件一致の好走歴・参考情報のみ）──
@@ -3409,9 +3628,11 @@ function renderPredictionPanel(raceNo) {
       if (_evPick) _rows += _row('期待値', '#7c3aed', `単勝候補 <b>${escapeHTML(_evPick.name)}</b> <span class="ps-mut">${_evPick.odds.toFixed(1)}倍｜校正勝率に対して価格が高い</span>`);
       else _rows += _row('購入', '#64748b', `<b>見送り</b> <span class="ps-mut">検証条件を満たす期待値候補なし</span>`);
       if (_pickDanger) _rows += _row('危険', '#b45309', `⚠️ <b>${escapeHTML(_pickDanger.name)}</b> <span class="ps-mut">${escapeHTML(_pickDanger.reasons.join('・'))}</span>`);
+      if (_pickSleeper) _rows += _row('激走', '#a21caf', `⚡ <b>${escapeHTML(_pickSleeper.umaBan || '—')}番 ${escapeHTML(_pickSleeper.name)}</b> <span class="ps-mut">${_pickSleeper.marketRank}人気・${_pickSleeper.status === 'strong' ? '候補' : '準候補'}｜${escapeHTML(_pickSleeper.why.join('・'))}（期待値未判定）</span>`);
       const _line = `${_confTxt === '断然' ? '本命◎が抜けています' : _confTxt === '接戦' ? '上位が僅差で頭は割れそう' : '標準的な力関係'}。`
         + (_evPick ? `単勝の期待値候補は${escapeHTML(_evPick.name)}（${_evPick.odds.toFixed(1)}倍）。` : '購入判定は見送りです。')
-        + (_pickDanger ? `人気の${escapeHTML(_pickDanger.name)}は割引が必要。` : '');
+        + (_pickDanger ? `人気の${escapeHTML(_pickDanger.name)}は割引が必要。` : '')
+        + (_pickSleeper ? `${escapeHTML(_pickSleeper.name)}は激走条件に一致しますが、購入には価格判定が必要です。` : '');
       pickSummary = `<div class="pick-summary"><div class="ps-head">🧭 能力評価と購入判断<button class="ps-copy" onclick="_copyPickText(this)" title="判断をコピー">📋</button></div>${_rows}<div class="ps-line">${_line}</div></div>`;
     }
   }

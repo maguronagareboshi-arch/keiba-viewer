@@ -47,10 +47,29 @@ def read_manifest(root: Path, errors: list[str]) -> list[str]:
     if not manifest.is_file():
         fail(errors, "missing .production-files")
         return []
-    paths = [normalize(line) for line in manifest.read_text(encoding="utf-8").splitlines()]
-    paths = [path for path in paths if path and not path.startswith("#")]
-    if paths != sorted(set(paths)):
+    entries = [normalize(line) for line in manifest.read_text(encoding="utf-8").splitlines()]
+    entries = [path for path in entries if path and not path.startswith("#")]
+    if entries != sorted(set(entries)):
         fail(errors, ".production-files must be unique and sorted")
+    paths: list[str] = []
+    for entry in entries:
+        if entry.endswith("/"):
+            directory = root / entry
+            if not directory.is_dir():
+                fail(errors, f"missing public directory: {entry}")
+                continue
+            files = sorted(
+                normalize(str(path.relative_to(root)))
+                for path in directory.rglob("*")
+                if path.is_file()
+            )
+            if not files:
+                fail(errors, f"public directory is empty: {entry}")
+            paths.extend(files)
+        else:
+            paths.append(entry)
+    if paths != sorted(set(paths)):
+        fail(errors, "expanded production paths must be unique and sorted")
     return paths
 
 
