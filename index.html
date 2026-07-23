@@ -2914,8 +2914,13 @@ const _kvLibSpecs = {
     src: 'modules/admin-horse-data.js',
     ready: () => typeof window.fetchAllByNameForRace === 'function' && typeof window.storeOfficialRacesAsHorseEntries === 'function',
   },
+  jraTransferShadow: {
+    src: 'modules/jra-transfer-shadow.js?v=20260723-v1',
+    ready: () => typeof window.KvJraTransferShadow?.scoreHorse === 'function' &&
+      window.KvJraTransferShadow?.contract?.status === 'forward_shadow_only',
+  },
   aiAnalysis: {
-    src: 'modules/ai-analysis.js?v=20260723-purchase1',
+    src: 'modules/ai-analysis.js?v=20260723-jra1',
     ready: () => typeof window.computeYosoScored === 'function' && typeof window.renderPredictionPanel === 'function' && typeof window.renderAnalysis === 'function',
   },
   aiInsights: {
@@ -2998,7 +3003,7 @@ function jsAttrEsc(s) {
 }
 
 function _ensureAiAnalysisModule() {
-  return _kvLoadLibrary('aiAnalysis').then(() => {
+  return _kvLoadLibrary('jraTransferShadow').then(() => _kvLoadLibrary('aiAnalysis')).then(() => {
     if (window._kvAnalysisModuleInitialized) return;
     window._kvAnalysisModuleInitialized = true;
     try { if (typeof initAnalysisDateSelect === 'function') initAnalysisDateSelect(); } catch (e) {}

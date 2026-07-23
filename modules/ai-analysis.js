@@ -2431,9 +2431,16 @@ function computeYosoScored(raceNo, selCondOverride) {
       ? +(baseScore + condMod*_eff('condNew') + distMod*_eff('distNew') + trendMod*_eff('trendN') + comboMod*_eff('comboN') + rotMod*_eff('rotN') + classMod*_eff('clsN') + cornMod*_eff('cornN') + weightMod*_eff('weightN') + agariMod*_eff('agariN') + marginMod*_eff('marginN') + winStrMod*_eff('winStrN') + jockeyChgMod*_eff('jockeyChgN') + takiMod*_eff('takiN') + cornConsistMod*_eff('cornConsistN') + rakuMod*_eff('rakuN') + paceCtxMod*_eff('paceCtxN')).toFixed(2)
       : null;
 
+    // JRA転入前能力は未採用shadowとして分離し、公開totalScore・印を変えない。
+    const transferShadow = window.KvJraTransferShadow?.scoreHorse?.({
+      races: _officialByHorse.get(hName) || [], targetClass: raceCls,
+      asOfDate: thisRaceDate, kochiStarts: kochiHist.length,
+      baselineScore: totalScore, isEstimatedScore,
+    }) || null;
+
     // _cornModRaw: ペース×馬場スケール(下記⑯-b)適用「前」の値。市場アンカーモデルはこのスケール前の
     // 値で学習済みのため、スケール後のcornModをそのまま使うと学習/推論の不一致(train/serve skew)になる。
-    return { horse, jockey, trainer, baseScore, jockeyMod, condMod, distMod, trendMod, comboMod, rotMod, classMod, cornMod, weightMod, agariMod, marginMod, winStrMod, jockeyChgMod, takiMod, cornConsistMod, rakuMod, paceCtxMod, avg4C, totalScore, siCount: recentSI.length, kochiSICount, isTransfer, isEstimatedScore, jockeyWR, _cornModRaw: cornMod };
+    return { horse, jockey, trainer, baseScore, jockeyMod, condMod, distMod, trendMod, comboMod, rotMod, classMod, cornMod, weightMod, agariMod, marginMod, winStrMod, jockeyChgMod, takiMod, cornConsistMod, rakuMod, paceCtxMod, avg4C, totalScore, transferShadow, siCount: recentSI.length, kochiSICount, isTransfer, isEstimatedScore, jockeyWR, _cornModRaw: cornMod };
   });
 
   // ── ⑯-b ペース×馬場バイアスで脚質補正(cornMod)を伸縮 ──
@@ -2473,6 +2480,12 @@ function computeYosoScored(raceNo, selCondOverride) {
 
   // 旧市場アンカー確率は公開印にも期待値判定にも使わなくなったため、ここでは計算しない。
   // 能力順位は常にtotalScore、価格評価は独立したT10前向きshadowへ分離する。
+  // 相対SIなど全補正後のtotalScoreへshadow基準値だけを同期する。
+  scored.forEach(s => {
+    if (s.transferShadow && s.totalScore != null) {
+      s.transferShadow.shadowScore = +(s.totalScore + s.transferShadow.scoreDelta).toFixed(3);
+    }
+  });
   scored._offsetModelUsed = false;
   scored.sort((a, b) => {
     if (a.totalScore == null && b.totalScore == null) return 0;
@@ -3844,6 +3857,14 @@ function renderPredictionPanel(raceNo) {
   const probabilityCalibrationHtml = _viewMode !== 'after' && typeof isAdminMode === 'function' && isAdminMode() &&
     window.KvProbabilityCalibration?.calibrateScored
     ? buildProbabilityCalibrationHtml(window.KvProbabilityCalibration.calibrateScored(scored)) : '';
+  const _jraTransferShadow = _viewMode !== 'after' && !raceHasResult && window.KvJraTransferShadow?.scoreRace
+    ? window.KvJraTransferShadow.scoreRace(scored) : null;
+  if (_jraTransferShadow && window.KvJraTransferShadow?.recordLive) {
+    try { window.KvJraTransferShadow.recordLive(raceNo, _jraTransferShadow); } catch (_) {}
+  }
+  const jraTransferShadowHtml = _viewMode !== 'after' && typeof isAdminMode === 'function' && isAdminMode() &&
+    window.KvJraTransferShadow?.buildAdminHtml
+    ? window.KvJraTransferShadow.buildAdminHtml(_jraTransferShadow) : '';
 
   container.innerHTML = `
     <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -3870,10 +3891,20 @@ function renderPredictionPanel(raceNo) {
     ${condFitBadge}
     ${paceBiasBadge}
     ${probabilityCalibrationHtml}
+    ${jraTransferShadowHtml}
     ${eraDriftHtml}
     ${opponentShadowHtml}
     <div style="overflow-x:auto;">${tableHtml}</div>
     <div id="yoso-backtest-${raceNo}"></div>`;
+  // 初回描画を止めず、転入候補だけ共有公式履歴を遅延取得する。取得できた時だけ同じ
+  // レースを一度再描画し、公開印はそのままshadow比較を更新する。
+  if (_viewMode !== 'after' && !raceHasResult && window.KvJraTransferShadow?.ensureRaceHistories) {
+    const _jraDate = String(raceInfo.raceDate || '');
+    setTimeout(() => window.KvJraTransferShadow.ensureRaceHistories(raceNo).then(changed => {
+      const latest = allRacesData?.[raceNo]?.raceInfo;
+      if (changed && String(latest?.raceDate || '') === _jraDate && currentRaceNo === raceNo) renderPredictionPanel(raceNo);
+    }).catch(() => {}), 0);
+  }
   // 【Phase3-1 hook・seam A案】確定scored(totalScore降順・sort済)＋既存印マップを、パネルinnerHTML反映直後に
   // 新UIへ1回だけ渡す。既存パネルの出力・状態は不変、二重計算なし（同じscored/horseMarkMapを渡す）。
   // 例外は kvxSafeRenderDebanV2 内部で隔離し、既存renderPredictionPanelを絶対に失敗させない。
