@@ -2998,6 +2998,7 @@ function judgeLongshotCandidate(facts) {
   const marketRank = finite(f.marketRank);
   const base = {
     candidate:false, supportCount:0, reasons:[], cautions:[],
+    redRiskCount:0, redRiskReasons:[], yellowRiskCount:0, yellowRiskReasons:[],
     marketRank:Number.isInteger(marketRank) && marketRank > 0 ? marketRank : null,
   };
   if (base.marketRank == null) return { ...base, status:'awaiting_popularity', label:'人気取得待ち' };
@@ -3012,19 +3013,35 @@ function judgeLongshotCandidate(facts) {
   const comboStarts = finite(f.comboStartCount) || 0;
   const comboRate = finite(f.comboTop3Rate);
   const restDays = finite(f.restDays);
+  const badRunRateLast3 = finite(f.badRunRateLast3);
+  const meanFinishPercentileLast3 = finite(f.meanFinishPercentileLast3);
   const primary = qualityRank != null && qualityRank <= 3;
   const supports = [];
   if (priorStarts >= 5 && careerRate != null && careerRate >= 0.40) supports.push('通算複勝40%以上');
   if (distanceStarts >= 3 && distanceRate != null && distanceRate >= 0.40) supports.push('同距離複勝40%以上');
   if (comboStarts >= 10 && comboRate != null && comboRate >= 0.30) supports.push('騎手×厩舎30%以上');
   const reasons = primary ? ['過去走の質がメンバー上位3頭', ...supports] : [...supports];
+  // 長期監査で人気・年度・候補階級を揃えても悪化が残った反証を、能力根拠とは別軸で保持する。
+  // 「直近3走すべて悪走」と「平均着順percentile 80%以上」は重なっても近走崩れ1種類と数える。
+  const redRiskReasons = [];
+  if (qualityRank != null && qualityRank >= 9) redRiskReasons.push(`履歴質${Math.round(qualityRank)}位`);
+  const recentCollapseReasons = [];
+  if (badRunRateLast3 != null && badRunRateLast3 >= 0.999999) recentCollapseReasons.push('直近3走すべて悪走');
+  if (meanFinishPercentileLast3 != null && meanFinishPercentileLast3 >= 0.80) recentCollapseReasons.push('直近3走平均が下位20%');
+  if (recentCollapseReasons.length) redRiskReasons.push(recentCollapseReasons.join('・'));
+  const yellowRiskReasons = [];
+  if (restDays != null && restDays >= 31 && restDays <= 60) yellowRiskReasons.push(`高知間隔${Math.round(restDays)}日`);
+  if (priorStarts >= 20) yellowRiskReasons.push(`高知履歴${Math.round(priorStarts)}走`);
   const detail = { ...base, primary, supportCount:supports.length, reasons,
-    historyQualityRank:qualityRank, restDays };
+    historyQualityRank:qualityRank, restDays, badRunRateLast3, meanFinishPercentileLast3,
+    redRiskCount:redRiskReasons.length, redRiskReasons,
+    yellowRiskCount:yellowRiskReasons.length, yellowRiskReasons,
+    cautions:[...redRiskReasons, ...yellowRiskReasons] };
 
   // 61日以上は独立して大幅なマイナス（集計上の3着内率6.37%）。候補表示を止めて注意にする。
   if (restDays != null && restDays >= 61) {
     return { ...detail, status:'long_layoff', label:'高知出走間隔に注意',
-      cautions:[`高知出走間隔${Math.round(restDays)}日`] };
+      cautions:[...redRiskReasons, `高知出走間隔${Math.round(restDays)}日`] };
   }
   if (primary && supports.length >= 1) {
     return { ...detail, status:'strong', label:'激走候補', candidate:true };
@@ -3035,6 +3052,21 @@ function judgeLongshotCandidate(facts) {
   return { ...detail, status:'out', label:'条件不足', reasonCode:'weak_evidence' };
 }
 
+// 監査結果では「準候補・赤0」（3着内16.66%）が「強候補・赤1」（10.64%）を上回った。
+// そのため候補の表示順だけは、強弱ラベルより先に反証の少なさを優先する。
+function _longshotCandidateSort(a, b) {
+  const ad = a?.decision || {}, bd = b?.decision || {};
+  const ar = Number.isFinite(Number(ad.redRiskCount)) ? Number(ad.redRiskCount) : 0;
+  const br = Number.isFinite(Number(bd.redRiskCount)) ? Number(bd.redRiskCount) : 0;
+  const ay = Number.isFinite(Number(ad.yellowRiskCount)) ? Number(ad.yellowRiskCount) : 0;
+  const by = Number.isFinite(Number(bd.yellowRiskCount)) ? Number(bd.yellowRiskCount) : 0;
+  return ar - br
+    || (ad.status === 'strong' ? -1 : 0) - (bd.status === 'strong' ? -1 : 0)
+    || ay - by
+    || (Number(ad.marketRank) || 99) - (Number(bd.marketRank) || 99)
+    || (Number(a?.umaBan) || 99) - (Number(b?.umaBan) || 99);
+}
+
 function _ensureLongshotCandidateStyles() {
   if (typeof document === 'undefined' || document.getElementById('kv-longshot-candidate-styles')) return;
   const style = document.createElement('style');
@@ -3042,15 +3074,20 @@ function _ensureLongshotCandidateStyles() {
   style.textContent = `
     .ana-run-bar.longshot-judge{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
     .longshot-judge .lsj-title{white-space:nowrap}.longshot-judge .lsj-list{display:flex;gap:7px;flex:1;flex-wrap:wrap}
-    .longshot-judge .lsj-item{display:grid;gap:1px;min-width:180px;padding:5px 8px;border:1px solid currentColor;border-radius:7px;background:rgba(255,255,255,.46)}
+    .longshot-judge .lsj-item{display:grid;gap:3px;min-width:225px;padding:6px 8px;border:1px solid currentColor;border-radius:7px;background:rgba(255,255,255,.46)}
     .longshot-judge .lsj-item>span,.longshot-judge .lsj-item>small{font-size:10px;font-weight:600;opacity:.86}
     .longshot-judge .lsj-deep{display:inline-flex;margin-left:5px;padding:0 4px;border-radius:999px;background:#86198f;color:#fff;font-size:8px}
+    .longshot-judge .lsj-risk{display:inline-flex;width:max-content;align-items:center;padding:2px 6px;border-radius:999px;font-size:9px!important;font-weight:800!important;opacity:1!important}
+    .longshot-judge .lsj-risk.is-clear{background:#dcfce7;color:#166534}.longshot-judge .lsj-risk.is-mid{background:#fef3c7;color:#92400e}.longshot-judge .lsj-risk.is-high{background:#fee2e2;color:#991b1b}
+    .longshot-judge .lsj-risk-detail{color:#991b1b}.longshot-judge .lsj-yellow{color:#92400e}
     .longshot-judge .lsj-more{align-self:center;font-size:10px;opacity:.8}
     .ana-run-bar.longshot-judge.is-secondary{background:#fff7ed;border-color:#ea580c;color:#9a3412}
     .ana-run-bar.longshot-judge.is-pending,.ana-run-bar.longshot-judge.is-none{background:#f8fafc;border-color:#cbd5e1;color:#475569;font-weight:500}
     .ana-run-bar.longshot-judge.is-risk{background:#fffbeb;border-color:#d97706;color:#92400e}
     body.dark-mode .ana-run-bar.longshot-judge.is-pending,body.dark-mode .ana-run-bar.longshot-judge.is-none{background:#111c2b!important;border-color:#475569!important;color:#cbd5e1!important}
     body.dark-mode .ana-run-bar.longshot-judge.is-risk{background:#2a1a00!important;border-color:#b45309!important;color:#fcd34d!important}
+    body.dark-mode .longshot-judge .lsj-risk.is-clear{background:#123522;color:#86efac}body.dark-mode .longshot-judge .lsj-risk.is-mid{background:#422006;color:#fde68a}body.dark-mode .longshot-judge .lsj-risk.is-high{background:#450a0a;color:#fecaca}
+    body.dark-mode .longshot-judge .lsj-risk-detail{color:#fecaca}body.dark-mode .longshot-judge .lsj-yellow{color:#fde68a}
     @media(max-width:640px){.longshot-judge .lsj-list{display:grid;width:100%}.longshot-judge .lsj-item{min-width:0}.longshot-judge .kvi-info{margin-left:auto}}
   `;
   document.head.appendChild(style);
@@ -3062,8 +3099,7 @@ function buildLongshotCandidateHtml(rows, options) {
   const opts = options && typeof options === 'object' ? options : {};
   const esc = value => typeof escapeHTML === 'function' ? escapeHTML(value) : String(value == null ? '' : value);
   const candidates = list.filter(row => row && row.decision && row.decision.candidate)
-    .sort((a, b) => (a.decision.status === 'strong' ? -1 : 0) - (b.decision.status === 'strong' ? -1 : 0)
-      || a.decision.marketRank - b.decision.marketRank || (a.umaBan || 99) - (b.umaBan || 99));
+    .sort(_longshotCandidateSort);
   const marketWord = opts.finalMarket ? '確定人気' : '現在人気';
   if (candidates.length) {
     const hasStrong = candidates.some(row => row.decision.status === 'strong');
@@ -3072,10 +3108,15 @@ function buildLongshotCandidateHtml(rows, options) {
       const badge = d.status === 'strong' ? '激走候補' : '準候補';
       const why = d.reasons.map(esc).join('＋');
       const deep = d.marketRank >= 10 ? '<span class="lsj-deep">深い人気薄</span>' : '';
-      return `<span class="lsj-item" data-longshot-state="${d.status}"><b>${esc(row.umaBan || '—')}番 ${esc(row.name || '—')}</b><span>${marketWord}${d.marketRank}位・${badge}${deep}</span><small>${why}</small></span>`;
+      const red = Math.max(0, Number(d.redRiskCount) || 0);
+      const riskLevel = red >= 2 ? 'high' : red === 1 ? 'mid' : 'clear';
+      const riskLabel = red >= 2 ? '高' : red === 1 ? '中' : '低';
+      const redDetail = red ? `<small class="lsj-risk-detail">反証：${(d.redRiskReasons || []).map(esc).join('・')}</small>` : '<small>反証：確認済み赤信号なし</small>';
+      const yellow = (d.yellowRiskReasons || []).length ? `<small class="lsj-yellow">注意：${d.yellowRiskReasons.map(esc).join('・')}</small>` : '';
+      return `<span class="lsj-item" data-longshot-state="${d.status}" data-longshot-risk="${red}"><b>${esc(row.umaBan || '—')}番 ${esc(row.name || '—')}</b><span>${marketWord}${d.marketRank}位・${badge}${deep}</span><span class="lsj-risk is-${riskLevel}">凡走警戒 ${riskLabel}</span><small>激走材料：${why}</small>${redDetail}${yellow}</span>`;
     }).join('');
     const extra = candidates.length > 3 ? `<span class="lsj-more">ほか${candidates.length - 3}頭</span>` : '';
-    return `<div class="ana-run-bar longshot-judge ${hasStrong ? 'is-strong' : 'is-secondary'}" data-longshot-state="${hasStrong ? 'strong' : 'secondary'}"><span class="lsj-title">⚡ <b>${hasStrong ? '激走候補' : '激走準候補'}</b></span><span class="lsj-list">${items}${extra}</span><button type="button" class="kvi-info" onclick="this.closest('.ana-run-bar').classList.toggle('kvi-open')" title="判定条件を表示">?</button><span class="arb-sub kvi-hidden">市場6番人気以下を対象に、過去走の相手・頭数を補正した質、通算成績、同距離成績、騎手×厩舎を照合しています。61日以上の高知出走間隔は候補から外します。期待値と購入可否はオッズ水準を含む別判定です。</span></div>`;
+    return `<div class="ana-run-bar longshot-judge ${hasStrong ? 'is-strong' : 'is-secondary'}" data-longshot-state="${hasStrong ? 'strong' : 'secondary'}"><span class="lsj-title">⚡ <b>${hasStrong ? '激走候補' : '激走準候補'}</b></span><span class="lsj-list">${items}${extra}</span><button type="button" class="kvi-info" onclick="this.closest('.ana-run-bar').classList.toggle('kvi-open')" title="判定条件を表示">?</button><span class="arb-sub kvi-hidden">激走材料と凡走の反証を別々に表示します。赤信号は履歴質9位以下と直近崩れ、黄信号は高知間隔31〜60日・高知履歴20走以上です。赤信号でも一律除外せず、期待値と購入可否は取得時点のオッズで別判定します。</span></div>`;
   }
   const waiting = list.some(row => row?.decision?.status === 'awaiting_popularity');
   const insufficient = list.some(row => row?.decision?.status === 'insufficient_history');
@@ -3125,12 +3166,16 @@ function _longshotDirectRaw(raceNo, scoredRunner, selectedCondition, store) {
   const history = getHorseHistoryBefore(horse.horseName, raceDate, raceNo)
     .filter(run => run.babaCode === '31' && _longshotStarter(run));
   const last5 = history.slice(0, 5);
-  const finishPct = last5.map(run => {
+  const finishPercentile = run => {
     const finish = parseInt(run.chakujun);
-    if (!Number.isFinite(finish) || finish < 1) return null;
+    // vNext/監査データと同じく、競走中止・失格は最下位相当(1.0)として近走崩れへ含める。
+    if (!Number.isFinite(finish) || finish < 1) return 1;
     const fieldSize = _longshotFieldSize(run, store);
     return Math.min(1, Math.max(0, (finish - 1) / Math.max(fieldSize - 1, 1)));
-  }).filter(Number.isFinite);
+  };
+  const finishPct = last5.map(finishPercentile).filter(Number.isFinite);
+  const finishPct3 = history.slice(0, 3).map(finishPercentile).filter(Number.isFinite);
+  const mean = values => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
   const top3 = runs => runs.filter(run => {
     const finish = parseInt(run.chakujun);
     return Number.isFinite(finish) && finish <= 3;
@@ -3145,7 +3190,9 @@ function _longshotDirectRaw(raceNo, scoredRunner, selectedCondition, store) {
   return {
     prior_start_count:history.length,
     history_quality_sample_count:finishPct.length,
-    history_finish_quality_proxy:finishPct.length ? 1 - finishPct.reduce((sum, value) => sum + value, 0) / finishPct.length : null,
+    history_finish_quality_proxy:finishPct.length ? 1 - mean(finishPct) : null,
+    mean_finish_percentile_last3:mean(finishPct3),
+    bad_run_rate_last3:finishPct3.length ? finishPct3.filter(value => value >= 0.60).length / finishPct3.length : null,
     career_top3_rate:history.length ? top3(history) / history.length : null,
     same_distance_start_count:sameDistance.length,
     same_distance_top3_rate:sameDistance.length ? top3(sameDistance) / sameDistance.length : null,
@@ -3220,6 +3267,8 @@ function computeLongshotCandidateRows(raceNo, scored, selectedCondition) {
       comboStartCount:raw.jockey_trainer_prior_start_count,
       comboTop3Rate:raw.jockey_trainer_prior_top3_rate,
       restDays:raw.rest_days,
+      badRunRateLast3:raw.bad_run_rate_last3,
+      meanFinishPercentileLast3:raw.mean_finish_percentile_last3,
     };
     return { name:horse.horseName || '', umaBan:parseInt(horse.umaBan) || null,
       scoredRunner:row.scoredRunner, marketSource:market.source, facts,
@@ -3566,12 +3615,14 @@ function renderPredictionPanel(raceNo) {
   const _longshotRows = computeLongshotCandidateRows(raceNo, scored, selCond);
   const anaBadge = buildLongshotCandidateHtml(_longshotRows, { finalMarket:raceHasResult });
   const _longshotTop = _longshotRows.filter(row => row.decision?.candidate)
-    .sort((a, b) => (a.decision.status === 'strong' ? -1 : 0) - (b.decision.status === 'strong' ? -1 : 0)
-      || a.decision.marketRank - b.decision.marketRank)[0] || null;
+    .sort(_longshotCandidateSort)[0] || null;
   if (_longshotTop) {
     _pickSleeper = { name:_longshotTop.name, umaBan:_longshotTop.umaBan,
       marketRank:_longshotTop.decision.marketRank, status:_longshotTop.decision.status,
-      why:_longshotTop.decision.reasons.slice() };
+      why:_longshotTop.decision.reasons.slice(),
+      redRiskCount:_longshotTop.decision.redRiskCount,
+      redRiskReasons:_longshotTop.decision.redRiskReasons.slice(),
+      yellowRiskReasons:_longshotTop.decision.yellowRiskReasons.slice() };
   }
 
   // ── 🔍距離/馬場実績ありバッジ（近走不振でも条件一致の好走歴・参考情報のみ）──
@@ -3628,11 +3679,16 @@ function renderPredictionPanel(raceNo) {
       if (_evPick) _rows += _row('期待値', '#7c3aed', `単勝候補 <b>${escapeHTML(_evPick.name)}</b> <span class="ps-mut">${_evPick.odds.toFixed(1)}倍｜校正勝率に対して価格が高い</span>`);
       else _rows += _row('購入', '#64748b', `<b>見送り</b> <span class="ps-mut">検証条件を満たす期待値候補なし</span>`);
       if (_pickDanger) _rows += _row('危険', '#b45309', `⚠️ <b>${escapeHTML(_pickDanger.name)}</b> <span class="ps-mut">${escapeHTML(_pickDanger.reasons.join('・'))}</span>`);
-      if (_pickSleeper) _rows += _row('激走', '#a21caf', `⚡ <b>${escapeHTML(_pickSleeper.umaBan || '—')}番 ${escapeHTML(_pickSleeper.name)}</b> <span class="ps-mut">${_pickSleeper.marketRank}人気・${_pickSleeper.status === 'strong' ? '候補' : '準候補'}｜${escapeHTML(_pickSleeper.why.join('・'))}（期待値未判定）</span>`);
+      if (_pickSleeper) {
+        const _riskLabel = _pickSleeper.redRiskCount >= 2 ? '高' : _pickSleeper.redRiskCount === 1 ? '中' : '低';
+        const _riskWhy = _pickSleeper.redRiskCount ? `・反証:${escapeHTML(_pickSleeper.redRiskReasons.join('・'))}` : '';
+        const _yellowWhy = _pickSleeper.yellowRiskReasons.length ? `・注意:${escapeHTML(_pickSleeper.yellowRiskReasons.join('・'))}` : '';
+        _rows += _row('激走', '#a21caf', `⚡ <b>${escapeHTML(_pickSleeper.umaBan || '—')}番 ${escapeHTML(_pickSleeper.name)}</b> <span class="ps-mut">${_pickSleeper.marketRank}人気・${_pickSleeper.status === 'strong' ? '候補' : '準候補'}｜凡走警戒${_riskLabel}${_riskWhy}${_yellowWhy}（期待値未判定）</span>`);
+      }
       const _line = `${_confTxt === '断然' ? '本命◎が抜けています' : _confTxt === '接戦' ? '上位が僅差で頭は割れそう' : '標準的な力関係'}。`
         + (_evPick ? `単勝の期待値候補は${escapeHTML(_evPick.name)}（${_evPick.odds.toFixed(1)}倍）。` : '購入判定は見送りです。')
         + (_pickDanger ? `人気の${escapeHTML(_pickDanger.name)}は割引が必要。` : '')
-        + (_pickSleeper ? `${escapeHTML(_pickSleeper.name)}は激走条件に一致しますが、購入には価格判定が必要です。` : '');
+        + (_pickSleeper ? `${escapeHTML(_pickSleeper.name)}は激走条件に一致し、凡走警戒は${_pickSleeper.redRiskCount >= 2 ? '高' : _pickSleeper.redRiskCount === 1 ? '中' : '低'}です。購入には価格判定が必要です。` : '');
       pickSummary = `<div class="pick-summary"><div class="ps-head">🧭 能力評価と購入判断<button class="ps-copy" onclick="_copyPickText(this)" title="判断をコピー">📋</button></div>${_rows}<div class="ps-line">${_line}</div></div>`;
     }
   }
