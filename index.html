@@ -2740,9 +2740,10 @@ const KV_APP_CSS = [
         <span id="backup-status" style="font-size:11px;color:#6b7280"></span>
       </div>
       <div class="admin-only" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;padding:8px 12px;background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px">
-        <span style="font-size:12px;font-weight:700;color:#6d28d9">🧪 相手AI前向き収集</span>
-        <button class="btn btn-secondary btn-sm" onclick="refreshOpponentShadowCollectionStatus()">状況を更新</button>
+        <span style="font-size:12px;font-weight:700;color:#6d28d9">🧪 T10予想収集・自動精算</span>
+        <button class="btn btn-secondary btn-sm" onclick="refreshOpponentShadowCollectionStatus();kvRefreshT10LedgerMonitor(true)">状況を更新</button>
         <span id="opponent-shadow-collection-status" style="font-size:11px;color:#6b7280">未確認</span>
+        <div id="t10-ledger-monitor" style="width:100%;font-size:11px;line-height:1.8;color:#475569">サーバー台帳を確認中…</div>
       </div>
       <div id="saved-list" class="saved-list">
         <p class="no-data">読み込み中...</p>
@@ -2936,7 +2937,7 @@ const _kvLibSpecs = {
   valueT10Shadow: {
     src: 'modules/value-t10-shadow.js',
     ready: () => typeof window.kvComputeT10ValueShadow === 'function' &&
-      typeof window.kvCaptureT10ValueShadow === 'function',
+      typeof window.kvCaptureT10ValueShadow === 'function' && typeof window.kvPersistT10DecisionLedger === 'function',
   },
 };
 
@@ -3184,6 +3185,7 @@ function switchPage(pageId, _fromPop) {
   if (pageId === 'saved')   {
     setTimeout(() => { try { renderSavedList(); } catch(e){} }, 0);
     _renderPageWithHistory(pageId, refreshOpponentShadowCollectionStatus);
+    _ensureValueT10ShadowModule().then(() => kvRefreshT10LedgerMonitor(true)).catch(()=>{});
   }
   if (pageId === 'f3avg')   { _renderPageWithHistory(pageId, renderF3Averages); }
   if (pageId === 'aiseiseki') {
@@ -5991,10 +5993,7 @@ async function fetchLiveOddsBtn(raceNo) {
   }
 }
 
-// ══ オッズ自動更新＆発走カウントダウン（2026-07-11）══
-// オッズ：当日・発走前（4時間前〜発走2分後）の「いま開いているレース」だけを5分間隔で
-// 自動取得。手動の「💹 オッズ取得」ボタンは従来通り（＝任意タイミングの最新化）。
-// カウントダウン：レースヘッダーの発走時刻から残り時間を15秒ごとに更新。
+// オッズ自動更新・発走カウントダウン
 const _kvOddsAutoLast = {};   // raceNo -> 最終取得時刻(ms)。手動取得も共有
 let _kvTickersStarted = false;
 function _kvStartTickers() {
@@ -6053,6 +6052,10 @@ function _kvOpponentCaptureSlot(minutesBeforeStart) {
 }
 
 async function _kvTickOpponentShadowCapture() {
+  if (typeof isAdminMode === 'function' && isAdminMode() &&
+      (typeof computeYosoScored !== 'function' || typeof kvPersistT10DecisionLedger !== 'function')) {
+    try { await _ensureRaceIntelligence(); } catch (e) { return; }
+  }
   if (typeof computeYosoScored !== 'function') return;
   const opponentOn = typeof opponentShadowEnabled === 'function' && opponentShadowEnabled();
   const valueOn = typeof kvCaptureT10ValueShadow === 'function' && typeof isAdminMode === 'function' && isAdminMode();
@@ -6113,11 +6116,16 @@ async function _kvTickOpponentShadowCapture() {
         }
         if (typeof kvCaptureT10ValueShadow === 'function') {
           try {
-            const valueRecorded = kvCaptureT10ValueShadow(target.raceNo, computed.scored);
+            const valueRecorded = kvCaptureT10ValueShadow(target.raceNo, computed.scored, { deferServer:target.slot === 't10' });
             if (!opponentOn) outcome = { ...valueRecorded,
               saved:valueRecorded.saved || valueRecorded.reason === 'DUPLICATE', fetchedRunnerCount:fetched };
           }
           catch (e) { console.warn('[valueT10Shadow capture]', e); }
+        }
+        if (target.slot === 't10' && typeof kvPersistT10DecisionLedger === 'function') {
+          const unified = await kvPersistT10DecisionLedger(target.raceNo, computed.scored);
+          outcome = { ...unified, serverSaved:unified.saved,
+            saved:unified.saved && unified.status !== 'incomplete', fetchedRunnerCount:fetched };
         }
       }
     }
@@ -8663,6 +8671,7 @@ const SUPABASE_HEADERS = {
   'apikey': SUPABASE_KEY,
   'Authorization': `Bearer ${SUPABASE_KEY}`,
 };
+window.kvSupabaseReadConfig = () => ({ url:SUPABASE_URL, headers:SUPABASE_HEADERS });
 
 // ============================================================
 // オッズ推移（keiba_odds_snapshots・表示専用）
@@ -8741,12 +8750,7 @@ async function renderHorseOddsHistory(containerId, raceDateSlash, raceNo, umaBan
   });
 }
 
-// ============================================================
-// Cloudflare Worker プロキシ（書き込み専用）
-// ★セキュリティ：書き込みトークンはソースにベタ書きしない（公開サイトのソースから盗まれ、
-//   誰でもDB全消去/改ざんが可能になるため・2026-07-08修正）。管理者が「管理者ログイン」で
-//   セッション中だけ sessionStorage(kv_write_token) に保持する。閲覧者は書込不可。
-// ============================================================
+// Cloudflare Worker書込。Tokenは管理者セッション中だけ保持する。
 const WORKER_URL = 'https://keiba-proxydeploy.maguronagareboshi.workers.dev';
 function getWriteToken() { return sessionStorage.getItem('kv_write_token') || localStorage.getItem('kv_write_token') || ''; }
 
@@ -12133,17 +12137,7 @@ function renderF3Averages() {
     前半3Fの由来：実測値＋自動補完（1400m＝決着タイム−上がり4F／1300m＝(決着タイム−上がり4F)で前半2.5Fを出し、残り100m分＝(上がり4F−上がり3F)÷2を加算／1600m＝決着タイム−上がり4F−4F目仮置き 良14.5〜不良13.5秒）。1600mは前半800mの内訳が計測されないため、稍重の逆転など±0.3秒程度の不確実性が残ります。</div>`;
 }
 
-// ══ AIの成績ページ（大玉②残り・2026-07-15）══
-// 過去の確定済みレースに「今のAI」をそのまま当てはめ直し、印別の1着率・連対率・複勝率を集計して公開する。
-// 【重要】ここで出す数値は「当時実際に表示していた印」ではなく「今のAIを過去に当てはめ直した場合の成績」。
-// 当時表示した印そのもののスナップショットを保存する仕組みが無いため。凍結運用中はズレは小さいはずだが、
-// 将来モデルを変更した場合はこのページの過去成績も静かに変わる点に注意（ページ内に注記を出す・要ユーザー確認済み）。
-// computeYosoScored/MARKS/totalScoreの計算式には一切触れない読み取り専用の集計機能。
-
-// 過去の1レースぶんだけ、現在のcomputeYosoScoredで安全に再計算する（表示中のallRacesDataへは影響させない）。
-// restoreFromSaved(10290行付近)と同じ組み立てロジックをDOM操作なしで再利用。
-// JSはシングルスレッドで、この関数内にawait/setTimeout等の一時停止点が無いため、
-// 差し替え中の状態を他の処理（ライブ更新タイマー等）が観測することはない。
+// AI成績：保存済み確定レースを現在モデルで安全に再計算する。
 function computeYosoScoredArchived(babaCode, raceDate, raceNo, horseKeys) {
   const lsData = lsRead();
   const raceVal = lsData[`race_${babaCode}_${raceDate}_${raceNo}`];

@@ -10,6 +10,8 @@
     root.KvT10ValueShadow = api;
     root.kvComputeT10ValueShadow = api.computeLive;
     root.kvCaptureT10ValueShadow = api.captureLive;
+    root.kvPersistT10DecisionLedger = api.persistDecisionLedger;
+    root.kvRefreshT10LedgerMonitor = api.refreshDecisionLedgerMonitor;
     root.kvListT10ValueShadowSnapshots = api.listSnapshots;
     root.kvEvaluateT10ValueShadow = api.evaluateSnapshots;
   }
@@ -268,7 +270,7 @@
     });
   }
 
-  function captureLive(raceNo, scored) {
+  function captureLive(raceNo, scored, options) {
     try {
       const admin = root && root.isAdminMode, read = root && root.lsRead, write = root && root.lsWrite;
       if (typeof admin !== 'function' || !admin()) return { saved:false, reason:'NOT_ADMIN' };
@@ -330,9 +332,205 @@
         serverSync:'pending',
       };
       write(key, snapshot);
-      persistServerSnapshot(key, snapshot);
-      return { saved:true, key, result };
+      if (!(options && options.deferServer)) persistServerSnapshot(key, snapshot);
+      return { saved:true, key, result, snapshot };
     } catch (e) { return { saved:false, reason:'WRITE_ERROR', error:String(e && e.message || e) }; }
+  }
+
+  const DECISION_LEDGER_SCHEMA = 'kochi_t10_decision_ledger/v1';
+  const cleanJson = value => cloneJson(value) ?? null;
+  const component = (status, data, reason) => ({ status, ...(reason ? { reason:String(reason).slice(0,120) } : {}),
+    ...(data == null ? {} : { data:cleanJson(data) }) });
+
+  async function persistDecisionLedger(raceNo, scored) {
+    const admin = root && root.isAdminMode, upsert = root && root.apiUpsert;
+    if (typeof admin !== 'function' || !admin()) return { saved:false, reason:'NOT_ADMIN' };
+    if (typeof upsert !== 'function') return { saved:false, reason:'NO_SERVER_TRANSPORT' };
+    const races = root && root.allRacesData, race = races && races[raceNo];
+    if (!race || String(race.raceInfo?.babaCode || '') !== '31' || !Array.isArray(race.horses)) {
+      return { saved:false, reason:'NO_KOCHI_RACE' };
+    }
+    const raceDate = date(race.raceInfo.raceDate), tm = typeof root._aiPredictionTimeMeta === 'function'
+      ? root._aiPredictionTimeMeta(raceDate, raceNo, '31') : null;
+    const minutes = Number(tm && tm.minutesBeforeStart);
+    if (!tm || tm.timing !== 'verified_prestart' || minutes < 10 || minutes > 10.9) {
+      return { saved:false, reason:'OUTSIDE_T10_WINDOW' };
+    }
+    const capturedAt = new Date().toISOString();
+    const runnerSet = sortedUma(race.horses.map(h => h.umaBan));
+    const marketRows = race.horses.map(h => ({ u:uma(h.umaBan), name:String(h.horseName || ''),
+      odds:finite(h.odds), ninki:finite(h.ninki) })).sort((a,b) => a.u-b.u);
+    const marketComplete = runnerSet.length >= 4 && marketRows.length === runnerSet.length &&
+      marketRows.every(r => r.u && r.odds != null && r.odds > 0);
+    const rankingModel = rankingModelIdentity();
+    const abilityRows = Array.isArray(scored) ? scored.map((s,index) => ({
+      u:uma(s?.horse?.umaBan), name:String(s?.horse?.horseName || ''), rank:finite(s?.totalScore) == null ? null : index+1,
+      totalScore:finite(s?.totalScore), features:{ ...normalizedFeatures(s || {}), jockeyChgN:finite(s?.jockeyChgMod),
+        paceCtxN:finite(s?.paceCtxMod), relSIN:finite(s?.relSIMod) },
+      quality:{ siCount:Number(s?.siCount || 0), kochiSICount:Number(s?.kochiSICount || 0),
+        isTransfer:!!s?.isTransfer, isEstimatedScore:!!s?.isEstimatedScore },
+    })).sort((a,b) => a.u-b.u) : [];
+    const abilityComplete = !!rankingModel && same(sortedUma(abilityRows.map(r => r.u)), runnerSet) &&
+      abilityRows.every(r => r.totalScore != null);
+
+    let longshotRows = [], longshotError = '';
+    try {
+      if (typeof root.computeLongshotCandidateRows !== 'function') longshotError = 'MODEL_NOT_LOADED';
+      else longshotRows = root.computeLongshotCandidateRows(raceNo, scored, null).map(row => ({
+        u:uma(row.umaBan), name:String(row.name || ''), marketSource:String(row.marketSource || ''),
+        facts:cleanJson(row.facts), decision:cleanJson(row.decision),
+      })).sort((a,b) => a.u-b.u);
+    } catch (error) { longshotError = String(error && error.message || 'COMPUTE_FAILED'); }
+    const longshotComplete = same(sortedUma(longshotRows.map(r => r.u)), runnerSet);
+
+    try { if (typeof root.kvEnsureVnextPartnerShadowRegistered === 'function') root.kvEnsureVnextPartnerShadowRegistered(); } catch (_) {}
+    const active = typeof root.getActiveOpponentShadowModel === 'function' ? root.getActiveOpponentShadowModel() : null;
+    const modelIds = [...new Set([active?.model?.id || 'kochi-t10-market-mainline-v1',
+      root.kvVnextPartnerModelId || 'kochi-vnext-rich-partner-shadow-v1',
+      root.kvVnextMarketBlendModelId || 'kochi-t10-vnext-blend-mainline-v1'])];
+    const opponent = modelIds.map(modelId => {
+      try {
+        if (typeof root.computeOpponentShadow !== 'function') return { modelId, status:'unavailable', reason:'MODEL_NOT_LOADED' };
+        const shadow = root.computeOpponentShadow(raceNo, scored, modelId);
+        return shadow ? { modelId, status:'computed', data:cleanJson(shadow) }
+          : { modelId, status:'rejected', reason:'MODEL_GATE_REJECTED' };
+      } catch (error) { return { modelId, status:'failed', reason:String(error && error.message || 'COMPUTE_FAILED').slice(0,120) }; }
+    });
+    const valueResult = computeLive(raceNo, scored);
+    const value = valueResult.ok ? component(valueResult.candidate ? 'candidate' : 'no_candidate', {
+      modelId:valueResult.modelId, modelFingerprint:valueResult.modelFingerprint,
+      selectionReason:valueResult.reason, selected:valueResult.candidate?.u ?? null,
+      rows:valueResult.rows, inputRows:valueResult.inputRows,
+    }) : component('failed', null, valueResult.reason);
+    const complete = marketComplete && abilityComplete && longshotComplete && valueResult.ok &&
+      opponent.every(row => row.status === 'computed');
+    const payload = {
+      schema:DECISION_LEDGER_SCHEMA, capturePolicy:'automatic-admin-viewer-at-verified-t10', capturedAt,
+      race:{ babaCode:'31', raceDate, raceNo:Number(raceNo), scheduledStartAt:tm.scheduledStartAt,
+        minutesBeforeStart:minutes, runnerSet },
+      market:{ status:marketComplete ? 'complete' : 'incomplete', source:race._liveOddsSource || null,
+        requestedAt:Number.isFinite(Number(race._liveOddsRequestNonce)) ? new Date(Number(race._liveOddsRequestNonce)).toISOString() : null,
+        observedAt:race._liveOddsObservedAt || null, rows:marketRows },
+      components:{
+        ability:abilityComplete ? component('computed',{ model:rankingModel, rows:abilityRows })
+          : component('incomplete',{ model:rankingModel, rows:abilityRows },'INCOMPLETE_ABILITY_UNIVERSE'),
+        longshot:longshotComplete ? component('computed',{ candidateCount:longshotRows.filter(r => r.decision?.candidate).length, rows:longshotRows })
+          : component('incomplete',{ rows:longshotRows },longshotError || 'INCOMPLETE_RUNNER_UNIVERSE'),
+        opponent:{ status:opponent.every(row => row.status === 'computed') ? 'computed' : 'incomplete', models:opponent },
+        value,
+      },
+    };
+    payload.inputFingerprint = fnv({ race:payload.race, market:payload.market, components:payload.components });
+    const id = `t10_31_${raceDate.replace(/\D/g,'')}_${String(Number(raceNo)).padStart(2,'0')}`;
+    const localKey = `t10DecisionLedger_v1|${id}`;
+    const row = { baba_code:'31', race_date:raceDate, race_no:Number(raceNo),
+      scheduled_post_at:tm.scheduledStartAt, status:complete ? (valueResult.candidate ? 'saved' : 'no_bet') : 'incomplete',
+      transport:'first_party_worker+admin_viewer', runner_count:runnerSet.length,
+      model_fingerprint:rankingModel?.fingerprint || '', payload };
+    try {
+      if (typeof root.lsWrite === 'function') root.lsWrite(localKey, { ...payload, type:'t10DecisionLedger', serverSync:'pending' });
+      await upsert('keiba_value_t10_ledger', id, row);
+      if (typeof root.lsWrite === 'function') root.lsWrite(localKey, { ...payload, type:'t10DecisionLedger', serverSync:'saved', serverSyncedAt:new Date().toISOString() });
+      return { saved:true, key:localKey, id, status:row.status, payload };
+    } catch (error) {
+      if (typeof root.lsWrite === 'function') root.lsWrite(localKey, { ...payload, type:'t10DecisionLedger', serverSync:'failed', serverSyncError:String(error && error.message || error).slice(0,240) });
+      return { saved:false, reason:'SERVER_WRITE_FAILED', error:String(error && error.message || error), key:localKey };
+    }
+  }
+
+  function settleDecisionLedgerRow(row, db) {
+    const payload = row && row.payload, race = payload && payload.race;
+    if (!payload || payload.schema !== DECISION_LEDGER_SCHEMA || !race) return { status:'not_unified' };
+    const runners = sortedUma(race.runnerSet || []), prefix = `31_${race.raceDate}_${Number(race.raceNo)}_`;
+    const results = runners.map(u => ({ u, row:db && db[`${prefix}${u}`] }));
+    const parsed = results.map(x => ({ u:x.u, finish:Number.parseInt(x.row?.chakujun,10), raw:String(x.row?.chakujun || '') }));
+    if (!runners.length || parsed.some(x => !Number.isInteger(x.finish) && !/中止|失格|取消|除外/.test(x.raw))) {
+      return { status:'awaiting_result', runnerCount:runners.length };
+    }
+    if (parsed.some(x => /取消|除外/.test(x.raw))) return { status:'void_late_exclusion', runnerCount:runners.length };
+    const finishByU = new Map(parsed.map(x => [x.u,x.finish]));
+    const winnerSet = parsed.filter(x => x.finish === 1).map(x => x.u);
+    const top3 = u => { const f=finishByU.get(uma(u)); return Number.isInteger(f) && f <= 3; };
+    const valueData = payload.components?.value?.data || {}, selected = uma(valueData.selected);
+    const payout = db && db[`payout_31_${race.raceDate}_${Number(race.raceNo)}`];
+    const wins = tanPayouts(payout), winPay = selected ? (wins.find(x => x.u === selected)?.pay || 0) : 0;
+    const longRows = payload.components?.longshot?.data?.rows || [];
+    const candidates = longRows.filter(x => x?.decision?.candidate), rejected = longRows.filter(x => !x?.decision?.candidate);
+    const models = payload.components?.opponent?.models || [];
+    const settlement = {
+      schema:'kochi_t10_decision_settlement/v1', status:'settled', settledAt:new Date().toISOString(),
+      winnerSet, runnerCount:runners.length,
+      ability:{ top1:uma(payload.components?.ability?.data?.rows?.find(x => x.rank === 1)?.u),
+        top1Win:winnerSet.includes(uma(payload.components?.ability?.data?.rows?.find(x => x.rank === 1)?.u)) },
+      longshot:{ candidates:candidates.length, candidateTop3:candidates.filter(x => top3(x.u)).length,
+        rejected:rejected.length, rejectedTop3:rejected.filter(x => top3(x.u)).length },
+      opponent:models.map(model => { const data=model.data || {}, picks=data.mainline || [];
+        return { modelId:model.modelId, status:model.status, anchorTop3:top3(data.anchor?.u),
+          bothMainlineTop3:picks.length >= 2 && picks.slice(0,2).every(x => top3(x.u)) }; }),
+      value:{ selected, hit:selected ? winnerSet.includes(selected) : false, stake:selected ? 100 : 0,
+        returned:selected && wins.length ? winPay : null, payoutAvailable:!selected || wins.length > 0 },
+    };
+    settlement.resultFingerprint=fnv({ winnerSet, ability:settlement.ability, longshot:settlement.longshot,
+      opponent:settlement.opponent, value:settlement.value });
+    return settlement;
+  }
+
+  function summarizeSettlements(rows) {
+    const settled = rows.filter(x => x?.status === 'settled'), values = settled.map(x => x.value).filter(x => x?.selected);
+    const withPay = values.filter(x => x.payoutAvailable), stake = withPay.reduce((s,x) => s+x.stake,0);
+    const returned = withPay.reduce((s,x) => s+(x.returned || 0),0);
+    const longshot = settled.reduce((a,x) => ({ candidates:a.candidates+x.longshot.candidates,
+      candidateTop3:a.candidateTop3+x.longshot.candidateTop3, rejected:a.rejected+x.longshot.rejected,
+      rejectedTop3:a.rejectedTop3+x.longshot.rejectedTop3 }), { candidates:0,candidateTop3:0,rejected:0,rejectedTop3:0 });
+    return { total:rows.length, settled:settled.length, pending:rows.filter(x => x?.status === 'awaiting_result').length,
+      void:rows.filter(x => x?.status === 'void_late_exclusion').length, selections:values.length,
+      hits:values.filter(x => x.hit).length, payoutReady:withPay.length, stake, returned,
+      roi:stake ? 100*returned/stake : null, longshot };
+  }
+
+  let monitorPromise = null, monitorAt = 0;
+  async function refreshDecisionLedgerMonitor(force) {
+    if (monitorPromise) return monitorPromise;
+    if (!force && Date.now()-monitorAt < 60000) return null;
+    monitorPromise = (async () => {
+      const el = root.document && root.document.getElementById('t10-ledger-monitor');
+      if (el) el.innerHTML = 'T10統合台帳を確認中…';
+      try {
+        const config = typeof root.kvSupabaseReadConfig === 'function' ? root.kvSupabaseReadConfig() : null;
+        if (!config?.url || !config?.headers) throw new Error('SERVER_CONFIG_UNAVAILABLE');
+        const url = `${config.url}/rest/v1/keiba_value_t10_ledger?select=*&baba_code=eq.31&order=race_date.desc,race_no.desc&limit=500`;
+        const response = await fetch(url,{ headers:config.headers });
+        if (!response.ok) throw new Error(`HTTP_${response.status}`);
+        const ledger = await response.json(), db = typeof root.lsRead === 'function' ? root.lsRead() : {};
+        const settlements = ledger.map(row => settleDecisionLedgerRow(row,db));
+        const summary = summarizeSettlements(settlements), statusCounts = {};
+        ledger.forEach(row => { statusCounts[row.status] = (statusCounts[row.status] || 0)+1; });
+        if (typeof root.isAdminMode === 'function' && root.isAdminMode() && typeof root.apiUpsert === 'function') {
+          for (let i=0;i<ledger.length;i++) {
+            const row=ledger[i], settlement=settlements[i];
+            if (settlement.status !== 'settled' || row.payload?.settlement?.resultFingerprint === settlement.resultFingerprint) continue;
+            const payload={ ...row.payload, settlement };
+            await root.apiUpsert('keiba_value_t10_ledger',row.id,{ baba_code:row.baba_code,race_date:row.race_date,
+              race_no:row.race_no,scheduled_post_at:row.scheduled_post_at,status:row.status,transport:row.transport,
+              upstream_status:row.upstream_status,raw_sha256:row.raw_sha256,runner_count:row.runner_count,
+              model_fingerprint:row.model_fingerprint,payload });
+          }
+        }
+        if (el) {
+          const pct=(a,b)=>b ? `${(100*a/b).toFixed(1)}%` : '—', roi=summary.roi == null ? '払戻待ち' : `${summary.roi.toFixed(1)}%`;
+          el.innerHTML=`<b>T10台帳 ${summary.total}R</b>　精算${summary.settled}R／結果待ち${summary.pending}R　`+
+            `価値候補 ${summary.hits}/${summary.selections}的中・ROI ${roi}（払戻${summary.payoutReady}件）<br>`+
+            `激走候補 複勝${pct(summary.longshot.candidateTop3,summary.longshot.candidates)} `+
+            `／候補外${pct(summary.longshot.rejectedTop3,summary.longshot.rejected)}　`+
+            `保存状態 ${Object.entries(statusCounts).map(([k,v])=>`${k}:${v}`).join(' / ')}`;
+        }
+        monitorAt=Date.now(); return { ledger, settlements, summary, statusCounts };
+      } catch (error) {
+        if (el) el.innerHTML=`<span style="color:#b91c1c">T10台帳の取得失敗：${String(error && error.message || error).slice(0,120)}</span>`;
+        return { error:String(error && error.message || error) };
+      } finally { monitorPromise=null; }
+    })();
+    return monitorPromise;
   }
 
   function listSnapshots() {
@@ -573,7 +771,9 @@
         productionEligible:false, required:'ROI>100, day-bootstrap CI lower bound>=100, and ROI without top payout>=100; production promotion is always manual' }, rows };
   }
 
-  return Object.freeze({ contract:MODEL, modelFingerprint, softmax, scoreRace, computeLive, captureLive,
+  return Object.freeze({ contract:MODEL, modelFingerprint, softmax, scoreRace, computeLive, captureLive, persistDecisionLedger,
+    settleDecisionLedgerRow, summarizeSettlements, refreshDecisionLedgerMonitor,
+    decisionLedgerSchema:DECISION_LEDGER_SCHEMA,
     snapshotSchema:SNAPSHOT_SCHEMA, snapshotKeyPrefix:SNAPSHOT_KEY_PREFIX,
     listSnapshots, validateSnapshot, evaluateSnapshots, tanPayouts, dayBootstrap95 });
 });
