@@ -5652,7 +5652,8 @@ function renderRaceContent(raceNo) {
   // 保存済みの軽量予想があれば、全履歴（約15万件）を展開する前に先行表示する。
   setTimeout(() => _ensureAiInsightsModule().then(async () => {
     if (window.kvAiHydrateServerDay) await window.kvAiHydrateServerDay(raceInfo.raceDate);
-    if (window.kvAiRenderCachedPrediction) window.kvAiRenderCachedPrediction(raceNo);
+    const showed = !!window.kvAiRenderCachedPrediction?.(raceNo);
+    if (!showed && _kvRaceHasResult(raceNo)) kvRefreshPrediction(raceNo,{ retrospective:true });
   }).catch(() => {}), 0);
   updateRacePace(raceNo);
   renderPaceDistChart(raceNo);
@@ -7064,17 +7065,25 @@ function _kvRenderAiOnDemandState(raceNo) {
   const panel = document.getElementById(`cockpit-ai-panel-${raceNo}`);
   const action = `<button type="button" class="btn btn-primary btn-sm viewer-ok" onclick="kvRefreshPrediction(${raceNo})"><i class="fas fa-bolt"></i> 端末データで最新計算</button>`;
   const html = `<div class="cockpit-panel-empty"><i class="fas fa-database"></i><strong style="display:block;margin:5px 0 2px">保存済みAI予想がありません</strong><span style="display:block;margin-bottom:10px">必要な場合だけ全履歴を読み込み、最新の印を計算します</span>${action}</div>`;
-  if (dock) dock.innerHTML = html;
-  if (panel) panel.innerHTML = html;
+  if (panel) { panel.innerHTML = html; if (dock) dock.innerHTML = ''; }
+  else if (dock) dock.innerHTML = html;
 }
 
-/** 利用者の明示操作でのみ、全履歴を使った最新AI予想を計算する。 */
-async function kvRefreshPrediction(raceNo) {
+function _kvRaceHasResult(raceNo) {
+  return !!allRacesData[raceNo]?.horses?.some(h => /^\d+$/.test(String(h.chakujun || '')));
+}
+const _kvPredictionRefreshJobs = new Map();
+async function kvRefreshPrediction(raceNo, options) {
+  if (_kvPredictionRefreshJobs.has(raceNo)) return _kvPredictionRefreshJobs.get(raceNo);
+  const job = _kvRefreshPredictionNow(raceNo,options).finally(()=>_kvPredictionRefreshJobs.delete(raceNo));
+  _kvPredictionRefreshJobs.set(raceNo,job); return job;
+}
+async function _kvRefreshPredictionNow(raceNo, options) {
   const target = document.getElementById(`cockpit-ai-panel-${raceNo}`);
   const dock = document.getElementById(`cockpit-picks-${raceNo}`);
-  const loading = _kvAsyncStateHtml('ai', 'AI予想を最新計算中', '端末の過去データを準備しています。この操作をした時だけ全履歴を読み込みます');
-  if (target) target.innerHTML = loading;
-  if (dock) dock.innerHTML = loading;
+  const retrospective=!!options?.retrospective || _kvRaceHasResult(raceNo);
+  const loading = _kvAsyncStateHtml('ai', retrospective?'過去レースを現在AIで再計算中':'AI予想を最新計算中', '端末の過去データを準備しています');
+  if (target) { target.innerHTML=loading; if(dock)dock.innerHTML=''; } else if(dock)dock.innerHTML=loading;
   try {
     await _ensureRaceIntelligence();
     const data = allRacesData[raceNo];
@@ -7085,11 +7094,14 @@ async function kvRefreshPrediction(raceNo) {
     });
     renderHorseRows(raceNo, freshHorses);
     _renderRaceHistoryPanels(raceNo);
-    renderPredictionPanel(raceNo);
+    if (retrospective && window.kvAiCachePrediction) {
+      const computed=computeYosoScored(raceNo,null);
+      window.kvAiCachePrediction(raceNo,computed,{ retrospective:true });
+      if (!window.kvAiRenderCachedPrediction?.(raceNo)) renderPredictionPanel(raceNo);
+    } else renderPredictionPanel(raceNo);
   } catch (e) {
     const errorHtml = _kvAsyncStateHtml('error', 'AI計算に失敗しました', '端末の過去データを準備できませんでした', `kvRefreshPrediction(${raceNo})`);
-    if (target) target.innerHTML = errorHtml;
-    if (dock) dock.innerHTML = errorHtml;
+    if (target) { target.innerHTML=errorHtml; if(dock)dock.innerHTML=''; } else if(dock)dock.innerHTML=errorHtml;
   }
 }
 
@@ -7165,6 +7177,7 @@ async function switchViewTab(raceNo, view) {
       renderPredictionPanel(raceNo);
       return;
     }
+    if (_kvRaceHasResult(raceNo)) { await kvRefreshPrediction(raceNo,{ retrospective:true }); return; }
     _kvRenderAiOnDemandState(raceNo);
   } else if (view === 'odds') {
     if (oddsView) oddsView.style.display = '';

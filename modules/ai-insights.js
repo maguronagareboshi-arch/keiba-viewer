@@ -136,12 +136,14 @@
     return null;
   }
 
-  function cachePrediction(raceNo, computed) {
+  function cachePrediction(raceNo, computed, options) {
     try {
       if (typeof lsRead !== 'function' || typeof lsWrite !== 'function' || typeof buildRankingModelIdentity !== 'function') return null;
       const data = allRacesData && allRacesData[raceNo];
       if (!data || !data.raceInfo || !Array.isArray(data.horses)) return null;
-      if (data.horses.some(h => /^\d+$/.test(String(h.chakujun || '')))) return null;
+      const hasResult = data.horses.some(h => /^\d+$/.test(String(h.chakujun || '')));
+      const retrospective = !!(options && options.retrospective);
+      if (hasResult && !retrospective) return null;
       const scored = (computed && computed.scored || []).filter(s => s && s.horse && s.totalScore != null);
       if (scored.length < 4) return null;
       const model = buildRankingModelIdentity(), raceDate = data.raceInfo.raceDate || currentDate || '';
@@ -156,13 +158,15 @@
       const snapshot = { type:'aiPredictionPrecalc', schema:PRECALC_SCHEMA, babaCode:'31', raceDate,
         raceNo:parseInt(raceNo, 10), computedAt:now, modelFingerprint:model.fingerprint,
         modelVersion:model.version, runnerSignature:runnerSignature(data), runners,
+        calculationMode:retrospective ? 'retrospective_current_model' : 'prestart',
         value:value || null, confidence:confidenceForPopularity(runners[0] && runners[0].ninki) };
       snapshot.outputFingerprint = typeof _aiFingerprint === 'function'
         ? _aiFingerprint(runners.map(r => [r.u, r.rank, r.totalScore])) : '';
       const key = cacheKey(raceDate, raceNo, model.fingerprint);
       const prior = lsRead()[key];
-      if (!prior || prior.outputFingerprint !== snapshot.outputFingerprint || prior.runnerSignature !== snapshot.runnerSignature) lsWrite(key, snapshot);
-      publishServerPrediction(snapshot);
+      if (!prior || prior.outputFingerprint !== snapshot.outputFingerprint || prior.runnerSignature !== snapshot.runnerSignature ||
+          prior.calculationMode !== snapshot.calculationMode) lsWrite(key, snapshot);
+      if (!retrospective) publishServerPrediction(snapshot);
       return snapshot;
     } catch (error) {
       console.warn('[ai precalc cache]', error);
@@ -268,9 +272,10 @@
     return `◎1着 ${(confidence.winRate * 100).toFixed(1)}%・3着内 ${(confidence.top3Rate * 100).toFixed(1)}%（${esc(confidence.band)} n=${confidence.n}）`;
   }
   function renderCachedPrediction(raceNo) {
-    if (typeof _idbFullReady !== 'undefined' && _idbFullReady && typeof computeYosoScored === 'function') return false;
     const snapshot = getCachedPrediction(raceNo);
     if (!snapshot) return false;
+    if (typeof _idbFullReady !== 'undefined' && _idbFullReady && typeof computeYosoScored === 'function' &&
+        snapshot.calculationMode !== 'retrospective_current_model') return false;
     const data = allRacesData && allRacesData[raceNo], liveByU = new Map((data && data.horses || []).map(h => [parseInt(h.umaBan, 10), h]));
     const dock = document.getElementById(`cockpit-picks-${raceNo}`), panel = document.getElementById(`cockpit-ai-panel-${raceNo}`);
     if (!dock && !panel) return false;
@@ -279,18 +284,19 @@
     const card = (row, mark, kind, note) => row ? `<button type="button" class="cockpit-pick is-${kind}" onclick="switchViewTab(${raceNo},'yoso')"><span class="cockpit-mark is-${kind}">${mark}</span><span class="cockpit-pick-copy"><strong>${esc(row.u || '—')}番 ${esc(row.name)}</strong><small>${esc(note)}</small></span><span class="cockpit-odds">${esc(marketText(row, liveByU.get(row.u)))}</span></button>` : '';
     const opponentHtml = `<button type="button" class="cockpit-pick is-opponents" onclick="switchViewTab(${raceNo},'yoso')"><span class="cockpit-mark is-second">○</span><span class="cockpit-opponent-list"><span class="cockpit-opponent-head">相手候補・役割</span>${opponents.map((r, i) => { const live = liveByU.get(r.u), role = cachedOpponentRole(r, live, i, main); return `<span class="cockpit-opponent-line"><span class="cockpit-opponent-mark">${['○','▲','△'][i]}</span><b>${esc(r.u)}番 ${esc(r.name)}<span class="cockpit-opponent-role" title="${esc(role.detail)}">${esc(role.label)}</span></b><small>${esc(marketText(r, live))}</small></span>`; }).join('')}</span></button>`;
     const risks = [];
+    const retrospective = snapshot.calculationMode === 'retrospective_current_model';
     const gap = rows[1] ? Number(main.totalScore) - Number(rows[1].totalScore) : 0;
     if (gap < 2) risks.push('上位評価が接近');
     if (!value) risks.push('明確な妙味なし');
     if (!risks.length) risks.push('大きな不安材料なし');
-    const decision = `<div class="cockpit-decision"><span class="decision-chip is-${confidence.className}" title="${esc(confidence.source)}"><i class="fas fa-chart-bar"></i> 同人気帯実績 ${confidence.label}</span><span class="decision-action"><i class="fas fa-gavel"></i> ${esc(snapshotAction(confidence, !!value))}</span><span class="decision-risk"><b>${confidenceHtml(confidence)}</b><br>不安材料: ${esc(risks.join('・'))}</span><button type="button" class="btn btn-secondary btn-sm viewer-ok" onclick="kvRefreshPrediction(${raceNo})">端末データで最新計算</button></div>`;
+    const decision = `<div class="cockpit-decision">${retrospective?'<span class="decision-chip is-mid">事後再計算</span>':''}<span class="decision-chip is-${confidence.className}" title="${esc(confidence.source)}"><i class="fas fa-chart-bar"></i> 同人気帯実績 ${confidence.label}</span><span class="decision-action"><i class="fas fa-gavel"></i> ${esc(snapshotAction(confidence, !!value))}</span><span class="decision-risk"><b>${confidenceHtml(confidence)}</b><br>不安材料: ${esc(risks.join('・'))}</span><button type="button" class="btn btn-secondary btn-sm viewer-ok" onclick="kvRefreshPrediction(${raceNo})">端末データで最新計算</button></div>`;
     if (dock) dock.innerHTML = card(main, '◎', 'main', `能力1位・${main.reason}`) + opponentHtml + (value ? card(value, '☆', 'value', snapshot.value.note) : '') + decision;
     if (panel) {
       const time = new Date(snapshot.computedAt), stamp = Number.isNaN(time.getTime()) ? '' : time.toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
       const tableRows = rows.slice(0, 6).map((row, index) => { const live = liveByU.get(row.u), role = index > 0 && index < 4 ? cachedOpponentRole(row, live, index - 1, main) : null, gap = cachedMarketGap(row, live); return `<tr class="cockpit-rank-row"><td><div class="cockpit-horse"><span class="cockpit-rank-mark">${row.mark}</span><span class="cockpit-uma">${esc(row.u)}</span><span><b>${esc(row.name)}</b><small>AI ${row.rank}位${role ? `<span class="cockpit-opponent-role" title="${esc(role.detail)}">${esc(role.label)}</span>` : ''}</small></span></div></td><td class="cockpit-market">${esc(marketText(row, live))}${gap.html}</td><td><i class="fas fa-layer-group"></i> ${esc(row.reason)}</td></tr>`; }).join('');
-      const sourceLabel = snapshot.cacheSource === 'server' ? '共有事前計算' : '端末の事前計算';
+      const sourceLabel = retrospective ? '現在モデルによる事後再計算' : snapshot.cacheSource === 'server' ? '共有事前計算' : '端末の事前計算';
       const buyLine = typeof global._cockpitBuyLineHtml === 'function' ? global._cockpitBuyLineHtml(null, null) : '';
-      panel.innerHTML = `<div class="cockpit-panel-head"><div><h3>能力予想</h3><p>◎○▲△はオッズ非依存。市場との差と相手の役割を後から重ねています</p></div><span><i class="fas fa-bolt"></i> ${sourceLabel} ${esc(stamp)}</span></div><div class="table-wrapper"><table class="cockpit-table"><thead><tr><th>印・馬</th><th>市場・評価差</th><th>判断材料</th></tr></thead><tbody>${tableRows}</tbody></table></div>${buyLine}`;
+      panel.innerHTML = `<div class="cockpit-panel-head"><div><h3>能力予想</h3><p>${retrospective ? '当時保存された予想ではなく、現在モデルで過去データだけを使った事後再計算です' : '◎○▲△はオッズ非依存。市場との差と相手の役割を後から重ねています'}</p></div><span><i class="fas fa-bolt"></i> ${sourceLabel} ${esc(stamp)}</span></div><div class="table-wrapper"><table class="cockpit-table"><thead><tr><th>印・馬</th><th>市場・評価差</th><th>判断材料</th></tr></thead><tbody>${tableRows}</tbody></table></div>${buyLine}`;
     }
     return true;
   }
