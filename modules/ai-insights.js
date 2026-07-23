@@ -77,7 +77,7 @@
       INCOMPLETE_T10_MARKET:'全頭のT10オッズが揃っていません', RUNNER_UNIVERSE_MISMATCH:'出走馬の整合確認待ちです',
       NOT_EVALUATED:'価格モデルは前向き検証中です' };
     const reason = String(shadow?.reason || 'NOT_EVALUATED');
-    return `<div class="cockpit-buy-line is-wait"><strong><i class="fas fa-tag"></i> 参考買いライン</strong><span class="cockpit-buy-line-main">${esc(labels[reason] || '価格判定の条件が揃っていません')}</span><small>能力印とは分離<br>条件不足時は見送り</small></div>`;
+    return `<div class="cockpit-buy-line is-wait"><strong><i class="fas fa-tag"></i> 参考買いライン</strong><span class="cockpit-buy-line-main">${esc(labels[reason] || '価格判定の条件が揃っていません')}</span><small>能力印とは分離<br>条件不足時は判定未提供</small></div>`;
   }
   function dateKey(value) { return String(value || '').replace(/\D/g, ''); }
   function racePrefix(date) { return `${PRECALC_PREFIX}|31|${dateKey(date)}|`; }
@@ -266,7 +266,7 @@
     return opponentIndex === 1 ? { label:'展開補完', detail:'◎○と異なる結果を補完' } : { label:'押さえ', detail:'能力上位を広く確保' };
   }
   function snapshotAction(confidence, hasValue) {
-    return hasValue ? '単勝の期待値候補あり' : '見送り';
+    return hasValue ? '単勝の期待値候補あり' : '購入判定未提供';
   }
   function confidenceHtml(confidence) {
     return `◎1着 ${(confidence.winRate * 100).toFixed(1)}%・3着内 ${(confidence.top3Rate * 100).toFixed(1)}%（${esc(confidence.band)} n=${confidence.n}）`;
@@ -287,7 +287,7 @@
     const retrospective = snapshot.calculationMode === 'retrospective_current_model';
     const gap = rows[1] ? Number(main.totalScore) - Number(rows[1].totalScore) : 0;
     if (gap < 2) risks.push('上位評価が接近');
-    if (!value) risks.push('明確な妙味なし');
+    if (!value) risks.push('期待値モデル未認定');
     if (!risks.length) risks.push('大きな不安材料なし');
     const decision = `<div class="cockpit-decision">${retrospective?'<span class="decision-chip is-mid">事後再計算</span>':''}<span class="decision-chip is-${confidence.className}" title="${esc(confidence.source)}"><i class="fas fa-chart-bar"></i> 同人気帯実績 ${confidence.label}</span><span class="decision-action"><i class="fas fa-gavel"></i> ${esc(snapshotAction(confidence, !!value))}</span><span class="decision-risk"><b>${confidenceHtml(confidence)}</b><br>不安材料: ${esc(risks.join('・'))}</span><button type="button" class="btn btn-secondary btn-sm viewer-ok" onclick="kvRefreshPrediction(${raceNo})">端末データで最新計算</button></div>`;
     if (dock) dock.innerHTML = card(main, '◎', 'main', `能力1位・${main.reason}`) + opponentHtml + (value ? card(value, '☆', 'value', snapshot.value.note) : '') + decision;

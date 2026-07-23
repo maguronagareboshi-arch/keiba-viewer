@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="referrer" content="strict-origin-when-cross-origin">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' data: https://cdn.jsdelivr.net; img-src 'self' data: blob:; connect-src 'self' https://jcrcftvrsgmsewwdkqha.supabase.co https://keiba-proxydeploy.maguronagareboshi.workers.dev https://www.keiba.go.jp https://keiba.rakuten.co.jp https://www.keiba.or.jp https://cdn.jsdelivr.net; frame-src https://keiba-lv-st.jp; worker-src 'self'; manifest-src 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' data: https://cdn.jsdelivr.net; img-src 'self' data: blob:; connect-src 'self' https://jcrcftvrsgmsewwdkqha.supabase.co https://keiba-proxydeploy.maguronagareboshi.workers.dev https://www.keiba.go.jp https://keiba.rakuten.co.jp https://www.keiba.or.jp https://cdn.jsdelivr.net; frame-src 'self' https://keiba-lv-st.jp; worker-src 'self'; manifest-src 'self'">
   <title>高知競馬ビューア</title>
   <!-- PWA（ホーム画面追加でアプリとして起動）。パスは相対＝github.io/keiba-viewer と独自ドメイン両対応 -->
   <link rel="manifest" href="manifest.webmanifest">
@@ -5808,12 +5808,12 @@ function renderCockpitSummary(raceNo) {
     main: { mark:'◎', kind:'main', s:main, note: main ? `能力1位・${_cockpitReasonFor(main)}` : '能力評価なし' },
     value: { mark:value ? 'EV' : '—', kind:'value', s:value, note: value
       ? (valueResearchOnly
-        ? `価値スコア ${Number(valueMeta?.ev || 0) >= 0 ? '+' : ''}${Number(valueMeta?.ev || 0).toFixed(2)}（未校正）・購入見送り`
+        ? `価値スコア ${Number(valueMeta?.ev || 0) >= 0 ? '+' : ''}${Number(valueMeta?.ev || 0).toFixed(2)}（未校正）・購入判定未提供`
         : `期待値指数 ${Number(valueMeta?.evCal || 0).toFixed(2)}`)
-      : '公正オッズ未校正・購入見送り' }
+      : '期待値モデル未認定・購入判定未提供' }
   };
   const cardHtml = p => {
-    if (!p.s) return `<div class="cockpit-pick is-empty"><span class="cockpit-mark is-${p.kind}">${p.mark}</span><div class="cockpit-pick-copy"><strong>${p.kind === 'value' ? '見送り' : '候補なし'}</strong><small>${p.note}</small></div><span class="cockpit-odds">—</span></div>`;
+    if (!p.s) return `<div class="cockpit-pick is-empty"><span class="cockpit-mark is-${p.kind}">${p.mark}</span><div class="cockpit-pick-copy"><strong>${p.kind === 'value' ? '判定未提供' : '候補なし'}</strong><small>${p.note}</small></div><span class="cockpit-odds">—</span></div>`;
     const h = p.s.horse, odds = parseFloat(h.odds), ninki = parseInt(h.ninki);
     const market = `${Number.isFinite(ninki) ? ninki + '人気 ' : ''}${Number.isFinite(odds) ? odds.toFixed(1) : '—'}`;
     return `<button type="button" class="cockpit-pick is-${p.kind}" onclick="switchViewTab(${raceNo},'yoso')">
@@ -5842,9 +5842,9 @@ function renderCockpitSummary(raceNo) {
   if (main && parseFloat(main.horse?.odds) > 0 && parseFloat(main.horse.odds) < 2) risks.push('本命に人気集中');
   if (!oddsReady) risks.push('オッズ未取得');
   if (valueResearchOnly) risks.push('期待値モデルは前向き検証中');
-  else if (!value) risks.push('検証合格した期待値モデルなし');
+  else if (!value) risks.push('期待値モデル未認定');
   if (!risks.length) risks.push('大きな不安材料なし');
-  const action = valueResearchOnly ? '期待値候補あり（検証中・購入見送り）' : value ? '単勝の期待値候補あり' : '購入見送り';
+  const action = valueResearchOnly ? '期待値候補あり（検証中）・購入判定未提供' : value ? '単勝の期待値候補あり' : '購入判定未提供';
   const confidenceEvidence = calibrated
     ? `<b>◎1着 ${(calibrated.winRate * 100).toFixed(1)}%・3着内 ${(calibrated.top3Rate * 100).toFixed(1)}%</b>（${escapeHTML(calibrated.band)} n=${calibrated.n}）<br>` : '';
   const confidenceTitle = calibrated ? '同人気帯実績' : '能力順位差の暫定信頼度';

@@ -2600,7 +2600,7 @@ async function fetchOddsForEv(raceNo) {
   _updateCockpitRaceStatus(raceNo);
 }
 
-/** T10価格・前向き成績・資金ゲートを同じ判定へ統合する。公開側は常に安全な見送りへ倒す。 */
+/** T10価格・前向き成績・資金ゲートを同じ判定へ統合する。公開側は購入判定を提供しない。 */
 function buildUnifiedPurchaseDecision(raceNo, scoredInput) {
   let shadow = null;
   let evaluation = null;
@@ -2621,7 +2621,7 @@ function buildUnifiedPurchaseDecision(raceNo, scoredInput) {
   }
   return { shadow:null, evaluation:null, decision:{
     schema:'kochi_purchase_decision/v1', status:'awaiting_input', reason:'VALUE_MODEL_NOT_AVAILABLE',
-    candidate:null, action:'SKIP', actionLabel:'見送り', productionEligible:false,
+    candidate:null, action:'SKIP', actionLabel:'購入判定未提供', productionEligible:false,
     funding:{ recommendedStakeYen:0, bankrollExposurePct:0, researchLedgerUnitYen:100,
       method:'flat_research_accounting_only' },
     evidence:{ settledSelections:0, firstReviewAt:200, remainingToFirstReview:200,
@@ -2659,7 +2659,7 @@ function buildEvMonitorHtml(raceNo, selCond, scoredInput, purchaseView) {
       <span class="evb-tag" style="background:#64748b">${escapeHTML(decision.actionLabel)}</span>
       <span class="evb-stake" style="background:#64748b">${Number(decision.funding?.recommendedStakeYen || 0).toLocaleString()}円</span></div>
     ${research}
-    <div style="margin-top:6px"><b>現在の購入判断は見送り、実購入への配分は0円です。</b> 研究候補が出ても、前向き成績の不確実性が解消するまでは買い推奨へ昇格しません。過去の近似確認は回収率104.2%でも、上位1件を除くと95.1%でした。</div>
+    <div style="margin-top:6px"><b>現在は購入判定を提供しておらず、実購入への配分は0円です。</b> 研究候補が出ても、前向き成績の不確実性が解消するまでは買い推奨へ昇格しません。過去の近似確認は回収率104.2%でも、上位1件を除くと95.1%でした。</div>
     <div class="evb-sub">100円は成績比較用の仮想集計単位で、推奨金額ではありません。未校正勝率、激走条件、人気順位だけから金額を計算しません。${auditLine}${admin ? ` 判定理由: ${escapeHTML(reasonJa[decision.reason] || reasonJa[shadow?.reason] || decision.reason)}` : ''}</div></div>`;
 }
 
@@ -3799,7 +3799,7 @@ function renderPredictionPanel(raceNo) {
         _rows += _row('激走', '#a21caf', `⚡ <b>${escapeHTML(_pickSleeper.umaBan || '—')}番 ${escapeHTML(_pickSleeper.name)}</b> <span class="ps-mut">${_pickSleeper.marketRank}人気・${_pickSleeper.status === 'strong' ? '候補' : '準候補'}｜凡走警戒${_riskLabel}${_riskWhy}${_yellowWhy}（期待値未判定）</span>`);
       }
       const _line = `${_confTxt === '断然' ? '本命◎が抜けています' : _confTxt === '接戦' ? '上位が僅差で頭は割れそう' : '標準的な力関係'}。`
-        + (_evPick ? `${escapeHTML(_evPick.name)}は価格の研究候補ですが、購入判定は見送りです。` : '購入判定は見送りです。')
+        + (_evPick ? `${escapeHTML(_evPick.name)}は価格の研究候補ですが、購入判定は未提供です。` : '購入判定は未提供です。')
         + (_pickDanger ? `人気の${escapeHTML(_pickDanger.name)}は割引が必要。` : '')
         + (_pickSleeper ? `${escapeHTML(_pickSleeper.name)}は激走条件に一致し、凡走警戒は${_pickSleeper.redRiskCount >= 2 ? '高' : _pickSleeper.redRiskCount === 1 ? '中' : '低'}です。購入には価格判定が必要です。` : '');
       pickSummary = `<div class="pick-summary"><div class="ps-head">🧭 能力評価と購入判断<button class="ps-copy" onclick="_copyPickText(this)" title="判断をコピー">📋</button></div>${_rows}<div class="ps-line">${_line}</div></div>`;
@@ -3829,7 +3829,7 @@ function renderPredictionPanel(raceNo) {
           <b>🔧 その他</b> … 細かい加点・減点の合計。出走間隔／クラスが上がった・下がった／馬体重の増減／ゴール前の伸び脚／勝った相手の強さ／騎手の乗り替わり／休み明け何戦目か、などです。<br><br>
           <span style="color:#b45309">※「騎手」の数字は参考表示で、スコアには足していません</span>（騎手の影響は「コンビ」と「乗り替わり」で反映済み）。<br>
           印の意味：◎いちばん期待 ○二番手 ▲三番手 △おさえ ×評価低め。「転入」＝他の競馬場から来たばかりで参考値、「推定」＝データが少なくクラスから推定した値です。<br><br>
-          <b>🧭 能力と期待値の分離</b> … ◎○▲△はオッズを入力にせず「総合スコア」の高い順です。人気だから印を上げることはしません。T10期待値モデルは管理者端末で前向き検証し、合格するまでは購入を見送ります。
+          <b>🧭 能力と期待値の分離</b> … ◎○▲△はオッズを入力にせず「総合スコア」の高い順です。人気だから印を上げることはしません。T10期待値モデルは管理者端末で前向き検証し、合格するまでは購入判定を提供しません。
         </div>
       </details>`;
   }

@@ -836,7 +836,7 @@
     const decision = {
       schema:'kochi_purchase_decision/v1', modelId:MODEL.modelId, modelFingerprint,
       status, reason, candidate,
-      action:'SKIP', actionLabel:'見送り', productionEligible:false,
+      action:'SKIP', actionLabel:'購入判定未提供', productionEligible:false,
       funding:Object.freeze({ recommendedStakeYen:0, bankrollExposurePct:0,
         researchLedgerUnitYen:100, method:'flat_research_accounting_only' }),
       evidence:Object.freeze({ settledSelections:settled, firstReviewAt,
