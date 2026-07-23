@@ -1,0 +1,10 @@
+# 以下は門別・大井プロジェクトの所有物。高知側から上書き・削除しない。
+keiba.html
+monbetsu.html
+nankan.html
+sim3d.html
+simulator.html
+vendor/BufferGeometryUtils.js
+vendor/Horse.glb
+vendor/gltfloader-r158.js
+vendor/three.module.min.js

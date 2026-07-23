@@ -13,6 +13,7 @@ from pathlib import Path
 
 SUPPORT_FILES = {
     ".production-files",
+    ".preserved-production-files",
     ".github/scripts/validate-production.py",
     ".github/workflows/odds-capture.yml",
     ".github/workflows/pages.yml",
@@ -42,15 +43,15 @@ def normalize(line: str) -> str:
     return line.strip().replace("\\", "/")
 
 
-def read_manifest(root: Path, errors: list[str]) -> list[str]:
-    manifest = root / ".production-files"
+def read_manifest(root: Path, errors: list[str], manifest_name: str = ".production-files") -> list[str]:
+    manifest = root / manifest_name
     if not manifest.is_file():
-        fail(errors, "missing .production-files")
+        fail(errors, f"missing {manifest_name}")
         return []
     entries = [normalize(line) for line in manifest.read_text(encoding="utf-8").splitlines()]
     entries = [path for path in entries if path and not path.startswith("#")]
     if entries != sorted(set(entries)):
-        fail(errors, ".production-files must be unique and sorted")
+        fail(errors, f"{manifest_name} must be unique and sorted")
     paths: list[str] = []
     for entry in entries:
         if entry.endswith("/"):
@@ -90,16 +91,22 @@ def tracked_files(root: Path, errors: list[str]) -> set[str]:
 def validate(root: Path, require_tracked: bool) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     public_files = read_manifest(root, errors)
+    preserved_files = read_manifest(root, errors, ".preserved-production-files")
     public_set = set(public_files)
+    preserved_set = set(preserved_files)
+    overlap = public_set & preserved_set
+    for path in sorted(overlap):
+        fail(errors, f"file cannot be both Kochi-owned and preserved: {path}")
 
-    for path in public_files:
+    deployment_files = sorted(public_set | preserved_set)
+    for path in deployment_files:
         candidate = root / path
         if not candidate.is_file():
-            fail(errors, f"missing public file: {path}")
+            fail(errors, f"missing deployment file: {path}")
 
-    tracked = tracked_files(root, errors) if require_tracked else public_set | SUPPORT_FILES
+    tracked = tracked_files(root, errors) if require_tracked else set(deployment_files) | SUPPORT_FILES
     if require_tracked:
-        allowed = public_set | SUPPORT_FILES
+        allowed = set(deployment_files) | SUPPORT_FILES
         for path in sorted(tracked - allowed):
             fail(errors, f"tracked file is not allowlisted: {path}")
         for path in sorted(allowed - tracked):
@@ -151,7 +158,7 @@ def validate(root: Path, require_tracked: bool) -> tuple[list[str], list[str]]:
     if manifest_path.is_file() and "高知" not in manifest_path.read_text(encoding="utf-8", errors="replace"):
         fail(errors, "manifest.webmanifest does not identify the Kochi app")
 
-    return errors, public_files
+    return errors, deployment_files
 
 
 def main() -> int:
@@ -161,7 +168,7 @@ def main() -> int:
     parser.add_argument("--no-tracked-check", action="store_true")
     args = parser.parse_args()
     root = Path(args.root).resolve()
-    errors, public_files = validate(root, not args.no_tracked_check)
+    errors, deployment_files = validate(root, not args.no_tracked_check)
     if errors:
         print("Production validation failed:", file=sys.stderr)
         for error in errors:
@@ -174,12 +181,12 @@ def main() -> int:
             return 1
         if target.exists():
             shutil.rmtree(target)
-        for path in public_files:
+        for path in deployment_files:
             destination = target / path
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(root / path, destination)
-        print(f"Staged {len(public_files)} public files in {target}")
-    print(f"Production validation passed ({len(public_files)} public files)")
+        print(f"Staged {len(deployment_files)} deployment files in {target}")
+    print(f"Production validation passed ({len(deployment_files)} deployment files)")
     return 0
 
 
