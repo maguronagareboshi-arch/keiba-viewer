@@ -6598,6 +6598,7 @@ function renderHorseRows(raceNo, horses) {
   setDebanMode(raceNo, _preDefault);
   // 結果タブの表示可否（結果ありレースのみ）
   try { _kvSyncKekkaTab(raceNo, _hasResults); } catch (e) {}
+  _restoreCommentRows(raceNo);
 }
 
 // ── ソート状態管理 ──────────────────────────────────────────
@@ -13703,19 +13704,27 @@ function _renderCommentsInTable(raceNo) {
     const horse = data.horses.find(h => (h.horseName || '').replace(/[\s\u3000]/g, '') === displayName);
     if (!horse || !horse.postComment) return;
 
-    // コメント行を作成（colspan=18 で全列結合）
+    // コメント行を作成（現在の列数で全列結合）
     const commentTr = document.createElement('tr');
     commentTr.className = 'horse-comment-row';
     commentTr.style.cssText = 'background:#f0fdff;border-bottom:1px solid #e0f2fe;';
+    if (!_commentVisible) commentTr.style.display = 'none';
     const td = document.createElement('td');
-    td.colSpan = 18;
+    td.colSpan = tr.cells.length;
     td.style.cssText = 'padding:4px 12px 6px 48px;font-size:12px;color:#0e7490;line-height:1.5;white-space:normal;';
     td.textContent = `💬 ${horse.postComment}`;
     commentTr.appendChild(td);
 
-    // 馬行の直後に挿入
-    tr.insertAdjacentElement('afterend', commentTr);
+    const anchor = tr.nextElementSibling?.classList.contains('kv-sp-row') ? tr.nextElementSibling : tr;
+    anchor.insertAdjacentElement('afterend', commentTr);
   });
+}
+
+function _restoreCommentRows(raceNo) {
+  const data = allRacesData[raceNo];
+  if (!data?.horses?.some(h => h.postComment)) return;
+  _renderCommentsInTable(raceNo);
+  if (!_commentVisible) _hideCommentRows(raceNo);
 }
 
 /** コメント行を非表示にする（チェックボックスOFF時） */
