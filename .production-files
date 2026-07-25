@@ -2,6 +2,8 @@
 .nojekyll
 CNAME
 data/3f/
+data/kochi-roster-baselines.js
+data/kochi-roster-baselines.json
 data/replay/
 icons/apple-touch-icon.png
 icons/icon-192.png

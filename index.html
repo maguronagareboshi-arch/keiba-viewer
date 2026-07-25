@@ -2954,6 +2954,10 @@ const _kvLibSpecs = {
     ready: () => typeof window.kvComputeT10ValueShadow === 'function' &&
       typeof window.kvCaptureT10ValueShadow === 'function' && typeof window.kvPersistT10DecisionLedger === 'function',
   },
+  kochiRoster: {
+    src: 'data/kochi-roster-baselines.js?v=20260725',
+    ready: () => !!window.KOCHI_ROSTER_BASELINES?.seasons,
+  },
 };
 
 function _kvLoadLibrary(key) {
@@ -3087,6 +3091,10 @@ function normalizeOfficialPrize(value) {
   return String(amount >= 10000 ? Math.round(amount / 1000) / 10 : amount);
 }
 
+function isOfficialHistoryCacheValid(races) {
+  return Array.isArray(races)&&races.length>0&&races.every(r=>(!r.time||/^\d+:\d{2}\.\d$/.test(String(r.time)))&&(!r.prize||/^\d+(?:\.\d+)?$/.test(String(r.prize))))&&races.some(r=>/^\d+:\d{2}\.\d$/.test(String(r.time||'')));
+}
+
 async function fetchOfficialHorseHistory(code, horseName, timeout = 15000) {
   const lineage = String(code || '').trim();
   if(!/^\d{8,14}$/.test(lineage)) throw new Error('invalid lineage');
@@ -3103,6 +3111,15 @@ async function fetchOfficialHorseHistory(code, horseName, timeout = 15000) {
     basicInfo:payload.basic_info||{},
     fetchedAt:payload.fetched_at||new Date().toISOString()
   };
+}
+
+async function getKochiOfficialBaseline(code, refDate) {
+  await _kvLoadLibrary('kochiRoster');
+  const d=refDate?new Date(refDate):new Date();
+  const anchors=window.KOCHI_ROSTER_BASELINES?.seasons?.[getKochiFiscalYear(d)]?.anchors||[];
+  const anchor=[...anchors].reverse().find(a=>parseDateStr(a.effectiveFrom)<=d);
+  const prize=Number(anchor?.horses?.[String(code||'')]);
+  return Number.isFinite(prize) ? {prize,asOf:anchor.asOf,effectiveFrom:anchor.effectiveFrom,source:anchor.source} : null;
 }
 
 // セッション内プロキシ死活管理
@@ -13862,14 +13879,15 @@ async function openHorseModal(horseName, raceNo) {
     // 過去成績がなくてもキャッシュがあれば公式成績を自動表示
     if(lineageCode) {
       const cached2 = _lsAll[`official_${lineageCode}`];
-      if(cached2 && cached2.type === 'official' && cached2.races && cached2.races.length) {
-        requestAnimationFrame(() => {
-          _renderOfficialSection({ races: cached2.races, basicInfo: cached2.basicInfo||{}, _saveToCache: false }, lineageCode, horseName);
+      if(cached2 && cached2.type === 'official' && isOfficialHistoryCacheValid(cached2.races)) {
+        requestAnimationFrame(async () => {
+          const baseline=await getKochiOfficialBaseline(lineageCode,parseDateStr(currentDate)).catch(()=>cached2.baseline||null);
+          _renderOfficialSection({ races: cached2.races, basicInfo: cached2.basicInfo||{}, baseline, _saveToCache: false }, lineageCode, horseName);
           const fb2 = document.getElementById('horse-fetch-btn');
           if(fb2) { fb2.innerHTML = '<i class="fas fa-sync-alt"></i> 再取得'; fb2.title = `キャッシュ済み（${cached2.savedAt ? new Date(cached2.savedAt).toLocaleDateString('ja-JP') : '—'}）`; }
           if(content) content.scrollTop = 0;
         });
-      }
+      } else if(cached2?.races?.length) requestAnimationFrame(()=>fetchHorseMarkInfo());
     }
     return;
   }
@@ -14173,9 +14191,10 @@ async function openHorseModal(horseName, raceNo) {
   // ── 公式成績キャッシュが存在すれば自動表示（コメントの後に追加・スクロールなし） ──
   if(lineageCode) {
     const cached = _lsAll[`official_${lineageCode}`];
-    if(cached && cached.type === 'official' && cached.races && cached.races.length) {
-      requestAnimationFrame(() => {
-        _renderOfficialSection({ races: cached.races, basicInfo: cached.basicInfo||{}, _saveToCache: false }, lineageCode, horseName);
+    if(cached && cached.type === 'official' && isOfficialHistoryCacheValid(cached.races)) {
+      requestAnimationFrame(async () => {
+        const baseline=await getKochiOfficialBaseline(lineageCode,parseDateStr(currentDate)).catch(()=>cached.baseline||null);
+        _renderOfficialSection({ races: cached.races, basicInfo: cached.basicInfo||{}, baseline, _saveToCache: false }, lineageCode, horseName);
         const fb = document.getElementById('horse-fetch-btn');
         if(fb) {
           fb.innerHTML = '<i class="fas fa-sync-alt"></i> 再取得';
@@ -14184,7 +14203,7 @@ async function openHorseModal(horseName, raceNo) {
         // 公式成績追加後もスクロール位置を先頭に戻す
         if(content) content.scrollTop = 0;
       });
-    }
+    } else if(cached?.races?.length) requestAnimationFrame(()=>fetchHorseMarkInfo());
   }
 
   // ── オッズ推移チャート（Supabase keiba_odds_snapshots・表示専用・非同期）──
@@ -14620,26 +14639,23 @@ function _renderOfficialSection(parsed, code, horseName) {
       ${bi.broodmareSire?`<span style="background:#fef9c3;color:#713f12;padding:2px 8px;border-radius:10px">母父: ${escapeHTML(bi.broodmareSire)}</span>`:''}
     </div>`:'';
 
-  // ── 賞金計算（JRA含む全成績・当日・未来のみ除外） ──
-  const today = new Date(); today.setHours(0,0,0,0);
-  const racesForPrize = parsed.races.filter(r => {
-    const d = parseDateStr(r.raceDate);
-    return d && d < today; // 当日・未来を除外（JRAは含む）
-  });
-  const prizeSummary = calcHorsePrizeSummary(racesForPrize, new Date());
+  // ── 閲覧中の開催日時点。公式在籍馬の基準額＋基準日後の本賞金で再現する ──
+  const viewedDate=parseDateStr(currentDate)||new Date();
+  const prizeSummary=calcHorsePrizeSummary(parsed.races,viewedDate,parsed.baseline);
 
   const prizeCardHtml = prizeSummary ? (()=>{
     const ec = prizeSummary.estimatedClass;
     const total = prizeSummary.totalPrize;
-    const cycleProjection = calcNextBangumiCycleProjection(racesForPrize, new Date(), prizeSummary);
-    const curIdx = KOCHI_CLASS_RULES.findIndex(r=>r.cls===ec.cls);
-    const nextClass = curIdx > 0 ? KOCHI_CLASS_RULES[curIdx-1] : null;
-    const remaining = nextClass ? Math.max(0, nextClass.min - total) : 0;
+    const cycleProjection=calcNextBangumiCycleProjection(parsed.races,viewedDate,prizeSummary);
+    const rules=prizeSummary.classRules;
+    const curIdx=rules.findIndex(r=>r.cls===ec.cls);
+    const nextClass=curIdx>0?rules[curIdx-1]:null;
+    const remaining=nextClass?Math.max(0,nextClass.min-total+0.1):0;
     const rangeMin = ec.min;
     const rangeMax = nextClass ? nextClass.min : ec.min + 200;
     const progress = Math.min(100, Math.max(0, ((total - rangeMin) / Math.max(rangeMax - rangeMin, 1)) * 100));
 
-    const borderLines = KOCHI_CLASS_RULES.map((r, idx)=>{
+    const borderLines=rules.map((r,idx)=>{
       const isCur = r.cls === ec.cls;
       const isAbove = idx < curIdx;
       const condLabel = r.max === Infinity
@@ -14698,11 +14714,13 @@ function _renderOfficialSection(parsed, code, horseName) {
 
     return `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
       <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:10px 16px;min-width:145px;flex:1">
-        <div style="font-size:10px;font-weight:700;color:#15803d;letter-spacing:.04em">💰 番組賞金（推定・期間内）</div>
+        <div style="font-size:10px;font-weight:700;color:#15803d;letter-spacing:.04em">💰 番組賞金（${prizeSummary.baseline?'公式基準＋確定分':'再構成'}）</div>
         <div style="font-size:24px;font-weight:800;color:#15803d;line-height:1.2">${total.toFixed(1)}<span style="font-size:12px">万円</span></div>
-        <div style="font-size:10px;color:#6b7280">${prizeSummary.countedRaces}走対象（着外除く）</div>
+        <div style="font-size:10px;color:#6b7280">${prizeSummary.baseline?`公式${prizeSummary.baseline.asOf.replace(/-/g,'/')}基準＋${prizeSummary.countedRaces}走`:`${prizeSummary.countedRaces}走対象`}</div>
         <div style="font-size:9px;color:#0369a1;margin-top:2px;font-weight:600">📅 ${prizeSummary.periodStart.toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric'})}以降</div>
-        <div style="font-size:9px;color:#9ca3af">当日/未来除外・JRA30%換算${prizeSummary.skippedRaces>0?` / 期間外${prizeSummary.skippedRaces}走除外`:''}</div>
+        <div style="font-size:9px;color:#9ca3af">閲覧当日/未来除外・JRA本賞30%換算${prizeSummary.skippedRaces>0?` / 期間外${prizeSummary.skippedRaces}走除外`:''}</div>
+        ${prizeSummary.missingPrizeRaces?`<div style="font-size:9px;color:#b45309;font-weight:700">⚠ 賞金欠損${prizeSummary.missingPrizeRaces}走は加算せず</div>`:''}
+        ${prizeSummary.unresolvedJraRaces?`<div style="font-size:9px;color:#b45309;font-weight:700">⚠ JRA付加賞未分離${prizeSummary.unresolvedJraRaces}走は概算</div>`:''}
       </div>
       <div style="background:${ec.bg}18;border:1.5px solid ${ec.bg};border-radius:8px;padding:10px 16px;min-width:115px;flex:1">
         <div style="font-size:10px;font-weight:700;color:${ec.bg};letter-spacing:.04em">🏷️ 推定格付けクラス</div>
@@ -14712,9 +14730,9 @@ function _renderOfficialSection(parsed, code, horseName) {
       ${nextCard}
       ${nextCycleCard}
       <div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:8px;padding:10px 14px;min-width:175px;flex:2">
-        <div style="font-size:10px;font-weight:700;color:#374151;margin-bottom:5px">📊 格付けボーダーライン（令和8年度PDF）</div>
+        <div style="font-size:10px;font-weight:700;color:#374151;margin-bottom:5px">📊 格付けボーダーライン（令和${prizeSummary.fiscalYear-2018}年度）</div>
         ${borderLines}
-        <div style="font-size:9px;color:#9ca3af;margin-top:4px;border-top:1px solid #e5e7eb;padding-top:3px">出典：令和8年度高知競馬番組編成要領 6.(4)</div>
+        <div style="font-size:9px;color:#9ca3af;margin-top:4px;border-top:1px solid #e5e7eb;padding-top:3px">出典：高知競馬番組編成要領 6.(4)</div>
       </div>
     </div>
     ${prizeSummary.prizeDetails.length ? `<div style="background:#fafafa;border:1px solid #e5e7eb;border-radius:6px;padding:8px 10px;font-size:10px;color:#374151">
@@ -14896,6 +14914,7 @@ function _renderOfficialSection(parsed, code, horseName) {
       horseName,
       races: parsed.races,
       basicInfo: parsed.basicInfo,
+      baseline: parsed.baseline||null,
       savedAt: new Date().toISOString()
     });
   }
@@ -14917,9 +14936,9 @@ async function fetchHorseMarkInfo() {
 
   let parsed;
   try {
-    const fetched=await fetchOfficialHorseHistory(code,horseName);
+    const [fetched,baseline]=await Promise.all([fetchOfficialHorseHistory(code,horseName),getKochiOfficialBaseline(code,parseDateStr(currentDate)).catch(()=>null)]);
     const cached=lsRead()[`official_${code}`];
-    parsed={races:fetched.races,basicInfo:Object.keys(fetched.basicInfo).length?fetched.basicInfo:(cached?.basicInfo||{}),_saveToCache:true};
+    parsed={races:fetched.races,basicInfo:Object.keys(fetched.basicInfo).length?fetched.basicInfo:(cached?.basicInfo||{}),baseline,_saveToCache:true};
     btn.innerHTML='<i class="fas fa-sync-alt"></i> 再取得';
   } catch(e) {
     btn.innerHTML='<i class="fas fa-database"></i> 公式成績を取得';
@@ -15064,12 +15083,7 @@ const KOCHI_CLASS_RULES = [
 
 // 収得賞金換算率（要領4(1)(イ)）。JRAの会場名は「J東京」等の表記を含む。
 const KOCHI_CONVERSION_RATE_TABLE = [
-  // ─── 高知2歳: 10% ───
-  { courses:['高知'], raceKw:['2歳','2才'], rate:0.10 },
-
   // ─── 30%グループ ───
-  // 高知3歳競走
-  { courses:['高知'], raceKw:['3歳','3才'], rate:0.30 },
   // JRA（keiba.go.jpは「J東京」「J中山」「J福島」「J阪神」「J京都」「J小倉」「J新潟」「J中京」「J函館」「J札幌」等）
   // → 先頭に「J」が付いていれば全てJRAと判定
   { courses:['J東京','J中山','J福島','J阪神','J京都','J小倉','J新潟','J中京','J函館','J札幌','J鹿児島','JRA','中央'], raceKw:[], rate:0.30 },
@@ -15091,29 +15105,6 @@ const KOCHI_CONVERSION_RATE_TABLE = [
   { courses:['高知'], raceKw:[], rate:1.00 },
 ];
 
-// 【令和8年度 クラス別賞金テーブル（万円）】 [1着,2着,3着,4着,5着]
-// ※ keiba.go.jp の prize フィールドが '0' または空の場合にこのテーブルで補完する
-// ※ 2歳・3歳は prize の実際の取得賞金がある場合はそちら（換算率適用後）を優先
-const KOCHI_PRIZE_TABLE = {
-  'A':    [280, 112,  84,  56, 28],
-  'B':    [180,  72,  54,  36, 18],
-  'C1':   [130,  52,  39,  26, 13],
-  'C2':   [ 80,  32,  24,  16,  8],
-  'C3上': [ 60,  24,  18,  12,  6],
-  'C3':   [ 60,  24,  18,  12,  6],  // C3上エイリアス（keiba.go.jp表記対応）
-  'C3下': [ 50,  20,  15,  10,  5],
-  'C4':   [ 50,  20,  15,  10,  5],  // C3下エイリアス
-  '重賞': [600, 240, 150, 100, 60],
-  // ── 年齢クラス ──
-  // 高知3歳競走は換算率30%。keiba.go.jpから prize が取れている場合は
-  // getConversionRate で30%換算されるのでこのテーブルは prize=0 時のみ使用。
-  // 高知3歳競走の1着賞金は概ねC3下〜C3上相当（50〜60万円）と推定。
-  // ただし prize が正しく取れていれば換算率適用で正確な値になるため
-  // ここは「取得賞金が取れなかった場合の概算」として設定する。
-  '3歳':  [ 50,  20,  15,  10,  5],  // 高知3歳競走概算（C3下相当・prize=0時のみ使用）
-  '2歳':  [ 30,  12,   9,   6,  3],  // 高知2歳競走概算（換算率10%・prize=0時のみ使用）
-};
-
 // 競馬場名とレース名から番組賞金への換算率を返す。
 function getConversionRate(course, raceName) {
   // 全角→半角に正規化してから比較
@@ -15125,6 +15116,14 @@ function getConversionRate(course, raceName) {
   // ★ JRA判定: keiba.go.jpは「J東京」「J中山」「J福島」「Ｊ福島」等で記録
   //   半角/全角正規化後に先頭「J」+非数字 → JRA会場 → 30%
   if(/^J[^\d]/.test(c)) return 0.30;
+
+  // 高知の「3歳以上／3歳上」は年齢限定ではなく一般競走。末尾が級・組の競走だけを年齢限定とする。
+  if(c.includes('高知')){
+    if(/[23](?:歳|才)(?:以上|上)/.test(n)) return 1.00;
+    if(/2(?:歳|才)/.test(n)) return 0.10;
+    if(/3(?:歳|才)/.test(n)) return 0.30;
+    return 1.00;
+  }
 
   for(const entry of KOCHI_CONVERSION_RATE_TABLE){
     // ① 競馬場条件: courses が空なら全場対象、そうでなければいずれかが部分一致
@@ -15144,35 +15143,30 @@ function getConversionRate(course, raceName) {
 }
 
 /**
- * 公式成績から累積番組賞金を計算し、格付けクラスを推定する
- *
- * 【計算ロジック】
- *  1. keiba.go.jp 取得賞金（円→万円変換済み）がある → 換算率を適用して番組賞金に変換
- *  2. 取得賞金がない → KOCHI_PRIZE_TABLE[クラス][着順-1] で高知での推定賞金を使用
- *  3. 累積番組賞金 > KOCHI_CLASS_RULES[i].min となる最初のクラスを格付けとして採用
- *
- * @param {Array} races - parseHorseMarkInfoHtml()のraces配列
- * @returns {{ totalPrize:number, estimatedClass:object, prizeDetails:Array }}
- */
-/**
  * 現在の開催日から番組賞金算出対象期間の開始日を求める
  * PDF 4.(1)(ア)：
- *   4月1日〜8月31日開催 → 2024年4月1日から編成日まで
- *   9月1日〜3月31日開催 → 2024年9月1日から編成日まで
- * ※令和8年度（2026年）の場合も同ルール（過去2年分程度が対象）
+ *   4月1日〜8月31日開催 → 2年前の4月1日から編成日まで
+ *   9月1日〜3月31日開催 → 2年前の9月1日から編成日まで
  * @param {Date} [refDate=今日] - 基準日（省略時は今日）
  * @returns {Date} 算出対象期間の開始日
  */
+function getKochiFiscalYear(refDate) {
+  const d=refDate?new Date(refDate):new Date();
+  return d.getMonth()>=3?d.getFullYear():d.getFullYear()-1;
+}
+
+function getKochiClassRules(refDate) {
+  const fy=getKochiFiscalYear(refDate);
+  if(fy!==2025) return KOCHI_CLASS_RULES;
+  const d=refDate?new Date(refDate):new Date();
+  const c3floor=d>=new Date(2025,8,1)?200:180;
+  return KOCHI_CLASS_RULES.map(r=>r.cls==='C1'?{...r,min:440}:r.cls==='C2'?{...r,max:440}:r.cls==='C3上'?{...r,min:c3floor}:r.cls==='C3下'?{...r,max:c3floor}:r);
+}
+
 function getBangumiPrizePeriodStart(refDate) {
-  const d = refDate ? new Date(refDate) : new Date();
-  const m = d.getMonth() + 1; // 1〜12
-  // 4月〜8月 → 2024年4月1日
-  // 9月〜翌3月 → 2024年9月1日
-  if(m >= 4 && m <= 8){
-    return new Date('2024-04-01');
-  } else {
-    return new Date('2024-09-01');
-  }
+  const d=refDate?new Date(refDate):new Date();
+  const month=d.getMonth()+1, startYear=getKochiFiscalYear(d)-2;
+  return new Date(startYear,month>=4&&month<=8?3:8,1);
 }
 
 /**
@@ -15190,117 +15184,40 @@ function parseDateStr(s) {
  *
  * 【重要】PDF 4.(1)(ア) の規定：
  *   番組賞金は「算出対象期間内」に収得した本賞金の合計
- *   → 4月〜8月開催なら 2024/4/1 以降のみ対象
- *   → 9月〜3月開催なら 2024/9/1 以降のみ対象
+ *   → 年度と開催時期から起算日を決め、閲覧当日以降は除外
  *   ※通算累積ではなく「現在サイクルの対象期間内」のみ集計
  *
  * @param {Array} races - parseHorseMarkInfoHtml()のraces配列
  * @param {Date}  [refDate] - 基準日（省略時=今日）で対象期間を決定
  */
-function calcHorsePrizeSummary(races, refDate) {
+function calcHorsePrizeSummary(races, refDate, baseline) {
   if(!races||!races.length) return null;
-
-  // 番組賞金算出対象期間の開始日
-  const periodStart = getBangumiPrizePeriodStart(refDate);
-
-  let totalPrize = 0;
-  let countedRaces = 0;
-  let skippedRaces = 0;
-  const prizeDetails = [];
+  const cutoff=refDate?new Date(refDate):new Date(); cutoff.setHours(0,0,0,0);
+  const periodStart=getBangumiPrizePeriodStart(cutoff), classRules=getKochiClassRules(cutoff);
+  const baselineDate=parseDateStr(baseline?.asOf), baselineEffective=parseDateStr(baseline?.effectiveFrom);
+  const useBaseline=Number.isFinite(Number(baseline?.prize))&&baselineDate&&baselineDate>=periodStart&&baselineDate<cutoff&&(!baselineEffective||baselineEffective<=cutoff);
+  let totalPrize=useBaseline?Number(baseline.prize):0, countedRaces=0, skippedRaces=0, missingPrizeRaces=0, unresolvedJraRaces=0;
+  const prizeDetails=[];
 
   races.forEach(r=>{
-    const c = parseInt(r.chakujun)||999;
-
-    // ── 期間フィルタ ──
-    // raceDate が対象期間より前のレースは集計しない
-    const raceD = parseDateStr(r.raceDate);
-    if(raceD && raceD < periodStart){
-      skippedRaces++;
-      return; // 対象外（算出期間外）
-    }
-
-    let prize = 0; // 万円単位
-
-    if(r.prize && parseFloat(r.prize) > 0){
-      // keiba.go.jp 取得賞金（円→万円変換済み）× 競馬場換算率
-      //
-      // ── 2歳/3歳判定：あらゆる表記に対応 ──
-      // raceClass / raceName / detectRaceClass の3ソースを全て使用して判定
-      // keiba.go.jpでは「3歳」「3才」「3歳－6」「3才-6」等が混在する可能性あり
-      const combinedText = [r.raceClass||'', r.raceName||''].join(' ');
-      // detectRaceClass を使うことで全角/半角/才/歳の正規化も行われる
-      const detectedCls = detectRaceClass(combinedText);
-      const is2sai = detectedCls === '2歳'
-        || /[2２][歳才]/.test(combinedText);
-      const is3sai = detectedCls === '3歳'
-        || /[3３][歳才]/.test(combinedText);
-
-      // 全角→半角正規化
-      const _normFull = s => (s||'').replace(/\s/g,'')
-        .replace(/[Ａ-Ｚａ-ｚ０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0));
-      const courseNorm = _normFull(r.course||'高知');
-      // JRA判定: 先頭が「J」+非数字（J東京, J中山, J福島, J阪神 等）
-      const isJRA = /^J[^\d]/.test(courseNorm);
-      const isKochi = !isJRA && (courseNorm.includes('高知') || courseNorm === '');
-
-      let rate;
-      if(isJRA){
-        rate = 0.30; // JRA（中央競馬）: 30%
-      } else if(isKochi && is2sai){
-        rate = 0.10; // 高知2歳競走: 10%
-      } else if(isKochi && is3sai){
-        rate = 0.30; // 高知3歳競走: 30%
-      } else {
-        // その他は競馬場名ベースの換算率テーブルで判定
-        rate = getConversionRate(r.course||'高知', combinedText);
-      }
-
-      const rawPrize = parseFloat(r.prize);
-      const converted = rawPrize * rate;
-      // 千円未満切り捨て（0.1万円単位）
-      prize = Math.floor(converted * 10) / 10;
-      console.log(`[賞金換算] ${r.raceDate} course="${r.course}" cls="${r.raceClass}" name="${r.raceName}" detected="${detectedCls}" → rate=${(rate*100).toFixed(0)}% prize=${rawPrize}→${prize}万`);
-      r._rate = rate; r._rawPrize = rawPrize;
-    }
-
-    // 取得賞金がない場合はクラス別推定テーブルで補完
-    if(!prize && c >= 1 && c <= 5){
-      const rawCls = r.raceClass || detectRaceClass(r.raceName||'');
-      const tbl = KOCHI_PRIZE_TABLE[rawCls]
-               || KOCHI_PRIZE_TABLE[rawCls.replace(/[上下]/,'')]
-               || KOCHI_PRIZE_TABLE['C3下'];
-      prize = tbl[c-1] || 0;
-    }
-
-    if(prize > 0){
-      totalPrize += prize;
-      countedRaces++;
-      prizeDetails.push({
-        date:      r.raceDate,
-        course:    r.course||'高知',
-        chakujun:  c,
-        prize,
-        raceClass: r.raceClass||'',
-        raceName:  r.raceName||'',
-        rawPrize:  r._rate != null ? r._rawPrize : null,
-        rate:      r._rate != null ? r._rate      : null,
-        course:    r.course||'',
-      });
-    }
+    const raceD=parseDateStr(r.raceDate), c=parseInt(r.chakujun)||999;
+    if(!raceD||raceD<periodStart){skippedRaces++;return;}
+    if(raceD>=cutoff||(useBaseline&&(baselineEffective?raceD<baselineEffective:raceD<=baselineDate))) return;
+    const raw=Number.parseFloat(r.prize);
+    if(!(raw>0)){if(c>=1&&c<=5)missingPrizeRaces++;return;}
+    const course=String(r.course||'高知').replace(/[Ａ-Ｚａ-ｚ０-９]/g,ch=>String.fromCharCode(ch.charCodeAt(0)-0xFEE0));
+    const isJRA=/^J[^\d]/.test(course.replace(/\s/g,''));
+    const hasExtra=Number.isFinite(Number.parseFloat(r.additionalPrize)), extra=isJRA&&hasExtra?Number.parseFloat(r.additionalPrize):0;
+    if(isJRA&&!hasExtra) unresolvedJraRaces++;
+    const mainPrize=Math.max(0,raw-extra), rate=getConversionRate(course,[r.raceClass||'',r.raceName||''].join(' '));
+    const prize=Math.floor(mainPrize*rate*10+1e-8)/10;
+    if(prize<=0)return;
+    totalPrize+=prize; countedRaces++;
+    prizeDetails.push({date:r.raceDate,course:r.course||'高知',chakujun:c,prize,raceClass:r.raceClass||'',raceName:r.raceName||'',rawPrize:mainPrize,rate});
   });
-
-  // 格付け推定（KOCHI_CLASS_RULES は A→C3下 の降順）
-  const estimatedClass = KOCHI_CLASS_RULES.find(r => totalPrize > r.min)
-                      || KOCHI_CLASS_RULES[KOCHI_CLASS_RULES.length-1];
-
-  return {
-    totalPrize,
-    estimatedClass,
-    prizeDetails,
-    countedRaces,
-    skippedRaces,
-    periodStart,
-  };
+  totalPrize=Math.round(totalPrize*10)/10;
+  const estimatedClass=classRules.find(r=>totalPrize>r.min)||classRules[classRules.length-1];
+  return {totalPrize,estimatedClass,prizeDetails,countedRaces,skippedRaces,missingPrizeRaces,unresolvedJraRaces,periodStart,classRules,fiscalYear:getKochiFiscalYear(cutoff),baseline:useBaseline?baseline:null,isComplete:missingPrizeRaces===0&&unresolvedJraRaces===0};
 }
 
 /** 令和8年度の9月起算日変更後について、確定済み賞金だけで降級を試算する。 */
@@ -15312,10 +15229,10 @@ function calcNextBangumiCycleProjection(races, refDate, currentSummary) {
   const current = currentSummary || calcHorsePrizeSummary(races, d);
   const nextSummary = calcHorsePrizeSummary(races, new Date(2026, 8, 1));
   if(!current || !nextSummary) return null;
-  const currentIdx = KOCHI_CLASS_RULES.findIndex(r=>r.cls===current.estimatedClass.cls);
-  const projectedIdx = KOCHI_CLASS_RULES.findIndex(r=>r.cls===nextSummary.estimatedClass.cls);
+  const currentIdx = current.classRules.findIndex(r=>r.cls===current.estimatedClass.cls);
+  const projectedIdx = nextSummary.classRules.findIndex(r=>r.cls===nextSummary.estimatedClass.cls);
   const isDemotion = projectedIdx > currentIdx;
-  const isLowestClass = currentIdx === KOCHI_CLASS_RULES.length - 1;
+  const isLowestClass = currentIdx === current.classRules.length - 1;
   const tenth = n => Math.round(Math.max(0,n) * 10) / 10;
   return {
     nextCycleStart: new Date(2026, 8, 1),
