@@ -5233,7 +5233,7 @@ function parseRaceMarkTable(html, raceDate, raceNo, babaCode) {
 function mergeHorseData(oldH, newH) {
   return newH.map(nh => {
     const oh = oldH.find(o => o.umaBan === nh.umaBan);
-    if (oh) { nh.first3f=oh.first3f||nh.first3f; nh.paceType=oh.paceType||nh.paceType; nh.mukaeShoumen=oh.mukaeShoumen||nh.mukaeShoumen; nh.shoumenStraight=oh.shoumenStraight||nh.shoumenStraight; }
+    if (oh) { nh.first3f=oh.first3f||nh.first3f; nh.paceType=oh.paceType||nh.paceType; nh.mukaeShoumen=oh.mukaeShoumen||nh.mukaeShoumen; nh.shoumenStraight=oh.shoumenStraight||nh.shoumenStraight; nh.postComment=oh.postComment||nh.postComment; }
     return nh;
   });
 }
@@ -6218,6 +6218,7 @@ async function _kvTickOddsAuto() {
         const result = await fetchOneRace(d, raceNo, data.raceInfo.babaCode || currentBaba || '31');
         if (raceNo === currentRaceNo && allRacesData[raceNo] && result && result.horses && result.horses.length) {
           const prev = allRacesData[raceNo];
+          if(prev)result.horses=mergeHorseData(prev.horses,result.horses);
           if (prev.raceInfo) {
             result.raceInfo.memo = prev.raceInfo.memo || result.raceInfo.memo;
             result.raceInfo.paceType = prev.raceInfo.paceType || result.raceInfo.paceType;
@@ -13077,6 +13078,7 @@ async function _kvRefreshTodayPriorityRaces(date, baba, preferredRaceNo) {
       if (date !== currentDate || baba !== currentBaba) return;
       if (result && result.horses && result.horses.length) {
         const prev = allRacesData[rn];
+        if(prev)result.horses=mergeHorseData(prev.horses,result.horses);
         if (prev && prev.raceInfo) {
           result.raceInfo.memo = prev.raceInfo.memo || result.raceInfo.memo;
           result.raceInfo.paceType = prev.raceInfo.paceType || result.raceInfo.paceType;
@@ -13704,7 +13706,6 @@ function _renderCommentsInTable(raceNo) {
     const horse = data.horses.find(h => (h.horseName || '').replace(/[\s\u3000]/g, '') === displayName);
     if (!horse || !horse.postComment) return;
 
-    // コメント行を作成（現在の列数で全列結合）
     const commentTr = document.createElement('tr');
     commentTr.className = 'horse-comment-row';
     commentTr.style.cssText = 'background:#f0fdff;border-bottom:1px solid #e0f2fe;';
