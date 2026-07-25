@@ -14,6 +14,7 @@ modules/admin-horse-data.js
 modules/ai-analysis.js
 modules/ai-insights.js
 modules/era-drift-shadow.js
+modules/first3f-autofill.js
 modules/jra-transfer-shadow.js
 modules/partner-vnext-live.js
 modules/partner-vnext-market-blend.js

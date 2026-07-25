@@ -18,6 +18,7 @@
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
   <script defer src="modules/performance-observer.js"></script>
+  <script defer src="modules/first3f-autofill.js?v=20260725-v1"></script>
 <style id="dark-mode-css">
 /* ===== DARK MODE ===== */
 /* 背景に奥行き（左上からのラジアルグラデ） */
@@ -4249,7 +4250,13 @@ async function fetchSingleRace() {
   showLoading(false);
   if (!result) { showError(`${raceNo}R のデータ取得に失敗しました。競走成績・出馬表ともに取得できませんでした。`); return; }
   _sanDeep(result);
-  if (allRacesData[raceNo]) result.horses = mergeHorseData(allRacesData[raceNo].horses, result.horses);
+  if (allRacesData[raceNo]) {
+    const prev = allRacesData[raceNo];
+    result.horses = mergeHorseData(prev.horses, result.horses);
+    _mergeFirst3fInfo(prev.raceInfo, result.raceInfo);
+    if (String(prev.raceInfo?.agari4f || '').trim()) result.raceInfo.agari4f = prev.raceInfo.agari4f;
+    if (String(prev.raceInfo?.agari3f_race || '').trim()) result.raceInfo.agari3f_race = prev.raceInfo.agari3f_race;
+  }
   allRacesData[raceNo] = result;
   addRaceTab(raceNo); switchRaceTab(raceNo);
   switchPage('deban');
@@ -4311,6 +4318,9 @@ async function fetchAllRaces() {
           result.horses = mergeHorseData(allRacesData[rn].horses, result.horses);
           // ユーザー入力済みのラップタイムを保持（再取得で消えないように）
           const prevInfo = allRacesData[rn].raceInfo;
+          _mergeFirst3fInfo(prevInfo, result.raceInfo);
+          if (String(prevInfo?.agari4f || '').trim()) result.raceInfo.agari4f = prevInfo.agari4f;
+          if (String(prevInfo?.agari3f_race || '').trim()) result.raceInfo.agari3f_race = prevInfo.agari3f_race;
           if (prevInfo && prevInfo.lapTimes && prevInfo.lapTimes.some(v => v != null)) {
             result.raceInfo.lapTimes = prevInfo.lapTimes;
           }
@@ -5003,9 +5013,10 @@ function parseDebaTable(html, raceDate, raceNo, babaCode) {
   return {
     raceInfo: {
       raceDate, raceNo, babaCode, raceName, distance, raceClass, trackCond,
-      first3f:      savedRace?.first3f      || '',
-      agari4f:      savedRace?.agari4f      || '',
-      agari3f_race: savedRace?.agari3f_race || '',
+      first3f:       savedRace?.first3f       || '',
+      first3fSource: savedRace?.first3fSource || '',
+      agari4f:       savedRace?.agari4f       || '',
+      agari3f_race:  savedRace?.agari3f_race  || '',
       paceType:     savedRace?.paceType     || '',
       manualPace:   !!(savedRace?.paceType),
       memo:         savedRace?.memo         || '',
@@ -5241,7 +5252,7 @@ function parseRaceMarkTable(html, raceDate, raceNo, babaCode) {
     }
   }
   return { raceInfo: { raceDate, raceNo, babaCode, raceName, distance, raceClass, trackCond,
-    first3f: savedRace?.first3f||'', agari4f: savedRace?.agari4f||autoAgari4f||'',
+    first3f: savedRace?.first3f||'', first3fSource: savedRace?.first3fSource||'', agari4f: savedRace?.agari4f||autoAgari4f||'',
     agari3f_race: savedRace?.agari3f_race||autoAgari3f||'',
     paceType: savedRace?.paceType||'', manualPace: !!(savedRace?.paceType), memo: savedRace?.memo||'',
     cornerGroups }, horses };
@@ -5438,16 +5449,16 @@ function renderRaceContent(raceNo) {
         <div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;padding:10px 14px;flex:1;min-width:280px;">
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
             <div class="pace-input-group">
-              <label style="font-size:10px;color:#6b7280;font-weight:700;letter-spacing:.04em;">前半3F（秒）</label>
-              <input type="text" inputmode="decimal" id="race-first3f-${raceNo}" class="pace-input" placeholder="36.5" value="${raceInfo.first3f ? parseFloat(raceInfo.first3f).toFixed(1) : ''}" oninput="updateRacePace(${raceNo})" onblur="if(this.value&&!isNaN(parseFloat(this.value)))this.value=parseFloat(this.value).toFixed(1)">
+              <label style="font-size:10px;color:#6b7280;font-weight:700;letter-spacing:.04em;">前半3F（秒） <span id="first3f-source-${raceNo}">${_first3fSourceBadgeHtml(raceInfo.first3fSource, raceInfo.first3f)}</span></label>
+              <input type="text" inputmode="decimal" id="race-first3f-${raceNo}" class="pace-input" placeholder="36.5" value="${raceInfo.first3f ? parseFloat(raceInfo.first3f).toFixed(1) : ''}" oninput="onRaceFirst3fInput(this,${raceNo})" onblur="onRaceFirst3fBlur(this,${raceNo})">
             </div>
             <div class="pace-input-group">
               <label style="font-size:10px;color:#6b7280;font-weight:700;letter-spacing:.04em;">上がり3F（秒）</label>
-              <input type="text" inputmode="decimal" id="race-agari3f-${raceNo}" class="pace-input pace-input--agari" placeholder="37.5" value="${raceInfo.agari3f_race ? parseFloat(raceInfo.agari3f_race).toFixed(1) : ''}" oninput="updateRacePace(${raceNo})" onblur="if(this.value&&!isNaN(parseFloat(this.value)))this.value=parseFloat(this.value).toFixed(1)">
+              <input type="text" inputmode="decimal" id="race-agari3f-${raceNo}" class="pace-input pace-input--agari" placeholder="37.5" value="${raceInfo.agari3f_race ? parseFloat(raceInfo.agari3f_race).toFixed(1) : ''}" oninput="onRaceAgari3fInput(this,${raceNo})" onblur="onRaceAgari3fBlur(this,${raceNo})">
             </div>
             <div class="pace-input-group">
               <label style="font-size:10px;color:#6b7280;font-weight:700;letter-spacing:.04em;">上がり4F（秒）</label>
-              <input type="text" inputmode="decimal" id="race-agari4f-${raceNo}" class="pace-input pace-input--agari" placeholder="49.0" value="${raceInfo.agari4f ? parseFloat(raceInfo.agari4f).toFixed(1) : ''}" onblur="if(this.value&&!isNaN(parseFloat(this.value)))this.value=parseFloat(this.value).toFixed(1)">
+              <input type="text" inputmode="decimal" id="race-agari4f-${raceNo}" class="pace-input pace-input--agari" placeholder="49.0" value="${raceInfo.agari4f ? parseFloat(raceInfo.agari4f).toFixed(1) : ''}" oninput="onRaceAgari4fInput(this,${raceNo})" onblur="onRaceAgari4fBlur(this,${raceNo})">
             </div>
           </div>
         </div>
@@ -6239,6 +6250,9 @@ async function _kvTickOddsAuto() {
           if (prev.raceInfo) {
             result.raceInfo.memo = prev.raceInfo.memo || result.raceInfo.memo;
             result.raceInfo.paceType = prev.raceInfo.paceType || result.raceInfo.paceType;
+            _mergeFirst3fInfo(prev.raceInfo, result.raceInfo);
+            if (String(prev.raceInfo.agari4f || '').trim()) result.raceInfo.agari4f = prev.raceInfo.agari4f;
+            if (String(prev.raceInfo.agari3f_race || '').trim()) result.raceInfo.agari3f_race = prev.raceInfo.agari3f_race;
             if (prev.raceInfo.lapTimes && prev.raceInfo.lapTimes.some(v => v != null)) result.raceInfo.lapTimes = prev.raceInfo.lapTimes;
           }
           _sanDeep(result);
@@ -6832,8 +6846,7 @@ function _updateTrackBiasInline(raceNo) {
 }
 
 /**
- * 決着時計を1着馬から自動取得して表示
- * 1400m戦で上がり4Fが入力済みの場合は前半3Fを自動計算して補完
+ * 決着時計を1着馬から自動取得して表示し、1300/1400m等の前半3Fを補完する。
  */
 function _updateFinishTime(raceNo) {
   const data = allRacesData[raceNo]; if (!data) return;
@@ -6848,96 +6861,7 @@ function _updateFinishTime(raceNo) {
     if (winner && winner.time) { rqsTime.textContent = winner.time; rqsTime.className = 'rqs-val'; }
     else { rqsTime.textContent = '—'; rqsTime.className = 'rqs-val rqs-empty'; }
   }
-  // 1400m戦: 全体時計 − 上がり4F = 前半3F（未入力の場合のみ自動補完）
-  const dist = String(data.raceInfo?.distance || '').replace(/[^\d]/g, '');
-  if (dist === '1400' && winner?.time) {
-    const f3Input  = document.getElementById(`race-first3f-${raceNo}`);
-    const ag4Input = document.getElementById(`race-agari4f-${raceNo}`);
-    if (f3Input && ag4Input && !f3Input.value && ag4Input.value) {
-      const winSec = raceTimeToSec(winner.time);
-      const ag4Sec = parseFloat(ag4Input.value);
-      if (winSec && !isNaN(ag4Sec) && ag4Sec > 0) {
-        const calcF3 = +(winSec - ag4Sec).toFixed(1);
-        if (calcF3 > 0) {
-          f3Input.value = calcF3.toFixed(1);
-          updateRacePace(raceNo);
-        }
-      }
-    }
-  }
-}
-
-/**
- * 保存済み1400mレースの前半3Fを上がり4Fから一括補完
- * 前半3F = 1着タイム(秒) − 上がり4F(秒)
- * 起動時に1回だけ実行（既に値があるエントリはスキップ）
- */
-/**
- * 前半3Fの自動補完（1300/1400/1600m・未入力レースのみ）
- *   1400m: 決着タイム − 上がり4F（前3F＋後4F＝7Fの厳密な逆算）
- *   1300m: (決着タイム − 上がり4F)で前半2.5Fを出し、残り100m分＝(上がり4F − 上がり3F)÷2を加算。
- *          式を整理すると 決着タイム − (上がり4F + 上がり3F)/2 と同値（下の実装はこの整理後の形）。
- *          手入力済み38件との突合で平均差+0.14秒・最大0.3秒を確認済み。
- *   1600m: 決着タイム − 上がり4F − 4F目仮置き（良14.5→不良13.5秒。
- *          前半800mの内訳が計測されないため推定精度は±0.3秒程度）
- * ローカルIDBのみ書き込み（サーバーへは保存操作時に反映）。
- */
-function backfillFirst3fFrom1400m() {
-  const lsData = lsRead();
-  // 従来はローカルIDBのみ書き込みで、共有DB(Supabase)へは管理者が該当レースを開いて「保存」を
-  // 押すまで反映されなかった（各セッションでは毎回正しく再計算されるが、それが共有DBに永続化される
-  // 保証がなかった）。管理者セッションに限り、計算結果をSupabaseへも自動反映する（2026-07-15追加）。
-  const canWriteServer = typeof isAdminMode === 'function' && isAdminMode();
-  // 勝ち馬タイムを一括マップ化（レースごとの全件スキャンを避ける）
-  const winTime = {};
-  for (const [hk, hv] of Object.entries(lsData)) {
-    if (!hv || hv.type !== 'horse' || hv.fromOfficial) continue;
-    if (String(hv.chakujun) !== '1') continue;
-    const t = raceTimeToSec(hv.time);
-    if (!t) continue;
-    const p = hk.split('_');
-    if (p.length >= 4) winTime[`${p[0]}_${p[1]}_${p[2]}`] = t;
-  }
-  const A4_1600 = { '良': 14.5, '稍重': 14.2, '重': 13.8, '不良': 13.5 };
-  const count = { 1300: 0, 1400: 0, 1600: 0 };
-  for (const [k, v] of Object.entries(lsData)) {
-    if (!k.startsWith('race_')) continue;
-    const dist = String(v.distance || v.dist || '').replace(/[^\d]/g, '');
-    if (dist !== '1400' && dist !== '1300' && dist !== '1600') continue;
-    if (v.first3f) continue;                            // 既に値あり → スキップ
-    const ag4Sec = parseFloat(v.agari4f || '');
-    if (isNaN(ag4Sec) || ag4Sec <= 0) continue;         // 上がり4F 未入力 → スキップ
-    const babaCode = v.baba_code;
-    const raceDate = v.race_date;
-    const raceNo   = String(v.race_no || '');
-    if (!babaCode || !raceDate || !raceNo) continue;
-    const winnerTimeSec = winTime[`${babaCode}_${raceDate}_${raceNo}`];
-    if (!winnerTimeSec) continue;
-    let first3f = null;
-    if (dist === '1400') {
-      first3f = winnerTimeSec - ag4Sec;
-    } else if (dist === '1300') {
-      const ag3Sec = parseFloat(v.agari3f_race || '');
-      if (isNaN(ag3Sec) || ag3Sec <= 0) continue;
-      const midF = ag4Sec - ag3Sec;                     // 中間1F（4F目→3F目）
-      if (midF < 10 || midF > 20) continue;             // 計測不整合ガード
-      first3f = winnerTimeSec - (ag4Sec + ag3Sec) / 2;
-    } else {
-      const t4 = A4_1600[v.track_cond || ''];
-      if (t4 == null) continue;                         // 馬場状態不明は補完しない
-      first3f = winnerTimeSec - ag4Sec - t4;
-    }
-    first3f = +first3f.toFixed(1);
-    if (first3f < 33 || first3f > 46) continue;         // 異常値ガード
-    lsWrite(k, { ...v, first3f: String(first3f) });
-    // 手動保存を待たずSupabaseへも反映（管理者のみ・ベストエフォート。失敗してもローカル表示には影響しない）
-    if (canWriteServer) apiUpsert('keiba_races', k, { first3f: String(first3f) })
-      .catch(e => console.warn('[backfillF3] サーバー反映失敗', k, e));
-    count[dist]++;
-  }
-  const total = count[1300] + count[1400] + count[1600];
-  if (total > 0) console.log(`[backfillF3] 前半3F補完: 1300m=${count[1300]} / 1400m=${count[1400]} / 1600m=${count[1600]}`);
-  return total;
+  _applyFirst3fAutofillToRace(raceNo, { replaceAuto:true });
 }
 
 function _updateRqsStrip(raceNo, f3, ag3, pace) {
@@ -7048,12 +6972,7 @@ function updateRacePace(raceNo) {
 }
 
 function setPace(raceNo, pace) {
-  const data = allRacesData[raceNo];
-  if (data) { data.raceInfo.paceType = pace; data.raceInfo.manualPace = true; }
-  const badge = document.getElementById(`pace-badge-${raceNo}`);
-  if (badge) { badge.textContent = pace; badge.className = `pace-badge ${getPaceBadgeClass(pace)}`; }
-  document.querySelectorAll('#race-content-area .pace-btn').forEach(b => b.classList.toggle('active', b.textContent.trim() === pace));
-  if (raceNo === currentRaceNo) updateRaceSummaryBar(raceNo);
+  _syncRacePaceUi(raceNo, pace, true);
 }
 
 function clearManualPace(raceNo) {
@@ -8756,9 +8675,15 @@ function onLapInput(raceNo) {
       if (first3.every(v => v !== null)) {
         const f3sum = first3.reduce((a, b) => a + b, 0);
         const f3Input = document.getElementById(`race-first3f-${raceNo}`);
-        if (f3Input && f3Input.value !== f3sum.toFixed(1)) {
+        const info = data.raceInfo || {};
+        const hasProtectedValue = String(info.first3f || f3Input?.value || '').trim()
+          && !_isAutoFirst3fSource(info.first3fSource);
+        if (f3Input && !hasProtectedValue && f3Input.value !== f3sum.toFixed(1)) {
           f3Input.value = f3sum.toFixed(1);
+          info.first3f = f3sum.toFixed(1);
+          info.first3fSource = FIRST3F_SOURCE.LAP_SUM;
           updateRacePace(raceNo);
+          _updateFirst3fSourceBadge(raceNo);
         }
       }
     }
@@ -8916,6 +8841,7 @@ async function apiSaveRaceBundle(raceId, raceRow, horseRows) {
   if (!Number.isFinite(saved) || saved !== expected.length) throw new Error(`保存頭数が一致しません（予定${expected.length}頭／保存${Number.isFinite(saved) ? saved : '不明'}頭）`);
   return { savedHorses:saved, result };
 }
+
 // ============================================================
 // IndexedDB ストレージ層（容量制限なし・通常数百MB〜GB単位）
 // LocalStorage の代替として使用。同期APIに見せかけた
@@ -9522,13 +9448,13 @@ function _putRaceRow(row) {
   let lapTimesArr = null;
   try { if (row.lap_times) lapTimesArr = JSON.parse(row.lap_times); } catch(e) {}
   const _existing = _idbCache && _idbCache[key];
-  // 1400m自動補完(backfillFirst3fFrom1400m)で計算したfirst3fはSupabase未保存のことが多い。
-  // 空で上書きすると毎回の再計算(数百ms)を招くため、ローカル計算値があれば保持する。
-  const _first3f = row.first3f || (_existing && _existing.first3f) || '';
+  const _serverHasFirst3f = String(row.first3f || '').trim() !== '';
+  const _first3f = _serverHasFirst3f ? row.first3f : (_existing?.first3f || '');
+  const _first3fSource = _serverHasFirst3f ? (row.first3f_source || '') : (_existing?.first3fSource || _existing?.first3f_source || '');
   const _newVal = {
     type:'race', race_date:row.race_date, race_no:row.race_no, baba_code:row.baba_code,
     race_name:row.race_name||'', distance:row.distance||'', race_class:row.race_class||'',
-    track_cond:row.track_cond||'', first3f:_first3f, agari4f:row.agari4f||'',
+    track_cond:row.track_cond||'', first3f:_first3f, first3fSource:_first3fSource, agari4f:row.agari4f||'',
     agari3f_race:row.agari3f_race||'', paceType:row.pace_type||'', memo:row.memo||'',
     lap_times:row.lap_times||'', lapTimes:lapTimesArr,
     _apiSaved:true,
@@ -9845,6 +9771,11 @@ async function initDB() {
     } catch (e) { console.warn('[kvTodayMode/deepLink]', e); }
   }, 0);
 
+  // 補完は全履歴同期の要否と切り離す。従来はfresh判定や別タブの同期ロックで処理ごと飛ばされていた。
+  _kvScheduleIdle(() => {
+    try { backfillFirst3fFrom1400m(); } catch(e) { console.warn('[backfillF3 phase1]', e); }
+  }, 600);
+
   // 全履歴同期は約90MBになるため、完全同期済みキャッシュが新しければ省略する。
   // 直近1000件は上のPhase1で毎回更新するので、当日データの鮮度は落とさない。
   let _fullSyncMeta = null;
@@ -9857,7 +9788,10 @@ async function initDB() {
   if (_fullSyncFresh) {
     console.log(`[initDB] Phase2 省略（全履歴同期から${Math.round((Date.now() - _fullSyncMeta.at) / 60000)}分）`);
     _kvScheduleIdle(async () => {
-      try { await Promise.all([loadWeeklySchedule(), _runIncrementalSync(_fullSyncMeta)]); }
+      try {
+        await Promise.all([loadWeeklySchedule(), _runIncrementalSync(_fullSyncMeta)]);
+        backfillFirst3fFrom1400m();
+      }
       catch(e) { console.warn('[initDB] 差分同期失敗:', e); }
     }, 2500);
     return;
@@ -10010,11 +9944,12 @@ async function saveAllData() {
       const memoEl=document.getElementById(`race-memo-${rn}`); if(memoEl)info.memo=memoEl.value;
       const agari4fEl=document.getElementById(`race-agari4f-${rn}`); if(agari4fEl)info.agari4f=agari4fEl.value;
       const agari3fEl=document.getElementById(`race-agari3f-${rn}`); if(agari3fEl)info.agari3f_race=agari3fEl.value;
+      _autofillFirst3fInData(data);
       // ラップタイム（onLapInput で info.lapTimes に入っている）
       const lapTimesJson = (info.lapTimes && info.lapTimes.some(v=>v!=null)) ? JSON.stringify(info.lapTimes) : '';
 
       const raceId=`race_${currentBaba}_${currentDate}_${rn}`;
-      const raceRow={race_date:currentDate,race_no:rn,baba_code:currentBaba,race_name:info.raceName||'',distance:info.distance||'',race_class:info.raceClass||'',track_cond:info.trackCond||'',first3f:info.first3f||'',agari4f:info.agari4f||'',agari3f_race:info.agari3f_race||'',pace_type:info.paceType||'',memo:info.memo||'',lap_times:lapTimesJson};
+      const raceRow={race_date:currentDate,race_no:rn,baba_code:currentBaba,race_name:info.raceName||'',distance:info.distance||'',race_class:info.raceClass||'',track_cond:info.trackCond||'',first3f:info.first3f||'',first3f_source:info.first3fSource||'',agari4f:info.agari4f||'',agari3f_race:info.agari3f_race||'',pace_type:info.paceType||'',memo:info.memo||'',lap_times:lapTimesJson};
       const horseRows = [];
       const localHorses = [];
       let raceHc = 0;
@@ -10027,8 +9962,8 @@ async function saveAllData() {
         localHorses.push([horseId,{type:'horse',chakujun:horseRow.chakujun,wakuBan:horseRow.waku_ban,horseName:horseRow.horse_name,belong:horseRow.belong,sexAge:horseRow.sex_age,kinryo:horseRow.kinryo,jockey:horseRow.jockey,trainer:horseRow.trainer,weight:horseRow.weight,ninki:horseRow.ninki,odds:horseRow.odds,time:horseRow.time,diff:horseRow.diff,agari3f:horseRow.agari3f,corner:horseRow.corner,first3f:horseRow.first3f,paceType:horseRow.pace_type,mukaeShoumen:horseRow.mukae_shoumen,shoumenStraight:horseRow.shoumen_straight,postComment:horse.postComment||'',lineageLoginCode:horse.lineageLoginCode||'',savedAt:new Date().toISOString()}]);
         raceHc++;
       }
-      await apiSaveRaceBundle(raceId, raceRow, horseRows);
-      lsWrite(raceId,{type:'race',...raceRow,paceType:info.paceType||'',lapTimes:info.lapTimes||null,_apiSaved:true,savedAt:new Date().toISOString()});
+      const saved=await apiSaveRaceBundle(raceId,raceRow,horseRows);_applyFirst3fSaveResult(saved,raceRow,info,rn);
+      lsWrite(raceId,{type:'race',...raceRow,first3fSource:info.first3fSource||'',paceType:info.paceType||'',lapTimes:info.lapTimes||null,_apiSaved:true,savedAt:new Date().toISOString()});
       localHorses.forEach(([horseId,row]) => lsWrite(horseId,row));
       rc++; hc += raceHc;
 
@@ -10084,10 +10019,11 @@ const _bulkSleep = ms => new Promise(r => setTimeout(r, ms));
 /** 1レース分（parsed）を直接Supabase＋IDBへ保存（グローバルに依存しないヘッドレス版）。戻り値=保存頭数 */
 async function _saveRaceDirect(date, baba, rn, parsed) {
   const info = parsed.raceInfo || {};
+  _autofillFirst3fInData(parsed);
   // ペース(前後半差)が未設定でも first3f＋上がり3F があれば計算して保存に含める
   if (!info.paceType) { const p = paceFromDiff(info.first3f, info.agari3f_race); if (p) info.paceType = p; }
   const raceId = `race_${baba}_${date}_${rn}`;
-  const raceRow = { race_date:date, race_no:rn, baba_code:baba, race_name:info.raceName||'', distance:info.distance||'', race_class:info.raceClass||'', track_cond:info.trackCond||'', first3f:info.first3f||'', agari4f:info.agari4f||'', agari3f_race:info.agari3f_race||'', pace_type:info.paceType||'', memo:info.memo||'', lap_times:'' };
+  const raceRow = { race_date:date, race_no:rn, baba_code:baba, race_name:info.raceName||'', distance:info.distance||'', race_class:info.raceClass||'', track_cond:info.trackCond||'', first3f:info.first3f||'', first3f_source:info.first3fSource||'', agari4f:info.agari4f||'', agari3f_race:info.agari3f_race||'', pace_type:info.paceType||'', memo:info.memo||'', lap_times:'' };
   const horseRows = [];
   const localHorses = [];
   let hc = 0;
@@ -10099,8 +10035,8 @@ async function _saveRaceDirect(date, baba, rn, parsed) {
     localHorses.push([horseId, { type:'horse', chakujun:horseRow.chakujun, wakuBan:horseRow.waku_ban, horseName:horseRow.horse_name, belong:horseRow.belong, sexAge:horseRow.sex_age, kinryo:horseRow.kinryo, jockey:horseRow.jockey, trainer:horseRow.trainer, weight:horseRow.weight, ninki:horseRow.ninki, odds:horseRow.odds, time:horseRow.time, diff:horseRow.diff, agari3f:horseRow.agari3f, corner:horseRow.corner, first3f:horseRow.first3f, paceType:horseRow.pace_type, mukaeShoumen:horseRow.mukae_shoumen, shoumenStraight:horseRow.shoumen_straight, postComment:h.postComment||'', lineageLoginCode:h.lineageLoginCode||'', savedAt:new Date().toISOString() }]);
     hc++;
   }
-  await apiSaveRaceBundle(raceId, raceRow, horseRows);
-  lsWrite(raceId, { type:'race', ...raceRow, paceType:info.paceType||'', lapTimes:null, _apiSaved:true, savedAt:new Date().toISOString() });
+  const saved=await apiSaveRaceBundle(raceId,raceRow,horseRows);_applyFirst3fSaveResult(saved,raceRow,info);
+  lsWrite(raceId, { type:'race', ...raceRow, first3fSource:info.first3fSource||'', paceType:info.paceType||'', lapTimes:null, _apiSaved:true, savedAt:new Date().toISOString() });
   localHorses.forEach(([horseId, row]) => lsWrite(horseId, row));
   return hc;
 }
@@ -10483,7 +10419,7 @@ async function _bulkFetchRun(monthsList, label) {
       }
     }
     // first3f・ペース自動補完（今回保存分に効く）＋基準タイム系のキャッシュ無効化（データ増を反映）
-    try { backfillFirst3fFrom1400m(); backfillPaceLabels(); backfillPaceType(); } catch(e) {}
+    try { backfillPaceLabels(); backfillPaceType(); } catch(e) {}
     window._f3BenchCache = null; window._leadFrontBench = null; window._frontBaseCache = null; window._comboStatsCache = null; window._jcMapsCache = null; window._evMapsCache = null; window._asOfComboCache = null; window._asOfAgariCache = null; window._asOfF3BenchCache = null;
     loadSavedData();
     if (typeof initAnalysisDateSelect === 'function') initAnalysisDateSelect();
@@ -10904,7 +10840,7 @@ function buildJockeyChangeDiag(raceNo) {
     </details>`;
 }
 
-function getSavedRacePace(key){const d=lsRead()[key];if(!d)return null;return{first3f:d.first3f||'',agari4f:d.agari4f||'',agari3f_race:d.agari3f_race||'',paceType:d.paceType||d.pace_type||'',memo:d.memo||''};}
+function getSavedRacePace(key){const d=lsRead()[key];if(!d)return null;return{first3f:d.first3f||'',first3fSource:d.first3fSource||d.first3f_source||'',agari4f:d.agari4f||'',agari3f_race:d.agari3f_race||'',paceType:d.paceType||d.pace_type||'',memo:d.memo||''};}
 function getSavedHorsePace(key){const d=lsRead()[key];if(!d)return null;return{first3f:d.first3f||'',paceType:d.paceType||d.pace_type||'',mukaeShoumen:d.mukaeShoumen||d.mukae_shoumen||'',shoumenStraight:d.shoumenStraight||d.shoumen_straight||''};}
 
 // ── 保存済みリスト：全件グループ構築（共通データソース） ──
@@ -13044,7 +12980,7 @@ async function restoreFromSaved(date, baba, silent) {
     const horses=horseEntries.sort((a,b)=>(parseInt(a[0].replace(hp,''))||0)-(parseInt(b[0].replace(hp,''))||0)).map(([k,v])=>{const umaBan=parseInt(k.replace(hp,''));return{chakujun:v.chakujun||'',wakuBan:v.wakuBan||String(Math.ceil(umaBan/2)),umaBan,horseName:v.horseName||`馬番${umaBan}`,belong:v.belong||'',sexAge:v.sexAge||'',kinryo:v.kinryo||'',jockey:v.jockey||'',trainer:v.trainer||'',weight:v.weight||'',ninki:v.ninki||'',odds:v.odds||'',time:v.time||'',diff:v.diff||'',agari3f:v.agari3f||'',corner:v.corner||'',first3f:v.first3f||'',paceType:v.paceType||'',mukaeShoumen:v.mukaeShoumen||'',shoumenStraight:v.shoumenStraight||'',postComment:v.postComment||'',lineageLoginCode:v.lineageLoginCode||''};});
     let _lapTimes = raceVal.lapTimes || null;
     if (!_lapTimes && raceVal.lap_times) { try { _lapTimes = JSON.parse(raceVal.lap_times); } catch(e){} }
-    allRacesData[rn]={raceInfo:{raceDate:date,raceNo:rn,babaCode:baba,raceName:raceVal.race_name||`第${rn}レース`,distance:raceVal.distance||'',raceClass:migrateRaceClass(raceVal.race_class||raceVal.raceClass||'',raceVal.race_name||''),trackCond:raceVal.track_cond||raceVal.trackCond||'',first3f:raceVal.first3f||'',agari4f:raceVal.agari4f||'',agari3f_race:raceVal.agari3f_race||'',paceType:raceVal.paceType||raceVal.pace_type||'',memo:raceVal.memo||'',lapTimes:_lapTimes},horses};
+    allRacesData[rn]={raceInfo:{raceDate:date,raceNo:rn,babaCode:baba,raceName:raceVal.race_name||`第${rn}レース`,distance:raceVal.distance||'',raceClass:migrateRaceClass(raceVal.race_class||raceVal.raceClass||'',raceVal.race_name||''),trackCond:raceVal.track_cond||raceVal.trackCond||'',first3f:raceVal.first3f||'',first3fSource:raceVal.first3fSource||raceVal.first3f_source||'',agari4f:raceVal.agari4f||'',agari3f_race:raceVal.agari3f_race||'',paceType:raceVal.paceType||raceVal.pace_type||'',memo:raceVal.memo||'',lapTimes:_lapTimes},horses};
     restoredCount++;
   });
   if(!restoredCount){showError('保存データからの復元に失敗しました');return;}
@@ -13078,6 +13014,9 @@ async function _refetchEmptyRaces(date, baba, rns) {
         if (prev && prev.raceInfo) {
           parsed.raceInfo.memo    = prev.raceInfo.memo    || parsed.raceInfo.memo;
           parsed.raceInfo.paceType= prev.raceInfo.paceType|| parsed.raceInfo.paceType;
+          _mergeFirst3fInfo(prev.raceInfo, parsed.raceInfo);
+          if (String(prev.raceInfo.agari4f || '').trim()) parsed.raceInfo.agari4f = prev.raceInfo.agari4f;
+          if (String(prev.raceInfo.agari3f_race || '').trim()) parsed.raceInfo.agari3f_race = prev.raceInfo.agari3f_race;
           if (prev.raceInfo.lapTimes && prev.raceInfo.lapTimes.some(v=>v!=null)) parsed.raceInfo.lapTimes = prev.raceInfo.lapTimes;
         }
         allRacesData[rn] = parsed;
@@ -13116,6 +13055,9 @@ async function _kvRefreshTodayPriorityRaces(date, baba, preferredRaceNo) {
         if (prev && prev.raceInfo) {
           result.raceInfo.memo = prev.raceInfo.memo || result.raceInfo.memo;
           result.raceInfo.paceType = prev.raceInfo.paceType || result.raceInfo.paceType;
+          _mergeFirst3fInfo(prev.raceInfo, result.raceInfo);
+          if (String(prev.raceInfo.agari4f || '').trim()) result.raceInfo.agari4f = prev.raceInfo.agari4f;
+          if (String(prev.raceInfo.agari3f_race || '').trim()) result.raceInfo.agari3f_race = prev.raceInfo.agari3f_race;
           if (prev.raceInfo.lapTimes && prev.raceInfo.lapTimes.some(v => v != null)) result.raceInfo.lapTimes = prev.raceInfo.lapTimes;
         }
         _sanDeep(result);
@@ -13396,10 +13338,11 @@ async function saveOneRace(raceNo) {
     const memoEl = document.getElementById(`race-memo-${raceNo}`); if (memoEl) info.memo = memoEl.value;
     const agari4fEl = document.getElementById(`race-agari4f-${raceNo}`); if (agari4fEl) info.agari4f = agari4fEl.value;
     const agari3fEl = document.getElementById(`race-agari3f-${raceNo}`); if (agari3fEl) info.agari3f_race = agari3fEl.value;
+    _autofillFirst3fInData(data);
     const lapTimesJson = (info.lapTimes && info.lapTimes.some(v => v != null)) ? JSON.stringify(info.lapTimes) : '';
 
     const raceId = `race_${currentBaba}_${currentDate}_${raceNo}`;
-    const raceRow = { race_date: currentDate, race_no: raceNo, baba_code: currentBaba, race_name: info.raceName||'', distance: info.distance||'', race_class: info.raceClass||'', track_cond: info.trackCond||'', first3f: info.first3f||'', agari4f: info.agari4f||'', agari3f_race: info.agari3f_race||'', pace_type: info.paceType||'', memo: info.memo||'', lap_times: lapTimesJson };
+    const raceRow = { race_date: currentDate, race_no: raceNo, baba_code: currentBaba, race_name: info.raceName||'', distance: info.distance||'', race_class: info.raceClass||'', track_cond: info.trackCond||'', first3f: info.first3f||'', first3f_source: info.first3fSource||'', agari4f: info.agari4f||'', agari3f_race: info.agari3f_race||'', pace_type: info.paceType||'', memo: info.memo||'', lap_times: lapTimesJson };
     const horseRows = [];
     const localHorses = [];
     let hc = 0;
@@ -13412,8 +13355,8 @@ async function saveOneRace(raceNo) {
       localHorses.push([horseId, { type:'horse', chakujun:horseRow.chakujun, wakuBan:horseRow.waku_ban, horseName:horseRow.horse_name, belong:horseRow.belong, sexAge:horseRow.sex_age, kinryo:horseRow.kinryo, jockey:horseRow.jockey, trainer:horseRow.trainer, weight:horseRow.weight, ninki:horseRow.ninki, odds:horseRow.odds, time:horseRow.time, diff:horseRow.diff, agari3f:horseRow.agari3f, corner:horseRow.corner, first3f:horseRow.first3f, paceType:horseRow.pace_type, mukaeShoumen:horseRow.mukae_shoumen, shoumenStraight:horseRow.shoumen_straight, postComment:horse.postComment||'', lineageLoginCode:horse.lineageLoginCode||'', savedAt:new Date().toISOString() }]);
       hc++;
     }
-    await apiSaveRaceBundle(raceId, raceRow, horseRows);
-    lsWrite(raceId, { type:'race', ...raceRow, paceType: info.paceType||'', lapTimes: info.lapTimes||null, _apiSaved: true, savedAt: new Date().toISOString() });
+    const saved=await apiSaveRaceBundle(raceId,raceRow,horseRows);_applyFirst3fSaveResult(saved,raceRow,info,raceNo);
+    lsWrite(raceId, { type:'race', ...raceRow, first3fSource:info.first3fSource||'', paceType: info.paceType||'', lapTimes: info.lapTimes||null, _apiSaved: true, savedAt: new Date().toISOString() });
     localHorses.forEach(([horseId, row]) => lsWrite(horseId, row));
 
     if (st) { st.textContent = `✅ ${raceNo}R 保存完了（${hc}頭）`; setTimeout(() => { st.textContent = ''; }, 3000); }

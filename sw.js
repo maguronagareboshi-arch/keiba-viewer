@@ -1,4 +1,4 @@
-const CACHE = 'kochi-viewer-v12';
+const CACHE = 'kochi-viewer-v13';
 const CORE = [
   './', './index.html', './manifest.webmanifest',
   './modules/ai-analysis.js?v=20260723-jra1', './modules/ai-insights.js', './modules/value-t10-shadow.js?v=20260723-purchase1',
@@ -6,6 +6,7 @@ const CORE = [
   './modules/jra-transfer-shadow.js?v=20260723-v1',
   './modules/probability-calibration.js?v=20260723-v1',
   './modules/performance-observer.js',
+  './modules/first3f-autofill.js?v=20260725-v1',
 ];
 
 self.addEventListener('install', event => {
