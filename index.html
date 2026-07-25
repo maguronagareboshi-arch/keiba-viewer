@@ -3075,9 +3075,35 @@ function _kvScheduleIdle(task, timeout = 4000) {
   if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout });
   else setTimeout(run, Math.min(timeout, 1500));
 }
+const KOCHI_WORKER_ORIGIN = 'https://keiba-proxydeploy.maguronagareboshi.workers.dev';
 const CORS_PROXIES = [
-  (url) => `https://keiba-proxydeploy.maguronagareboshi.workers.dev/?url=${encodeURIComponent(url)}`,
+  (url) => `${KOCHI_WORKER_ORIGIN}/?url=${encodeURIComponent(url)}`,
 ];
+
+function normalizeOfficialPrize(value) {
+  const match = String(value ?? '').replace(/,/g,'').match(/\d+(?:\.\d+)?/);
+  if(!match) return '';
+  const amount = Number(match[0]);
+  return String(amount >= 10000 ? Math.round(amount / 1000) / 10 : amount);
+}
+
+async function fetchOfficialHorseHistory(code, horseName, timeout = 15000) {
+  const lineage = String(code || '').trim();
+  if(!/^\d{8,14}$/.test(lineage)) throw new Error('invalid lineage');
+  const url = `${KOCHI_WORKER_ORIGIN}/horse-history?lineage=${encodeURIComponent(lineage)}&horse=${encodeURIComponent(horseName || '')}`;
+  const res = await fetch(url, {signal:AbortSignal.timeout(timeout), cache:'no-store'});
+  if(!res.ok) throw new Error(`official history HTTP ${res.status}`);
+  const payload = await res.json();
+  if(!Array.isArray(payload.races) || !payload.races.length) throw new Error('official history empty');
+  return {
+    races:payload.races.map(r=>({...r,
+      raceClass:detectRaceClass(r.raceClassRaw||r.raceClass||r.raceName)||r.raceClass||'',
+      prize:normalizeOfficialPrize(r.prize)
+    })),
+    basicInfo:payload.basic_info||{},
+    fetchedAt:payload.fetched_at||new Date().toISOString()
+  };
+}
 
 // セッション内プロキシ死活管理
 const _proxyHealth = CORS_PROXIES.map(() => ({ blockedUntil: 0 }));
@@ -14535,6 +14561,7 @@ function _renderOfficialSection(parsed, code, horseName) {
   // 既存の公式データセクションを削除
   const old=document.getElementById('official-race-section');
   if(old) old.remove();
+  document.getElementById('official-class-outlook')?.remove();
 
   if(!parsed.races.length){ 
     const noData=document.createElement('div');
@@ -14740,6 +14767,8 @@ function _renderOfficialSection(parsed, code, horseName) {
   // 表示/非表示トグルで本体を折りたたみ可能にする
   const sectionBodyId = `official-section-body-${code}`;
   const sectionToggleId = `official-section-toggle-${code}`;
+  const outlookAnchor = document.getElementById('hm-top-anchor');
+  const prizeAtTop = !!(outlookAnchor && prizeCardHtml);
   // 初期状態を sessionStorage で保持（デフォルト=表示）
   const _toggleKey = `_officialVisible_${code}`;
   const _initVisible = sessionStorage.getItem(_toggleKey) !== 'false';
@@ -14765,7 +14794,7 @@ function _renderOfficialSection(parsed, code, horseName) {
     <!-- 本体（折りたたみ対象） -->
     <div id="${sectionBodyId}" style="display:${_initVisible?'block':'none'};padding:0 16px 14px">
       ${basicHtml}
-      ${prizeCardHtml}
+      ${prizeAtTop?'':prizeCardHtml}
       ${officialWeightChartHtml}
       <div style="overflow-x:auto;margin-top:10px">
         <table class="deban-table" style="font-size:12px;min-width:900px">
@@ -14783,6 +14812,13 @@ function _renderOfficialSection(parsed, code, horseName) {
       <div style="font-size:10px;color:#9ca3af;margin-top:6px">JRA（グレー行）の取得賞金は番組賞金へ30%換算して格付け推定に算入します</div>
     </div>
   </div>`;
+  if(prizeAtTop){
+    const outlook=document.createElement('section');
+    outlook.id='official-class-outlook';
+    outlook.setAttribute('aria-label','現在級・昇降級見込み');
+    outlook.innerHTML=prizeCardHtml;
+    outlookAnchor.insertAdjacentElement('afterend',outlook);
+  }
   content.appendChild(section);
   // スクロール位置は openHorseModal 側で制御するためここでは行わない
 
@@ -14859,41 +14895,35 @@ async function fetchHorseMarkInfo() {
   const horseName=btn.dataset.horse;
   if(!code) return;
 
-  const url=`https://www.keiba.go.jp/KeibaWeb/DataRoom/HorseMarkInfo?k_lineageLoginCode=${code}`;
   btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> 取得中...';
   btn.disabled=true;
 
-  let html='';
-  for(const proxyFn of CORS_PROXIES){
-    try{
-      const res=await fetch(proxyFn(url),{signal:AbortSignal.timeout(10000)});
-      if(res.ok){ html=await res.text(); if(html.length>500) break; }
-    }catch(e){}
+  let parsed;
+  try {
+    const fetched=await fetchOfficialHorseHistory(code,horseName);
+    const cached=lsRead()[`official_${code}`];
+    parsed={races:fetched.races,basicInfo:Object.keys(fetched.basicInfo).length?fetched.basicInfo:(cached?.basicInfo||{}),_saveToCache:true};
+    btn.innerHTML='<i class="fas fa-sync-alt"></i> 再取得';
+  } catch(e) {
+    btn.innerHTML='<i class="fas fa-database"></i> 公式成績を取得';
+    const content=document.getElementById('horse-modal-content');
+    if(content){
+      document.getElementById('official-fetch-error')?.remove();
+      const error=document.createElement('div');
+      error.id='official-fetch-error';
+      error.style.cssText='background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:10px 14px;margin:8px 0;color:#9a3412;font-size:12px';
+      error.innerHTML='<i class="fas fa-exclamation-triangle"></i> 公式成績を取得できませんでした。通信状態を確認して「公式成績を取得」を再度押してください。';
+      const anchor=document.getElementById('hm-top-anchor');
+      anchor?anchor.insertAdjacentElement('afterend',error):content.prepend(error);
+    }
+    btn.disabled=false;
+    return;
   }
-  btn.innerHTML='<i class="fas fa-database"></i> 公式成績を取得';
   btn.disabled=false;
-
-  if(!html){ alert('公式ページの取得に失敗しました。プロキシの制限が原因の場合があります。'); return; }
-
-  const parsed=parseHorseMarkInfoHtml(html);
-  // 新規取得のためキャッシュ保存を有効に
-  parsed._saveToCache = true;
 
   const content=document.getElementById('horse-modal-content');
   if(!content) return;
-
-  if(!parsed.races.length){ 
-    const noData=document.createElement('div');
-    noData.id='official-race-section';
-    noData.style.cssText='background:#fff8f0;border:1px solid #fbd38d;border-radius:8px;padding:12px 16px;margin-top:12px;font-size:13px;color:#92400e';
-    noData.innerHTML='<i class="fas fa-exclamation-triangle"></i> 公式ページからの成績取得ができませんでした（ページ構造の変更またはCORS制限）';
-    // 既存セクション削除
-    const oldSec=document.getElementById('official-race-section');
-    if(oldSec) oldSec.remove();
-    content.appendChild(noData);
-    return;
-  }
-
+  document.getElementById('official-fetch-error')?.remove();
   _renderOfficialSection(parsed, code, horseName);
 }
 
@@ -14959,17 +14989,8 @@ async function fetchAllHorsesOfficialData(silent = false) {
     progressBar.innerHTML = `<i class="fas fa-spinner fa-spin" style="color:#7c3aed"></i> 公式成績取得中: <strong>${horseName}</strong> (${done+1}/${total}) スキップ:${skipped}`;
     if(btn) { btn.disabled = true; btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> 取得中 ${done+1}/${total}`; }
 
-    const url = `https://www.keiba.go.jp/KeibaWeb/DataRoom/HorseMarkInfo?k_lineageLoginCode=${code}`;
-    let html = '';
-    for(const proxyFn of CORS_PROXIES){
-      try{
-        const res = await fetch(proxyFn(url), {signal: AbortSignal.timeout(12000)});
-        if(res.ok){ html = await res.text(); if(html.length > 500) break; }
-      }catch(e){}
-    }
-
-    if(html && html.length > 500){
-      const parsed = parseHorseMarkInfoHtml(html);
+    try {
+      const parsed = await fetchOfficialHorseHistory(code, horseName, 15000);
       // 取得成功 → キャッシュ保存
       lsWrite(cacheKey, {
         type: 'official',
@@ -14977,11 +14998,11 @@ async function fetchAllHorsesOfficialData(silent = false) {
         horseName,
         races: parsed.races,
         basicInfo: parsed.basicInfo,
-        savedAt: new Date().toISOString()
+        savedAt: parsed.fetchedAt
       });
       // 予想AIが読む fromOfficial エントリも保存
       storeOfficialRacesAsHorseEntries(horseName, code, parsed.races);
-    } else {
+    } catch(e) {
       failed++;
     }
 

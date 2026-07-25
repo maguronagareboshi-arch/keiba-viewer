@@ -158,16 +158,14 @@ async function autoFetchHorseDataByName(horseName, lineageCode, progressCb) {
   try {
     const code = lineageCode || await searchHorseLineageCode(horseName);
     if (!code) { progressCb?.('notfound'); return false; }
-    const infoUrl = `https://www.keiba.go.jp/KeibaWeb/DataRoom/HorseMarkInfo?k_lineageLoginCode=${code}`;
-    let html;
-    try { html = await fetchHtmlWithProxy(infoUrl, 15000); } catch(e) { progressCb?.('error'); return false; }
-    const parsed = parseHorseMarkInfoHtml(html);
+    let parsed;
+    try { parsed = await fetchOfficialHorseHistory(code, horseName, 15000); } catch(e) { progressCb?.('error'); return false; }
     if (!parsed.races.length) { progressCb?.('empty'); return false; }
     // official_ キャッシュ保存
     lsWrite(`official_${code}`, {
       type: 'official', lineageCode: code, horseName,
       races: parsed.races, basicInfo: parsed.basicInfo,
-      savedAt: new Date().toISOString()
+      savedAt: parsed.fetchedAt || new Date().toISOString()
     });
     // SI計算用エントリ保存
     storeOfficialRacesAsHorseEntries(horseName, code, parsed.races);
