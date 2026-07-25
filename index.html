@@ -8859,6 +8859,17 @@ async function renderHorseOddsHistory(containerId, raceDateSlash, raceNo, umaBan
 const WORKER_URL = 'https://keiba-proxydeploy.maguronagareboshi.workers.dev';
 function getWriteToken() { return sessionStorage.getItem('kv_write_token') || localStorage.getItem('kv_write_token') || ''; }
 
+async function apiCheckWriteAccess() {
+  const token = getWriteToken();
+  if (!token) { const e = new Error('管理者認証がありません。再ログインしてください'); e.status = 401; throw e; }
+  let res;
+  try {
+    res = await fetch(`${WORKER_URL}/auth/check`, { method:'GET', headers:{'X-Write-Token':token}, signal:AbortSignal.timeout(10000) });
+  } catch (cause) { throw new Error('保存サーバーの認証確認に失敗しました。通信状態を確認してください', { cause }); }
+  if (!res.ok) { const e = new Error(res.status === 401 ? '保存権限の有効期限が切れています。再ログインしてください' : `保存サーバーの認証確認に失敗しました（HTTP ${res.status}）`); e.status = res.status; throw e; }
+  return true;
+}
+
 /** Supabase REST API：upsert（INSERT OR UPDATE）— Worker 経由で書き込み */
 async function apiUpsert(table, id, payload) {
   const token = getWriteToken();
@@ -8890,14 +8901,15 @@ async function apiSaveRaceBundle(raceId, raceRow, horseRows) {
   if (!token) throw new Error('管理者認証がありません');
   const expected = (horseRows || []).map(row => parseInt(row.uma_ban, 10)).filter(Number.isFinite).sort((a,b) => a-b);
   if (!expected.length || new Set(expected).size !== expected.length) throw new Error('出走馬の馬番集合が不正です');
-  const res = await fetch(`${WORKER_URL}/rpc/save-keiba-race-bundle`, {
-    method:'POST',
-    headers:{'Content-Type':'application/json','X-Write-Token':token},
-    body:JSON.stringify({ race_id:raceId, race:raceRow, horses:horseRows, expected_uma_ban:expected }),
-    signal:AbortSignal.timeout(20000),
-  });
+  let res;
+  try {
+    res = await fetch(`${WORKER_URL}/rpc/save-keiba-race-bundle`, {
+      method:'POST', headers:{'Content-Type':'application/json','X-Write-Token':token},
+      body:JSON.stringify({ race_id:raceId, race:raceRow, horses:horseRows, expected_uma_ban:expected }), signal:AbortSignal.timeout(20000),
+    });
+  } catch (cause) { throw new Error('保存サーバーとの通信に失敗しました', { cause }); }
   const raw = await res.text();
-  if (!res.ok) throw new Error(`レース一括保存に失敗しました（HTTP ${res.status}）${raw ? `: ${raw.slice(0, 240)}` : ''}`);
+  if (!res.ok) { const e = new Error(`レース一括保存に失敗しました（HTTP ${res.status}）${raw ? `: ${raw.slice(0, 240)}` : ''}`); e.status = res.status; throw e; }
   let result = null;
   try { result = raw ? JSON.parse(raw) : null; } catch (_) {}
   const saved = Number(result?.saved_horses ?? result?.[0]?.saved_horses);
@@ -9906,21 +9918,14 @@ async function initDB() {
     _setBgLoadIndicator(false);
     loadSavedData();
     if(typeof initAnalysisDateSelect==='function') initAnalysisDateSelect();
-    // Phase1時点でデータ未到着だったディープリンクの再試行（古い開催日のリンク対応）
     try { if (window._kvDeepLink) await _kvTryDeepLink(); } catch(e) {}
-    // 1400m戦の前半3Fを上がり4Fから一括補完（全データ揃った後に実行）
     const _bfCount = backfillFirst3fFrom1400m();
-    // 自動ペースラベル（基準比ベース・paceTypeAuto）＋前後半差ペース(paceType)を補完。手入力のpaceTypeは保持
     try { backfillPaceLabels(); backfillPaceType(); } catch(e) { console.warn('[paceLabels]', e); }
-    // 補完で1400mデータが増えたので、馬場傾向の前残り傾向パネルを最新で再描画
     if (_bfCount > 0 && typeof renderTrackTrend === 'function') {
       try { renderTrackTrend(); } catch(e) {}
     }
     };
 
-    // 複数タブが同時に約90MBの全履歴を取得すると、出馬表や馬比較の通信まで競合する。
-    // Web Locks対応ブラウザでは同期担当を1タブだけに限定する。取得結果は共有IndexedDBへ
-    // 保存されるため、他タブは次回の必要時・再読込時に同じデータを利用できる。
     if (navigator.locks?.request) {
       const didRun = await navigator.locks.request('kochi-full-history-sync-v1', { ifAvailable:true }, async lock => {
         if (!lock) return false;
@@ -9951,6 +9956,19 @@ async function saveAllData() {
   const footer   = document.getElementById('save-modal-footer');
   const st       = document.getElementById('save-status');
 
+  try { await apiCheckWriteAccess(); }
+  catch (e) {
+    console.error('[saveAllData] 保存権限の確認失敗:', e);
+    if (st) st.textContent = `❌ ${e.message || e}`;
+    if (e.status === 401) {
+      sessionStorage.removeItem('kv_write_token'); localStorage.removeItem('kv_write_token');
+      applyModeUI(); openAdminLogin();
+      const err = document.getElementById('admin-login-error');
+      if (err) { err.textContent = e.message; err.style.display = 'block'; }
+    }
+    return;
+  }
+
   // ── 対象レースをソート ──
   const raceEntries = Object.entries(allRacesData).map(([k,v])=>({rn:parseInt(k),data:v})).sort((a,b)=>a.rn-b.rn);
   const total = raceEntries.length;
@@ -9971,7 +9989,7 @@ async function saveAllData() {
   footer.textContent = 'しばらくお待ちください';
   overlay.style.display = 'flex';
 
-  let rc=0, hc=0, errCount=0, skipped=0;
+  let rc=0, hc=0, errCount=0, skipped=0, firstError='';
   for (const {rn, data} of raceEntries) {
     const info = data.raceInfo;
     const item = document.getElementById(`save-item-${rn}`);
@@ -10022,7 +10040,10 @@ async function saveAllData() {
       }
     } catch(e) {
       errCount++;
-      if (item) { item.className='save-race-item error'; item.querySelector('.item-icon').textContent='❌'; }
+      const msg = e?.message || String(e);
+      if (!firstError) firstError = msg;
+      console.error(`[saveAllData] ${rn}R 保存失敗:`, e);
+      if (item) { item.className='save-race-item error'; item.querySelector('.item-icon').textContent='❌'; item.querySelector('.item-horses').textContent=`失敗 HTTP ${e?.status || '通信'}`; item.title=msg; }
     }
 
     // プログレスバーと進捗テキスト更新
@@ -10040,17 +10061,13 @@ async function saveAllData() {
   document.querySelector('.save-modal-title').innerHTML = hasErr
     ? '<i class="fas fa-exclamation-triangle" style="color:#e84040"></i> 保存完了（一部エラー）'
     : '<i class="fas fa-check-circle" style="color:#16a34a"></i> 保存完了！';
-  footer.innerHTML = `<strong>${rc}レース・${hc}頭</strong> をサーバーに保存しました`;
+  footer.innerHTML = `<strong>${rc}レース・${hc}頭</strong> をサーバーに保存しました${firstError ? `<div style="color:#b91c1c;text-align:left;margin-top:6px">原因: ${escapeHTML(firstError)}</div>` : ''}`;
   progBar.style.width = '100%';
 
   // save-statusにも反映
   if (st) { st.textContent = hasErr ? `⚠ ${rc}R保存（${errCount}件失敗）` : `✅ ${rc}レース・${hc}頭を保存`; }
 
-  // 2秒後にモーダルを閉じる
-  setTimeout(() => {
-    overlay.style.display = 'none';
-    if (st) setTimeout(()=>{ st.textContent=''; }, 3000);
-  }, 2000);
+  if (!hasErr) setTimeout(() => { overlay.style.display = 'none'; if (st) setTimeout(()=>{ st.textContent=''; }, 3000); }, 2000);
 
   loadSavedData();
   if(typeof initAnalysisDateSelect==='function') initAnalysisDateSelect();
