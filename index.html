@@ -13556,12 +13556,19 @@ function parsePostRaceCommentDom(doc, horseNames) {
 }
 
 /**
- * CORSプロキシ経由でレース後コメントを取得し { 馬名: コメント } マップを返す
+ * コメント専用Worker経由でレース後コメントを取得し { 馬名: コメント } マップを返す
  */
 async function fetchPostRaceComments(raceDate, raceNo, horseNames) {
   const url = buildCommentUrl(raceDate, raceNo);
+  const rn = Number(raceNo);
+  const raceId = `${String(raceDate || '').replace(/\D/g,'')}${String(rn).padStart(2,'0')}`;
   try {
-    const html = await fetchHtmlWithProxy(url, 14000);
+    if (!/^\d{10}$/.test(raceId) || rn < 1 || rn > 12) throw new Error('invalid race');
+    const res = await fetch(`${KOCHI_WORKER_ORIGIN}/postrace-comment?race=${raceId}`, {
+      signal:AbortSignal.timeout(14000), cache:'no-store'
+    });
+    if (!res.ok) throw new Error(`comment HTTP ${res.status}`);
+    const html = await res.text();
     if (!html || html.length < 100) return { map: {}, url, error: true, success: false };
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const commentMap = parsePostRaceCommentDom(doc, horseNames || []);
@@ -13569,7 +13576,7 @@ async function fetchPostRaceComments(raceDate, raceNo, horseNames) {
     const rawText = (container?.innerText || container?.textContent || '').substring(0, 2000);
     return { map: _sanDeep(commentMap), url, rawText: _sanDeep(rawText), success: true };
   } catch(e) {
-    console.warn('[コメント取得] 全プロキシ失敗:', url, e);
+    console.warn('[コメント取得] 専用経路失敗:', url, e);
     return { map: {}, url, error: true, success: false };
   }
 }
@@ -13604,8 +13611,8 @@ async function fetchAndApplyComments(raceNo) {
         btn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> 取得失敗（再試行）';
       }
       // デバッグ用にコンソール出力
-      console.warn('[コメント取得] 全プロキシ失敗:', commentUrl);
-      alert(`コメントの取得に失敗しました。\nCORSプロキシが全滅している可能性があります。\n\n直接確認: ${commentUrl}`);
+      console.warn('[コメント取得] 専用経路失敗:', commentUrl);
+      alert(`公式コメント取得サーバーに接続できませんでした。\n時間をおいて再試行してください。\n\n直接確認: ${commentUrl}`);
       return;
     }
 
