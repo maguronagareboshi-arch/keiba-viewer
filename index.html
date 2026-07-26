@@ -3434,6 +3434,9 @@ function applyImport3F() {
   if (!txt) { alert('テキストが空です'); return; }
   const MUKAE_LABELS = ['最内', '内', '外2', '外3', '大外'];
   let applied = 0, appliedPos = 0, noRace = new Set(), noHorse = 0, skipped = 0;
+  let guarded = 0;                  // 既に値があるところへ推定を書こうとして止めた数
+  const changes = [];               // 既存の値を書き換える行(確認ダイアログに出す)
+  const rows = [];                  // 実際に反映する行を貯めてから、確認後にまとめて書く
   for (const line of txt.split(/\r?\n/)) {
     const s = line.trim();
     if (!s || /レース|馬番|race/i.test(s)) continue;   // ヘッダ行
@@ -3442,11 +3445,13 @@ function applyImport3F() {
     const raceNo = parseInt(cols[0]), umaBan = parseInt(cols[1]);
     // 3F=馬番より後ろの「最後の数値列」(3〜5列形式対応)。向正面ラベル列(最内/内/外2/外3/大外)が
     // あれば内外も反映(計測アプリのポジション自動出力対応・2026-07-15拡張)
-    let val = NaN, mukae = '';
+    // 出自列(推定/実測/実測(旧)/実測(融合N頭))があれば拾う(2026-07-26追加・下の保護に使う)
+    let val = NaN, mukae = '', src = '';
     for (let ci = 2; ci < cols.length; ci++) {
       const f = parseFloat(cols[ci]);
-      if (isFinite(f) && f >= 25 && f <= 60) val = f;
-      if (MUKAE_LABELS.includes(cols[ci])) mukae = cols[ci];
+      if (isFinite(f) && f >= 25 && f <= 60) { val = f; continue; }
+      if (MUKAE_LABELS.includes(cols[ci])) { mukae = cols[ci]; continue; }
+      if (/^(推定|実測)/.test(cols[ci])) src = cols[ci];
     }
     if (!raceNo || !umaBan || (!isFinite(val) && !mukae)) { skipped++; continue; }
     const data = allRacesData[raceNo];
@@ -3455,14 +3460,13 @@ function applyImport3F() {
     if (!horse) { noHorse++; continue; }
     if (isFinite(val)) {
       const v = (Math.round(val * 10) / 10).toFixed(1);
-      horse.first3f = v;
-      const inp = document.querySelector(`input.threef-input[oninput="onHorse3FInput(this,${raceNo},${umaBan})"]`);
-      if (inp) {
-        inp.value = v;
-        const vw = inp.closest('td')?.querySelector('.vw-val');
-        if (vw) vw.textContent = v + '秒';
-      }
-      applied++;
+      const cur = String(horse.first3f || '').trim();
+      // ⛔既に入っている値を「推定」で潰さない(2026-07-26追加)。
+      //   推定は映像を一切使っていない値なので、手入力にも実測にも劣る。空欄だけ埋める。
+      //   実測系(実測/実測(旧)/実測(融合N頭))は書く——ただし値が変わる場合は下で確認を取る。
+      if (cur && src.startsWith('推定')) { guarded++; continue; }
+      if (cur && cur !== v) changes.push(`R${raceNo} ${umaBan}番 ${cur} → ${v}${src ? '（' + src + '）' : ''}`);
+      rows.push({ raceNo, umaBan, horse, v });
     }
     if (mukae && !horse.mukaeShoumen) {
       // 自動ラベルは±1ビン82%精度の推定値のため、手入力済みの値は上書きしない(空欄のみ埋める)
@@ -3476,8 +3480,31 @@ function applyImport3F() {
       appliedPos++;
     }
   }
+  // ⛔既存の値を書き換えるときは、黙って上書きせず件数と中身を見せて確認を取る。
+  if (changes.length) {
+    const head = changes.slice(0, 12).join('\n');
+    const more = changes.length > 12 ? `\n…ほか ${changes.length - 12} 頭` : '';
+    if (!confirm(`既に値が入っている ${changes.length} 頭を書き換えます。よろしいですか？\n\n${head}${more}`)) {
+      alert('取込を中止しました。何も変更していません。');
+      return;
+    }
+  }
+  for (const r of rows) {
+    {
+      const { raceNo, umaBan, horse, v } = r;
+      horse.first3f = v;
+      const inp = document.querySelector(`input.threef-input[oninput="onHorse3FInput(this,${raceNo},${umaBan})"]`);
+      if (inp) {
+        inp.value = v;
+        const vw = inp.closest('td')?.querySelector('.vw-val');
+        if (vw) vw.textContent = v + '秒';
+      }
+      applied++;
+    }
+  }
   document.getElementById('f3imp-overlay')?.remove();
   let msg = `前半3Fを ${applied}件 反映しました。\n※「保存」ボタンを押すと確定されます。`;
+  if (guarded) msg += `\n既に値が入っていたので推定で上書きしなかった: ${guarded}件`;
   if (appliedPos) msg += `\n向正面(内外)も ${appliedPos}件 反映しました。`;
   if (noRace.size) msg += `\n未読込のレース(スキップ): R${[...noRace].join(', R')} — 対象日の出馬表を読み込んでから取込してください`;
   if (noHorse) msg += `\n馬番不一致スキップ: ${noHorse}件`;
