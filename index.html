@@ -19,6 +19,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
   <script defer src="modules/performance-observer.js"></script>
   <script defer src="modules/first3f-autofill.js?v=20260725-v1"></script>
+  <script defer src="modules/track-bias-v2.js?v=20260726-v2"></script>
 <style id="dark-mode-css">
 /* ===== DARK MODE ===== */
 /* 背景に奥行き（左上からのラジアルグラデ） */
@@ -2783,13 +2784,13 @@ const KV_APP_CSS = [
     <div class="saved-card">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
         <h2 class="section-title" style="margin-bottom:0"><i class="fas fa-gauge-high"></i> 1400m ペース別 前残り傾向</h2>
-        <span style="font-size:11px;color:#6b7280">前後半差＝前半3F − 上がり3F（マイナス＝前が速い＝ハイ）</span>
+        <span style="font-size:11px;color:#6b7280">クラス×馬場状態別の前半3F基準でハイ・平均・スローを判定</span>
       </div>
       <p style="font-size:11.5px;color:#6b7280;margin:0 0 12px;line-height:1.7">
-        1400m戦のみ集計（全体時計と上がり4Fから前半3Fを自動算出）。各セルは
+        1400m戦のみ集計（保存済み前半3Fを使用。自動算出値を含む）。各セルは
         <strong style="color:#dc2626">逃げ馬（先頭通過）の複勝率</strong>を主表示し、N数・前決着率を併記。
         <span style="color:#059669;font-weight:700">緑＝前残り傾向</span> /
-        <span style="color:#dc2626;font-weight:700">赤＝前つぶれ（差し台頭）</span>。N&lt;8は薄字（参考値）。
+        <span style="color:#dc2626;font-weight:700">赤＝前つぶれ（差し台頭）</span>。N&lt;20は薄字（参考値）。
       </p>
       <div id="pace-bias-1400"></div>
     </div>
@@ -2917,7 +2918,7 @@ const _kvLibSpecs = {
       window.KvJraTransferShadow?.contract?.status === 'forward_shadow_only',
   },
   aiAnalysis: {
-    src: 'modules/ai-analysis.js?v=20260726-transfer2',
+    src: 'modules/ai-analysis.js?v=20260726-transfer2-bias1',
     ready: () => typeof window.computeYosoScored === 'function' && typeof window.renderPredictionPanel === 'function' && typeof window.renderAnalysis === 'function',
   },
   aiInsights: {
@@ -6882,7 +6883,8 @@ function _updateTrackBiasInline(raceNo) {
       .filter(h => h.chaku >= 1 && h.chaku <= 3 && h.time != null)
       .sort((a,b) => a.chaku - b.chaku).slice(0, 3);
     const top3avg = top3.length === 3 ? top3.reduce((s,h) => s + h.time, 0) / 3 : null;
-    if (stdTime != null && top3avg != null) stdDiff = +(top3avg - stdTime).toFixed(2);
+    const center = typeof _raceBiasCenter === 'function' ? _raceBiasCenter(top3).center : top3avg;
+    if (stdTime != null && center != null) stdDiff = +(center - stdTime).toFixed(2);
   }
   const stdDiffHtml = stdDiff !== null ? (()=>{
     const s2 = stdDiff > 0 ? '+' : '';
@@ -7482,7 +7484,7 @@ function renderRankingPanel(raceNo, subTab) {
     // 近5走SI
     const recent5 = [];
     for (const h of hist.slice(0, 5)) {
-      const bias = getDayBiasForDateAndDist(h.babaCode, h.raceDate, h.distance);
+      const bias = getDayBiasForDateAndDist(h.babaCode, h.raceDate, h.distance, h.raceNo);
       const avgF3 = getRaceAvgF3(h.babaCode, h.raceDate, h.raceNo);
       const pAdj = calcPaceAdj(parseFloat(h.first3f), avgF3);
       const si = calcSpeedIndex(h.time, h.distance, h.raceClass, h.trackCond, bias, h.kinryo, pAdj);
@@ -7496,7 +7498,7 @@ function renderRankingPanel(raceNo, subTab) {
     const RANKING_LOOKBACK_DAYS = 730;
     const distH = hist.filter(h => String(h.distance||'').replace(/[^\d]/g,'')===raceDist && h.chakujun && h.time && dateDiffDays(raceInfo.raceDate, h.raceDate) <= RANKING_LOOKBACK_DAYS);
     const distC = distH.map(h=>parseInt(h.chakujun)).filter(c=>c>0&&c<99);
-    const distSIPairs = distH.map(h => ({ si: calcSpeedIndex(h.time,h.distance,h.raceClass,h.trackCond,getDayBiasForDateAndDist(h.babaCode,h.raceDate,h.distance),h.kinryo,null), date: h.raceDate })).filter(p=>p.si!=null);
+    const distSIPairs = distH.map(h => ({ si: calcSpeedIndex(h.time,h.distance,h.raceClass,h.trackCond,getDayBiasForDateAndDist(h.babaCode,h.raceDate,h.distance,h.raceNo),h.kinryo,null), date: h.raceDate })).filter(p=>p.si!=null);
     let distMax = null, distMaxDate = null;
     if (distSIPairs.length) { const _b = distSIPairs.reduce((a,b)=>b.si>a.si?b:a); distMax = _b.si; distMaxDate = _b.date; }
     const dn = distC.length;
@@ -7505,7 +7507,7 @@ function renderRankingPanel(raceNo, subTab) {
     // 当該コース（同競馬場+距離・直近2年のみ集計）
     const crsH = hist.filter(h => h.babaCode===raceBaba && String(h.distance||'').replace(/[^\d]/g,'')===raceDist && h.chakujun && h.time && dateDiffDays(raceInfo.raceDate, h.raceDate) <= RANKING_LOOKBACK_DAYS);
     const crsC = crsH.map(h=>parseInt(h.chakujun)).filter(c=>c>0&&c<99);
-    const crsSIPairs = crsH.map(h => ({ si: calcSpeedIndex(h.time,h.distance,h.raceClass,h.trackCond,getDayBiasForDateAndDist(h.babaCode,h.raceDate,h.distance),h.kinryo,null), date: h.raceDate })).filter(p=>p.si!=null);
+    const crsSIPairs = crsH.map(h => ({ si: calcSpeedIndex(h.time,h.distance,h.raceClass,h.trackCond,getDayBiasForDateAndDist(h.babaCode,h.raceDate,h.distance,h.raceNo),h.kinryo,null), date: h.raceDate })).filter(p=>p.si!=null);
     let crsMax = null, crsMaxDate = null;
     if (crsSIPairs.length) { const _b = crsSIPairs.reduce((a,b)=>b.si>a.si?b:a); crsMax = _b.si; crsMaxDate = _b.date; }
     const cn = crsC.length;
@@ -7719,62 +7721,9 @@ function renderAbilityTable(raceNo) {
     return result;
   };
 
-  // ─── 日付ごとの「当日馬場差」をIDBから計算（キャッシュ付き） ──
-  // babaCode + raceDate の全レースの基準差の中央値 = その日の当日馬場差
-  if (!renderAbilityTable._dayBiasCache) renderAbilityTable._dayBiasCache = {};
-  const _dayBiasCache = renderAbilityTable._dayBiasCache;
-
-  const getDayBiasForDate = (babaCode, raceDate) => {
-    const cacheKey = `${babaCode}_${raceDate}`;
-    if (_dayBiasCache[cacheKey] !== undefined) return _dayBiasCache[cacheKey];
-
-    const lsData = lsRead();
-    // 起動時に構築済みの開催日索引を使う。従来のObject.entries全件走査は
-    // 「出走馬×過去開催日×15万件」になり、馬比較7〜9秒の主因だった。
-    const dayIndex = _raceDayIndex?.get(`${babaCode}|${raceDate}`) || null;
-    const raceNos = dayIndex ? [...dayIndex.keys()] : [];
-
-    // 各レースの基準差を計算
-    const diffs = [];
-    for (const rno of raceNos) {
-      // そのレースのraceInfo（distance, raceClass, trackCond）を取得
-      const raceKey  = `race_${babaCode}_${raceDate}_${rno}`;
-      const entry = dayIndex?.get(Number(rno));
-      const raceInfo = entry?.raceVal || lsData[raceKey] || null;
-      if (!raceInfo) continue;
-
-      const dist    = getDistNum(raceInfo.distance);
-      const effCls  = getEffectiveClass(raceInfo.race_class || raceInfo.raceClass || '');
-      if (!dist || !effCls) continue;
-      const stdTime = STANDARD_TIMES[dist]?.[effCls];
-      if (!stdTime) continue;
-
-      // 同レースの1〜3着タイム
-      const top3 = [...(entry?.horseKeys || [])]
-        .map(k2 => lsData[k2])
-        .filter(Boolean)
-        .map(v2 => ({ chaku: parseInt(v2.chakujun) || 999, time: raceTimeToSec(v2.time) }))
-        .filter(h => h.chaku >= 1 && h.chaku <= 3 && h.time != null)
-        .sort((a, b) => a.chaku - b.chaku)
-        .slice(0, 3);
-      if (!top3.length) continue;
-
-      const avg = top3.reduce((s, h) => s + h.time, 0) / top3.length;
-      let adjDiffL = avg - stdTime;
-      const _f3l = parseFloat(raceInfo.first3f || '');
-      if (isFinite(_f3l) && _f3l > 0) {
-        const _tcl   = raceInfo.track_cond || raceInfo.trackCond || '';
-        const _cls3l = is3yo(raceInfo.race_class || raceInfo.raceClass || '') ? '3歳' : effCls;
-        const _sf3l  = getStandardF3(dist, _cls3l, _tcl);
-        if (_sf3l != null) adjDiffL += (_f3l - _sf3l) * PACE_BIAS_CORR_FACTOR;
-      }
-      diffs.push(+adjDiffL.toFixed(2));
-    }
-
-    const result = diffs.length ? calcMedian(diffs) : null;
-    _dayBiasCache[cacheKey] = result;
-    return result;
-  };
+  // 馬比較だけ別実装を持つと、馬場傾向ページ・AI・馬モーダルで値がずれる。
+  // 2026-07-26以降は監査済みの共通計算へ必ず委譲する。
+  const getDayBiasForDate = (babaCode, raceDate, excludeRaceNo) => window.getDayBiasForDate(babaCode, raceDate, excludeRaceNo);
 
   // ─── 馬場差バッジHTML生成（ヘッダー背景色に合わせた視認性優先デザイン） ─
   const makeBiasLabel = (bias) => {
@@ -7825,10 +7774,10 @@ function renderAbilityTable(raceNo) {
     // ─── 近走指数サマリー（最大10走） ────────────────────────
     const _calcIdx = r => {
       const rDist   = getDistNum(r.distance);
-      const dBiasM  = getDayBiasByDist(r.babaCode, r.raceDate);
+      const dBiasM  = getDayBiasByDist(r.babaCode, r.raceDate, r.raceNo);
       const bias    = (rDist != null && dBiasM[rDist] != null)
         ? dBiasM[rDist]
-        : getDayBiasForDate(r.babaCode, r.raceDate) ?? (r.fromOfficial ? estimateBiasFromCond(r.distance, r.raceClass, r.trackCond) : null);
+        : getDayBiasForDate(r.babaCode, r.raceDate, r.raceNo) ?? (r.fromOfficial ? estimateBiasFromCond(r.distance, r.raceClass, r.trackCond) : null);
       const avgF3 = getRaceAvgF3(r.babaCode, r.raceDate, r.raceNo);
       const pAdj  = calcPaceAdj(parseFloat(r.first3f), avgF3);
       return calcSpeedIndex(r.time, r.distance, r.raceClass, r.trackCond, bias, r.kinryo, pAdj);
@@ -7918,10 +7867,10 @@ function renderAbilityTable(raceNo) {
 
       // 距離別馬場差（同距離のレース中央値、なければ全距離平均）
       const _rDist      = getDistNum(r.distance);
-      const _dBiasM     = getDayBiasByDist(r.babaCode, r.raceDate);
+      const _dBiasM     = getDayBiasByDist(r.babaCode, r.raceDate, r.raceNo);
       const perRaceBias = (_rDist != null && _dBiasM[_rDist] != null)
         ? _dBiasM[_rDist]
-        : getDayBiasForDate(r.babaCode, r.raceDate) ?? (r.fromOfficial ? estimateBiasFromCond(r.distance, r.raceClass, r.trackCond) : null);
+        : getDayBiasForDate(r.babaCode, r.raceDate, r.raceNo) ?? (r.fromOfficial ? estimateBiasFromCond(r.distance, r.raceClass, r.trackCond) : null);
 
       // 馬場差 + 斤量補正 + ペース補正タイム
       let corrStr = '';
@@ -9241,6 +9190,8 @@ function idbPut(key, val) {
       _horseHistCache.clear();
       if (renderAbilityTable._dayBiasCache) renderAbilityTable._dayBiasCache = {};
       window._dayBiasCache = {};
+      window._dayBiasRowsCache = {};
+      window._dayBiasMetaCache = {};
       window._dayCondBiasCache = {};
       window._dayBiasDistCache = {};
       window._dayTrackCondCache = {};
@@ -9408,6 +9359,8 @@ async function _idbBulkPut(obj) {
   _horseHistCache.clear();
   if (typeof renderAbilityTable === 'function' && renderAbilityTable._dayBiasCache) renderAbilityTable._dayBiasCache = {};
   window._dayBiasCache = {};
+  window._dayBiasRowsCache = {};
+  window._dayBiasMetaCache = {};
   window._dayCondBiasCache = {};
   window._dayBiasDistCache = {};
   window._dayTrackCondCache = {};
@@ -12536,18 +12489,18 @@ function renderTrackTrend() {
   const lsData = lsRead();
 
   // 全グループのbias・condを事前計算
-  const biasArr = groups.map(g => getDayBiasForDate(g.baba, g.date));
+  const biasMetaArr = groups.map(g => getDayBiasMeta(g.baba, g.date));
+  const biasArr = biasMetaArr.map(m => m.bias);
   const condArr  = groups.map(g => getDayTrackCond(g.baba, g.date));
 
   // 条件内比較（COND_STANDARDS基準との差）を事前計算
   const condBiasArr = groups.map((g, i) => getDayCondBias(g.baba, g.date, condArr[i]));
-  // 距離別馬場差を事前計算
-  const distBiasArr = groups.map(g => getDayBiasByDist(g.baba, g.date));
   // 馬アンカー方式（同一馬の自己比較）を事前計算
   const horseBiasArr = groups.map(g => getHorseAnchoredBias(g.baba, g.date));
 
   const rows = groups.map((g, idx) => {
     const bias = biasArr[idx];
+    const biasMeta = biasMetaArr[idx];
     const cond = condArr[idx];
     const ds = getDaySettings(g.baba, g.date);
     const memoVal = (ds.memo || '').replace(/"/g, '&quot;');
@@ -12558,18 +12511,20 @@ function renderTrackTrend() {
       const sign = bias < 0 ? '−' : '+';
       const abs  = Math.abs(bias).toFixed(2);
       const col  = bias < -0.05 ? '#1d4ed8' : bias > 0.05 ? '#dc2626' : '#059669';
-      const distBias = distBiasArr[idx];
-      const distEntries = Object.entries(distBias).sort(([a],[b]) => +a - +b);
+      const distEntries = Object.entries(biasMeta.byDist || {}).sort(([a],[b]) => +a - +b);
       const distHtml = distEntries.length >= 2
         ? `<div style="margin-top:3px;display:flex;gap:5px;justify-content:center;flex-wrap:wrap">${
-            distEntries.map(([d, v]) => {
-              const s = v < 0 ? '−' : '+';
-              const c = v < -0.1 ? '#2563eb' : v > 0.1 ? '#dc2626' : '#059669';
-              return `<span style="font-size:9px;color:#64748b">${d}:<span style="color:${c};font-weight:700">${s}${Math.abs(v).toFixed(1)}</span></span>`;
+            distEntries.map(([d, item]) => {
+              if (item.bias == null) return `<span style="font-size:9px;color:#94a3b8" title="3R未満のため日全体値へフォールバック">${d}:—(n=${item.n})</span>`;
+              const s = item.bias < 0 ? '−' : '+';
+              const c = item.bias < -0.1 ? '#2563eb' : item.bias > 0.1 ? '#dc2626' : '#059669';
+              return `<span style="font-size:9px;color:#64748b">${d}:<span style="color:${c};font-weight:700">${s}${Math.abs(item.bias).toFixed(1)}</span>(n=${item.n})</span>`;
             }).join('')
           }</div>`
         : '';
-      biasCell = `<span style="font-weight:700;color:${col};font-size:13px">${sign}${abs}秒</span>${distHtml}`;
+      const conf = biasMeta.confidence === 'high' ? '信頼高' : biasMeta.confidence === 'medium' ? '参考' : '暫定';
+      const runaway = biasMeta.runawayAdjustedCount ? `・圧勝補正${biasMeta.runawayAdjustedCount}R` : '';
+      biasCell = `<span style="font-weight:700;color:${col};font-size:13px">${sign}${abs}秒</span><div style="font-size:9px;color:#94a3b8">${conf}・n=${biasMeta.count}R${runaway}</div>${distHtml}`;
     }
 
     // 馬基準差（馬アンカー方式：同一馬の自己比較なのでメンバーの強弱に依存しない）
@@ -12595,18 +12550,20 @@ function renderTrackTrend() {
       condCell2 = `<span style="font-weight:600;color:${col};font-size:12px">${sign}${abs}秒</span>`;
     }
 
-    const condCell = cond
-      ? `<span class="track-cond-badge track-cond-${trackCondClass(cond)}" style="padding:2px 8px;border-radius:8px;font-size:12px">${cond}</span>`
+    const condNames = Object.keys(biasMeta.conditions || {});
+    const condLabel = condNames.length > 1 ? condNames.join('→') : cond;
+    const condCell = condLabel
+      ? `<span class="track-cond-badge track-cond-${trackCondClass(cond)}" style="padding:2px 8px;border-radius:8px;font-size:12px" title="${condNames.map(c=>`${c}:${biasMeta.conditions[c]}R`).join(' / ')}">${condLabel}</span>`
       : `<span style="color:#9ca3af">—</span>`;
 
     return `<tr class="tt-row" style="border-bottom:1px solid #f1f5f9">
       <td class="tt-date" style="padding:8px 10px;white-space:nowrap;font-weight:600;color:#1a1a2e">${g.date}</td>
       <td class="tt-baba" style="padding:8px 10px;white-space:nowrap;color:#374151">${getBabaName(g.baba)}</td>
       <td class="tt-cell" data-label="馬場状態" style="padding:8px 10px;text-align:center">${condCell}</td>
-      <td class="tt-cell" data-label="馬場差(良比較)" style="padding:8px 10px;text-align:center">${biasCell}</td>
+      <td class="tt-cell" data-label="時計馬場差" style="padding:8px 10px;text-align:center">${biasCell}</td>
       <td class="tt-cell" data-label="馬基準差" style="padding:8px 10px;text-align:center">${horseBiasCell}</td>
       <td class="tt-cell" data-label="条件内比較" style="padding:8px 10px;text-align:center">${condCell2}</td>
-      <td class="tt-cell" data-label="レース数" style="padding:8px 4px;color:#6b7280;font-size:11px;text-align:center">${g.races.length}R</td>
+      <td class="tt-cell" data-label="レース数" style="padding:8px 4px;color:#6b7280;font-size:11px;text-align:center" title="基準計算に使えたレース数 / 保存レース数">${biasMeta.count}/${g.races.length}R</td>
       <td class="tt-memo" style="padding:8px 10px;min-width:160px">
         ${isAdminMode()
           ? `<input type="text" value="${memoVal}" placeholder="馬場傾向を入力..."
@@ -12632,9 +12589,9 @@ function renderTrackTrend() {
         <th style="padding:8px 6px;border-bottom:2px solid #e2e8f0">日付</th>
         <th style="padding:8px 6px;border-bottom:2px solid #e2e8f0">競馬場</th>
         <th style="padding:8px 6px;border-bottom:2px solid #e2e8f0;text-align:center">馬場状態</th>
-        <th style="padding:8px 6px;border-bottom:2px solid #e2e8f0;text-align:center">馬場差<br><span style="font-size:9px;font-weight:400;color:#9ca3af">（良比較）</span></th>
+        <th style="padding:8px 6px;border-bottom:2px solid #e2e8f0;text-align:center">時計馬場差<br><span style="font-size:9px;font-weight:400;color:#9ca3af">良比較・展開補正なし</span></th>
         <th style="padding:8px 6px;border-bottom:2px solid #e2e8f0;text-align:center">馬基準差<br><span style="font-size:9px;font-weight:400;color:#9ca3af">同一馬の自己比較</span></th>
-        <th style="padding:8px 6px;border-bottom:2px solid #e2e8f0;text-align:center">条件内比較<br><span style="font-size:9px;font-weight:400;color:#9ca3af">条件基準との差</span></th>
+        <th style="padding:8px 6px;border-bottom:2px solid #e2e8f0;text-align:center">条件・年度内比較<br><span style="font-size:9px;font-weight:400;color:#9ca3af">同馬場＋近年水準との差</span></th>
         <th style="padding:8px 4px;border-bottom:2px solid #e2e8f0;text-align:center">R数</th>
         <th style="padding:8px 10px;border-bottom:2px solid #e2e8f0">馬場傾向メモ${isAdminMode() ? '' : '<span style="font-size:9px;font-weight:400;color:#9ca3af">（閲覧のみ）</span>'}</th>
       </tr>
@@ -12696,6 +12653,8 @@ function _collectPaceRaces(babaFilter, distNum, asOfDate, asOfRaceNo) {
     races.push({
       raceDate, raceNo,
       cond: v.track_cond || '',
+      raceClass: v.race_class || v.raceClass || '',
+      first3f: f3,
       diff: +(f3 - a3).toFixed(1),
       maeKecchaku: (wc1 / field) <= 0.33,
       leaderTop3: leader ? (leader.chaku <= 3) : null
@@ -12706,6 +12665,26 @@ function _collectPaceRaces(babaFilter, distNum, asOfDate, asOfRaceNo) {
 
 // 前後半差 → ペース区分（マイナス＝前が速い＝ハイ）
 function _paceOfDiff(diff) { return diff <= -0.5 ? 'ハイ' : diff <= 0.5 ? '平均' : 'スロー'; }
+
+/** 表示用ペース区分。固定の前後半差ではなく、距離×クラス×馬場のpace-v2基準を優先する。 */
+function _paceOfRecordV2(r, distNum) {
+  try {
+    const api = window.KvPaceV2Shadow;
+    const baseline = window.KOCHI_PACE_BASELINES_V2;
+    const entry = api?.baselineEntry?.(baseline, distNum, r.raceClass, r.cond, 'live');
+    const key = api?.classify?.(r.first3f, entry);
+    if (key === 'high') return 'ハイ';
+    if (key === 'slow') return 'スロー';
+    if (key === 'middle') return '平均';
+  } catch (e) {}
+  const effCls = getEffectiveClass(r.raceClass || '');
+  const standard = getStandardF3(distNum, effCls, r.cond);
+  if (standard != null && Number.isFinite(r.first3f)) {
+    const dev = r.first3f - standard;
+    return dev <= -0.4 ? 'ハイ' : dev >= 0.4 ? 'スロー' : '平均';
+  }
+  return _paceOfDiff(r.diff);
+}
 
 /**
  * buildPaceBiasMatrix(babaFilter, distNum)
@@ -12782,7 +12761,7 @@ function renderPaceBias1400(babaFilter) {
     return;
   }
 
-  const paceOf = r => r.diff <= -0.5 ? 'ハイ' : r.diff <= 0.5 ? '平均' : 'スロー';
+  const paceOf = r => _paceOfRecordV2(r, 1400);
   const PACES = ['ハイ', '平均', 'スロー'];
   const CONDS = ['良', '稍重', '重', '不良'];
   const paceHint = { 'ハイ': '前が速い', '平均': '', 'スロー': '前が遅い' };
@@ -12800,14 +12779,14 @@ function renderPaceBias1400(babaFilter) {
     };
   };
 
-  // 逃げ馬複勝率 → 色（緑=前残り / 赤=前つぶれ）。N<8は薄字。
+  // 逃げ馬複勝率 → 色（緑=前残り / 赤=前つぶれ）。AI側と同じくN<20は参考値。
   const cellHtml = (rs) => {
     const a = agg(rs);
     if (!a.N) return `<td style="padding:7px 6px;text-align:center;color:#cbd5e1">—</td>`;
-    const low = a.N < 8;
+    const low = a.N < 20;
     const fr = a.fukuRate;
     let col = '#6b7280';
-    if (fr != null) col = fr >= 70 ? '#059669' : fr >= 55 ? '#d97706' : '#dc2626';
+    if (!low && fr != null) col = fr >= 70 ? '#059669' : fr >= 55 ? '#d97706' : '#dc2626';
     const opacity = low ? '0.45' : '1';
     return `<td style="padding:7px 6px;text-align:center;opacity:${opacity}">
       <div style="font-size:15px;font-weight:800;color:${col}">${fr != null ? fr + '%' : '—'}</div>
@@ -12929,8 +12908,11 @@ function renderDebanBias() {
   if (!panel) return;
   const races = Object.values(allRacesData || {});
   const runners = [];
+  const racePaces = [];
   races.forEach(rd => {
     const rno = rd.raceInfo && rd.raceInfo.raceNo;
+    const racePace = rd.raceInfo && (rd.raceInfo.paceType || rd.raceInfo.pace_type);
+    if (racePace && (rd.horses || []).some(h => Number.isFinite(parseInt(h.chakujun)) && parseInt(h.chakujun) > 0)) racePaces.push(racePace);
     (rd.horses || []).forEach(h => {
       const ch = parseInt(h.chakujun);
       if (isNaN(ch) || ch < 1) return;
@@ -12938,9 +12920,9 @@ function renderDebanBias() {
     });
   });
   const resRaces = new Set(runners.map(r => r.rno)).size;
-  if (runners.length < 12 || resRaces < 2) {
+  if (runners.length < 24 || resRaces < 4) {
     panel.className = 'dbias dbias--wait';
-    panel.innerHTML = '<span class="dbias-wait-txt"><i class="fas fa-hourglass-half"></i> 本日の好走傾向は、レース確定後（2R以上）に自動表示されます</span>';
+    panel.innerHTML = '<span class="dbias-wait-txt"><i class="fas fa-hourglass-half"></i> 本日の好走傾向は、4R以上の確定後に速報表示されます</span>';
     return;
   }
   const winners = runners.filter(r => r.ch <= 3);
@@ -12953,18 +12935,18 @@ function renderDebanBias() {
   const innW = winners.filter(r => r.mukae === '最内' || r.mukae === '内').length;
   const outW = winners.filter(r => r.mukae === '外3' || r.mukae === '大外').length;
   const posN = winners.filter(r => r.mukae).length;
-  // ペース基調（確定レースの多数派ペース）
-  const paceCount = {}; runners.forEach(r => { if (r.pace) paceCount[r.pace] = (paceCount[r.pace] || 0) + 1; });
+  // ペース基調は「馬ごとのペース入力」ではなく、1レースにつき1票で集計する。
+  const paceCount = {}; racePaces.forEach(p => { paceCount[p] = (paceCount[p] || 0) + 1; });
   const topPace = Object.keys(paceCount).sort((a, b) => paceCount[b] - paceCount[a])[0];
 
   const chip = (label, val, tone) => `<span class="dbias-chip dbias-chip--${tone}">${label}<b>${val}</b></span>`;
   const chips = [];
-  if (frontRate != null) chips.push(chip('前残り度 ', frontRate + '%', frontRate >= 55 ? 'hot' : frontRate <= 38 ? 'cool' : 'mid'));
+  if (frontRate != null) chips.push(chip('前残り度 ', frontRate + '%', frontRate >= 60 ? 'hot' : frontRate <= 40 ? 'cool' : 'mid'));
   // 内外バイアスは直線（決着）位置の好走率で判定＝バーと一致させる
-  const strRate = v => { const tot = runners.filter(r => r.str === v).length; return tot >= 4 ? Math.round(100 * winners.filter(r => r.str === v).length / tot) : null; };
+  const strRate = v => { const tot = runners.filter(r => r.str === v).length; return tot >= 8 ? Math.round(100 * winners.filter(r => r.str === v).length / tot) : null; };
   const inR = strRate('内'), otR = strRate('外');
   if (inR != null && otR != null) {
-    const bias = inR > otR + 10 ? ['内有利', 'hot'] : otR > inR + 10 ? ['外有利', 'cool'] : ['内外フラット', 'mid'];
+    const bias = inR > otR + 15 ? ['内有利', 'hot'] : otR > inR + 15 ? ['外有利', 'cool'] : ['内外フラット', 'mid'];
     chips.push(chip('', bias[0], bias[1]));
   }
   if (topPace) chips.push(chip('多くは ', topPace + 'ペース', topPace === 'スロー' ? 'hot' : topPace === 'ハイ' ? 'cool' : 'mid'));
@@ -12973,9 +12955,9 @@ function renderDebanBias() {
   const barRow = (title, key, vals) => {
     const cells = vals.map(v => ({ v, d: rate(key, v) })).filter(x => x.d);
     if (!cells.length) return '';
-    const elig = cells.filter(c => c.d.n >= 4);
+    const elig = cells.filter(c => c.d.n >= 8);
     const mx = elig.length ? Math.max(...elig.map(c => c.d.r)) : -1;
-    return `<div class="dbias-bar"><span class="dbias-bar-label">${title}</span>${cells.map(c => `<span class="dbias-seg${(c.d.r === mx && c.d.n >= 4) ? ' dbias-seg--top' : ''}${c.d.n < 4 ? ' dbias-seg--low' : ''}" title="${c.v}：好走率${c.d.r}%・${c.d.n}頭">${c.v}<b>${c.d.r}</b></span>`).join('')}</div>`;
+    return `<div class="dbias-bar"><span class="dbias-bar-label">${title}</span>${cells.map(c => `<span class="dbias-seg${(c.d.r === mx && c.d.n >= 8) ? ' dbias-seg--top' : ''}${c.d.n < 8 ? ' dbias-seg--low' : ''}" title="${c.v}：好走率${c.d.r}%・${c.d.n}頭">${c.v}<b>${c.d.r}</b></span>`).join('')}</div>`;
   };
   const bars = barRow('向正面', 'mukae', ['最内', '内', '外2', '外3', '大外'])
     + barRow('直線', 'str', ['内', '中', '外']);
@@ -12989,7 +12971,7 @@ function renderDebanBias() {
   panel.className = 'dbias';
   panel.innerHTML =
     `<div class="dbias-head"><span class="dbias-title"><i class="fas fa-chart-simple"></i> 本日の好走傾向</span>` +
-    `<span class="dbias-sub">${resRaces}R確定・${wN}好走</span>` +
+    `<span class="dbias-sub">${resRaces < 6 ? '速報・' : ''}${resRaces}R確定・${wN}好走</span>` +
     `<button class="dbias-more" onclick="_gotoAnaForDay()">詳しく分析 <i class="fas fa-arrow-right"></i></button></div>` +
     `<div class="dbias-chips">${chips.join('')}</div>` +
     `<div class="dbias-bars">${bars}</div>`;
@@ -14046,7 +14028,7 @@ async function openHorseModal(horseName, raceNo) {
     const racePace2    = h.paceTypeRace || '';  // レース全体のペース
     const pace=horseOwnPace||racePace2;
     const sameDist=curDist&&h.distance===curDist&&h.babaCode==='31', samePace=curPace&&racePace2===curPace;
-    const _hBias      = getDayBiasForDate(h.babaCode, h.raceDate) ?? (h.fromOfficial ? estimateBiasFromCond(h.distance, h.raceClass, h.trackCond) : null);
+    const _hBias      = getDayBiasForDate(h.babaCode, h.raceDate, h.raceNo) ?? (h.fromOfficial ? estimateBiasFromCond(h.distance, h.raceClass, h.trackCond) : null);
     const _rAvgF3     = getRaceAvgF3(h.babaCode, h.raceDate, h.raceNo);
     const _paceAdj    = calcPaceAdj(f3Val, _rAvgF3);
     const _si         = calcSpeedIndex(h.time, h.distance, h.raceClass, h.trackCond, _hBias, h.kinryo, _paceAdj);
@@ -15842,13 +15824,13 @@ function _buildDayRaceData(babaCode, raceDate) {
 }
 
 /** 距離別馬場差優先ヘルパー（距離データなければ全体中央値にフォールバック） */
-function getDayBiasForDateAndDist(babaCode, raceDate, distStr) {
+function getDayBiasForDateAndDist(babaCode, raceDate, distStr, excludeRaceNo) {
   const dist = getDistNum(distStr);
   if (dist) {
-    const db = getDayBiasByDist(babaCode, raceDate);
-    if (db[dist] != null) return db[dist];
+    const meta = getDayBiasMeta(babaCode, raceDate, excludeRaceNo);
+    if (meta.byDist?.[dist]?.aiBias != null) return +meta.byDist[dist].aiBias.toFixed(2);
   }
-  return getDayBiasForDate(babaCode, raceDate);
+  return getDayBiasForDate(babaCode, raceDate, excludeRaceNo);
 }
 
 /**
@@ -15903,47 +15885,6 @@ window._testAuditDayBias = function() {
   return { pass, results };
 };
 
-/** 指定日・競馬場の当日馬場差を計算（グローバルキャッシュ付き） */
-if (!window._dayBiasCache) window._dayBiasCache = {};
-function getDayBiasForDate(babaCode, raceDate) {
-  const cacheKey = `${babaCode}_${raceDate}`;
-  if (window._dayBiasCache[cacheKey] !== undefined) return window._dayBiasCache[cacheKey];
-  const { raceInfoMap, horsesByRace } = _buildDayRaceData(babaCode, raceDate);
-  const diffs = [];
-  for (const [rno, raceInfo] of raceInfoMap) {
-    if (is2yo(raceInfo.race_class || raceInfo.raceClass || '')) continue;
-    const dist   = getDistNum(raceInfo.distance);
-    const effCls = getEffectiveClass(raceInfo.race_class || raceInfo.raceClass || '');
-    if (!dist || !effCls) continue;
-    const stdTime = STANDARD_TIMES[dist]?.[effCls];
-    if (!stdTime) continue;
-    const top3 = (horsesByRace.get(rno) || [])
-      .map(v => ({ chaku: parseInt(v.chakujun)||999, time: raceTimeToSec(v.time) }))
-      .filter(h => h.chaku >= 1 && h.chaku <= 3 && h.time != null)
-      .sort((a,b) => a.chaku - b.chaku).slice(0, 3);
-    if (!top3.length) continue;
-    const avg = top3.reduce((s,h) => s+h.time, 0) / top3.length;
-    let adjDiff = avg - stdTime;
-    const _f3 = parseFloat(raceInfo.first3f || '');
-    if (isFinite(_f3) && _f3 > 0) {
-      const _tc  = raceInfo.track_cond || raceInfo.trackCond || '';
-      const _cls3 = is3yo(raceInfo.race_class || raceInfo.raceClass || '') ? '3歳' : effCls;
-      const _sf3 = getStandardF3(dist, _cls3, _tc);
-      if (_sf3 != null) adjDiff += (_f3 - _sf3) * PACE_BIAS_CORR_FACTOR;
-    }
-    diffs.push(+adjDiff.toFixed(2));
-  }
-  // 外れ値除去（中央値から2秒超のレースは除外）
-  if (diffs.length >= 4) {
-    const med = calcMedian([...diffs]);
-    const trimmed = diffs.filter(d => Math.abs(d - med) <= 2.0);
-    if (trimmed.length >= 2) diffs.splice(0, diffs.length, ...trimmed);
-  }
-  const result = diffs.length ? calcMedian(diffs) : null;
-  window._dayBiasCache[cacheKey] = result;
-  return result;
-}
-
 /**
  * 馬アンカー方式の当日馬場差（同一馬の自己比較）
  * その日の各出走馬のタイムを「同じ馬の直近の同距離走（参照日の馬場差で水準補正済み）」
@@ -15954,11 +15895,13 @@ function getDayBiasForDate(babaCode, raceDate) {
  */
 if (!window._horseBiasCache) window._horseBiasCache = {};
 /** 馬別の自己ベンチ比差分を収集（getHorseAnchoredBiasと人気帯別内訳の共通材料） */
-function _horseBiasDiffs(babaCode, raceDate) {
+function _horseBiasDiffs(babaCode, raceDate, excludeRaceNo) {
   const { raceInfoMap, horsesByRace } = _buildDayRaceData(babaCode, raceDate);
+  const excluded = parseInt(excludeRaceNo) || 0;
   const REF_DAYS = 180; // 参照期間（この日数より古い自己ベンチは使わない）
   const rows = [];
   for (const [rno, raceInfo] of raceInfoMap) {
+    if (excluded && Number(rno) === excluded) continue;
     if (is2yo(raceInfo.race_class || raceInfo.raceClass || '')) continue;
     const dist = getDistNum(raceInfo.distance);
     if (!dist) continue;
@@ -15976,7 +15919,7 @@ function _horseBiasDiffs(babaCode, raceDate) {
         if (getDistNum(h.distance) !== dist) continue;
         const rt = raceTimeToSec(h.time);
         if (rt == null) continue;
-        const rb = getDayBiasForDate(babaCode, h.raceDate);
+        const rb = getDayBiasForDate(babaCode, h.raceDate, h.raceNo);
         if (rb == null) continue;
         refs.push(rt - rb); // 参照日の馬場差を引いて水準を揃える
         if (refs.length >= 3) break;
@@ -15988,10 +15931,11 @@ function _horseBiasDiffs(babaCode, raceDate) {
   return rows;
 }
 
-function getHorseAnchoredBias(babaCode, raceDate) {
-  const cacheKey = `${babaCode}_${raceDate}`;
+function getHorseAnchoredBias(babaCode, raceDate, excludeRaceNo) {
+  const excluded = parseInt(excludeRaceNo) || 0;
+  const cacheKey = `${babaCode}_${raceDate}_${excluded || 'all'}`;
   if (window._horseBiasCache[cacheKey] !== undefined) return window._horseBiasCache[cacheKey];
-  const diffs = _horseBiasDiffs(babaCode, raceDate).map(r => r.diff);
+  const diffs = _horseBiasDiffs(babaCode, raceDate, excluded).map(r => r.diff);
   // 外れ値除去（中央値から3秒超は大敗・展開崩れとして除外）
   let arr = diffs;
   if (arr.length >= 8) {
@@ -16029,45 +15973,14 @@ function toggleHorseBiasDetail(babaCode, raceDate, cellEl) {
 
 /** 指定日の距離別馬場差を計算 → {1300: -X, 1400: -Y, ...} */
 if (!window._dayBiasDistCache) window._dayBiasDistCache = {};
-function getDayBiasByDist(babaCode, raceDate) {
-  const cacheKey = `${babaCode}_${raceDate}`;
+function getDayBiasByDist(babaCode, raceDate, excludeRaceNo) {
+  const excluded = parseInt(excludeRaceNo) || 0;
+  const cacheKey = `${babaCode}_${raceDate}_${excluded || 'all'}`;
   if (window._dayBiasDistCache[cacheKey] !== undefined) return window._dayBiasDistCache[cacheKey];
-  const { raceInfoMap, horsesByRace } = _buildDayRaceData(babaCode, raceDate);
-  const diffsByDist = {};
-  for (const [rno, raceInfo] of raceInfoMap) {
-    if (is2yo(raceInfo.race_class || raceInfo.raceClass || '')) continue;
-    const dist   = getDistNum(raceInfo.distance);
-    const effCls = getEffectiveClass(raceInfo.race_class || raceInfo.raceClass || '');
-    if (!dist || !effCls) continue;
-    const stdTime = STANDARD_TIMES[dist]?.[effCls];
-    if (!stdTime) continue;
-    const top3 = (horsesByRace.get(rno) || [])
-      .map(v => ({ chaku: parseInt(v.chakujun)||999, time: raceTimeToSec(v.time) }))
-      .filter(h => h.chaku >= 1 && h.chaku <= 3 && h.time != null)
-      .sort((a,b) => a.chaku - b.chaku).slice(0, 3);
-    if (!top3.length) continue;
-    const avg = top3.reduce((s,h) => s+h.time, 0) / top3.length;
-    let adjDiff = avg - stdTime;
-    const _f3b = parseFloat(raceInfo.first3f || '');
-    if (isFinite(_f3b) && _f3b > 0) {
-      const _tcb  = raceInfo.track_cond || raceInfo.trackCond || '';
-      const _cls3b = is3yo(raceInfo.race_class || raceInfo.raceClass || '') ? '3歳' : effCls;
-      const _sf3b = getStandardF3(dist, _cls3b, _tcb);
-      if (_sf3b != null) adjDiff += (_f3b - _sf3b) * PACE_BIAS_CORR_FACTOR;
-    }
-    if (!diffsByDist[dist]) diffsByDist[dist] = [];
-    diffsByDist[dist].push(+adjDiff.toFixed(2));
-  }
-  // 距離別に外れ値除去
-  for (const arr of Object.values(diffsByDist)) {
-    if (arr.length >= 4) {
-      const med = calcMedian([...arr]);
-      const trimmed = arr.filter(d => Math.abs(d - med) <= 2.0);
-      if (trimmed.length >= 2) arr.splice(0, arr.length, ...trimmed);
-    }
-  }
   const result = {};
-  for (const [d, arr] of Object.entries(diffsByDist)) result[+d] = +calcMedian(arr).toFixed(2);
+  for (const [dist, item] of Object.entries(getDayBiasMeta(babaCode, raceDate, excluded).byDist)) {
+    if (item.aiBias != null) result[+dist] = +item.aiBias.toFixed(2);
+  }
   window._dayBiasDistCache[cacheKey] = result;
   return result;
 }
@@ -16075,27 +15988,14 @@ function getDayBiasByDist(babaCode, raceDate) {
 /** 指定日・馬場状態の条件内比較を計算（COND_STANDARDSとの差の中央値） */
 if (!window._dayCondBiasCache) window._dayCondBiasCache = {};
 function getDayCondBias(babaCode, raceDate, trackCond) {
-  if (!babaCode || !raceDate || !trackCond) return null;
-  const cacheKey = `${babaCode}_${raceDate}_${trackCond}`;
+  if (!babaCode || !raceDate) return null;
+  const cacheKey = `${babaCode}_${raceDate}_v2`;
   if (window._dayCondBiasCache[cacheKey] !== undefined) return window._dayCondBiasCache[cacheKey];
-  const { raceInfoMap, horsesByRace } = _buildDayRaceData(babaCode, raceDate);
-  const diffs = [];
-  for (const [rno, raceInfo] of raceInfoMap) {
-    if (is2yo(raceInfo.race_class || raceInfo.raceClass || '')) continue;
-    const dist   = getDistNum(raceInfo.distance);
-    const effCls = getEffectiveClass(raceInfo.race_class || raceInfo.raceClass || '');
-    if (!dist || !effCls) continue;
-    const condStd = COND_STANDARDS[dist]?.[effCls]?.[trackCond];
-    if (!condStd) continue;
-    const top3 = (horsesByRace.get(rno) || [])
-      .map(v => ({ chaku: parseInt(v.chakujun)||999, time: raceTimeToSec(v.time) }))
-      .filter(h => h.chaku >= 1 && h.chaku <= 3 && h.time != null)
-      .sort((a,b) => a.chaku - b.chaku).slice(0, 3);
-    if (!top3.length) continue;
-    const avg = top3.reduce((s,h) => s+h.time, 0) / top3.length;
-    diffs.push(+(avg - condStd).toFixed(2));
-  }
-  const result = diffs.length ? calcMedian(diffs) : null;
+  // 各レース自身の馬場状態を使う。多数派状態を全レースへ当てない。
+  const diffs = _collectDayBiasRows(babaCode, raceDate).map(r => r.condDiff).filter(Number.isFinite);
+  const raw = _trimmedBiasMedian(diffs);
+  // 上位3頭/上位5頭の母集団差と、過去3年だけで求めた年度水準を表示上補正。
+  const result = raw == null ? null : +(raw + TRACK_BIAS_TOP3_CENTER_SEC - getTrackBiasEraOffset(raceDate)).toFixed(2);
   window._dayCondBiasCache[cacheKey] = result;
   return result;
 }
@@ -16120,8 +16020,10 @@ function calcRaceStandardDiff(raceData) {
     .sort((a, b) => a.chaku - b.chaku)
     .slice(0, 3);
   if (top3.length < 3) return null; // 3頭揃わない場合は除外
-  const avg = top3.reduce((s, h) => s + h.time, 0) / top3.length;
-  return +(avg - stdTime).toFixed(2);
+  const center = typeof _raceBiasCenter === 'function'
+    ? _raceBiasCenter(top3).center
+    : top3.reduce((s, h) => s + h.time, 0) / top3.length;
+  return center == null ? null : +(center - stdTime).toFixed(2);
 }
 
 /**
@@ -16141,6 +16043,16 @@ function calcMedian(arr) {
  * allRacesData を使用
  */
 function calcDayTrackBias() {
+  // 保存データがある日は馬場傾向ページ・AIと同じ共通計算を使う。
+  if (currentBaba && currentDate) {
+    const meta = getDayBiasMeta(currentBaba, currentDate);
+    if (meta.count > 0) return {
+      median:meta.bias, diffs:_collectDayBiasRows(currentBaba, currentDate).map(r => r.rawDiff),
+      count:meta.count, confidence:meta.confidence,
+      runawayAdjustedCount:meta.runawayAdjustedCount || 0,
+      transferRunawayCount:meta.transferRunawayCount || 0,
+    };
+  }
   const diffs = [];
   for (const raceData of Object.values(allRacesData)) {
     if (is2yo(raceData.raceInfo?.raceClass)) continue;
@@ -16153,7 +16065,7 @@ function calcDayTrackBias() {
     const trimmed = diffs.filter(d => Math.abs(d - med) <= 2.0);
     if (trimmed.length >= 2) diffs.splice(0, diffs.length, ...trimmed);
   }
-  return { median: calcMedian(diffs), diffs, count: diffs.length };
+  return { median: calcMedian(diffs), diffs, count: diffs.length, confidence:diffs.length >= 6 ? 'high' : diffs.length >= 3 ? 'medium' : 'low' };
 }
 
 /**
@@ -16179,13 +16091,17 @@ function renderTrackBiasPanel(raceNo) {
     .sort((a, b) => a.chaku - b.chaku)
     .slice(0, 3);
   const top3avg = top3.length === 3 ? top3.reduce((s, h) => s + h.time, 0) / 3 : null;
+  const centerInfo = typeof _raceBiasCenter === 'function' ? _raceBiasCenter(top3) : null;
+  const biasCenter = centerInfo?.center ?? top3avg;
 
   // 基準差（このレース）
-  const stdDiff = (stdTime != null && top3avg != null) ? +(top3avg - stdTime).toFixed(2) : null;
+  const stdDiff = (stdTime != null && biasCenter != null) ? +(biasCenter - stdTime).toFixed(2) : null;
 
   // 当日馬場差（全レースの中央値）
   const biasInfo = calcDayTrackBias();
   const dayBias  = biasInfo.median;
+  const runawayDayNote = biasInfo.runawayAdjustedCount
+    ? `<span style="font-size:9px;color:#b45309;margin-left:4px">圧勝補正${biasInfo.runawayAdjustedCount}R</span>` : '';
 
   // 補正後差
   const corrected = (stdDiff != null && dayBias != null) ? +(stdDiff - dayBias).toFixed(2) : null;
@@ -16247,7 +16163,7 @@ function renderTrackBiasPanel(raceNo) {
           <div style="font-size:10px;color:#9ca3af">${isDebaOnly ? 'レース前' : '3頭未揃'}</div>
         </div>
         <div style="background:${biasBg};border-radius:8px;padding:8px 14px;border:1px solid #e0f2fe;min-width:140px;text-align:center">
-          <div style="font-size:10px;color:#6b7280;margin-bottom:2px">当日馬場差 <span style="opacity:.7">(${biasInfo.count}R中央値)</span></div>
+          <div style="font-size:10px;color:#6b7280;margin-bottom:2px">当日馬場差 <span style="opacity:.7">(${biasInfo.count}R中央値)</span>${runawayDayNote}</div>
           <div style="font-size:18px;font-weight:800;font-family:monospace;color:${biasClr}">${biasStr}秒</div>
         </div>
         <div style="background:#f4f6fa;border-radius:8px;padding:8px 14px;border:1px solid #e2e8f0;min-width:110px;text-align:center">
@@ -16278,7 +16194,8 @@ function renderTrackBiasPanel(raceNo) {
       <div style="background:#fff;border-radius:8px;padding:8px 14px;border:1px solid #bae6fd;min-width:110px;text-align:center">
         <div style="font-size:10px;color:#6b7280;margin-bottom:2px">基準時計（良）</div>
         <div style="font-size:16px;font-weight:800;font-family:monospace;color:#0369a1">${secToDisp(stdTime)}</div>
-        <div style="font-size:9px;color:#9ca3af;margin-top:1px">上位3頭平均: ${secToDisp(top3avg)}</div>
+        <div style="font-size:9px;color:#9ca3af;margin-top:1px">${centerInfo?.runawayAdjusted ? '圧勝補正（2・3着平均）' : '上位3頭平均'}: ${secToDisp(biasCenter)}</div>
+        ${centerInfo?.runawayAdjusted ? `<div style="font-size:9px;color:#b45309;margin-top:1px">1着差 ${centerInfo.winMargin.toFixed(1)}秒・勝ち馬を馬場基準から除外</div>` : ''}
       </div>
       <!-- 基準差 -->
       <div style="background:#fff;border-radius:8px;padding:8px 14px;border:1px solid #bae6fd;min-width:100px;text-align:center">
@@ -16290,7 +16207,7 @@ function renderTrackBiasPanel(raceNo) {
       <div style="display:flex;align-items:center;color:#94a3b8;font-size:18px;padding-top:8px">→</div>
       <!-- 当日馬場差 -->
       <div style="background:${diffBg(dayBias)};border-radius:8px;padding:8px 14px;border:1px solid #bae6fd;min-width:140px;text-align:center">
-        <div style="font-size:10px;color:#6b7280;margin-bottom:2px">当日馬場差 <span style="opacity:.7">(${biasInfo.count}R中央値)</span></div>
+        <div style="font-size:10px;color:#6b7280;margin-bottom:2px">当日馬場差 <span style="opacity:.7">(${biasInfo.count}R中央値)</span>${runawayDayNote}</div>
         <div style="font-size:18px;font-weight:800;font-family:monospace;color:${diffColor(dayBias)}">${dayBiasStr}秒</div>
         <div style="font-size:9px;color:#9ca3af;margin-top:1px">${dayBias!=null?(dayBias<0?'速い馬場':'時計かかる馬場'):''}</div>
       </div>
@@ -16304,7 +16221,7 @@ function renderTrackBiasPanel(raceNo) {
       </div>
     </div>
     <div style="margin-top:8px;font-size:11px;color:#64748b;padding:6px 10px;background:rgba(255,255,255,.6);border-radius:6px;line-height:1.7">
-      📌 基準差=上位3頭平均−良馬場基準時計 ／ 当日馬場差=その日の基準差の中央値（全条件共通） ／ 補正後差=基準差−当日馬場差
+      📌 基準差=原則上位3頭平均−良馬場基準時計（1着が1.0秒以上離した場合は2・3着平均） ／ 当日馬場差=その日の基準差の中央値 ／ 補正後差=基準差−当日馬場差
     </div>
   </div>`;
 }

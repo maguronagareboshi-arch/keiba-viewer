@@ -2086,11 +2086,11 @@ function computeHorseSI(h, useAnchor, auditCtx) {
   const f3Val = parseFloat(h.first3f);
   let bias;
   if (useAnchor) {
-    const hb = getHorseAnchoredBias(h.babaCode, h.raceDate);
+    const hb = getHorseAnchoredBias(h.babaCode, h.raceDate, h.raceNo);
     bias = (hb && hb.bias != null) ? hb.bias
-      : (getDayBiasForDate(h.babaCode, h.raceDate) ?? (h.fromOfficial ? estimateBiasFromCond(h.distance, h.raceClass, h.trackCond) : null));
+      : (getDayBiasForDate(h.babaCode, h.raceDate, h.raceNo) ?? (h.fromOfficial ? estimateBiasFromCond(h.distance, h.raceClass, h.trackCond) : null));
   } else {
-    bias = getDayBiasForDate(h.babaCode, h.raceDate) ?? (h.fromOfficial ? estimateBiasFromCond(h.distance, h.raceClass, h.trackCond) : null);
+    bias = getDayBiasForDate(h.babaCode, h.raceDate, h.raceNo) ?? (h.fromOfficial ? estimateBiasFromCond(h.distance, h.raceClass, h.trackCond) : null);
   }
   const avgF3 = getRaceAvgF3(h.babaCode, h.raceDate, h.raceNo);
   const pAdj  = calcPaceAdj(f3Val, avgF3);
@@ -2142,9 +2142,9 @@ function computePsfScores(raceNo) {
   const raceDate = data.raceInfo.raceDate || '';
   const thisNo = parseInt(raceNo);
   const ls = lsRead();
-  const anchBias = (babaCode, d) => {
-    const hb = getHorseAnchoredBias(babaCode, d);
-    return (hb && hb.bias != null) ? hb.bias : (getDayBiasForDate(babaCode, d) ?? null);
+  const anchBias = (babaCode, d, no) => {
+    const hb = getHorseAnchoredBias(babaCode, d, no);
+    return (hb && hb.bias != null) ? hb.bias : (getDayBiasForDate(babaCode, d, no) ?? null);
   };
   const rows = data.horses.map(horse => {
     const name = horse.horseName || '';
@@ -2162,7 +2162,7 @@ function computePsfScores(raceNo) {
       const cl = getEffectiveClass(rrec.race_class || h.raceClass || '');
       const std = (d2 && cl) ? STANDARD_TIMES[d2]?.[cl] : null;
       if (std == null) continue;
-      const db = anchBias('31', h.raceDate);
+      const db = anchBias('31', h.raceDate, h.raceNo);
       if (db == null) continue;
       perfs.push(-(t - db - std - PSF_POSEXP[Math.min(c1, 9)]));
     }
@@ -2304,7 +2304,7 @@ function computeYosoScored(raceNo, selCondOverride) {
     // ── ③ 馬場適性（SI差分ベース・1走から機能） ──
     // ライブ版は公式履歴のバイアス推定込み（検証版は当日バイアスのみ・仕様差）
     const _allSIWithCond = Yoso.siWithCondList(histEx, h =>
-      getDayBiasForDate(h.babaCode, h.raceDate) ?? (h.fromOfficial ? estimateBiasFromCond(h.distance, h.raceClass, h.trackCond) : null));
+      getDayBiasForDate(h.babaCode, h.raceDate, h.raceNo) ?? (h.fromOfficial ? estimateBiasFromCond(h.distance, h.raceClass, h.trackCond) : null));
     const _globalSIAvg = _allSIWithCond.length ? _allSIWithCond.reduce((s,x)=>s+x.si,0)/_allSIWithCond.length : null;
     const _condSIs = _allSIWithCond.filter(x => x.cond === selCond).map(x => x.si);
     const _condSIAvg = _condSIs.length ? _condSIs.reduce((a,b)=>a+b,0)/_condSIs.length : null;
@@ -2375,7 +2375,7 @@ function computeYosoScored(raceNo, selCondOverride) {
         let _wSI = null;
         for (const [ck, cv] of Object.entries(_ld)) {
           if (!ck.startsWith(_wpfx) || parseInt(cv.chakujun) !== 1 || !cv.time) continue;
-          const _wb3 = getDayBiasForDate(_ph0.babaCode, _ph0.raceDate) ?? null;
+          const _wb3 = getDayBiasForDate(_ph0.babaCode, _ph0.raceDate, _ph0.raceNo) ?? null;
           const _rc3 = _ld[`race_${_ph0.babaCode}_${_ph0.raceDate}_${_ph0.raceNo}`] || {};
           _wSI = calcSpeedIndex(cv.time, _rc3.distance||_ph0.distance, _rc3.race_class||_ph0.raceClass, _rc3.track_cond||_ph0.trackCond, _wb3, cv.kinryo, null);
           break;
@@ -4052,7 +4052,7 @@ function runYosoBacktest(raceNo) {
         if (_wp.length < 4 || _wp[0] !== '31') continue;
         const _wrk = `${_wp[0]}_${_wp[1]}_${_wp[2]}`;
         if (_winnerSIMap[_wrk] != null) continue;
-        const _wb2 = getDayBiasForDate(_wp[0], _wp[1]) ?? null;
+        const _wb2 = getDayBiasForDate(_wp[0], _wp[1], parseInt(_wp[2])) ?? null;
         const _rc2 = lsData[`race_${_wp[0]}_${_wp[1]}_${parseInt(_wp[2])}`] || {};
         const _wsi = calcSpeedIndex(v.time, _rc2.distance||'', _rc2.race_class||'', _rc2.track_cond||v.trackCond||'', _wb2, v.kinryo, null);
         if (_wsi != null) _winnerSIMap[_wrk] = _wsi;
@@ -4082,9 +4082,9 @@ function runYosoBacktest(raceNo) {
 
       // 馬基準差SI実験用アクセサ：SIの水準補正を馬アンカー方式に置き換える
       // （データ不足でnullの日は基準時計方式へフォールバック）
-      const _anchBiasBT = (babaCode, raceDate) => {
-        const hb = getHorseAnchoredBias(babaCode, raceDate);
-        return (hb && hb.bias != null) ? hb.bias : (getDayBiasForDate(babaCode, raceDate) ?? null);
+      const _anchBiasBT = (babaCode, raceDate, raceNo) => {
+        const hb = getHorseAnchoredBias(babaCode, raceDate, raceNo);
+        return (hb && hb.bias != null) ? hb.bias : (getDayBiasForDate(babaCode, raceDate, raceNo) ?? null);
       };
 
       // PSF定数・カーブはトップレベル（PSF_WIN等）を使用（ライブの💎妙味バッジと共通）
@@ -4158,7 +4158,7 @@ function runYosoBacktest(raceNo) {
           const distOld = dH_old.length >= 3 ? (dH_old.filter(h=>parseInt(h.chakujun)<=3).length/dH_old.length - 0.33)*2 : 0;
 
           // 新: condMod + distMod（検証版は当日バイアスのみ・仕様差）
-          const allSIcd = Yoso.siWithCondList(preHist, h => getDayBiasForDate(h.babaCode, h.raceDate) ?? null);
+          const allSIcd = Yoso.siWithCondList(preHist, h => getDayBiasForDate(h.babaCode, h.raceDate, h.raceNo) ?? null);
           const gAvg = allSIcd.length ? allSIcd.reduce((s,x)=>s+x.si,0)/allSIcd.length : null;
           const cSIs = allSIcd.filter(x=>x.cond===selCond).map(x=>x.si);
           const cAvg = cSIs.length ? cSIs.reduce((a,b)=>a+b,0)/cSIs.length : null;
@@ -4275,7 +4275,7 @@ function runYosoBacktest(raceNo) {
               const _pcl = getEffectiveClass(_prr.race_class || h.raceClass || '');
               const _std = (_pd2 && _pcl) ? STANDARD_TIMES[_pd2]?.[_pcl] : null;
               if (_std == null) continue;
-              const _pdb = _anchBiasBT('31', h.raceDate);
+              const _pdb = _anchBiasBT('31', h.raceDate, h.raceNo);
               if (_pdb == null) continue;
               _perfs.push(-(_pt - _pdb - _std - PSF_POSEXP[Math.min(_pc1, 9)]));
             }
