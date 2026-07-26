@@ -3104,6 +3104,53 @@ function isOfficialHistoryCacheValid(races) {
   return Array.isArray(races)&&races.length>0&&races.every(r=>(!r.time||/^\d+:\d{2}\.\d$/.test(String(r.time)))&&(!r.prize||/^\d+(?:\.\d+)?$/.test(String(r.prize))))&&races.some(r=>/^\d+:\d{2}\.\d$/.test(String(r.time||'')));
 }
 
+// 公式成績は追走のたびに増えるため、「形式が正常」だけでは最新性を保証できない。
+// 当日付近の開催は半日ごとに再検証し、端末側にキャッシュより新しい既知レースが
+// ある場合は時刻に関係なく再取得する。
+const OFFICIAL_HISTORY_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+
+function _officialHistoryDateMs(value) {
+  if(value instanceof Date) return Number.isFinite(value.getTime()) ? value.getTime() : NaN;
+  const parsed=parseDateStr(String(value||''));
+  return parsed&&Number.isFinite(parsed.getTime()) ? parsed.getTime() : NaN;
+}
+
+function getOfficialHistoryCacheState(cached, refDate, knownRaces, nowDate) {
+  const races=Array.isArray(cached?.races)?cached.races:[];
+  if(!cached||cached.type!=='official'||!isOfficialHistoryCacheValid(races)){
+    return {usable:false,shouldRefresh:true,reason:'invalid'};
+  }
+
+  const cutoffMs=_officialHistoryDateMs(refDate);
+  const latestBeforeCutoff=list=>(Array.isArray(list)?list:[]).reduce((latest,r)=>{
+    const ms=_officialHistoryDateMs(r?.raceDate);
+    if(!Number.isFinite(ms)||(Number.isFinite(cutoffMs)&&ms>=cutoffMs)) return latest;
+    return Number.isFinite(latest)?Math.max(latest,ms):ms;
+  },NaN);
+  const cachedLatestMs=latestBeforeCutoff(races);
+  const knownLatestMs=latestBeforeCutoff(knownRaces);
+
+  // 保存済みの通常レース履歴が公式キャッシュより新しければ、今回のイカホのように
+  // 最新賞金が欠けていることが確定するため、即時更新する。
+  if(Number.isFinite(knownLatestMs)&&(!Number.isFinite(cachedLatestMs)||knownLatestMs>cachedLatestMs)){
+    return {usable:true,shouldRefresh:true,reason:'newer_known_race',cachedLatestMs,knownLatestMs};
+  }
+
+  const nowInstant=nowDate instanceof Date&&Number.isFinite(nowDate.getTime())?nowDate.getTime():Date.now();
+  const now=new Date(nowInstant);
+  now.setHours(0,0,0,0);
+  const liveFloor=new Date(now); liveFloor.setDate(liveFloor.getDate()-1);
+  const nearLive=!Number.isFinite(cutoffMs)||cutoffMs>=liveFloor.getTime();
+  if(nearLive){
+    const savedMs=Date.parse(String(cached.savedAt||''));
+    const age=Number.isFinite(savedMs)?nowInstant-savedMs:Infinity;
+    if(!Number.isFinite(savedMs)||age>OFFICIAL_HISTORY_CACHE_MAX_AGE_MS){
+      return {usable:true,shouldRefresh:true,reason:'expired',cachedLatestMs,knownLatestMs};
+    }
+  }
+  return {usable:true,shouldRefresh:false,reason:'fresh',cachedLatestMs,knownLatestMs};
+}
+
 async function fetchOfficialHorseHistory(code, horseName, timeout = 15000) {
   const lineage = String(code || '').trim();
   if(!/^\d{8,14}$/.test(lineage)) throw new Error('invalid lineage');
@@ -13816,9 +13863,10 @@ async function openHorseModal(horseName, raceNo) {
   // 表示中レースより後の結果は「過去成績」に含めない（未来の結果混入バグ対策）。
   // レース文脈が取れない場合（保存データ経由等）は従来通り全履歴を表示する。
   const _modalRaceData = allRacesData[raceNo||currentRaceNo];
+  const _knownOfficialHistory=getHorseHistory(horseName);
   const history = _modalRaceData?.raceInfo?.raceDate
     ? getHorseHistoryBefore(horseName, _modalRaceData.raceInfo.raceDate, raceNo||currentRaceNo)
-    : getHorseHistory(horseName);
+    : _knownOfficialHistory;
   const modal=document.getElementById('horse-modal'),title=document.getElementById('horse-modal-title'),content=document.getElementById('horse-modal-content');
   if(!modal||!title||!content)return;
   title.textContent=`🐴 ${horseName} の過去成績`;
@@ -13899,7 +13947,8 @@ async function openHorseModal(horseName, raceNo) {
     // 過去成績がなくてもキャッシュがあれば公式成績を自動表示
     if(lineageCode) {
       const cached2 = _lsAll[`official_${lineageCode}`];
-      if(cached2 && cached2.type === 'official' && isOfficialHistoryCacheValid(cached2.races)) {
+      const cacheState2=getOfficialHistoryCacheState(cached2,currentDate,_knownOfficialHistory);
+      if(cacheState2.usable && !cacheState2.shouldRefresh) {
         requestAnimationFrame(async () => {
           const baseline=await getKochiOfficialBaseline(lineageCode,parseDateStr(currentDate)).catch(()=>cached2.baseline||null);
           _renderOfficialSection({ races: cached2.races, basicInfo: cached2.basicInfo||{}, baseline, _saveToCache: false }, lineageCode, horseName);
@@ -13907,7 +13956,12 @@ async function openHorseModal(horseName, raceNo) {
           if(fb2) { fb2.innerHTML = '<i class="fas fa-sync-alt"></i> 再取得'; fb2.title = `キャッシュ済み（${cached2.savedAt ? new Date(cached2.savedAt).toLocaleDateString('ja-JP') : '—'}）`; }
           if(content) content.scrollTop = 0;
         });
-      } else if(cached2?.races?.length) requestAnimationFrame(()=>fetchHorseMarkInfo());
+      } else if(cached2?.races?.length) {
+        requestAnimationFrame(()=>{
+          const fb2=document.getElementById('horse-fetch-btn');
+          if(fb2?.dataset.code===lineageCode) fetchHorseMarkInfo();
+        });
+      }
     }
     return;
   }
@@ -14211,7 +14265,8 @@ async function openHorseModal(horseName, raceNo) {
   // ── 公式成績キャッシュが存在すれば自動表示（コメントの後に追加・スクロールなし） ──
   if(lineageCode) {
     const cached = _lsAll[`official_${lineageCode}`];
-    if(cached && cached.type === 'official' && isOfficialHistoryCacheValid(cached.races)) {
+    const cacheState=getOfficialHistoryCacheState(cached,currentDate,_knownOfficialHistory);
+    if(cacheState.usable && !cacheState.shouldRefresh) {
       requestAnimationFrame(async () => {
         const baseline=await getKochiOfficialBaseline(lineageCode,parseDateStr(currentDate)).catch(()=>cached.baseline||null);
         _renderOfficialSection({ races: cached.races, basicInfo: cached.basicInfo||{}, baseline, _saveToCache: false }, lineageCode, horseName);
@@ -14223,7 +14278,12 @@ async function openHorseModal(horseName, raceNo) {
         // 公式成績追加後もスクロール位置を先頭に戻す
         if(content) content.scrollTop = 0;
       });
-    } else if(cached?.races?.length) requestAnimationFrame(()=>fetchHorseMarkInfo());
+    } else if(cached?.races?.length) {
+      requestAnimationFrame(()=>{
+        const fb=document.getElementById('horse-fetch-btn');
+        if(fb?.dataset.code===lineageCode) fetchHorseMarkInfo();
+      });
+    }
   }
 
   // ── オッズ推移チャート（Supabase keiba_odds_snapshots・表示専用・非同期）──
@@ -15030,13 +15090,17 @@ async function fetchAllHorsesOfficialData(silent = false) {
   }
 
   const lsData = lsRead();
-  let done = 0, skipped = 0, failed = 0;
+  let done = 0, skipped = 0, failed = 0, refreshed = 0;
   const total = unique.length;
 
   for(const { horseName, code } of unique) {
-    // 取得済みチェック
+    // 取得済みでも古ければ更新する。存在だけでスキップすると、直近の獲得賞金が
+    // 欠けたまま格付けを誤判定する。
     const cacheKey = `official_${code}`;
-    if(lsData[cacheKey] && lsData[cacheKey].type === 'official'){
+    const existingCache=lsData[cacheKey];
+    const knownHistory=getHorseHistory(horseName);
+    const cacheState=getOfficialHistoryCacheState(existingCache,currentDate,knownHistory);
+    if(cacheState.usable && !cacheState.shouldRefresh){
       skipped++;
       done++;
       progressBar.innerHTML = `<i class="fas fa-horse-head" style="color:#7c3aed"></i> 公式成績一括取得中… ${done}/${total} 頭（スキップ:${skipped} 失敗:${failed}）`;
@@ -15059,6 +15123,7 @@ async function fetchAllHorsesOfficialData(silent = false) {
       });
       // 予想AIが読む fromOfficial エントリも保存
       storeOfficialRacesAsHorseEntries(horseName, code, parsed.races);
+      if(existingCache) refreshed++;
     } catch(e) {
       failed++;
     }
@@ -15070,7 +15135,8 @@ async function fetchAllHorsesOfficialData(silent = false) {
 
   // 完了
   if(btn) { btn.disabled = false; btn.innerHTML = origLabel; }
-  progressBar.innerHTML = `<i class="fas fa-check-circle" style="color:#16a34a"></i> 取得完了！ ${total}頭中 新規取得:${total-skipped-failed}頭 スキップ:${skipped}頭 失敗:${failed}頭 <button onclick="document.getElementById('fetch-all-progress-bar').remove()" style="margin-left:16px;padding:2px 10px;border-radius:6px;border:1px solid #7c3aed;background:#fff;color:#7c3aed;cursor:pointer;font-size:12px">閉じる</button>`;
+  const fetched=total-skipped-failed;
+  progressBar.innerHTML = `<i class="fas fa-check-circle" style="color:#16a34a"></i> 取得完了！ ${total}頭中 新規:${fetched-refreshed}頭 更新:${refreshed}頭 スキップ:${skipped}頭 失敗:${failed}頭 <button onclick="document.getElementById('fetch-all-progress-bar').remove()" style="margin-left:16px;padding:2px 10px;border-radius:6px;border:1px solid #7c3aed;background:#fff;color:#7c3aed;cursor:pointer;font-size:12px">閉じる</button>`;
 }
 
 /**
