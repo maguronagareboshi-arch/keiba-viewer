@@ -206,12 +206,14 @@
     if (!wanted || typeof fetch !== 'function' || typeof SUPABASE_URL === 'undefined' || typeof SUPABASE_HEADERS === 'undefined') return [];
     if (serverLoads.has(wanted)) return serverLoads.get(wanted);
     const job = (async () => {
+      const controller = typeof AbortController === 'function' ? new AbortController() : null;
+      const timeoutId = controller ? setTimeout(() => controller.abort(), 5000) : null;
       try {
         const url = `${SUPABASE_URL}/rest/v1/${SERVER_TABLE}?select=race_date,race_no,model_fingerprint,runner_signature,output_fingerprint,computed_at,payload&baba_code=eq.31&race_date=eq.${encodeURIComponent(wanted)}&order=race_no.asc&limit=24`;
-        const response = await fetch(url, { headers:SUPABASE_HEADERS, cache:'no-store' });
+        const response = await fetch(url, { headers:SUPABASE_HEADERS, cache:'no-store', ...(controller ? { signal:controller.signal } : {}) });
         if (!response.ok) {
-          if (response.status !== 404) console.warn('[ai server cache load]', response.status);
-          return [];
+          if (response.status === 404) return [];
+          throw new Error(`AI共有キャッシュ HTTP ${response.status}`);
         }
         const rows = await response.json();
         if (!Array.isArray(rows)) return [];
@@ -226,9 +228,15 @@
         return rows;
       } catch (error) {
         console.warn('[ai server cache load]', error);
-        return [];
+        throw error;
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
       }
-    })();
+    })().catch(error => {
+      // タイムアウトや一時的な通信失敗を永続キャッシュしない。次回の明示操作で再試行できるようにする。
+      serverLoads.delete(wanted);
+      throw error;
+    });
     serverLoads.set(wanted, job);
     return job;
   }

@@ -1,17 +1,18 @@
-const CACHE = 'kochi-viewer-v17';
+const CACHE = 'kochi-viewer-v18';
+const REQUIRED = ['./index.html', './manifest.webmanifest', './modules/app-main.js?v=20260726-light1'];
 const CORE = [
-  './', './index.html', './manifest.webmanifest',
-  './modules/ai-analysis.js?v=20260726-transfer3-bias1', './modules/ai-insights.js', './modules/value-t10-shadow.js?v=20260723-purchase1',
-  './modules/era-drift-shadow.js?v=20260723-v2',
-  './modules/jra-transfer-shadow.js?v=20260726-v3',
-  './modules/probability-calibration.js?v=20260723-v1',
+  './modules/ai-insights.js',
   './modules/performance-observer.js',
   './modules/first3f-autofill.js?v=20260725-v1',
   './modules/track-bias-v2.js?v=20260726-v2',
 ];
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(CORE)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(CACHE).then(async cache => {
+    await cache.addAll(REQUIRED);
+    // 補助モジュールの一時失敗でService Worker全体の更新を失敗させない。
+    await Promise.allSettled(CORE.map(url => cache.add(url)));
+  }).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', event => {
