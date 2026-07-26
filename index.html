@@ -2079,15 +2079,11 @@ const KV_APP_CSS = [
       '.kv-async-state{display:flex;align-items:center;gap:11px;min-height:74px;padding:14px;border:1px solid var(--kc-border,#dbe3ef);border-radius:9px;background:var(--kc-surface-2,#f8fafc);color:var(--kc-text,#1e293b)}',
       '.kv-async-state i{font-size:18px;color:var(--kc-primary,#1a56a0)}.kv-async-state strong{display:block;font-size:13px}.kv-async-state small{display:block;margin-top:3px;color:var(--kc-muted,#64748b);font-size:10px}.kv-async-state.is-error i{color:#dc2626}.kv-async-state .btn{margin-left:auto;white-space:nowrap}',
       '.kv-route-status{margin:0 0 10px}.kv-route-status.hidden{display:none}',
-      'body.public-mode.kv-cockpit .kv-vtabs{grid-template-columns:repeat(4,minmax(0,1fr))}',
-      'body.kv-cockpit .kv-vtabs-more{position:relative;min-width:0}',
-      'body.kv-cockpit .kv-vtabs-more>.kv-vtab{display:flex!important}',
-      'body.kv-cockpit .kv-vtabs-more>.kv-vtab .fa-chevron-down{font-size:9px;transition:transform .16s ease}body.kv-cockpit .kv-vtabs-more>.kv-vtab[aria-expanded="true"] .fa-chevron-down{transform:rotate(180deg)}',
-      'body.kv-cockpit .kv-vtabs-more-menu{position:absolute;right:0;top:calc(100% + 4px);z-index:70;min-width:164px;padding:5px;border:1px solid var(--kc-border);border-radius:8px;background:var(--kc-surface);box-shadow:0 10px 28px rgba(15,23,42,.28)}',
-      'body.kv-cockpit .kv-vtabs-more-menu.hidden{display:none}body.kv-cockpit .kv-vtabs-more-menu .kv-vtab{display:flex!important;width:100%;margin:2px 0!important;justify-content:flex-start!important}',
       'body.kv-cockpit .odds-freshness{display:inline-flex;align-items:center;gap:5px;padding:3px 7px;border-radius:999px;background:rgba(22,163,74,.12);color:#16a34a;font-size:10px;font-weight:800}body.kv-cockpit .odds-freshness.is-stale{background:rgba(217,119,6,.13);color:#d97706}body.kv-cockpit .odds-freshness.is-saved{background:var(--kc-surface-3);color:var(--kc-muted)}',
       'body.kv-cockpit .odds-warning{margin:0 0 9px;padding:7px 9px;border-radius:7px;background:rgba(217,119,6,.1);color:#d97706;font-size:10px;font-weight:700}',
       'body.kv-cockpit .odds-move{display:block;margin-top:2px;font-size:9px;font-weight:800}.odds-move.is-shorter{color:#16a34a}.odds-move.is-longer{color:#dc2626}.odds-move.is-flat{color:var(--kc-muted,#64748b)}',
+      'body.kv-cockpit .odds-checkpoint{display:grid;gap:2px;min-width:58px}body.kv-cockpit .odds-checkpoint strong{color:var(--kc-primary);font-size:14px}body.kv-cockpit .odds-checkpoint small{color:var(--kc-muted);font-size:9px;font-weight:600}body.kv-cockpit .odds-checkpoint.is-missing strong{color:var(--kc-muted);font-weight:600}',
+      'body.kv-cockpit .cockpit-odds-table th:nth-child(n+4):nth-child(-n+7){text-align:center}body.kv-cockpit .cockpit-odds-table td:nth-child(n+4):nth-child(-n+7){text-align:center}',
       '.kv-fav-btn{display:inline-grid;place-items:center;width:30px;height:30px;flex:0 0 auto;border:0;border-radius:50%;background:transparent;color:#94a3b8;cursor:pointer;font-size:15px}.kv-fav-btn:hover{background:#fef3c7;color:#d97706}.kv-fav-btn.is-on{color:#f59e0b;background:#fef3c7}',
       '.kv-favorite-list{display:grid;gap:7px}.kv-favorite-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--kc-border,#e2e8f0);border-radius:8px}.kv-favorite-item strong{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.kv-favorite-empty{color:#94a3b8;font-size:12px}',
       '.spr-more{margin-top:6px;border-top:1px solid #eef2f7}.spr-more>summary{padding:7px 0 2px;list-style:none;color:#1a56a0;font-size:11px;font-weight:800;cursor:pointer}.spr-more>summary::-webkit-details-marker{display:none}.spr-more-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px 10px;padding:6px 0 3px;color:#64748b;font-size:10px}.spr-more-grid b{display:block;color:#374151;font-size:11px}',
@@ -2095,8 +2091,8 @@ const KV_APP_CSS = [
       'body.kv-cockpit .cockpit-ai-details>summary{padding:9px 11px;color:var(--kc-muted);font-size:11px;font-weight:700;cursor:pointer;list-style:none}',
       'body.kv-cockpit .cockpit-ai-details>summary::-webkit-details-marker{display:none}',
       'body.kv-cockpit .cockpit-ai-details-body{padding:10px;border-top:1px solid var(--kc-border)}',
-      '@media(max-width:640px){body.kv-cockpit .header-sub{display:block!important;margin-left:32px!important}body.kv-cockpit .cockpit-live-status{flex-direction:column;align-items:flex-end;gap:3px}body.kv-cockpit .cockpit-live-status span{padding:2px 5px;font-size:8px}body.kv-cockpit #cockpit-global-odds i{display:none}body.kv-cockpit #race-tabs-section.sidebar-mode .race-tabs{grid-template-columns:repeat(6,minmax(0,1fr))!important}body.kv-cockpit .cockpit-race-heading{align-items:flex-start}body.kv-cockpit .race-name{font-size:16px!important}body.kv-cockpit .cockpit-race-time>strong{font-size:12px}body.kv-cockpit .cockpit-race-meta{font-size:10px}body.kv-cockpit .cockpit-picks{grid-template-columns:1fr;gap:6px}body.kv-cockpit .cockpit-pick{min-height:64px;padding:9px 10px}body.public-mode.kv-cockpit .kv-vtabs{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}body.public-mode.kv-cockpit .kv-vtab{height:44px!important;padding:0 5px!important}body.kv-cockpit .cockpit-decision{grid-template-columns:1fr 1fr;gap:6px}.decision-risk{grid-column:1/-1;grid-row:2}.decision-action{text-align:right}body.kv-cockpit .cockpit-panel-head{align-items:flex-start}body.kv-cockpit .cockpit-table{min-width:620px}body.kv-cockpit .cockpit-value-note{align-items:flex-start;flex-wrap:wrap}body.kv-cockpit .cockpit-value-note small{width:100%;margin-left:36px}.kv-async-state{align-items:flex-start;flex-wrap:wrap}.kv-async-state .btn{width:100%;margin-left:0}.kv-fav-btn{width:44px;height:44px}.spr-l1{min-height:44px}.spr-more>summary{min-height:44px;display:flex;align-items:center}}',
-      '@media(max-width:640px){body.kv-cockpit .cockpit-live-status span{font-size:11px}body.kv-cockpit .cockpit-race-meta{font-size:12px}body.kv-cockpit .cockpit-table{min-width:0!important}body.kv-cockpit .cockpit-table thead{display:none}body.kv-cockpit .cockpit-table tbody,body.kv-cockpit .cockpit-table tr,body.kv-cockpit .cockpit-table td{display:block;width:auto}body.kv-cockpit .cockpit-table tr{margin:0 0 8px;padding:8px 10px;border:1px solid var(--kc-border);border-radius:8px;background:var(--kc-surface)}body.kv-cockpit .cockpit-table td{padding:5px 0;border:0!important;font-size:12px}body.kv-cockpit .cockpit-table td+td{padding-left:38px}body.kv-cockpit .cockpit-odds-table td{display:grid;grid-template-columns:72px 1fr;gap:8px;padding:4px 0}body.kv-cockpit .cockpit-odds-table td:nth-child(1)::before{content:"馬番"}body.kv-cockpit .cockpit-odds-table td:nth-child(2)::before{content:"馬名"}body.kv-cockpit .cockpit-odds-table td:nth-child(3)::before{content:"人気"}body.kv-cockpit .cockpit-odds-table td:nth-child(4)::before{content:"単勝"}body.kv-cockpit .cockpit-odds-table td:nth-child(5)::before{content:"AI"}body.kv-cockpit .cockpit-odds-table td::before{color:var(--kc-muted);font-size:11px;font-weight:700}}',
+      '@media(max-width:640px){body.kv-cockpit .header-sub{display:block!important;margin-left:32px!important}body.kv-cockpit .cockpit-live-status{flex-direction:column;align-items:flex-end;gap:3px}body.kv-cockpit .cockpit-live-status span{padding:2px 5px;font-size:8px}body.kv-cockpit #cockpit-global-odds i{display:none}body.kv-cockpit #race-tabs-section.sidebar-mode .race-tabs{grid-template-columns:repeat(6,minmax(0,1fr))!important}body.kv-cockpit .cockpit-race-heading{align-items:flex-start}body.kv-cockpit .race-name{font-size:16px!important}body.kv-cockpit .cockpit-race-time>strong{font-size:12px}body.kv-cockpit .cockpit-race-meta{font-size:10px}body.kv-cockpit .cockpit-picks{grid-template-columns:1fr;gap:6px}body.kv-cockpit .cockpit-pick{min-height:64px;padding:9px 10px}body.public-mode.kv-cockpit .kv-vtabs{grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}body.public-mode.kv-cockpit .kv-vtab{height:44px!important;padding:0 3px!important;font-size:10px!important}body.public-mode.kv-cockpit .kv-vtab i{display:none}body.kv-cockpit .cockpit-decision{grid-template-columns:1fr 1fr;gap:6px}.decision-risk{grid-column:1/-1;grid-row:2}.decision-action{text-align:right}body.kv-cockpit .cockpit-panel-head{align-items:flex-start}body.kv-cockpit .cockpit-table{min-width:620px}body.kv-cockpit .cockpit-value-note{align-items:flex-start;flex-wrap:wrap}body.kv-cockpit .cockpit-value-note small{width:100%;margin-left:36px}.kv-async-state{align-items:flex-start;flex-wrap:wrap}.kv-async-state .btn{width:100%;margin-left:0}.kv-fav-btn{width:44px;height:44px}.spr-l1{min-height:44px}.spr-more>summary{min-height:44px;display:flex;align-items:center}}',
+      '@media(max-width:640px){body.kv-cockpit .cockpit-live-status span{font-size:11px}body.kv-cockpit .cockpit-race-meta{font-size:12px}body.kv-cockpit .cockpit-table{min-width:0!important}body.kv-cockpit .cockpit-table thead{display:none}body.kv-cockpit .cockpit-table tbody,body.kv-cockpit .cockpit-table tr,body.kv-cockpit .cockpit-table td{display:block;width:auto}body.kv-cockpit .cockpit-table tr{margin:0 0 8px;padding:8px 10px;border:1px solid var(--kc-border);border-radius:8px;background:var(--kc-surface)}body.kv-cockpit .cockpit-table td{padding:5px 0;border:0!important;font-size:12px}body.kv-cockpit .cockpit-table td+td{padding-left:38px}body.kv-cockpit .cockpit-odds-table td{display:grid;grid-template-columns:72px 1fr;gap:8px;padding:4px 0;text-align:left!important}body.kv-cockpit .cockpit-odds-table td:nth-child(1)::before{content:"馬番"}body.kv-cockpit .cockpit-odds-table td:nth-child(2)::before{content:"馬名"}body.kv-cockpit .cockpit-odds-table td:nth-child(3)::before{content:"人気"}body.kv-cockpit .cockpit-odds-table td:nth-child(4)::before{content:"30分前"}body.kv-cockpit .cockpit-odds-table td:nth-child(5)::before{content:"10分前"}body.kv-cockpit .cockpit-odds-table td:nth-child(6)::before{content:"5分前"}body.kv-cockpit .cockpit-odds-table td:nth-child(7)::before{content:"確定"}body.kv-cockpit .cockpit-odds-table td:nth-child(8)::before{content:"AI"}body.kv-cockpit .cockpit-odds-table td::before{color:var(--kc-muted);font-size:11px;font-weight:700}}',
 ];
 (function kvInjectStyles(){
   if (document.getElementById('kv-styles')) return;
@@ -3190,7 +3186,7 @@ let currentRaceNo = null;
 let currentDate = '';
 let currentBaba = '31';
 let _commentVisible = true; // レース後コメントの表示フラグ（チェックボックスで制御）
-let _kvLastViewTab = 'yoso'; // Race CockpitはAI判断を初期表示。以後は直近の選択をレース間で維持する。
+let _kvLastViewTab = 'deban'; // レースを開いた直後は出馬表を表示。以後は直近の選択をレース間で維持する。
 
 // 馬体重の差分を +/- 表記にフォーマット（例: "475(9)" → "475(+9)"）
 function fmtWeightDiff(w) {
@@ -5588,28 +5584,23 @@ function renderRaceContent(raceNo) {
          style="position:relative;background:#f8fafc;border-bottom:2px solid #e2e8f0;height:44px;width:100%;box-sizing:border-box;overflow:hidden;">
       <!-- 左：タブボタン群（padding-rightでボタン領域を確保） -->
       <div class="kv-vtabs" role="tablist" aria-label="レース情報" onkeydown="onRaceTabKeydown(event,${raceNo})">
-        <button id="tab-btn-yoso-${raceNo}" class="kv-vtab on" data-view="yoso" role="tab" aria-selected="true" aria-controls="view-yoso-${raceNo}" tabindex="0"
-                onclick="switchViewTab(${raceNo},'yoso')">
-          <i class="fas fa-star"></i>
-          <span>AI予想</span>
-        </button>
-        <button id="tab-btn-deban-${raceNo}" class="kv-vtab" data-view="deban" role="tab" aria-selected="false" aria-controls="view-deban-${raceNo}" tabindex="-1"
+        <button id="tab-btn-deban-${raceNo}" class="kv-vtab on" data-view="deban" role="tab" aria-selected="true" aria-controls="view-deban-${raceNo}" tabindex="0"
                 onclick="switchViewTab(${raceNo},'deban')">
           <i class="fas fa-table"></i>
           <span>出馬表</span>
+        </button>
+        <button id="tab-btn-yoso-${raceNo}" class="kv-vtab" data-view="yoso" role="tab" aria-selected="false" aria-controls="view-yoso-${raceNo}" tabindex="-1"
+                onclick="switchViewTab(${raceNo},'yoso')">
+          <i class="fas fa-star"></i>
+          <span>AI予想</span>
         </button>
         <button id="tab-btn-odds-${raceNo}" class="kv-vtab" data-view="odds" role="tab" aria-selected="false" aria-controls="view-odds-${raceNo}" tabindex="-1"
                 onclick="switchViewTab(${raceNo},'odds')">
           <i class="fas fa-chart-line"></i>
           <span>オッズ</span>
         </button>
-        <div class="kv-vtabs-more">
-          <button id="tab-btn-more-${raceNo}" class="kv-vtab" type="button" aria-expanded="false" aria-haspopup="menu" aria-controls="tab-more-menu-${raceNo}" title="馬比較と確定結果を開く" onclick="toggleRaceMoreTabs(${raceNo})"><i class="fas fa-chevron-down"></i><span>比較・結果</span></button>
-          <div id="tab-more-menu-${raceNo}" class="kv-vtabs-more-menu hidden" role="menu" aria-label="比較と結果">
-            <button id="tab-btn-ability-${raceNo}" class="kv-vtab" role="menuitem" data-view="ability" onclick="switchViewTab(${raceNo},'ability')"><i class="fas fa-columns"></i><span>馬比較</span></button>
-            <button id="tab-btn-kekka-${raceNo}" class="kv-vtab" role="menuitem" data-view="kekka" disabled onclick="switchViewTab(${raceNo},'kekka')"><i class="fas fa-flag-checkered"></i><span>結果</span></button>
-          </div>
-        </div>
+        <button id="tab-btn-ability-${raceNo}" class="kv-vtab" role="tab" aria-selected="false" aria-controls="view-ability-${raceNo}" tabindex="-1" data-view="ability" onclick="switchViewTab(${raceNo},'ability')"><i class="fas fa-columns"></i><span>馬比較</span></button>
+        <button id="tab-btn-kekka-${raceNo}" class="kv-vtab" role="tab" aria-selected="false" aria-controls="view-kekka-${raceNo}" tabindex="-1" data-view="kekka" disabled onclick="switchViewTab(${raceNo},'kekka')"><i class="fas fa-flag-checkered"></i><span>結果</span></button>
       </div>
       <!-- 右：コメント操作 — 絶対配置で右端に固定 -->
       <div id="deban-controls-${raceNo}" class="kv-vctrl">
@@ -5629,7 +5620,7 @@ function renderRaceContent(raceNo) {
     </div>
 
     <!-- 出馬表ビュー -->
-    <div id="view-deban-${raceNo}" role="tabpanel" aria-labelledby="tab-btn-deban-${raceNo}" hidden>
+    <div id="view-deban-${raceNo}" role="tabpanel" aria-labelledby="tab-btn-deban-${raceNo}">
       <!-- 展開予想・乗り替わり診断（2026-07-11：予想AIタブから出馬表タブへ移設。馬柱表より上に配置） -->
       <div id="deban-extra-${raceNo}" style="padding:0 8px 8px;"></div>
       <div class="split-view-wrap">
@@ -5953,11 +5944,54 @@ function renderCockpitSummary(raceNo) {
   }
 }
 
-/** サンプルのオッズタブ。既存の取得処理と同じhorses配列を読み取り専用で一覧化する。 */
-function renderOddsPanel(raceNo) {
+function _kvOddsRaceStartMs(data, raceNo, historyRows) {
+  const date = String(data?.raceInfo?.raceDate || currentDate || '').replace(/-/g, '/');
+  const fromRace = typeof _kvGetRaceTime === 'function'
+    ? _kvGetRaceTime(date, raceNo, data?.raceInfo?.babaCode || currentBaba) : '';
+  const fromHistory = (historyRows || []).map(row => row?.post_time).find(Boolean) || '';
+  const match = String(fromRace || fromHistory).match(/(\d{1,2}):(\d{2})/);
+  const dm = date.match(/(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+  if (!match || !dm) return null;
+  const iso = `${dm[1]}-${String(dm[2]).padStart(2,'0')}-${String(dm[3]).padStart(2,'0')}T${String(match[1]).padStart(2,'0')}:${match[2]}:00+09:00`;
+  const value = new Date(iso).getTime();
+  return Number.isFinite(value) ? value : null;
+}
+
+function _kvOddsMinutesToPost(row, raceStartMs) {
+  const rawSaved = row?.minutes_to_post;
+  const saved = rawSaved == null || rawSaved === '' ? NaN : Number(rawSaved);
+  if (Number.isFinite(saved)) return saved;
+  const captured = new Date(row?.captured_at || '').getTime();
+  return Number.isFinite(raceStartMs) && Number.isFinite(captured)
+    ? Math.round((raceStartMs - captured) / 60000) : null;
+}
+
+/** 指定区分に最も近い保存値を返す。古い記録はcaptured_atから発走何分前かを補完する。 */
+function _kvPickOddsCheckpoint(rows, umaBan, targetMinutes, raceStartMs) {
+  const tolerance = targetMinutes === 30 ? 6 : 4;
+  return (rows || []).filter(row => parseInt(row?.uma_ban) === parseInt(umaBan) && parseFloat(row?.odds) > 0)
+    .map(row => ({ row, delta:Math.abs(_kvOddsMinutesToPost(row, raceStartMs) - targetMinutes) }))
+    .filter(item => Number.isFinite(item.delta) && item.delta <= tolerance)
+    .sort((a, b) => a.delta - b.delta || new Date(b.row.captured_at || 0) - new Date(a.row.captured_at || 0))[0]?.row || null;
+}
+
+function _kvOddsCheckpointHtml(row, label) {
+  const odds = parseFloat(row?.odds);
+  if (!Number.isFinite(odds)) return `<span class="odds-checkpoint is-missing"><strong>—</strong><small>${label || '記録なし'}</small></span>`;
+  const captured = new Date(row?.captured_at || '');
+  const time = !isNaN(captured.getTime())
+    ? captured.toLocaleTimeString('ja-JP', { hour:'2-digit', minute:'2-digit', hour12:false }) : label;
+  return `<span class="odds-checkpoint"><strong>${odds.toFixed(1)}</strong><small>${escapeHTML(time || label || '')}</small></span>`;
+}
+
+/** 30分前・10分前・5分前・確定の単勝を、保存スナップショットと公式結果から一覧化する。 */
+async function renderOddsPanel(raceNo) {
   const panel = document.getElementById(`odds-panel-${raceNo}`);
   const data = allRacesData[raceNo];
   if (!panel || !data) return;
+  const renderKey = `${Date.now()}-${Math.random()}`;
+  panel.dataset.oddsRenderKey = renderKey;
+  panel.innerHTML = _kvAsyncStateHtml('data', 'オッズ履歴を取得中', '30分前・10分前・5分前・確定を整理しています');
   let rankMap = new Map();
   try {
     if (!_idbFullReady) throw new Error('history-not-ready');
@@ -5968,26 +6002,35 @@ function renderOddsPanel(raceNo) {
     const ao = parseFloat(a.odds), bo = parseFloat(b.odds);
     return (Number.isFinite(ao) ? ao : 99999) - (Number.isFinite(bo) ? bo : 99999) || (parseInt(a.umaBan) || 0) - (parseInt(b.umaBan) || 0);
   });
+  let history = [];
+  try { history = await fetchRaceOddsHistory(data.raceInfo?.raceDate || currentDate, raceNo); }
+  catch (e) { console.warn('[odds checkpoints]', e); }
+  if (!panel.isConnected || panel.dataset.oddsRenderKey !== renderKey) return;
+  const raceStartMs = _kvOddsRaceStartMs(data, raceNo, history);
+  const hasResult = _kvRaceHasResult(raceNo);
   const valid = horses.filter(h => parseFloat(h.odds) > 0).length;
   const observed = data._liveOddsObservedAt ? new Date(data._liveOddsObservedAt) : null;
   const observedOk = observed && !isNaN(observed.getTime());
   const ageMin = observedOk ? Math.max(0, Math.floor((Date.now() - observed.getTime()) / 60000)) : null;
   const stale = ageMin != null && ageMin >= 10;
-  const stamp = observedOk ? `${String(observed.getHours()).padStart(2,'0')}:${String(observed.getMinutes()).padStart(2,'0')}現在` : (valid ? '保存オッズ' : '未取得');
-  const freshness = observedOk
+  const freshness = hasResult
+    ? `<span class="odds-freshness is-saved"><i class="fas fa-flag-checkered"></i> 結果確定</span>`
+    : observedOk
     ? `<span class="odds-freshness${stale ? ' is-stale' : ''}"><i class="fas ${stale ? 'fa-exclamation-circle' : 'fa-check-circle'}"></i> ${stale ? `${ageMin}分前・要更新` : ageMin === 0 ? '最新' : `${ageMin}分前`}</span>`
     : `<span class="odds-freshness is-saved"><i class="fas fa-database"></i> ${valid ? '保存値' : '未取得'}</span>`;
   const rows = horses.map(h => {
     const odds = parseFloat(h.odds), ninki = parseInt(h.ninki), aiRank = rankMap.get(h.horseName);
     const ai = aiRank === 1 ? '◎' : aiRank === 2 ? '○' : aiRank === 3 ? '▲' : '';
-    const move = h._oddsMove;
-    const moveHtml = move && Number.isFinite(move.previous) && Number.isFinite(move.current)
-      ? `<span class="odds-move ${move.direction === 'shorter' ? 'is-shorter' : move.direction === 'longer' ? 'is-longer' : 'is-flat'}">${move.previous.toFixed(1)} → ${move.current.toFixed(1)} ${move.direction === 'shorter' ? '↓' : move.direction === 'longer' ? '↑' : '→'}${move.percent ? ` ${Math.abs(move.percent).toFixed(0)}%` : ''}</span>` : '';
-    return `<tr><td><span class="cockpit-uma">${escapeHTML(h.umaBan || '—')}</span></td><td><b>${ai} ${escapeHTML(h.horseName) || '—'}</b></td><td>${Number.isFinite(ninki) ? ninki + '人気' : '—'}</td><td class="cockpit-odds-value">${Number.isFinite(odds) ? odds.toFixed(1) : '—'}${moveHtml}</td><td>${aiRank ? `AI ${aiRank}位` : '—'}</td></tr>`;
+    const t30 = _kvPickOddsCheckpoint(history, h.umaBan, 30, raceStartMs);
+    const t10 = _kvPickOddsCheckpoint(history, h.umaBan, 10, raceStartMs);
+    const t5 = _kvPickOddsCheckpoint(history, h.umaBan, 5, raceStartMs);
+    const finalRow = hasResult && Number.isFinite(odds) ? { odds, captured_at:'', ninki } : null;
+    return `<tr><td><span class="cockpit-uma">${escapeHTML(h.umaBan || '—')}</span></td><td><b>${ai} ${escapeHTML(h.horseName) || '—'}</b></td><td>${Number.isFinite(ninki) ? ninki + '人気' : '—'}</td><td>${_kvOddsCheckpointHtml(t30, '記録なし')}</td><td>${_kvOddsCheckpointHtml(t10, '記録なし')}</td><td>${_kvOddsCheckpointHtml(t5, '記録なし')}</td><td>${_kvOddsCheckpointHtml(finalRow, hasResult ? '公式確定' : '未確定')}</td><td>${aiRank ? `AI ${aiRank}位` : '—'}</td></tr>`;
   }).join('');
-  const warning = stale ? `<div class="odds-warning"><i class="fas fa-exclamation-triangle"></i> ${ageMin}分前のオッズです。購入判断の前に更新してください。</div>` : (!observedOk && valid ? '<div class="odds-warning"><i class="fas fa-info-circle"></i> 保存時のオッズです。現在値とは異なる場合があります。</div>' : '');
-  panel.innerHTML = `<div class="cockpit-panel-head"><div><h3>単勝オッズ</h3><p>${escapeHTML(stamp)}・取得 ${valid}/${horses.length}頭</p></div><span style="display:flex;align-items:center;gap:7px">${freshness}<button type="button" class="btn btn-secondary viewer-ok" onclick="fetchLiveOddsBtn(${raceNo})"><i class="fas fa-sync-alt"></i> 最新に更新</button></span></div>${warning}
-    <div class="table-wrapper"><table class="cockpit-table cockpit-odds-table"><thead><tr><th>馬番</th><th>馬名</th><th>人気</th><th>単勝</th><th>AI</th></tr></thead><tbody>${rows || '<tr><td colspan="5">出走馬データがありません</td></tr>'}</tbody></table></div>`;
+  const warning = stale && !hasResult ? `<div class="odds-warning"><i class="fas fa-exclamation-triangle"></i> 最新取得は${ageMin}分前です。購入判断の前に更新してください。</div>`
+    : (!history.length ? '<div class="odds-warning"><i class="fas fa-info-circle"></i> 時点別の保存オッズがありません。記録のない欄は「—」で表示します。</div>' : '');
+  panel.innerHTML = `<div class="cockpit-panel-head"><div><h3>単勝オッズ推移</h3><p>30分前・10分前・5分前・確定を同じ行で比較（保存 ${history.length}件）</p></div><span style="display:flex;align-items:center;gap:7px">${freshness}<button type="button" class="btn btn-secondary viewer-ok" onclick="fetchLiveOddsBtn(${raceNo})"><i class="fas fa-sync-alt"></i> 最新に更新</button></span></div>${warning}
+    <div class="table-wrapper"><table class="cockpit-table cockpit-odds-table"><thead><tr><th>馬番</th><th>馬名</th><th>人気</th><th>30分前</th><th>10分前</th><th>5分前</th><th>確定</th><th>AI</th></tr></thead><tbody>${rows || '<tr><td colspan="8">出走馬データがありません</td></tr>'}</tbody></table></div>`;
 }
 
 /**
@@ -6064,6 +6107,8 @@ async function fetchLiveOddsBtn(raceNo) {
   if (btn) { btn.disabled = true; btn.innerHTML = '💹 取得中...'; }
   try {
     const n = await fetchLiveOdds(raceNo);
+    const historyKey = `${allRacesData[raceNo]?.raceInfo?.raceDate || currentDate}__${raceNo}`;
+    delete _oddsHistCache[historyKey]; // 時点別オッズも次の描画で再取得する
     renderHorseRows(raceNo, allRacesData[raceNo].horses);
     renderCockpitSummary(raceNo);
     renderOddsPanel(raceNo);
@@ -7040,35 +7085,11 @@ function toggleCollapse(type, raceNo) {
 // ============================================================
 // タブ切替（出馬表 / 能力表）
 // ============================================================
-let _raceMoreMenuWired = false;
-function _closeRaceMoreMenus(exceptMenu) {
-  document.querySelectorAll('.kv-vtabs-more-menu').forEach(menu => {
-    if (menu === exceptMenu) return;
-    menu.classList.add('hidden');
-    const btn = document.getElementById(menu.id.replace('tab-more-menu-', 'tab-btn-more-'));
-    if (btn) btn.setAttribute('aria-expanded', 'false');
-  });
-}
-function toggleRaceMoreTabs(raceNo, force) {
-  const menu = document.getElementById(`tab-more-menu-${raceNo}`), btn = document.getElementById(`tab-btn-more-${raceNo}`);
-  if (!menu || !btn) return;
-  const open = typeof force === 'boolean' ? force : menu.classList.contains('hidden');
-  if (open) _closeRaceMoreMenus(menu);
-  menu.classList.toggle('hidden', !open); btn.setAttribute('aria-expanded', String(open));
-  if (!_raceMoreMenuWired) {
-    _raceMoreMenuWired = true;
-    document.addEventListener('click', event => {
-      if (!event.target.closest('.kv-vtabs-more')) _closeRaceMoreMenus();
-    });
-    document.addEventListener('keydown', event => {
-      if (event.key === 'Escape') _closeRaceMoreMenus();
-    });
-  }
-}
-
 function onRaceTabKeydown(event, raceNo) {
   if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
-  const tabs = ['yoso','deban','odds'].map(view => document.getElementById(`tab-btn-${view}-${raceNo}`)).filter(Boolean);
+  const tabs = ['deban','yoso','odds','ability','kekka']
+    .map(view => document.getElementById(`tab-btn-${view}-${raceNo}`))
+    .filter(button => button && !button.disabled && getComputedStyle(button).display !== 'none');
   if (!tabs.length) return;
   const current = Math.max(0, tabs.indexOf(document.activeElement));
   const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
@@ -7138,14 +7159,16 @@ async function switchViewTab(raceNo, view) {
   const abilityBtn  = document.getElementById(`tab-btn-ability-${raceNo}`);
   const yosoBtn     = document.getElementById(`tab-btn-yoso-${raceNo}`);
   const oddsBtn     = document.getElementById(`tab-btn-odds-${raceNo}`);
-  const moreBtn     = document.getElementById(`tab-btn-more-${raceNo}`);
   const debanCtrl   = document.getElementById(`deban-controls-${raceNo}`);
   if (!debanView || !abilityView) return;
   _kvLastViewTab = view; // 直近選択のサブタブを記憶（新規レース表示時にswitchRaceTab/renderRaceContentから復元）
 
   [debanView, kekkaView, abilityView, yosoView, oddsView].forEach(v => { if (v) v.style.display = 'none'; });
-  [debanBtn, kekkaBtn, abilityBtn, yosoBtn, oddsBtn, moreBtn].forEach(b => { if (b) b.classList.remove('on'); });
-  const tabMap = { deban:[debanBtn,debanView], yoso:[yosoBtn,yosoView], odds:[oddsBtn,oddsView] };
+  [debanBtn, kekkaBtn, abilityBtn, yosoBtn, oddsBtn].forEach(b => { if (b) b.classList.remove('on'); });
+  const tabMap = {
+    deban:[debanBtn,debanView], yoso:[yosoBtn,yosoView], odds:[oddsBtn,oddsView],
+    ability:[abilityBtn,abilityView], kekka:[kekkaBtn,kekkaView]
+  };
   Object.values(tabMap).forEach(([button,panel]) => {
     if (button) { button.setAttribute('aria-selected','false'); button.tabIndex = -1; }
     if (panel) panel.hidden = true;
@@ -7156,8 +7179,6 @@ async function switchViewTab(raceNo, view) {
     if (panel) panel.hidden = false;
   }
   if (debanCtrl) debanCtrl.style.display = 'none';
-  toggleRaceMoreTabs(raceNo, false);
-
   if (view === 'deban') {
     debanView.style.display = '';
     if (debanBtn) debanBtn.classList.add('on');
@@ -7165,7 +7186,6 @@ async function switchViewTab(raceNo, view) {
   } else if (view === 'kekka') {
     if (kekkaView) kekkaView.style.display = '';
     if (kekkaBtn) kekkaBtn.classList.add('on');
-    if (moreBtn) moreBtn.classList.add('on');
     const target = document.getElementById(`kekka-panel-${raceNo}`);
     if (target) target.innerHTML = _kvAsyncStateHtml('ai', '結果とAI印を照合中', '確定着順とレース前の評価を計算しています');
     try { await _ensureRaceIntelligence(); } catch (e) { if (target) target.innerHTML = _kvAsyncStateHtml('error','結果表示に失敗しました','通信状態を確認して再試行してください',`switchViewTab(${raceNo},'kekka')`); return; }
@@ -7173,7 +7193,6 @@ async function switchViewTab(raceNo, view) {
   } else if (view === 'ability') {
     abilityView.style.display = '';
     if (abilityBtn) abilityBtn.classList.add('on');
-    if (moreBtn) moreBtn.classList.add('on');
     const target = document.getElementById(`ability-table-${raceNo}`);
     if (target) target.innerHTML = _kvAsyncStateHtml('data', '出走馬の履歴を取得中', `${allRacesData[raceNo]?.horses?.length || 0}頭分だけを優先して準備しています`);
     // 能力表は共通の日付計算・馬タグ機能を使うため、遅延モジュールも明示的に準備する。
@@ -8729,7 +8748,7 @@ function fetchRaceOddsHistory(raceDateSlash, raceNo) {
     const pageSize = 1000;
     const allRows = [];
     for (let offset = 0; ; offset += pageSize) {
-      const url = `${SUPABASE_URL}/rest/v1/keiba_odds_snapshots?select=captured_at,uma_ban,odds,ninki`
+      const url = `${SUPABASE_URL}/rest/v1/keiba_odds_snapshots?select=captured_at,uma_ban,odds,ninki,minutes_to_post,post_time`
         + `&race_date=eq.${encodeURIComponent(raceDateSlash)}&race_no=eq.${encodeURIComponent(raceNo)}`
         + `&order=captured_at.asc,uma_ban.asc&limit=${pageSize}&offset=${offset}`;
       let rows;
