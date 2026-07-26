@@ -2916,12 +2916,12 @@ const _kvLibSpecs = {
     ready: () => typeof window.fetchAllByNameForRace === 'function' && typeof window.storeOfficialRacesAsHorseEntries === 'function',
   },
   jraTransferShadow: {
-    src: 'modules/jra-transfer-shadow.js?v=20260723-v1',
+    src: 'modules/jra-transfer-shadow.js?v=20260726-v2',
     ready: () => typeof window.KvJraTransferShadow?.scoreHorse === 'function' &&
       window.KvJraTransferShadow?.contract?.status === 'forward_shadow_only',
   },
   aiAnalysis: {
-    src: 'modules/ai-analysis.js?v=20260723-jra1',
+    src: 'modules/ai-analysis.js?v=20260726-transfer2',
     ready: () => typeof window.computeYosoScored === 'function' && typeof window.renderPredictionPanel === 'function' && typeof window.renderAnalysis === 'function',
   },
   aiInsights: {
@@ -2945,6 +2945,15 @@ const _kvLibSpecs = {
     src: 'modules/era-drift-shadow.js?v=20260723-v2',
     ready: () => typeof window.kvCaptureEraDriftShadow === 'function' &&
       window.KvEraDriftShadow?.contract?.status === 'forward_shadow_only',
+  },
+  paceV2Baseline: {
+    src: 'data/kochi-pace-baselines-v2.js?v=20260726-v1',
+    ready: () => window.KOCHI_PACE_BASELINES_V2?.version === 2,
+  },
+  paceV2Shadow: {
+    src: 'modules/pace-v2-shadow.js?v=20260726-v1',
+    ready: () => typeof window.KvPaceV2Shadow?.computeLive === 'function' &&
+      window.KvPaceV2Shadow?.contract?.status === 'forward_shadow_only',
   },
   probabilityCalibration: {
     src: 'modules/probability-calibration.js?v=20260723-v1',
@@ -3030,6 +3039,8 @@ function _ensureVnextPartnerShadowModule() {
     .then(() => _kvLoadLibrary('vnextMarketBlend'))
     .then(() => _kvLoadLibrary('vnextPartnerLive'))
     .then(() => _kvLoadLibrary('eraDriftShadow'))
+    .then(() => _kvLoadLibrary('paceV2Baseline'))
+    .then(() => _kvLoadLibrary('paceV2Shadow'))
     .then(() => {
       if (window.kvEnsureVnextPartnerShadowRegistered) window.kvEnsureVnextPartnerShadowRegistered();
       if (typeof isAdminMode === 'function' && isAdminMode() && window.KvEraDriftShadow?.hydrateServerSnapshots) {
@@ -9197,6 +9208,9 @@ function idbPut(key, val) {
   _idbCache[key] = val; // メモリキャッシュを即時更新
   _indexStoredEntry(key, val);
   if (val && (val.type === 'horse' || val.type === 'race')) window._kvHistoryRevision = Number(window._kvHistoryRevision || 0) + 1;
+  if (val && (val.type === 'official' || String(key).startsWith('official_'))) {
+    window._kvOfficialHistoryRevision = Number(window._kvOfficialHistoryRevision || 0) + 1;
+  }
   _savedGroupsDirty = true;
   if (val && (val.type === 'horse' || val.type === 'race') && window.kvResetVnextPartnerLiveIndex) {
     window.kvResetVnextPartnerLiveIndex();
@@ -9240,6 +9254,9 @@ function idbDelete(key) {
     delete _idbCache[key];
   }
   if (_old && (_old.type === 'horse' || _old.type === 'race')) window._kvHistoryRevision = Number(window._kvHistoryRevision || 0) + 1;
+  if (_old && (_old.type === 'official' || String(key).startsWith('official_'))) {
+    window._kvOfficialHistoryRevision = Number(window._kvOfficialHistoryRevision || 0) + 1;
+  }
   _savedGroupsDirty = true;
   if (_old && (_old.type === 'horse' || _old.type === 'race') && window.kvResetVnextPartnerLiveIndex) {
     window.kvResetVnextPartnerLiveIndex();
@@ -9361,6 +9378,12 @@ async function _idbBulkPut(obj) {
     if (_idbCache[k]) _unindexStoredEntry(k, _idbCache[k]);
     _idbCache[k] = obj[k];
     _indexStoredEntry(k, obj[k]);
+  }
+  if (keys.some(k => obj[k]?.type === 'horse' || obj[k]?.type === 'race')) {
+    window._kvHistoryRevision = Number(window._kvHistoryRevision || 0) + 1;
+  }
+  if (keys.some(k => obj[k]?.type === 'official' || String(k).startsWith('official_'))) {
+    window._kvOfficialHistoryRevision = Number(window._kvOfficialHistoryRevision || 0) + 1;
   }
   _savedGroupsDirty = true;
   _horseHistCache.clear();
@@ -12617,7 +12640,7 @@ function renderTrackTrend() {
  * 1400m専用の行列を1300m/1600mへも誤って適用していた（buildPaceBiasMatrixに距離不問で1400mしか
  * 渡していなかった）。距離を引数化し、スコア側は現在レースの距離で行列を構築するよう修正。
  */
-function _collectPaceRaces(babaFilter, distNum) {
+function _collectPaceRaces(babaFilter, distNum, asOfDate, asOfRaceNo) {
   const distStr = String(distNum || 1400);
   const all = lsRead();
   // 馬エントリを raceKey でグルーピング（1パス）
@@ -12637,6 +12660,11 @@ function _collectPaceRaces(babaFilter, distNum) {
     if (!k.startsWith('race_')) continue;
     if (babaFilter && v.baba_code !== babaFilter) continue;
     if (String(v.distance || '').replace(/[^\d]/g, '') !== distStr) continue;
+    const raceDate = String(v.race_date || v.raceDate || k.split('_')[2] || '');
+    const raceNo = parseInt(v.race_no || v.raceNo || k.split('_')[3]) || 0;
+    if (asOfDate && !(raceDate < asOfDate || (raceDate === asOfDate && raceNo < (parseInt(asOfRaceNo) || 0)))) {
+      continue;
+    }
     const f3 = parseFloat(v.first3f), a3 = parseFloat(v.agari3f_race);
     if (isNaN(f3) || isNaN(a3)) continue;
     const horses = byRace.get(`${v.baba_code}_${v.race_date}_${String(v.race_no)}`);
@@ -12647,6 +12675,7 @@ function _collectPaceRaces(babaFilter, distNum) {
     const wc1 = fc(winner.corner); if (wc1 == null) continue;
     const leader = horses.find(h => fc(h.corner) === 1);
     races.push({
+      raceDate, raceNo,
       cond: v.track_cond || '',
       diff: +(f3 - a3).toFixed(1),
       maeKecchaku: (wc1 / field) <= 0.33,
@@ -12668,8 +12697,11 @@ function _paceOfDiff(diff) { return diff <= -0.5 ? 'ハイ' : diff <= 0.5 ? '平
  * ※メモ化しない：backfillで first3f が後から増えても件数(キー数)は変わらず
  *   古い行列を返してしまうため。スキャンは軽量なので毎回構築する。
  */
-function buildPaceBiasMatrix(babaFilter, distNum) {
-  const races = _collectPaceRaces(babaFilter, distNum || 1400);
+function buildPaceBiasMatrix(babaFilter, distNum, asOfDate, asOfRaceNo, precollected) {
+  const source = Array.isArray(precollected) ? precollected : _collectPaceRaces(babaFilter, distNum || 1400);
+  const races = asOfDate ? source.filter(r =>
+    r.raceDate < asOfDate || (r.raceDate === asOfDate && r.raceNo < (parseInt(asOfRaceNo) || 0))
+  ) : source;
   const stat = rs => {
     const leaders = rs.filter(r => r.leaderTop3 != null);
     const fuku = leaders.filter(r => r.leaderTop3).length;
@@ -14668,6 +14700,7 @@ function _renderOfficialSection(parsed, code, horseName) {
         <div style="font-size:10px;color:#4b5563;margin-top:4px">9月起算・持越し ${cp.nextSummary.totalPrize.toFixed(1)}万円</div>
         ${cp.droppedPrize>0?`<div style="font-size:10px;color:#6b7280">起算日変更で対象外 ${cp.droppedPrize.toFixed(1)}万円</div>`:''}
         <div style="font-size:10px;font-weight:700;color:${tone};margin-top:3px">${status}</div>
+        ${!cp.isComplete?`<div style="font-size:9px;color:#b45309;font-weight:700;margin-top:3px">⚠ 対象外期間の賞金欠損を含む暫定値</div>`:''}
         <div style="font-size:9px;color:#9ca3af;margin-top:3px">${/(?:3歳|3才|[牡牝騸セ]3)/.test(String(bi.sexAge||''))?'3歳馬は一般格編入時の参考値。':''}現時点の推定。残り開催の獲得賞金・編成判断で変動</div>
       </div>`;
     })() : '';
@@ -15187,21 +15220,43 @@ function calcNextBangumiCycleProjection(races, refDate, currentSummary) {
   // 公開済みの令和8年度要領で確定している4〜8月→9月の切替だけを予測する。
   if(d.getFullYear() !== 2026 || month < 4 || month > 8) return null;
   const current = currentSummary || calcHorsePrizeSummary(races, d);
-  const nextSummary = calcHorsePrizeSummary(races, new Date(2026, 8, 1));
-  if(!current || !nextSummary) return null;
+  if(!current) return null;
+  const nextCycleStart = new Date(2026, 8, 1);
+  const nextPeriodStart = getBangumiPrizePeriodStart(nextCycleStart);
+  // 現在級は公式基準額を優先しているため、次回だけ全履歴から再構成すると計算方式が混ざる。
+  // 現在額から、新しい起算日（2024/09/01）より前の対象賞金だけを差し引いて持越額を出す。
+  const droppedRaces = (Array.isArray(races) ? races : []).filter(r=>{
+    const rd=parseDateStr(r.raceDate);
+    return rd&&rd>=current.periodStart&&rd<nextPeriodStart;
+  });
+  const droppedSummary = droppedRaces.length
+    ? calcHorsePrizeSummary(droppedRaces, new Date(2026, 7, 31))
+    : {totalPrize:0,missingPrizeRaces:0,unresolvedJraRaces:0,isComplete:true};
+  const droppedPrize = Math.round(Number(droppedSummary?.totalPrize||0)*10)/10;
+  const nextTotal = Math.round(Math.max(0,current.totalPrize-droppedPrize)*10)/10;
+  const nextRules = getKochiClassRules(nextCycleStart);
+  const nextClass = nextRules.find(r=>nextTotal>r.min)||nextRules[nextRules.length-1];
+  const nextSummary = {
+    totalPrize:nextTotal, estimatedClass:nextClass, classRules:nextRules,
+    periodStart:nextPeriodStart, fiscalYear:getKochiFiscalYear(nextCycleStart),
+    missingPrizeRaces:Number(droppedSummary?.missingPrizeRaces||0),
+    unresolvedJraRaces:Number(droppedSummary?.unresolvedJraRaces||0),
+    isComplete:!!current.isComplete&&!!droppedSummary?.isComplete,
+  };
   const currentIdx = current.classRules.findIndex(r=>r.cls===current.estimatedClass.cls);
   const projectedIdx = nextSummary.classRules.findIndex(r=>r.cls===nextSummary.estimatedClass.cls);
   const isDemotion = projectedIdx > currentIdx;
   const isLowestClass = currentIdx === current.classRules.length - 1;
   const tenth = n => Math.round(Math.max(0,n) * 10) / 10;
   return {
-    nextCycleStart: new Date(2026, 8, 1),
+    nextCycleStart,
     currentClass: current.estimatedClass,
     projectedClass: nextSummary.estimatedClass,
     nextSummary,
     isDemotion,
     isLowestClass,
-    droppedPrize: tenth(current.totalPrize - nextSummary.totalPrize),
+    isComplete:nextSummary.isComplete,
+    droppedPrize: tenth(droppedPrize),
     retentionNeeded: isDemotion ? tenth(current.estimatedClass.min - nextSummary.totalPrize + 0.1) : 0,
     retentionMargin: !isDemotion && !isLowestClass ? tenth(nextSummary.totalPrize - current.estimatedClass.min) : 0,
   };

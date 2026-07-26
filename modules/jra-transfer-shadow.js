@@ -5,12 +5,12 @@
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (root) root.KvJraTransferShadow = api;
 })(typeof window !== 'undefined' ? window : globalThis, function (root) {
-  const VERSION = 'jra-transfer-shadow-v1';
+  const VERSION = 'jra-transfer-shadow-v2';
   const WORKER = 'https://keiba-proxydeploy.maguronagareboshi.workers.dev';
   const CLASS_ORDER = ['NEWCOMER', 'MAIDEN', '1WIN', '2WIN', '3WIN', 'OPEN', 'GRADE'];
   const ORIGIN_RANK = { NEWCOMER:1.5, MAIDEN:2.5, '1WIN':4, '2WIN':5.5, '3WIN':7, OPEN:8, GRADE:9 };
   const MARKS = ['◎', '○', '▲', '△', '×', '×'];
-  const attempted = new Set();
+  const attempted = new Map();
   const pending = new Map();
 
   const contract = Object.freeze({
@@ -21,6 +21,8 @@
     classSource: 'keiba.go.jp HorseMarkInfo',
     shrinkage: 0.5,
     decayByKochiStart: [1, 0.5, 0.25, 0],
+    validatedScope: 'first_start',
+    laterStartsStatus: 'forward_shadow_monitoring',
   });
 
   function normalize(value) {
@@ -54,17 +56,68 @@
     return /^J[^0-9]/.test(normalize(value));
   }
 
+  function isKochiCourse(value) {
+    const s = normalize(value);
+    return s === '高知' || s.startsWith('高知');
+  }
+
   function dateKey(value) {
     const digits = String(value || '').replace(/\D/g, '').slice(0, 8);
     return digits.length === 8 ? Number(digits) : 0;
   }
 
-  function analyzeHistory(races, asOfDate) {
+  function priorOfficialRaces(races, asOfDate) {
     const cutoff = dateKey(asOfDate) || 99999999;
-    const prior = (Array.isArray(races) ? races : [])
+    return (Array.isArray(races) ? races : [])
       .filter(r => dateKey(r.raceDate || r.date) && dateKey(r.raceDate || r.date) < cutoff)
       .slice().sort((a, b) => dateKey(a.raceDate || a.date) - dateKey(b.raceDate || b.date));
-    if (!prior.length || !isJraCourse(prior[prior.length - 1].course)) return null;
+  }
+
+  /**
+   * 対象日時点の高知在籍状態を、直近の「高知以外→高知」サイクルで判定する。
+   * localKochiRuns は公式キャッシュが発走前取得のまま古い場合を補完するためだけに使う。
+   */
+  function analyzeKochiEntryState(races, asOfDate, options = {}) {
+    const known = options.historyKnown !== false && Array.isArray(races);
+    const prior = priorOfficialRaces(races, asOfDate);
+    if (!prior.length) return {
+      status: known ? 'newcomer' : 'unknown', originCourse:null, originRace:null,
+      originDate:0, kochiStartsSinceOrigin:0, officialPriorCount:0,
+    };
+
+    let originIndex = -1;
+    for (let i = prior.length - 1; i >= 0; i--) {
+      if (!isKochiCourse(prior[i].course)) { originIndex = i; break; }
+    }
+    if (originIndex < 0) return {
+      status:'kochi_existing', originCourse:null, originRace:null, originDate:0,
+      kochiStartsSinceOrigin:prior.filter(r => isKochiCourse(r.course)).length,
+      officialPriorCount:prior.length,
+    };
+
+    const originRace = prior[originIndex];
+    const originDate = dateKey(originRace.raceDate || originRace.date);
+    const officialKochi = prior.slice(originIndex + 1).filter(r => isKochiCourse(r.course));
+    // 1頭が同日に複数競走へ出ることはないため、公式側にraceNoがない場合も日付で重複排除できる。
+    const localKeys = new Set(officialKochi.map(r => String(dateKey(r.raceDate || r.date))));
+    for (const r of Array.isArray(options.localKochiRuns) ? options.localKochiRuns : []) {
+      const d = dateKey(r.raceDate || r.race_date || r.date);
+      if (d > originDate && d < (dateKey(asOfDate) || 99999999)) {
+        localKeys.add(String(d));
+      }
+    }
+    return {
+      status:isJraCourse(originRace.course) ? 'jra_transfer' : 'nar_transfer',
+      originCourse:String(originRace.course || ''), originRace, originDate,
+      kochiStartsSinceOrigin:localKeys.size, officialPriorCount:prior.length,
+    };
+  }
+
+  function analyzeHistory(races, asOfDate, options = {}) {
+    const entryState = analyzeKochiEntryState(races, asOfDate, options);
+    if (entryState.status !== 'jra_transfer') return null;
+    const prior = priorOfficialRaces(races, asOfDate)
+      .filter(r => dateKey(r.raceDate || r.date) <= entryState.originDate);
     const classified = prior.filter(r => isJraCourse(r.course)).map(r => ({
       row: r,
       cls: classifyJraClass([r.raceClassRaw, r.raceClass, r.raceName].filter(Boolean).join(' ')),
@@ -73,7 +126,7 @@
     const recent = classified[classified.length - 1];
     const peak = classified.reduce((best, item) =>
       CLASS_ORDER.indexOf(item.cls) > CLASS_ORDER.indexOf(best.cls) ? item : best, classified[0]);
-    return { recentClass:recent.cls, peakClass:peak.cls, recentRace:recent.row, peakRace:peak.row };
+    return { recentClass:recent.cls, peakClass:peak.cls, recentRace:recent.row, peakRace:peak.row, entryState };
   }
 
   // Log-odds lifts measured in the 2019-2025 audit, deliberately broad and sparse.
@@ -90,10 +143,15 @@
   }
 
   function scoreHorse(input) {
-    const history = analyzeHistory(input.races, input.asOfDate);
+    const history = analyzeHistory(input.races, input.asOfDate, {
+      historyKnown:input.historyKnown,
+      localKochiRuns:input.localKochiRuns,
+    });
     if (!history || !Number.isFinite(Number(input.baselineScore))) return null;
     const target = targetClass(input.targetClass);
-    const starts = Math.max(0, Number(input.kochiStarts) || 0);
+    const starts = Array.isArray(input.localKochiRuns)
+      ? history.entryState.kochiStartsSinceOrigin
+      : Math.max(history.entryState.kochiStartsSinceOrigin, Math.max(0, Number(input.kochiStarts) || 0));
     const decay = starts === 0 ? 1 : starts === 1 ? 0.5 : starts === 2 ? 0.25 : 0;
     if (!decay) return null;
     const lift = empiricalLogitLift(history.recentClass, target);
@@ -106,6 +164,8 @@
     return {
       schema: 'jra_transfer_factor/v1', model: VERSION, targetClass: target,
       recentClass: history.recentClass, peakClass: history.peakClass,
+      entryStatus:history.entryState.status, originCourse:history.entryState.originCourse,
+      originDate:history.entryState.originDate,
       kochiStarts: starts, decay, logitLift: lift, empiricalDelta:+empiricalDelta.toFixed(3),
       peakCorrection:+peakCorrection.toFixed(3), scoreDelta:+scoreDelta.toFixed(3),
       shadowScore:+(Number(input.baselineScore) + scoreDelta).toFixed(3),
@@ -118,7 +178,7 @@
       .map((s, currentRank) => ({
         horse:s.horse, currentRank:currentRank + 1, currentScore:Number(s.totalScore),
         shadowScore:s.transferShadow ? s.transferShadow.shadowScore : Number(s.totalScore),
-        factor:s.transferShadow || null,
+        factor:s.transferShadow || null, entryState:s.transferEntryState || null,
       })).sort((a, b) => b.shadowScore - a.shadowScore || a.currentRank - b.currentRank)
       .map((r, i) => ({ ...r, shadowRank:i + 1, shadowMark:MARKS[i] || '' }));
     const currentTop = rows.slice().sort((a, b) => a.currentRank - b.currentRank)[0] || null;
@@ -134,14 +194,17 @@
 
   function buildAdminHtml(result) {
     if (typeof root.isAdminMode === 'function' && !root.isAdminMode()) return '';
-    if (!result || !result.ranked.some(r => r.factor)) return '';
+    if (!result) return '';
     const affected = result.ranked.filter(r => r.factor);
+    const deferred = result.ranked.filter(r => !r.factor && ['nar_transfer', 'newcomer'].includes(r.entryState?.status));
+    if (!affected.length && !deferred.length) return '';
     const evaluation = evaluateStored();
     return `<div class="jra-transfer-shadow-card" data-model="${VERSION}" style="margin:10px 0;padding:10px 12px;border:1px solid #38bdf855;border-radius:8px;background:#0c2030;color:#dbeafe;font-size:11px">
-      <div style="font-weight:800;color:#67e8f9;margin-bottom:6px">JRA転入能力・影予想（未採用）</div>
+      <div style="font-weight:800;color:#67e8f9;margin-bottom:6px">転入前能力・影予想（未採用）</div>
       <div>現行◎ <b>${esc(result.currentTop?.horse?.horseName || '—')}</b> ／ 転入補正◎ <b>${esc(result.shadowTop?.horse?.horseName || '—')}</b>${result.changedTop ? ' <span style="color:#fbbf24">変更あり</span>' : ''}</div>
       ${affected.map(r => `<div style="margin-top:4px;color:#bae6fd">${esc(r.horse?.horseName || '')}: ${esc(r.factor.reason)}、補正 ${r.factor.scoreDelta >= 0 ? '+' : ''}${r.factor.scoreDelta.toFixed(2)}、影${r.shadowRank}位</div>`).join('')}
-      <div style="margin-top:6px;color:#7dd3fc">直近JRAクラス×高知編入クラス・50%縮約。公開印と買い目には未反映。</div>
+      ${deferred.map(r => `<div style="margin-top:4px;color:#fcd34d">${esc(r.horse?.horseName || '')}: ${r.entryState.status === 'nar_transfer' ? `${esc(r.entryState.originCourse || '他地区')}からの転入・換算係数未採用` : '公式の過去出走なし・新馬として判定保留'}</div>`).join('')}
+      <div style="margin-top:6px;color:#7dd3fc">直近JRAクラス×高知編入クラス・50%縮約。初戦を主評価、2・3戦目は減衰監視。公開印と買い目には未反映。</div>
       <div style="margin-top:3px;color:#94a3b8">前向き保存 ${evaluation.snapshots || 0}R／結果確定 ${evaluation.settled || 0}R${evaluation.deltaPt == null ? '' : `／◎差 ${evaluation.deltaPt >= 0 ? '+' : ''}${evaluation.deltaPt.toFixed(2)}pt`}</div>
     </div>`;
   }
@@ -160,7 +223,9 @@
     const rowFor = r => ({ u:Number(r.horse?.umaBan), name:String(r.horse?.horseName || ''),
       rank:r.currentRank, shadowRank:r.shadowRank, score:r.currentScore, shadowScore:r.shadowScore,
       factor:r.factor ? { recentClass:r.factor.recentClass, peakClass:r.factor.peakClass,
-        targetClass:r.factor.targetClass, kochiStarts:r.factor.kochiStarts, scoreDelta:r.factor.scoreDelta } : null });
+        targetClass:r.factor.targetClass, entryStatus:r.factor.entryStatus,
+        originCourse:r.factor.originCourse, originDate:r.factor.originDate,
+        kochiStarts:r.factor.kochiStarts, scoreDelta:r.factor.scoreDelta } : null });
     const snapshot = { type:'jraTransferShadowSnapshot', schema:'jra_transfer_shadow_snapshot/v1',
       model:VERSION, status:'shadow_unadopted', savedAt:new Date().toISOString(),
       babaCode:'31', raceDate:date, raceNo:Number(raceNo),
@@ -221,8 +286,9 @@
     const raceDate = data?.raceInfo?.raceDate || data?.raceInfo?.race_date || root.currentDate;
     if (!data?.horses?.length || !raceDate || typeof root.lsRead !== 'function') return false;
     const raceKey = `${raceDate}|${raceNo}`;
-    if (attempted.has(raceKey)) return false;
-    attempted.add(raceKey);
+    const lastAttempt = attempted.get(raceKey) || 0;
+    if (Date.now() - lastAttempt < 30000) return false;
+    attempted.set(raceKey, Date.now());
     const local = root.lsRead();
     const wanted = data.horses.filter(h => {
       const code = String(h.lineageLoginCode || h.lineage_login_code || '');
@@ -240,6 +306,7 @@
     return changed;
   }
 
-  return { contract, classifyJraClass, targetClass, analyzeHistory, empiricalLogitLift,
+  return { contract, classifyJraClass, targetClass, isJraCourse, isKochiCourse,
+    analyzeKochiEntryState, analyzeHistory, empiricalLogitLift,
     scoreHorse, scoreRace, buildAdminHtml, recordLive, evaluateStored, fetchServerHistory, ensureRaceHistories };
 });

@@ -1804,7 +1804,7 @@ const Yoso = {
   },
 
   /** ① 転入馬推定スコア：履歴→official_*キャッシュの順で、最高クラスの1走から推定。材料なしはnull（真のデビュー馬） */
-  estimateTransferScore(histEx, raceCls, hName, officialByHorse) {
+  estimateTransferScore(histEx, raceCls, hName, officialByHorse, officialRacesOverride) {
     const calc = (entry, useClassStr) => {
       const originRank = getTransferOriginRank(useClassStr);
       const curRank    = YOSO_CLASS_RANK[getEffectiveClass(raceCls)] || 2;
@@ -1826,7 +1826,7 @@ const Yoso = {
       }
       return calc(best, [best._raceClass || best.raceClass, best._raceName].filter(Boolean).join(' '));
     }
-    const offRaces = officialByHorse?.get(hName);
+    const offRaces = Array.isArray(officialRacesOverride) ? officialRacesOverride : officialByHorse?.get(hName);
     if (offRaces?.length) {
       let best = null, bestRank = -1;
       for (const r of offRaces) {
@@ -2210,7 +2210,7 @@ function _yosoInputSignature(raceNo, data, selCondOverride) {
   const info = data.raceInfo || {};
   const rows = (data.horses || []).map(h => [h.umaBan,h.horseName,h.jockey,h.trainer,h.kinryo,h.weight,h.odds,h.ninki]);
   return JSON.stringify([raceNo,selCondOverride || '',info.raceDate,info.distance,info.trackCond,info.raceClass,
-    Number(window._kvHistoryRevision || 0),rows]);
+    Number(window._kvHistoryRevision || 0),Number(window._kvOfficialHistoryRevision || 0),rows]);
 }
 
 /**
@@ -2241,13 +2241,28 @@ function computeYosoScored(raceNo, selCondOverride) {
   const rdistNum = parseInt(raceDist) || 0;
   const FIELD_AVG_WR = 12;
 
-  // JRA転入馬フォールバック用: official_* キャッシュを馬名でインデックス化
+  // 転入馬フォールバック用。血統登録番号を正本とし、馬名は一意な場合だけfallbackする。
+  // 同名馬の公式履歴を別馬へ流用しない。
   const _officialByHorse = new Map();
+  const _officialByLineage = new Map();
+  const _officialNameCandidates = new Map();
   for (const [k, v] of Object.entries(lsRead())) {
     if (k.startsWith('official_') && v.type === 'official' && v.horseName && v.races?.length) {
-      _officialByHorse.set(v.horseName, v.races);
+      const code = String(v.lineageCode || k.slice('official_'.length) || '');
+      if (code) _officialByLineage.set(code, v);
+      if (!_officialNameCandidates.has(v.horseName)) _officialNameCandidates.set(v.horseName, []);
+      _officialNameCandidates.get(v.horseName).push(v);
     }
   }
+  for (const [name, rows] of _officialNameCandidates) {
+    if (rows.length === 1) _officialByHorse.set(name, rows[0].races);
+  }
+  const _officialRecordForHorse = horse => {
+    const code = String(horse?.lineageLoginCode || horse?.lineage_login_code || '');
+    if (code && _officialByLineage.has(code)) return _officialByLineage.get(code);
+    const rows = _officialNameCandidates.get(horse?.horseName || '') || [];
+    return rows.length === 1 ? rows[0] : null;
+  };
 
   const scored = horses.map(horse => {
     const hName  = horse.horseName || '';
@@ -2258,6 +2273,8 @@ function computeYosoScored(raceNo, selCondOverride) {
     // ── ① ベーススコア ──
     const kochiHist = histEx.filter(h => h.babaCode === '31');
     const otherHist = histEx.filter(h => h.babaCode !== '31');
+    const _officialRecord = _officialRecordForHorse(horse);
+    const _officialRaces = _officialRecord?.races || [];
     // 【2026-07-10】computeHorseSI()に統一（③）。ライブ/バックテスト/EV特徴量が同じ関数を呼ぶ。
     const _siAuditCtx = { predictionDate: thisRaceDate, predictionRaceNo: thisRaceNo };
     const _siForLive = h => computeHorseSI(h, false, { ..._siAuditCtx, caller: '_siForLive' });
@@ -2271,7 +2288,7 @@ function computeYosoScored(raceNo, selCondOverride) {
     let baseScore = Yoso.baseFromSIList(Yoso.buildSIList(kochiHist, otherHist, _siForLiveAnch).list) ?? Yoso.baseFromSIList(recentSI);
     // 転入馬推定スコア（SI算出不可＝JRA・NAR他場転入等。履歴→official_*キャッシュの順で推定）
     if (baseScore === null) {
-      const _est = Yoso.estimateTransferScore(histEx, raceCls, hName, _officialByHorse);
+      const _est = Yoso.estimateTransferScore(histEx, raceCls, hName, _officialByHorse, _officialRaces);
       if (_est !== null) { baseScore = _est; isEstimatedScore = true; isTransfer = true; }
     }
 
@@ -2431,16 +2448,21 @@ function computeYosoScored(raceNo, selCondOverride) {
       ? +(baseScore + condMod*_eff('condNew') + distMod*_eff('distNew') + trendMod*_eff('trendN') + comboMod*_eff('comboN') + rotMod*_eff('rotN') + classMod*_eff('clsN') + cornMod*_eff('cornN') + weightMod*_eff('weightN') + agariMod*_eff('agariN') + marginMod*_eff('marginN') + winStrMod*_eff('winStrN') + jockeyChgMod*_eff('jockeyChgN') + takiMod*_eff('takiN') + cornConsistMod*_eff('cornConsistN') + rakuMod*_eff('rakuN') + paceCtxMod*_eff('paceCtxN')).toFixed(2)
       : null;
 
+    const transferEntryState = window.KvJraTransferShadow?.analyzeKochiEntryState?.(
+      _officialRaces, thisRaceDate, { historyKnown:!!_officialRecord, localKochiRuns:kochiHist }
+    ) || { status:'unknown' };
+
     // JRA転入前能力は未採用shadowとして分離し、公開totalScore・印を変えない。
     const transferShadow = window.KvJraTransferShadow?.scoreHorse?.({
-      races: _officialByHorse.get(hName) || [], targetClass: raceCls,
+      races:_officialRaces, historyKnown:!!_officialRecord, localKochiRuns:kochiHist,
+      targetClass: raceCls,
       asOfDate: thisRaceDate, kochiStarts: kochiHist.length,
       baselineScore: totalScore, isEstimatedScore,
     }) || null;
 
     // _cornModRaw: ペース×馬場スケール(下記⑯-b)適用「前」の値。市場アンカーモデルはこのスケール前の
     // 値で学習済みのため、スケール後のcornModをそのまま使うと学習/推論の不一致(train/serve skew)になる。
-    return { horse, jockey, trainer, baseScore, jockeyMod, condMod, distMod, trendMod, comboMod, rotMod, classMod, cornMod, weightMod, agariMod, marginMod, winStrMod, jockeyChgMod, takiMod, cornConsistMod, rakuMod, paceCtxMod, avg4C, totalScore, transferShadow, siCount: recentSI.length, kochiSICount, isTransfer, isEstimatedScore, jockeyWR, _cornModRaw: cornMod };
+    return { horse, jockey, trainer, baseScore, jockeyMod, condMod, distMod, trendMod, comboMod, rotMod, classMod, cornMod, weightMod, agariMod, marginMod, winStrMod, jockeyChgMod, takiMod, cornConsistMod, rakuMod, paceCtxMod, avg4C, totalScore, transferEntryState, transferShadow, siCount: recentSI.length, kochiSICount, isTransfer, isEstimatedScore, jockeyWR, _cornModRaw: cornMod };
   });
 
   // ── ⑯-b ペース×馬場バイアスで脚質補正(cornMod)を伸縮 ──
@@ -2448,7 +2470,7 @@ function computeYosoScored(raceNo, selCondOverride) {
   // 前つぶれ想定日は前の加点を抑え差しの減点を緩和、前残り想定日は前を増す（対称）。
   // 【2026-07-10】行列は必ず現在レースの距離(rdistNum)で構築。旧実装は距離を渡さず常に1400m専用
   // 行列を全距離に適用していた。サンプル不足の距離はgetPaceBiasFactor内のN<20ガードでfactor=1になる。
-  const _pbMatrix = buildPaceBiasMatrix(currentBaba || '31', rdistNum);
+  const _pbMatrix = buildPaceBiasMatrix(currentBaba || '31', rdistNum, thisRaceDate, thisRaceNo);
   const _pbPace   = predictRacePaceFromA4C(scored.map(s => s.avg4C), scored.length);
   const _pbFactor = getPaceBiasFactor(_pbMatrix, raceCond, _pbPace);
   if (_pbFactor !== 1) {
@@ -3854,6 +3876,13 @@ function renderPredictionPanel(raceNo) {
   const eraDriftHtml = _eraDriftAvailable
     ? `<div id="era-drift-shadow-slot-${raceNo}" class="admin-only" aria-live="polite"><div style="margin-bottom:10px;padding:9px 12px;border:1px dashed #5eead4;border-radius:8px;color:#0f766e;font-size:11px">🗓️ 年度ドリフト補正を準備中…</div></div>`
     : '';
+  const _paceV2Available = _viewMode !== 'after' && !raceHasResult &&
+    typeof isAdminMode === 'function' && isAdminMode() &&
+    typeof window.KvPaceV2Shadow?.computeLive === 'function' &&
+    typeof window.KvPaceV2Shadow?.buildAdminHtml === 'function' &&
+    window.KOCHI_PACE_BASELINES_V2?.version === 2;
+  const paceV2Html = _paceV2Available
+    ? `<div id="pace-v2-shadow-slot-${raceNo}" class="admin-only" aria-live="polite"><div style="margin-bottom:10px;padding:9px 12px;border:1px dashed #38bdf8;border-radius:8px;color:#0369a1;font-size:11px">🌊 ペース適性v2を準備中…</div></div>` : '';
   const probabilityCalibrationHtml = _viewMode !== 'after' && typeof isAdminMode === 'function' && isAdminMode() &&
     window.KvProbabilityCalibration?.calibrateScored
     ? buildProbabilityCalibrationHtml(window.KvProbabilityCalibration.calibrateScored(scored)) : '';
@@ -3893,6 +3922,7 @@ function renderPredictionPanel(raceNo) {
     ${probabilityCalibrationHtml}
     ${jraTransferShadowHtml}
     ${eraDriftHtml}
+    ${paceV2Html}
     ${opponentShadowHtml}
     <div style="overflow-x:auto;">${tableHtml}</div>
     <div id="yoso-backtest-${raceNo}"></div>`;
@@ -3945,6 +3975,30 @@ function renderPredictionPanel(raceNo) {
     };
     if (typeof _kvScheduleIdle === 'function') _kvScheduleIdle(_renderEraDrift, 1300);
     else setTimeout(_renderEraDrift, 0);
+  }
+  if (_paceV2Available) {
+    const _renderPaceV2 = () => {
+      const slot = document.getElementById(`pace-v2-shadow-slot-${raceNo}`);
+      const currentRace = allRacesData && allRacesData[raceNo];
+      if (!slot || container._opponentShadowRenderToken !== _opponentShadowToken || !currentRace?.raceInfo) return;
+      try {
+        const result = window.KvPaceV2Shadow.computeLive({
+          scored,
+          raceInfo:{ ...currentRace.raceInfo, raceNo:parseInt(raceNo) },
+          store:lsRead(), baseline:window.KOCHI_PACE_BASELINES_V2, mode:'live',
+          getHistory:name => getHorseHistory(name),
+        });
+        container._paceV2Shadow = result && result.ok ? result : null;
+        slot.innerHTML = result && result.ok
+          ? window.KvPaceV2Shadow.buildAdminHtml(result)
+          : '<div style="margin-bottom:10px;padding:9px 12px;border:1px dashed #cbd5e1;border-radius:8px;color:#64748b;font-size:11px">ペース適性v2は脚質履歴が不足しているため判定を保留しました</div>';
+      } catch (e) {
+        console.warn('[paceV2Shadow render]', e);
+        slot.innerHTML = '<div style="margin-bottom:10px;padding:9px 12px;border:1px dashed #cbd5e1;border-radius:8px;color:#64748b;font-size:11px">ペース適性v2を作成できません</div>';
+      }
+    };
+    if (typeof _kvScheduleIdle === 'function') _kvScheduleIdle(_renderPaceV2, 1450);
+    else setTimeout(_renderPaceV2, 0);
   }
 }
 
@@ -4012,7 +4066,19 @@ function runYosoBacktest(raceNo) {
       // ペース×馬場バイアス行列（脚質補正の伸縮係数用）。
       // 【2026-07-10】距離別にキャッシュしながら構築（旧実装は1400m専用行列を全距離に適用していた）。
       const _btPaceMatrices = {};
-      const _getBtPaceMatrix = d => _btPaceMatrices[d] || (_btPaceMatrices[d] = buildPaceBiasMatrix('31', d));
+      const _btPaceRows = {};
+      const _getBtPaceMatrix = (d, date, no) => {
+        const key = `${d}|${date}|${no}`;
+        if (_btPaceMatrices[key]) return _btPaceMatrices[key];
+        const rows = _btPaceRows[d] || (_btPaceRows[d] = _collectPaceRaces('31', d));
+        return (_btPaceMatrices[key] = buildPaceBiasMatrix('31', d, date, no, rows));
+      };
+      const _btLiveWeights = getMlLiveWeights();
+      const _btEff = k => (_btLiveWeights && _btLiveWeights.eff[k] != null)
+        ? _btLiveWeights.eff[k] : (YOSO_FACTOR_SCALE[k] != null ? YOSO_FACTOR_SCALE[k] : 1);
+      const _paceV2BtReady = typeof window.KvPaceV2Shadow?.profileHistory === 'function' && window.KOCHI_PACE_BASELINES_V2?.holdout_2026;
+      const _paceV2FieldSizes = _paceV2BtReady ? window.KvPaceV2Shadow.buildFieldSizes(lsData) : null;
+      const paceV2S = { t:0, c1:0, c3:0, s1:0, s3:0, c2p:0, s2p:0, c3p:0, s3p:0, changed:0, bet:0, cRet:0, sRet:0 };
 
       // 馬基準差SI実験用アクセサ：SIの水準補正を馬アンカー方式に置き換える
       // （データ不足でnullの日は基準時計方式へフォールバック）
@@ -4176,8 +4242,7 @@ function runYosoBacktest(raceNo) {
           let paceCtxN = 0;
           {
             let _tough = false, _gifted = false, _excused = false;
-            for (const h of preHist.slice(0, 3)) {
-              if (h.babaCode !== '31') continue;
+            for (const h of kochiPre.slice(0, 3)) {
               const rrec = lsData[`race_31_${h.raceDate}_${h.raceNo}`];
               if (!rrec || !rrec.first3f) continue;
               const pd = getPaceDevLabelAsOf(rrec.distance, rrec.race_class, rrec.track_cond, rrec.first3f, h.raceDate, parseInt(h.raceNo));
@@ -4226,6 +4291,13 @@ function runYosoBacktest(raceNo) {
           // 既にcontinueで除外済み＝ここには到達しない。
           const _isTransferBT = _isEstimatedBT;
           const _isDebutBT    = false;
+          const _paceV2Profile = _paceV2BtReady && String(raceDate).startsWith('2026')
+            ? window.KvPaceV2Shadow.profileHistory({
+                history:kochiPre, store:lsData, fieldSizes:_paceV2FieldSizes,
+                baseline:window.KOCHI_PACE_BASELINES_V2, mode:'holdout_2026',
+                asOfDate:raceDate, asOfRaceNo:rNo,
+              })
+            : null;
 
           const chaku = parseInt(entry.chakujun);
           const _sc = !!entry._scratched;
@@ -4233,14 +4305,24 @@ function runYosoBacktest(raceNo) {
           const _ninki = parseInt(entry.ninki);
           if (!_sc) scanRaceData.push({ chaku, umaBan: parseInt(String(entry._key || '').split('_')[3]) || null, base, baseA, condNew, distNew, rotN, clsN, cornN, trendN, weightN, agariN, comboN, marginN, winStrN, jockeyChgN, takiN, cornConsistN, rakuN, paceCtxN, rotTakiN: rotN + takiN, psfEs, psfG, psfCombo, psfKin, psfWcM, odds: (!isNaN(_odds) && _odds>0) ? _odds : null, ninki: isNaN(_ninki) ? null : _ninki });
           scoredOld.push({ hName, chaku, score: base + condOld + distOld, _scratched: _sc });
-          scoredNew.push({ hName, chaku, score: base + condNew + distNew + rotN + clsN + cornN + trendN + weightN + agariN + comboN + marginN + winStrN + jockeyChgN + takiN + cornConsistN + rakuN, base, _scratched: _sc, _cornN: cornN, _a4c: _a4c, _isTransferBT, _isDebutBT });
+          const _preRelScore = +(base + condNew*_btEff('condNew') + distNew*_btEff('distNew') +
+            trendN*_btEff('trendN') + comboN*_btEff('comboN') + rotN*_btEff('rotN') +
+            clsN*_btEff('clsN') + cornN*_btEff('cornN') + weightN*_btEff('weightN') +
+            agariN*_btEff('agariN') + marginN*_btEff('marginN') + winStrN*_btEff('winStrN') +
+            jockeyChgN*_btEff('jockeyChgN') + takiN*_btEff('takiN') +
+            cornConsistN*_btEff('cornConsistN') + rakuN*_btEff('rakuN') + paceCtxN*_btEff('paceCtxN')).toFixed(2);
+          scoredNew.push({ hName, chaku, score:_preRelScore, _preRelScore, _relSI:0, base, _scratched:_sc, _cornN:cornN, _a4c:_a4c, _isTransferBT, _isDebutBT, _paceV2Profile, _umaBan:parseInt(String(entry._key || '').split('_')[3]) || null, _odds:(!isNaN(_odds) && _odds > 0) ? _odds : null });
         }
 
         // 相対SI補正（フィールド内相対位置・後処理）
         const _btBases = scoredNew.filter(s => s.base != null).map(s => s.base);
         if (_btBases.length >= 3) {
           const _btFAvg = _btBases.reduce((a,b)=>a+b,0)/_btBases.length;
-          scoredNew.forEach(s => { if (s.base != null) s.score += Yoso.relSIMod(s.base, _btFAvg); });
+          scoredNew.forEach(s => {
+            if (s.base == null) return;
+            s._relSI = +Yoso.relSIMod(s.base, _btFAvg).toFixed(2);
+            s.score = +(s._preRelScore + s._relSI).toFixed(2);
+          });
         }
 
         // PSFスコア（レース内後処理）：ES順位＝競り合い後の期待位置 → 実測勝率カーブ × 地力
@@ -4322,9 +4404,14 @@ function runYosoBacktest(raceNo) {
         // ── 新＋ペース補正（cornMod を ペース×馬場係数でスケールした場合の◎） ──
         const _btCond = raceVal.track_cond || raceVal.trackCond || '';
         const _btPace = predictRacePaceFromA4C(runnersNew.map(s => s._a4c), runnersNew.length);
-        const _btFactor = getPaceBiasFactor(_getBtPaceMatrix(rdistNum), _btCond, _btPace);
+        const _btFactor = getPaceBiasFactor(_getBtPaceMatrix(rdistNum, raceDate, rNo), _btCond, _btPace);
+        const _btEffCorn = _btEff('cornN');
         const runnersB = runnersNew
-          .map(s => ({ chaku: s.chaku, _scratched: s._scratched, score: s.score + (s._cornN || 0) * (_btFactor - 1) }))
+          .map(s => {
+            const beforeRel = +(s._preRelScore + (s._cornN || 0) * _btEffCorn * (_btFactor - 1)).toFixed(2);
+            return { chaku:s.chaku, hName:s.hName, u:s._umaBan, odds:s._odds, profile:s._paceV2Profile,
+              _scratched:s._scratched, score:+(beforeRel + (s._relSI || 0)).toFixed(2) };
+          })
           .sort((a, b) => b.score - a.score);
         if (!runnersB[0]?._scratched) {
           newBS.t++;
@@ -4337,6 +4424,32 @@ function runYosoBacktest(raceNo) {
             if (runnersNew[0].chaku <= 3) pbActN.n3++;
             if (runnersB[0].chaku === 1)   pbActN.b1++;
             if (runnersB[0].chaku <= 3)    pbActN.b3++;
+          }
+        }
+        if (_paceV2BtReady && String(raceDate).startsWith('2026')) {
+          const paceResult = window.KvPaceV2Shadow.scoreRace({ runners:runnersB.map(row => ({
+            u:row.u, name:row.hName, currentScore:row.score, profile:row.profile,
+          })) });
+          if (paceResult?.ok) {
+            const byU = new Map(runnersB.map(row => [row.u, row]));
+            const shadow = paceResult.ranked.map(row => byU.get(row.u)).filter(Boolean);
+            if (shadow.length === runnersB.length) {
+              paceV2S.t++;
+              if (runnersB[0].chaku === 1) paceV2S.c1++;
+              if (runnersB[0].chaku <= 3) paceV2S.c3++;
+              if (shadow[0].chaku === 1) paceV2S.s1++;
+              if (shadow[0].chaku <= 3) paceV2S.s3++;
+              if (runnersB[1]?.chaku <= 3) paceV2S.c2p++;
+              if (shadow[1]?.chaku <= 3) paceV2S.s2p++;
+              if (runnersB[2]?.chaku <= 3) paceV2S.c3p++;
+              if (shadow[2]?.chaku <= 3) paceV2S.s3p++;
+              if (paceResult.changed) paceV2S.changed++;
+              if (runnersB[0].odds != null && shadow[0].odds != null) {
+                paceV2S.bet++;
+                if (runnersB[0].chaku === 1) paceV2S.cRet += runnersB[0].odds * 100;
+                if (shadow[0].chaku === 1) paceV2S.sRet += shadow[0].odds * 100;
+              }
+            }
           }
         }
 
@@ -5424,7 +5537,20 @@ function runYosoBacktest(raceNo) {
           <td style="padding:5px 10px;text-align:center;font-size:13px;font-weight:700;color:${color}">${pct(s.h3,s.t)}</td>
         </tr>` : '').join('');
 
+      const _paceV2AuditHtml = paceV2S.t ? `<details open style="margin-top:10px;border:1px solid #bae6fd;border-radius:8px;background:#f0f9ff">
+        <summary style="cursor:pointer;padding:9px 11px;font-size:12px;font-weight:800;color:#075985">🌊 ペース適性v2・2026年ホールドアウト（${paceV2S.t}R）</summary>
+        <div style="padding:0 11px 10px;font-size:11px;line-height:1.8;color:#334155">
+          <b>現行 → 影予想</b>　◎1着 ${pct(paceV2S.c1,paceV2S.t)} → <b>${pct(paceV2S.s1,paceV2S.t)}</b> ／
+          ◎3着内 ${pct(paceV2S.c3,paceV2S.t)} → <b>${pct(paceV2S.s3,paceV2S.t)}</b><br>
+          ○3着内 ${pct(paceV2S.c2p,paceV2S.t)} → <b>${pct(paceV2S.s2p,paceV2S.t)}</b> ／
+          ▲3着内 ${pct(paceV2S.c3p,paceV2S.t)} → <b>${pct(paceV2S.s3p,paceV2S.t)}</b> ／ 順位変更 ${paceV2S.changed}R<br>
+          単勝回収率（全馬オッズ有・同一${paceV2S.bet}R） ${paceV2S.bet ? (paceV2S.cRet/paceV2S.bet).toFixed(1) : '—'}% →
+          <b>${paceV2S.bet ? (paceV2S.sRet/paceV2S.bet).toFixed(1) : '—'}%</b>
+          <div style="margin-top:5px;color:#64748b">学習は2025/12/31まで、判定は2026年のみ。現在レースの前半3F・コーナーは未使用。改善しない限り現行印へ採用しません。</div>
+        </div></details>` : '';
+
       btDiv.innerHTML = `
+        ${_paceV2AuditHtml}
         ${_offsetValHtml}
         <details style="margin-top:10px">
           <summary style="cursor:pointer;font-size:12px;font-weight:700;color:#6b7280;padding:4px 0">🗂 旧検証ログを見る（総合スコア方式時代の実験記録・普段は見なくてOK）</summary>
