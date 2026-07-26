@@ -5,7 +5,7 @@
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (root) root.KvJraTransferShadow = api;
 })(typeof window !== 'undefined' ? window : globalThis, function (root) {
-  const VERSION = 'jra-transfer-shadow-v2';
+  const VERSION = 'jra-transfer-factor-v3';
   const WORKER = 'https://keiba-proxydeploy.maguronagareboshi.workers.dev';
   const CLASS_ORDER = ['NEWCOMER', 'MAIDEN', '1WIN', '2WIN', '3WIN', 'OPEN', 'GRADE'];
   const ORIGIN_RANK = { NEWCOMER:1.5, MAIDEN:2.5, '1WIN':4, '2WIN':5.5, '3WIN':7, OPEN:8, GRADE:9 };
@@ -15,12 +15,13 @@
 
   const contract = Object.freeze({
     id: VERSION,
-    status: 'forward_shadow_only',
-    productionMarksAllowed: false,
+    status: 'production_first_start',
+    productionMarksAllowed: true,
     marketInputs: [],
     classSource: 'keiba.go.jp HorseMarkInfo',
     shrinkage: 0.5,
     decayByKochiStart: [1, 0.5, 0.25, 0],
+    productionDecayByKochiStart: [1, 0, 0, 0],
     validatedScope: 'first_start',
     laterStartsStatus: 'forward_shadow_monitoring',
   });
@@ -161,6 +162,9 @@
       ? contract.shrinkage * ((ORIGIN_RANK[history.recentClass] || 3) - (ORIGIN_RANK[history.peakClass] || 3)) * 2.5
       : 0;
     const scoreDelta = Math.max(-4, Math.min(3, empiricalDelta + peakCorrection));
+    // 年度順検証を通過した初戦だけを公開印へ反映する。2・3戦目は影監視を継続する。
+    const productionScoreDelta = starts === 0 ? scoreDelta : 0;
+    const shadowOnlyScoreDelta = scoreDelta - productionScoreDelta;
     return {
       schema: 'jra_transfer_factor/v1', model: VERSION, targetClass: target,
       recentClass: history.recentClass, peakClass: history.peakClass,
@@ -168,6 +172,9 @@
       originDate:history.entryState.originDate,
       kochiStarts: starts, decay, logitLift: lift, empiricalDelta:+empiricalDelta.toFixed(3),
       peakCorrection:+peakCorrection.toFixed(3), scoreDelta:+scoreDelta.toFixed(3),
+      productionScoreDelta:+productionScoreDelta.toFixed(3),
+      shadowOnlyScoreDelta:+shadowOnlyScoreDelta.toFixed(3),
+      appliedToProduction:starts === 0,
       shadowScore:+(Number(input.baselineScore) + scoreDelta).toFixed(3),
       reason: `${history.recentClass}→${target}・高知${starts + 1}戦目`,
     };
@@ -200,11 +207,11 @@
     if (!affected.length && !deferred.length) return '';
     const evaluation = evaluateStored();
     return `<div class="jra-transfer-shadow-card" data-model="${VERSION}" style="margin:10px 0;padding:10px 12px;border:1px solid #38bdf855;border-radius:8px;background:#0c2030;color:#dbeafe;font-size:11px">
-      <div style="font-weight:800;color:#67e8f9;margin-bottom:6px">転入前能力・影予想（未採用）</div>
-      <div>現行◎ <b>${esc(result.currentTop?.horse?.horseName || '—')}</b> ／ 転入補正◎ <b>${esc(result.shadowTop?.horse?.horseName || '—')}</b>${result.changedTop ? ' <span style="color:#fbbf24">変更あり</span>' : ''}</div>
-      ${affected.map(r => `<div style="margin-top:4px;color:#bae6fd">${esc(r.horse?.horseName || '')}: ${esc(r.factor.reason)}、補正 ${r.factor.scoreDelta >= 0 ? '+' : ''}${r.factor.scoreDelta.toFixed(2)}、影${r.shadowRank}位</div>`).join('')}
+      <div style="font-weight:800;color:#67e8f9;margin-bottom:6px">転入前能力補正（初戦のみ本予想へ採用）</div>
+      <div>本予想◎ <b>${esc(result.currentTop?.horse?.horseName || '—')}</b> ／ 2・3戦目も含む監視順位◎ <b>${esc(result.shadowTop?.horse?.horseName || '—')}</b>${result.changedTop ? ' <span style="color:#fbbf24">影順位のみ変更あり</span>' : ''}</div>
+      ${affected.map(r => `<div style="margin-top:4px;color:#bae6fd">${esc(r.horse?.horseName || '')}: ${esc(r.factor.reason)}、補正 ${r.factor.scoreDelta >= 0 ? '+' : ''}${r.factor.scoreDelta.toFixed(2)}、${r.factor.appliedToProduction ? '<b style="color:#86efac">本予想反映</b>' : `影監視${r.shadowRank}位`}</div>`).join('')}
       ${deferred.map(r => `<div style="margin-top:4px;color:#fcd34d">${esc(r.horse?.horseName || '')}: ${r.entryState.status === 'nar_transfer' ? `${esc(r.entryState.originCourse || '他地区')}からの転入・換算係数未採用` : '公式の過去出走なし・新馬として判定保留'}</div>`).join('')}
-      <div style="margin-top:6px;color:#7dd3fc">直近JRAクラス×高知編入クラス・50%縮約。初戦を主評価、2・3戦目は減衰監視。公開印と買い目には未反映。</div>
+      <div style="margin-top:6px;color:#7dd3fc">直近JRAクラス×高知編入クラス・50%縮約。初戦だけ公開印へ反映し、2・3戦目は減衰した影順位で前向き監視。</div>
       <div style="margin-top:3px;color:#94a3b8">前向き保存 ${evaluation.snapshots || 0}R／結果確定 ${evaluation.settled || 0}R${evaluation.deltaPt == null ? '' : `／◎差 ${evaluation.deltaPt >= 0 ? '+' : ''}${evaluation.deltaPt.toFixed(2)}pt`}</div>
     </div>`;
   }
@@ -225,9 +232,11 @@
       factor:r.factor ? { recentClass:r.factor.recentClass, peakClass:r.factor.peakClass,
         targetClass:r.factor.targetClass, entryStatus:r.factor.entryStatus,
         originCourse:r.factor.originCourse, originDate:r.factor.originDate,
-        kochiStarts:r.factor.kochiStarts, scoreDelta:r.factor.scoreDelta } : null });
+        kochiStarts:r.factor.kochiStarts, scoreDelta:r.factor.scoreDelta,
+        productionScoreDelta:r.factor.productionScoreDelta,
+        shadowOnlyScoreDelta:r.factor.shadowOnlyScoreDelta } : null });
     const snapshot = { type:'jraTransferShadowSnapshot', schema:'jra_transfer_shadow_snapshot/v1',
-      model:VERSION, status:'shadow_unadopted', savedAt:new Date().toISOString(),
+      model:VERSION, status:'production_first_start_later_shadow', savedAt:new Date().toISOString(),
       babaCode:'31', raceDate:date, raceNo:Number(raceNo),
       baselineTop:Number(result.currentTop?.horse?.umaBan), challengerTop:Number(result.shadowTop?.horse?.umaBan),
       changedTop:result.changedTop, runners:result.ranked.map(rowFor) };

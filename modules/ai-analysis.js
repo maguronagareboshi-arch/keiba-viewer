@@ -2452,7 +2452,8 @@ function computeYosoScored(raceNo, selCondOverride) {
       _officialRaces, thisRaceDate, { historyKnown:!!_officialRecord, localKochiRuns:kochiHist }
     ) || { status:'unknown' };
 
-    // JRA転入前能力は未採用shadowとして分離し、公開totalScore・印を変えない。
+    // JRA転入前能力は年度順検証を通過した初戦だけ本予想へ採用する。
+    // 2・3戦目は年度別に不安定なため、減衰shadowとして公開totalScoreから分離する。
     const transferShadow = window.KvJraTransferShadow?.scoreHorse?.({
       races:_officialRaces, historyKnown:!!_officialRecord, localKochiRuns:kochiHist,
       targetClass: raceCls,
@@ -2502,10 +2503,20 @@ function computeYosoScored(raceNo, selCondOverride) {
 
   // 旧市場アンカー確率は公開印にも期待値判定にも使わなくなったため、ここでは計算しない。
   // 能力順位は常にtotalScore、価格評価は独立したT10前向きshadowへ分離する。
-  // 相対SIなど全補正後のtotalScoreへshadow基準値だけを同期する。
+  // 相対SIなど全補正後に、検証済みのJRA転入初戦補正だけを公開totalScoreへ加える。
+  // 2・3戦目の残余補正はshadowScoreだけに加え、公開印を変えない。
   scored.forEach(s => {
     if (s.transferShadow && s.totalScore != null) {
-      s.transferShadow.shadowScore = +(s.totalScore + s.transferShadow.scoreDelta).toFixed(3);
+      const productionDelta = Number(s.transferShadow.productionScoreDelta) || 0;
+      const shadowOnlyDelta = Number(s.transferShadow.shadowOnlyScoreDelta) || 0;
+      s.transferScoreBefore = s.totalScore;
+      if (productionDelta) {
+        s.totalScore = +(s.totalScore + productionDelta).toFixed(2);
+        s.transferProductionApplied = true;
+      } else {
+        s.transferProductionApplied = false;
+      }
+      s.transferShadow.shadowScore = +(s.totalScore + shadowOnlyDelta).toFixed(3);
     }
   });
   scored._offsetModelUsed = false;

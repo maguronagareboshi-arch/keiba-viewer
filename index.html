@@ -2913,12 +2913,12 @@ const _kvLibSpecs = {
     ready: () => typeof window.fetchAllByNameForRace === 'function' && typeof window.storeOfficialRacesAsHorseEntries === 'function',
   },
   jraTransferShadow: {
-    src: 'modules/jra-transfer-shadow.js?v=20260726-v2',
+    src: 'modules/jra-transfer-shadow.js?v=20260726-v3',
     ready: () => typeof window.KvJraTransferShadow?.scoreHorse === 'function' &&
-      window.KvJraTransferShadow?.contract?.status === 'forward_shadow_only',
+      window.KvJraTransferShadow?.contract?.status === 'production_first_start',
   },
   aiAnalysis: {
-    src: 'modules/ai-analysis.js?v=20260726-transfer2-bias1',
+    src: 'modules/ai-analysis.js?v=20260726-transfer3-bias1',
     ready: () => typeof window.computeYosoScored === 'function' && typeof window.renderPredictionPanel === 'function' && typeof window.renderAnalysis === 'function',
   },
   aiInsights: {
