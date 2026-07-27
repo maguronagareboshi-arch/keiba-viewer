@@ -1,7 +1,7 @@
-const CACHE = 'kochi-viewer-v18';
-const REQUIRED = ['./index.html', './manifest.webmanifest', './modules/app-main.js?v=20260726-light1'];
+const CACHE = 'kochi-viewer-v19';
+const REQUIRED = ['./index.html', './manifest.webmanifest', './modules/app-main.js?v=20260727-fix1'];
 const CORE = [
-  './modules/ai-insights.js',
+  './modules/ai-insights.js?v=20260727-fix1',
   './modules/performance-observer.js',
   './modules/first3f-autofill.js?v=20260725-v1',
   './modules/track-bias-v2.js?v=20260726-v2',
@@ -31,11 +31,12 @@ self.addEventListener('fetch', event => {
     event.respondWith(fetch(request).catch(() => caches.match('./index.html')));
     return;
   }
-  if (url.pathname.includes('/data/3f/') || url.pathname.includes('/data/replay/')) {
+  if (url.pathname.includes('/modules/') || url.pathname.includes('/data/3f/') || url.pathname.includes('/data/replay/')) {
     // 計測値は同じ日付・ファイル名のまま再較正されることがあるためネットワーク優先。
     // オフライン時だけ直近の検証済みコピーへフォールバックする。
     event.respondWith(fetch(request).then(response => {
-      if (response.ok) caches.open(CACHE).then(cache => cache.put(request, response.clone()));
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      caches.open(CACHE).then(cache => cache.put(request, response.clone()));
       return response;
     }).catch(() => caches.match(request)));
     return;

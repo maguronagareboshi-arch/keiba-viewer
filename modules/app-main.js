@@ -33,7 +33,7 @@ const _kvLibSpecs = {
     ready: () => typeof window.computeYosoScored === 'function' && typeof window.renderPredictionPanel === 'function' && typeof window.renderAnalysis === 'function',
   },
   aiInsights: {
-    src: 'modules/ai-insights.js',
+    src: 'modules/ai-insights.js?v=20260727-fix1',
     ready: () => window.kvAiInsightsReady === true,
   },
   vnextPartnerScorer: {
@@ -165,7 +165,14 @@ function _ensureRaceIntelligence() {
   const partnerShadow = (_admin || _t10) ? _ensureVnextPartnerShadowModule() : Promise.resolve();
   const valueShadow = _admin ? _ensureValueT10ShadowModule() : Promise.resolve();
   const calibration = _admin ? _kvLoadLibrary('probabilityCalibration') : Promise.resolve();
-  return Promise.all([_ensureFullIDBCache(), _ensureAiAnalysisModule(), partnerShadow, valueShadow, calibration]);
+  // ◎○▲△を作る本体は全履歴＋aiAnalysisだけ。影予想・期待値・校正の一時障害で
+  // 本体まで利用不能にしない。補助群は同時に開始するが、失敗は個別に隔離する。
+  Promise.allSettled([partnerShadow, valueShadow, calibration]).then(results => {
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') console.warn('[optional AI module]', ['partner','value','calibration'][index], result.reason);
+    });
+  });
+  return Promise.all([_ensureFullIDBCache(), _ensureAiAnalysisModule()]);
 }
 
 /** 通信・AI計算・失敗を同じスピナー文言にせず、利用者が待つ理由と次の操作を判断できる状態表示。 */
@@ -3200,8 +3207,12 @@ async function renderOddsPanel(raceNo) {
     return (Number.isFinite(ao) ? ao : 99999) - (Number.isFinite(bo) ? bo : 99999) || (parseInt(a.umaBan) || 0) - (parseInt(b.umaBan) || 0);
   });
   let history = [];
+  let historyLoadFailed = false;
   try { history = await fetchRaceOddsHistory(data.raceInfo?.raceDate || currentDate, raceNo); }
-  catch (e) { console.warn('[odds checkpoints]', e); }
+  catch (e) {
+    historyLoadFailed = true;
+    console.warn('[odds checkpoints]', e);
+  }
   if (!panel.isConnected || panel.dataset.oddsRenderKey !== renderKey) return;
   const latestSavedOddsMs = history.reduce((latest, row) => {
     const ms = new Date(row?.captured_at || '').getTime();
@@ -3230,7 +3241,9 @@ async function renderOddsPanel(raceNo) {
     const finalRow = hasResult && Number.isFinite(odds) ? { odds, captured_at:'', ninki } : null;
     return `<tr><td><span class="cockpit-uma">${escapeHTML(h.umaBan || '—')}</span></td><td><b>${ai} ${escapeHTML(h.horseName) || '—'}</b></td><td>${Number.isFinite(ninki) ? ninki + '人気' : '—'}</td><td>${_kvOddsCheckpointHtml(t30, '記録なし')}</td><td>${_kvOddsCheckpointHtml(t10, '記録なし')}</td><td>${_kvOddsCheckpointHtml(t5, '記録なし')}</td><td>${_kvOddsCheckpointHtml(finalRow, hasResult ? '公式確定' : '未確定')}</td><td>${aiRank ? `AI ${aiRank}位` : '—'}</td></tr>`;
   }).join('');
-  const warning = stale && !hasResult ? `<div class="odds-warning"><i class="fas fa-exclamation-triangle"></i> 最新取得は${ageMin}分前です。購入判断の前に更新してください。</div>`
+  const warning = historyLoadFailed
+    ? `<div class="odds-warning"><i class="fas fa-exclamation-triangle"></i> 保存オッズの取得に失敗しました。<button type="button" class="btn btn-secondary viewer-ok" onclick="renderOddsPanel(${raceNo})"><i class="fas fa-redo"></i> 再試行</button></div>`
+    : stale && !hasResult ? `<div class="odds-warning"><i class="fas fa-exclamation-triangle"></i> 最新取得は${ageMin}分前です。購入判断の前に更新してください。</div>`
     : (!history.length ? '<div class="odds-warning"><i class="fas fa-info-circle"></i> 時点別の保存オッズがありません。記録のない欄は「—」で表示します。</div>' : '');
   panel.innerHTML = `<div class="cockpit-panel-head"><div><h3>単勝オッズ推移</h3><p>30分前・10分前・5分前・確定を同じ行で比較（保存 ${history.length}件）</p></div><span style="display:flex;align-items:center;gap:7px">${freshness}<button type="button" class="btn btn-secondary viewer-ok" onclick="fetchLiveOddsBtn(${raceNo})"><i class="fas fa-sync-alt"></i> 最新に更新</button></span></div>${warning}
     <div class="table-wrapper"><table class="cockpit-table cockpit-odds-table"><thead><tr><th>馬番</th><th>馬名</th><th>人気</th><th>30分前</th><th>10分前</th><th>5分前</th><th>確定</th><th>AI</th></tr></thead><tbody>${rows || '<tr><td colspan="8">出走馬データがありません</td></tr>'}</tbody></table></div>`;
@@ -3267,32 +3280,39 @@ async function fetchLiveOdds(raceNo, options) {
   if (!table) throw new Error('オッズ未発売');
   const previousOdds = new Map(data.horses.map(h => [parseInt(h.umaBan), parseFloat(h.odds)]));
   const previousObservedAt = data._liveOddsObservedAt || null;
-  const seenOdds = new Set();
+  // 取得途中で本体を書き換えると、新旧オッズが混在したまま「最新」扱いになる。
+  // 全出走馬の馬番が揃うまで一時Mapに保持し、検証後に一括反映する。
+  const pending = new Map();
   for (const tr of [...table.querySelectorAll('tr')].slice(1)) {
     const c = [...tr.querySelectorAll('td,th')].map(x => (x.textContent || '').trim());
     if (c.length < 8) continue;
     const uma = parseInt(c[1]);
     if (isNaN(uma)) continue;
-    if (seenOdds.has(uma)) continue;
+    if (pending.has(uma)) continue;
     const h = data.horses.find(x => parseInt(x.umaBan) === uma);
     if (!h) continue;
     const odds = parseFloat(c[3]);
     if (!isNaN(odds) && odds > 0) {
-      seenOdds.add(uma);
-      const prev = previousOdds.get(uma);
-      h.odds = String(odds);
-      if (Number.isFinite(prev) && prev > 0) {
-        const pct = ((odds - prev) / prev) * 100;
-        h._oddsMove = { previous:prev, current:odds, percent:pct, direction:odds < prev ? 'shorter' : odds > prev ? 'longer' : 'flat' };
-      }
+      const wt = (c[7] || '').split(/\s/)[0];
+      pending.set(uma, { odds, weight:wt && /^\d{3}/.test(wt) ? _sanDeep(wt) : '' });
     }
-    const wt = (c[7] || '').split(/\s/)[0];
-    if (wt && /^\d{3}/.test(wt) && !h.weight) h.weight = _sanDeep(wt);
   }
-  const hit = seenOdds.size;
+  const expectedUma = data.horses.map(h => parseInt(h.umaBan)).filter(Number.isFinite);
+  const hit = pending.size;
+  if (hit !== expectedUma.length || expectedUma.some(uma => !pending.has(uma))) {
+    throw new Error(`オッズ取得不完全（${hit}/${expectedUma.length}頭）`);
+  }
+  for (const h of data.horses) {
+    const uma = parseInt(h.umaBan), next = pending.get(uma), prev = previousOdds.get(uma);
+    h.odds = String(next.odds);
+    if (next.weight) h.weight = next.weight;
+    if (Number.isFinite(prev) && prev > 0) {
+      const pct = ((next.odds - prev) / prev) * 100;
+      h._oddsMove = { previous:prev, current:next.odds, percent:pct, direction:next.odds < prev ? 'shorter' : next.odds > prev ? 'longer' : 'flat' };
+    }
+  }
   const _byOdds = data.horses.filter(h => parseFloat(h.odds) > 0).sort((a, b) => parseFloat(a.odds) - parseFloat(b.odds));
-  // 全頭取得時は人気を作り直し、古い順位を残さない。
-  if (hit === data.horses.length) _byOdds.forEach((h, i) => { h.ninki = String(i + 1); });
+  _byOdds.forEach((h, i) => { h.ninki = String(i + 1); });
   if (hit > 0) {
     // 相手shadowは「いま取得した公式オッズ」だけを前向き評価へ使う。保存値や朝オッズを
     // T10市場と誤認しないよう、race objectへ取得元・観測時刻・取得頭数を別メタとして残す。
@@ -3331,6 +3351,7 @@ async function fetchLiveOddsBtn(raceNo) {
 
 // オッズ自動更新・発走カウントダウン
 const _kvOddsAutoLast = {};   // raceNo -> 最終取得時刻(ms)。手動取得も共有
+const _kvOddsAutoBusy = {};   // 通信中は多重取得を防ぐ。失敗は成功時刻として記録しない。
 let _kvTickersStarted = false;
 function _kvStartTickers() {
   if (_kvTickersStarted) return;
@@ -3512,7 +3533,7 @@ async function _kvTickOddsAuto() {
     // ── 発走2分後〜30分後：確定結果を1回だけ取り直す（着順・確定オッズ・馬場状態を
     //    朝の事前予報値から実際の値へ補正。track_cond等の事後変化に対応）──
     if (mins != null && mins <= -2 && mins >= -30 && !_kvSettledFetched[raceNo]) {
-      _kvSettledFetched[raceNo] = true;
+      _kvSettledFetched[raceNo] = 'loading';
       try {
         const result = await fetchOneRace(d, raceNo, data.raceInfo.babaCode || currentBaba || '31');
         if (raceNo === currentRaceNo && allRacesData[raceNo] && result && result.horses && result.horses.length) {
@@ -3534,16 +3555,25 @@ async function _kvTickOddsAuto() {
           if (currentRaceNo === raceNo) switchRaceTab(raceNo);
           try { renderPredictionPanel(raceNo); } catch(e) {}
           _kvSetOddsAutoNote(raceNo, '結果を確定取得');
+          _kvSettledFetched[raceNo] = true;
+        } else {
+          delete _kvSettledFetched[raceNo];
         }
-      } catch(e) { console.warn('[settle fetch]', raceNo, e); }
+      } catch(e) { delete _kvSettledFetched[raceNo]; console.warn('[settle fetch]', raceNo, e); }
       return;   // この回はここまで（確定取得と通常オッズ更新を同時に行わない）
     }
     if (mins != null && (mins < -30 || mins > 240)) return;    // 発走30分後より先は何もしない
 
     const last = _kvOddsAutoLast[currentRaceNo] || 0;
-    if (Date.now() - last < 5 * 60 * 1000) return;            // 5分間隔
-    _kvOddsAutoLast[currentRaceNo] = Date.now();
-    const n = await fetchLiveOdds(raceNo);
+    if (_kvOddsAutoBusy[raceNo] || Date.now() - last < 5 * 60 * 1000) return; // 5分間隔
+    _kvOddsAutoBusy[raceNo] = true;
+    let n;
+    try {
+      n = await fetchLiveOdds(raceNo);
+      _kvOddsAutoLast[raceNo] = Date.now();
+    } finally {
+      delete _kvOddsAutoBusy[raceNo];
+    }
     if (raceNo !== currentRaceNo || !allRacesData[raceNo]) return;  // 取得中にレース移動したら描画しない
     if (n > 0) {
       renderHorseRows(raceNo, allRacesData[raceNo].horses);
@@ -4333,12 +4363,7 @@ function _kvRenderAiOnDemandState(raceNo) {
 function _kvRenderAiLoadErrorState(raceNo) {
   const dock = document.getElementById(`cockpit-picks-${raceNo}`);
   const panel = document.getElementById(`cockpit-ai-panel-${raceNo}`);
-  const html = _kvAsyncStateHtml(
-    'error',
-    '保存済みAI予想を確認できませんでした',
-    '通信が不安定です。出馬表はそのまま利用できます',
-    `switchViewTab(${raceNo},'yoso')`
-  );
+  const html = `<div class="kv-async-state is-error" data-state="error" role="alert" aria-live="assertive"><i class="fas fa-exclamation-triangle" aria-hidden="true"></i><span><strong>保存済みAI予想を確認できませんでした</strong><small>共有キャッシュに接続できません。端末データで計算できます</small></span><button type="button" class="btn btn-primary btn-sm" onclick="kvRefreshPrediction(${raceNo})"><i class="fas fa-bolt"></i> 端末データで計算</button></div>`;
   if (panel) { panel.innerHTML = html; if (dock) dock.innerHTML = ''; }
   else if (dock) dock.innerHTML = html;
 }
@@ -5952,18 +5977,19 @@ function fetchRaceOddsHistory(raceDateSlash, raceNo) {
       let rows;
       try {
         const response = await fetch(url, { headers: SUPABASE_HEADERS, signal: AbortSignal.timeout(15000) });
-        if (!response.ok) return [];
+        if (!response.ok) throw new Error(`オッズ履歴 HTTP ${response.status}`);
         rows = await response.json();
-      } catch (_) {
-        return [];
+      } catch (error) {
+        throw error;
       }
-      if (!Array.isArray(rows)) return [];
+      if (!Array.isArray(rows)) throw new Error('オッズ履歴の応答形式が不正です');
       allRows.push(...rows);
       if (rows.length < pageSize) return allRows;
     }
   })();
-  _oddsHistCache[key] = p;
-  return p;
+  const retryable = p.catch(error => { delete _oddsHistCache[key]; throw error; });
+  _oddsHistCache[key] = retryable;
+  return retryable;
 }
 function destroyHorseOddsHistoryChart() {
   if (!window._hmOddsHistoryChart) return;
@@ -5982,7 +6008,9 @@ function oddsMoveBadgeHtml(hist) {
 }
 async function renderHorseOddsHistory(containerId, raceDateSlash, raceNo, umaBan, horseName) {
   if (!document.getElementById(containerId)) return;
-  const rows = (await fetchRaceOddsHistory(raceDateSlash, raceNo)).filter(r => String(r.uma_ban) === String(umaBan));
+  let rows;
+  try { rows = (await fetchRaceOddsHistory(raceDateSlash, raceNo)).filter(r => String(r.uma_ban) === String(umaBan)); }
+  catch (_) { return; }
   if (rows.length < 2) return;  // データ不足時は無表示
   // モーダルが別馬に切り替わっていたら描画しない（openHorseModalの再入によるレースコンディション対策）
   const titleEl = document.getElementById('horse-modal-title');
@@ -10355,7 +10383,10 @@ async function _kvRefreshTodayPriorityRaces(date, baba, preferredRaceNo) {
   await Promise.all(targets.map(async rn => {
     try {
       const result = await fetchOneRace(date, rn, baba);
-      if (date !== currentDate || baba !== currentBaba) return;
+      if (date !== currentDate || baba !== currentBaba) {
+        delete _kvTodayRaceRefreshed[`${date}_${baba}_${rn}`];
+        return;
+      }
       if (result && result.horses && result.horses.length) {
         const prev = allRacesData[rn];
         if(prev)result.horses=mergeHorseData(prev.horses,result.horses);
@@ -10374,6 +10405,9 @@ async function _kvRefreshTodayPriorityRaces(date, baba, preferredRaceNo) {
         _kvOddsAutoLast[rn] = Date.now();
         _kvSetOddsAutoNote(rn, '自動更新');
         renderNextRaceHomeCard();
+      } else {
+        // fetchOneRaceは通信失敗をnullで返す場合がある。成功扱いを残さず次回再試行する。
+        delete _kvTodayRaceRefreshed[`${date}_${baba}_${rn}`];
       }
     } catch (e) {
       delete _kvTodayRaceRefreshed[`${date}_${baba}_${rn}`];
@@ -10392,17 +10426,19 @@ async function deleteSavedDay(event, date, baba) {
     if(!v.type&&k.startsWith(`race_${baba}_${date}_`))raceKeys.push(k);
     if(!v.type&&k.startsWith(`${baba}_${date}_`))horseKeys.push(k);
   });
-  // Supabase サーバー削除（Worker 経由）
-  const del = async (table, id) => {
-    const res = await fetch(`${WORKER_URL}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-      headers: {'Content-Type':'application/json','X-Write-Token':getWriteToken()},
-      signal:AbortSignal.timeout(15000),
-    });
-    if (!res.ok) throw new Error(`${table}/${id} の削除に失敗しました（HTTP ${res.status}）`);
-  };
+  // 馬・レースを個別DELETEすると途中失敗時にサーバーだけ半端な状態になる。
+  // DB関数内の1トランザクションで開催日全体を削除し、成功後だけ端末側を消す。
   try {
-    await Promise.all([...raceKeys.map(k=>del('keiba_races',k)),...horseKeys.map(k=>del('keiba_horses',k))]);
+    const res = await fetch(`${WORKER_URL}/rpc/delete-keiba-day`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','X-Write-Token':getWriteToken()},
+      body: JSON.stringify({baba_code:baba, race_date:date}),
+      signal:AbortSignal.timeout(20000),
+    });
+    if (!res.ok) {
+      const detail = (await res.text().catch(() => '')).slice(0, 240);
+      throw new Error(`HTTP ${res.status}${detail ? `: ${detail}` : ''}`);
+    }
   } catch (e) {
     alert(`サーバー削除に失敗したため、端末データは残しました。\n${e.message || e}`);
     return;
