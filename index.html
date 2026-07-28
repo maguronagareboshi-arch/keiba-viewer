@@ -309,7 +309,6 @@ body.dark-mode .ai-rx{color:#8fa3be!important}
 body.dark-mode .rf-o{background:#1e2a3a!important;color:#8fa3be!important}
 body.dark-mode .rf-x{background:#0d1826!important;color:#7386a0!important}
 body.dark-mode .rf-none{color:#7386a0!important}
-body.dark-mode .psf-value-bar{background:#062a33!important;border-color:#0e5a6b!important;color:#7dd3fc!important}
 body.dark-mode .value-bet-bar{background:#3f3506!important;border-color:#a16207!important;color:#fde047!important}
 body.dark-mode .danger-fav-bar{background:#2d0000!important;border-color:#b91c1c!important;color:#fca5a5!important}
 body.dark-mode .leg-warn-bar{background:#2a1400!important;border-color:#c2410c!important;color:#fdba74!important}
@@ -407,11 +406,6 @@ body.dark-mode .ddi-date{color:#e2e8f0!important}
 body.dark-mode .ddi-count{background:#0d2a5a!important;color:#7dd3fc!important}
 body.dark-mode .ddi-tag{background:#052e16!important;color:#4ade80!important}
 body.dark-mode #deban-back-bar button{color:#38bdf8!important}
-body.dark-mode .psf-chip{background:#0d1826!important;border-color:#1e3048!important}
-body.dark-mode .psf-chip--hl{background:#062a33!important;border-color:#0e5a6b!important}
-body.dark-mode .psf-chip-label{color:#8fa3be!important}
-body.dark-mode .psf-chip-val{color:#e2e8f0!important}
-body.dark-mode .psf-chip--hl .psf-chip-val{color:#7dd3fc!important}
 body.dark-mode .f3avg-h{color:#38bdf8!important}
 body.dark-mode .f3avg-table thead tr{background:#0d1a2e!important}
 body.dark-mode .f3avg-n{color:#7386a0!important}
@@ -1328,9 +1322,6 @@ const KV_APP_CSS = [
       '.col-odds{font-family:monospace;font-weight:800;color:#dc2626}',
       '.col-aiscore{font-family:monospace;font-weight:700;color:#7c3aed;white-space:nowrap}',
       '.ai-rank-chip{display:inline-block;background:#ede9fe;color:#7c3aed;border-radius:8px;font-size:9px;font-weight:800;padding:1px 5px;vertical-align:middle;font-family:\'Noto Sans JP\',sans-serif}',
-      // 💎PSF妙味バッジ（位置構造モデルの単独推し表示・印には影響しない）
-      '.psf-badge{margin-left:3px;font-size:12px;vertical-align:middle;cursor:help}',
-      '.psf-value-bar{margin-bottom:10px;background:#ecfeff;border:1px solid #67e8f9;border-radius:8px;padding:7px 12px;font-size:12px;color:#155e75}',
       '.value-bet-bar{margin-bottom:10px;background:#fefce8;border:1.5px solid #eab308;border-radius:8px;padding:7px 12px;font-size:12px;color:#854d0e;font-weight:600}',
       '.value-bet-bar .vbb-sub{font-size:11px;opacity:.85;font-weight:500}',
       '.danger-fav-bar{margin-bottom:10px;background:#fef2f2;border:1.5px solid #dc2626;border-radius:8px;padding:7px 12px;font-size:12px;color:#991b1b;font-weight:600}',
@@ -1433,12 +1424,6 @@ const KV_APP_CSS = [
       '.cv-sec>summary .cv-sum-verdict{font-weight:600;color:#64748b;font-size:10px}',
       '.cv-sec[open]>summary{border-radius:6px 6px 0 0;background:#e0f2fe}',
       '.cv-sec-body{padding:8px 10px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 6px 6px}',
-      // PSF履歴タブのサマリーチップ
-      '.psf-chip{flex:1;min-width:110px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;text-align:center}',
-      '.psf-chip--hl{background:#ecfeff;border-color:#67e8f9}',
-      '.psf-chip-label{font-size:10px;color:#6b7280}',
-      '.psf-chip-val{font-size:16px;font-weight:800;color:#1a1a2e;font-family:monospace}',
-      '.psf-chip--hl .psf-chip-val{color:#0e7490}',
       // 近5走チップ（能力表のエッセンスを出馬表に直接埋め込み。クリックで能力表タブへ）
       '.col-recent{white-space:nowrap;cursor:pointer}',
       '.rf-chip{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:5px;font-size:11px;font-weight:800;margin-right:2px}',
@@ -1471,9 +1456,14 @@ const KV_APP_CSS = [
       '.ais-table td{padding:8px 10px;text-align:center;border-bottom:1px solid #eef2f7;font-family:monospace;font-weight:700;color:#1a1a2e}',
       '.ais-table td.ais-mark{font-family:inherit;font-size:20px;font-weight:900;color:#dc2626}',
       '.ais-note{font-size:10px;color:#9ca3af;margin-top:12px;line-height:1.8}',
+      '.ais-h3{font-size:13px;font-weight:800;color:#1a56a0;margin:18px 0 8px}',
+      '.ais-table td.ais-year{font-family:inherit;font-weight:800;white-space:nowrap}',
+      '.ais-table td.ais-year .ais-partial{font-size:10px;font-weight:600;color:#6b7280;margin-left:2px}',
       'body.dark-mode .ais-table thead tr{background:#0f3d7a}',
       'body.dark-mode .ais-table td{color:#e2e8f0;border-color:#1e293b}',
       'body.dark-mode .ais-controls select{background:#0d1826;color:#e2e8f0;border-color:#22344e}',
+      'body.dark-mode .ais-h3{color:#7dd3fc}',
+      'body.dark-mode .ais-table td.ais-year .ais-partial{color:#94a3b8}',
       // 通過順ボックス（能力表・高知競馬スタイル：最終コーナーを青ハイライト）
       '.pass-box{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 3px;background:#e8edf5;color:#1e3a5f;border:1px solid #c8d6e8;border-radius:4px;font-size:11px;font-weight:600;font-family:monospace;line-height:1}',
       '.pass-box--last{background:#1a56a0;color:#fff;border-color:transparent;font-weight:800}',
@@ -2154,7 +2144,6 @@ const KV_APP_CSS = [
           <button type="button" data-page="aiseiseki" onclick="switchPage('aiseiseki')"><i class="fas fa-trophy"></i> AIの成績</button>
           <button type="button" class="admin-only" data-page="bets" onclick="switchPage('bets')"><i class="fas fa-wallet"></i> 収支ノート</button>
           <button type="button" class="admin-only" data-page="saved" onclick="switchPage('saved')"><i class="fas fa-database"></i> 保存データ</button>
-          <button type="button" class="admin-only" data-page="psfhist" onclick="switchPage('psfhist')"><i class="fas fa-gem"></i> PSF履歴</button>
         </div>
       </details>
     </div>
@@ -2670,14 +2659,6 @@ const KV_APP_CSS = [
   </section>
 </div>
 
-<!-- ページ: PSF妙味履歴 -->
-<div id="page-psfhist" class="page-section page-hidden">
-  <section class="search-card">
-    <h2 class="section-title"><i class="fas fa-gem"></i> 💎PSF妙味 過去履歴（PSFと現行AIの意見が割れたレース）</h2>
-    <div id="psfhist-body"><p style="color:#9ca3af;font-size:13px">計算中...</p></div>
-  </section>
-</div>
-
 <!-- ページ: 収支ノート（マイ的中トラッカー） -->
 <div id="page-bets" class="page-section page-hidden">
   <section class="search-card">
@@ -2861,7 +2842,6 @@ const KV_APP_CSS = [
   <button type="button" class="admin-only" onclick="switchPage('saved')"><i class="fas fa-database"></i> 保存データ</button>
   <button type="button" onclick="switchPage('f3avg')"><i class="fas fa-stopwatch"></i> 前半3F基準</button>
   <button type="button" onclick="switchPage('aiseiseki')"><i class="fas fa-trophy"></i> AIの成績</button>
-  <button type="button" class="admin-only" onclick="switchPage('psfhist')"><i class="fas fa-gem"></i> PSF履歴</button>
 </div>
 
 <!-- レース展開リプレイ（コーナー通過順アニメ） -->
@@ -2888,7 +2868,7 @@ const KV_APP_CSS = [
 
 <!-- ユーザー手計測の区間ラップ(259レース)。app-main より先に window.KOCHI_USER_LAPS を用意する -->
 <script defer src="data/kochi-user-laps.js?v=20260728-v1"></script>
-<script defer src="modules/app-main.js?v=20260729-rmpanels"></script>
+<script defer src="modules/app-main.js?v=20260729-psf-years"></script>
 
 <!-- AI予想・詳細分析は modules/ai-analysis.js を必要時に読み込む -->
 <!-- D: レースサマリーバー（画面下部固定） -->

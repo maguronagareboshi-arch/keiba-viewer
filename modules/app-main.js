@@ -382,10 +382,13 @@ function _renderPageWithHistory(pageId, renderFn, needsAiModule) {
   }, 0);
 }
 
+const KV_PAGE_IDS = ['search','deban','bunseki','baba','jchg','saved','f3avg','bets','aiseiseki'];
 function switchPage(pageId, _fromPop) {
-  // 閲覧者は管理者専用ページ（保存データ・PSF履歴）へは入れない
-  if (typeof isAdminMode === 'function' && !isAdminMode() && ['saved', 'psfhist', 'bets'].includes(pageId)) pageId = 'search';
-  ['search','deban','bunseki','baba','jchg','saved','f3avg','psfhist','bets','aiseiseki'].forEach(id => {
+  // 廃止したページ（旧PSF履歴など）の古いブックマークで真っ白にしない
+  if (!KV_PAGE_IDS.includes(pageId)) pageId = 'search';
+  // 閲覧者は管理者専用ページ（保存データ・収支ノート）へは入れない
+  if (typeof isAdminMode === 'function' && !isAdminMode() && ['saved', 'bets'].includes(pageId)) pageId = 'search';
+  KV_PAGE_IDS.forEach(id => {
     const el = document.getElementById('page-' + id);
     if (el) el.classList.toggle('page-hidden', id !== pageId);
   });
@@ -395,7 +398,7 @@ function switchPage(pageId, _fromPop) {
     if (active) btn.setAttribute('aria-current','page'); else btn.removeAttribute('aria-current');
   });
   // 「その他」配下のページでは上下ナビの⋯をアクティブに
-  const _morePages = ['jchg', 'saved', 'f3avg', 'psfhist', 'bets', 'aiseiseki'];
+  const _morePages = ['jchg', 'saved', 'f3avg', 'bets', 'aiseiseki'];
   const _headerMoreBtn = document.getElementById('header-more-btn');
   if (_headerMoreBtn) _headerMoreBtn.classList.toggle('active', _morePages.includes(pageId));
   const _moreBtn = document.getElementById('kbn-more');
@@ -435,7 +438,6 @@ function switchPage(pageId, _fromPop) {
       if (el) el.innerHTML = _kvAsyncStateHtml('error','AI成績の表示に失敗しました','監査データを読み込めませんでした',"switchPage('aiseiseki')");
     }), 0);
   }
-  if (pageId === 'psfhist') { _renderPageWithHistory(pageId, renderPsfHistory, true); }
   if (pageId === 'bets')    { _renderPageWithHistory(pageId, renderBetsPage); }
 }
 
@@ -3807,10 +3809,6 @@ function renderHorseRows(raceNo, horses) {
       _aiMap[s.horse.horseName] = { mark: _AI_MARKS[i] || '', rank: s.totalScore != null ? i + 1 : null, score: s.totalScore };
     });
   }
-  // 💎PSF参考：位置構造モデル(PSF)の1位が現行AI◎と不一致なら表示（補助統計as-of・期待値再検証待ち）
-  const _psfTop = (_aiReady && typeof computePsfScores === 'function') ? (computePsfScores(raceNo)?.top ?? null) : null;
-  const _aiTopName = (_cy && _cy.scored[0] && _cy.scored[0].totalScore != null) ? _cy.scored[0].horse.horseName : null;
-  const _psfValueName = (_psfTop && _psfTop !== _aiTopName) ? _psfTop : null;
   // 全行を一括innerHTML（12回のappendChildを1回に削減）
   tbody.innerHTML=horses.map(horse=>{
     const waku=parseInt(horse.wakuBan)||Math.ceil(horse.umaBan/2);
@@ -3833,7 +3831,6 @@ function renderHorseRows(raceNo, horses) {
         return `<span class="rf-chip ${cls}" title="${escapeHTML(tip)}">${isNaN(ch)?'－':ch}</span>`;
       }).join('');
     })();
-    const _psfGem=_psfValueName===horse.horseName?`<span class="psf-badge" title="PSF参考：位置構造モデルの単独推し。期待値は再検証中">💎</span>`:'';
     // 外部由来(スクレイピング/入力)文字列の表示・属性エスケープ（jsAttrEsc=onclick内JS文字列用・escapeHTML=通常表示/属性用）
     const _nameEsc=jsAttrEsc(horse.horseName);
     const _nameHtml=escapeHTML(horse.horseName);
@@ -3852,7 +3849,7 @@ function renderHorseRows(raceNo, horses) {
       <td class="col-waku"><span class="waku-badge ${wCls}">${horse.wakuBan}</span></td>
       <td class="col-ninki">${horse.ninki?ninkiBadge(horse.ninki):'－'}</td>
       <td class="col-umano"><span class="umano-badge">${horse.umaBan}</span></td>
-      <td class="col-ai">${_ai.mark?`<span class="ai-mark ${_aiCls}">${_ai.mark}</span>`:'<span class="data-empty">—</span>'}${_psfGem}</td>
+      <td class="col-ai">${_ai.mark?`<span class="ai-mark ${_aiCls}">${_ai.mark}</span>`:'<span class="data-empty">—</span>'}</td>
       <td class="col-mymark">${kvMyMarkHtml(allRacesData[raceNo]?.raceInfo?.raceDate||'',raceNo,horse.umaBan,false)}</td>
       <td class="col-umaname">${kvFavoriteButtonHtml(horse.horseName,false)}<span class="horse-name horse-name-link" onclick="openHorseModal('${_nameEsc}',${raceNo})"><i class="fas fa-history horse-hist-icon"></i>${_nameHtml}</span></td>
       <td class="col-recent" title="クリックで近5走の詳細をこの場に展開" onclick="kvToggleHist(event,${raceNo},${horse.umaBan},'${_nameEsc}')">${_rfHtml}</td>
@@ -3877,7 +3874,7 @@ function renderHorseRows(raceNo, horses) {
         <div class="spr-l1">
           ${(_raced && _isAdminView)?`<span class="chakujun-badge ${chakujunClass(horse.chakujun)}">${horse.chakujun}</span>`:`<span class="waku-badge ${wCls}">${horse.wakuBan}</span>`}
           <span class="umano-badge">${horse.umaBan}</span>
-          ${_ai.mark?`<span class="ai-mark ${_aiCls}">${_ai.mark}</span>`:''}${_psfGem}
+          ${_ai.mark?`<span class="ai-mark ${_aiCls}">${_ai.mark}</span>`:''}
           ${kvMyMarkHtml(allRacesData[raceNo]?.raceInfo?.raceDate||'',raceNo,horse.umaBan,true)}
           ${kvFavoriteButtonHtml(horse.horseName,true)}
           <span class="spr-name" onclick="openHorseModal('${_nameEsc}',${raceNo})">${_nameHtml}</span>
@@ -9132,98 +9129,6 @@ function getDayTrackCond(babaCode, raceDate) {
   return result;
 }
 
-/**
- * 💎PSF妙味履歴タブ：厳密検証と同一のscanDataパイプラインから
- * 「PSFと現行AIの◎が割れたレース」を抽出して成績を一覧表示する。
- * scanData未生成時は非表示divを使ってバックテストを裏で実行（初回のみ約15秒）。
- */
-function renderPsfHistory() {
-  const body = document.getElementById('psfhist-body');
-  if (!body) return;
-  if (!window._scanData) {
-    body.innerHTML = '<p style="color:#9ca3af;font-size:13px"><i class="fas fa-spinner fa-spin"></i> 全レースを解析中（初回のみ・約15秒）...</p>';
-    let hidden = document.getElementById('yoso-backtest-hist');
-    if (!hidden) {
-      hidden = document.createElement('div');
-      hidden.id = 'yoso-backtest-hist';
-      hidden.style.display = 'none';
-      document.body.appendChild(hidden);
-    }
-    try { runYosoBacktest('hist'); } catch(e) { body.innerHTML = `<p style="color:#dc2626;font-size:13px">解析に失敗しました: ${e}</p>`; return; }
-    const t0 = Date.now();
-    const iv = setInterval(() => {
-      if (window._scanData) { clearInterval(iv); _renderPsfHistoryTable(body); }
-      else if (Date.now() - t0 > 60000) { clearInterval(iv); body.innerHTML = '<p style="color:#dc2626;font-size:13px">タイムアウトしました。再度タブを開いてください。</p>'; }
-    }, 600);
-    return;
-  }
-  _renderPsfHistoryTable(body);
-}
-
-function _renderPsfHistoryTable(body) {
-  const S = window._scanData, ls = lsRead();
-  const curScore = c => c.base + c.condNew + c.distNew + c.rotN + c.clsN + c.cornN + c.trendN + c.weightN + c.agariN + c.comboN + c.marginN + c.winStrN + c.jockeyChgN + c.takiN + c.cornConsistN + (c.rakuN || 0);
-  const psfScore = c => c.psfS != null ? c.psfS : -1e9;
-  const pickOf = (rc, f) => { let bi = 0, bs = -Infinity; for (let i = 0; i < rc.length; i++) { const v = f(rc[i]); if (v > bs) { bs = v; bi = i; } } return rc[bi]; };
-  const nameOf = (date, rno, uma) => (ls[`31_${date}_${rno}_${uma}`] || {}).horseName || `${uma}番`;
-  const rows = [];
-  const all = { bet: 0, ret: 0, h1: 0, h3: 0, n: 0 };       // 勝ち馬オッズ判明レースでの単勝収支
-  const band = { bet: 0, ret: 0, h1: 0 };                     // 本域（3-10倍・全馬オッズ判明レースのみ）
-  for (const rc of S) {
-    if (rc.length < 2 || rc._rno == null) continue;
-    const pP = pickOf(rc, psfScore), pC = pickOf(rc, curScore);
-    if (pP.psfS == null || pP === pC) continue;
-    const winner = rc.find(c => c.chaku === 1);
-    const winnerOddsKnown = !!(winner && winner.odds != null);
-    all.n++;
-    if (pP.chaku <= 3) all.h3++;
-    if (winnerOddsKnown) {
-      all.bet++;
-      if (pP.chaku === 1) { all.ret += pP.odds * 100; all.h1++; }
-    }
-    const fullCover = rc.every(c => c.odds != null);
-    if (fullCover && pP.odds >= 3 && pP.odds < 10) {
-      band.bet++;
-      if (pP.chaku === 1) { band.ret += pP.odds * 100; band.h1++; }
-    }
-    rows.push({
-      date: rc._date, rno: rc._rno,
-      psfName: nameOf(rc._date, rc._rno, pP.umaBan), psfOdds: pP.odds, psfNinki: pP.ninki, psfChaku: pP.chaku,
-      aiName: nameOf(rc._date, rc._rno, pC.umaBan), aiChaku: pC.chaku,
-      inBand: fullCover && pP.odds >= 3 && pP.odds < 10,
-    });
-  }
-  rows.sort((a, b) => a.date < b.date ? 1 : a.date > b.date ? -1 : b.rno - a.rno);
-  const chakuHtml = ch => `<span style="font-weight:800;color:${ch === 1 ? '#dc2626' : ch <= 3 ? '#d97706' : '#9ca3af'}">${ch}着</span>`;
-  const summaryChip = (label, val, strong) => `<div class="psf-chip${strong ? ' psf-chip--hl' : ''}"><div class="psf-chip-label">${label}</div><div class="psf-chip-val">${val}</div></div>`;
-  const shown = rows.slice(0, 50);
-  body.innerHTML = `
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
-      ${summaryChip('💎対象レース', all.n + 'R', false)}
-      ${summaryChip('単勝的中率', all.bet ? (100 * all.h1 / all.bet).toFixed(1) + '%' : '—', false)}
-      ${summaryChip('複勝率', all.n ? (100 * all.h3 / all.n).toFixed(1) + '%' : '—', false)}
-      ${summaryChip('単勝ROI（全体）', all.bet ? (all.ret / all.bet).toFixed(1) + '%' : '—', true)}
-      ${summaryChip('単勝ROI（本域3-10倍）', band.bet ? `${(band.ret / band.bet).toFixed(1)}%（${band.h1}/${band.bet}）` : '—', true)}
-    </div>
-    <div style="overflow-x:auto"><table class="f3avg-table">
-      <thead><tr><th style="text-align:left">日付</th><th>R</th><th style="text-align:left">💎PSF妙味馬</th><th>オッズ</th><th>人気</th><th>結果</th><th style="text-align:left">AI◎（現行）</th><th>結果</th></tr></thead>
-      <tbody>${shown.map(r => `<tr${r.inBand ? ' style="background:rgba(103,232,249,.10)"' : ''}>
-        <td class="f3-cls" style="white-space:nowrap">${r.date}</td>
-        <td>${r.rno}R</td>
-        <td class="f3-cls" style="font-weight:700">${r.psfName}${r.inBand ? ' <span title="本域（3〜10倍）">💎</span>' : ''}</td>
-        <td>${r.psfOdds != null ? r.psfOdds.toFixed(1) : '—'}</td>
-        <td>${r.psfNinki != null ? r.psfNinki : '—'}</td>
-        <td>${chakuHtml(r.psfChaku)}</td>
-        <td class="f3-cls">${r.aiName}</td>
-        <td>${chakuHtml(r.aiChaku)}</td>
-      </tr>`).join('')}</tbody>
-    </table></div>
-    <div class="f3avg-note">
-      直近${shown.length}件を表示（全${rows.length}件）。行の水色背景＝本域（オッズ3〜10倍）。
-      ROIは公式確定払戻ベースの単勝100円均一買い想定。「全体」は勝ち馬オッズ判明レース（外れ馬券のオッズは収支に不要）、
-      「本域」は全馬オッズ判明レースのみで集計。実際の前売りオッズとはズレる点に注意。
-    </div>`;
-}
 
 /** 前半3F基準表（クラス×馬場×距離の平均・n>=3セルのみ）を構築（キャッシュ付き） */
 function getF3BenchTable() {
@@ -9515,20 +9420,29 @@ const AI_SEISEKI_CACHE_SCHEMA = 'ai_seiseki_cache/v2';
 const AI_SEISEKI_CACHE_PREFIX = 'aiSeisekiCache_v2';
 const AI_SEISEKI_MARKS = ['◎', '○', '▲', '△', '×', '×'];  // computeYosoScored系と同一定義（値は変更しない）
 const AI_SEISEKI_MAX_RACES = 600;                    // 直近約50開催日。画面内の再計算を有限時間に保つ
-// complete-v3（2026-07-11凍結）からリリース時に生成した軽量集計。
+// complete-v3（2026-07-11凍結）から生成した軽量集計。年度別＝直近5年＋当年(7/11まで)。
+// 生成元: 高知競馬ビューア改善/experiments/ranking_vnext/build_shipped_ai_seiseki_years.py
 // legacy_v2_anchor.score_approx は現行AIの順位近似であり、実印・完全なlive scoreとは表示しない。
 // 画面を開くだけでは重い過去再採点をせず、この監査済み参考値を即時表示する。
 const AI_SEISEKI_SHIPPED = Object.freeze({
-  schema: 'ai_seiseki_shipped/v1', rankingLabel: '現行AI近似順位',
-  startDate: '2025/01/01', endDate: '2026/07/11', raceCount: 1241,
-  excludedIncompleteScore: 560, excludedInvalidTop3: 13,
+  schema: 'ai_seiseki_shipped_years/v1', rankingLabel: '現行AI近似順位',
+  startDate: '2021/01/01', endDate: '2026/07/11', raceCount: 4210,
+  excludedIncompleteScore: 2388, excludedInvalidTop3: 39,
   datasetSha256: '699f63e95dfa47f1fdc5f6ff0c0db8fa5d005f11c11a012a2df9e75b89bbc0ec',
-  cumulative: {
-    '◎': { n: 1241, win: 520, top2: 767, top3: 900 },
-    '○': { n: 1241, win: 250, top2: 519, top3: 696 },
-    '▲': { n: 1241, win: 140, top2: 354, top3: 574 },
-    '△': { n: 1241, win: 89, top2: 240, top3: 439 },
-    '×': { n: 2473, win: 122, top2: 317, top3: 602 },
+  cumulative: { '◎': { n: 4210, win: 1775, top2: 2591, top3: 3077 }, '○': { n: 4210, win: 844, top2: 1784, top3: 2435 }, '▲': { n: 4210, win: 478, top2: 1169, top3: 1886 }, '△': { n: 4210, win: 306, top2: 837, top3: 1458 }, '×': { n: 8403, win: 424, top2: 1078, top3: 1986 } },
+  byYear: {
+    '2021': { raceCount: 786, startDate: '2021/01/01', endDate: '2021/12/31', excludedIncompleteScore: 463, excludedInvalidTop3: 10,
+      agg: { '◎': { n: 786, win: 331, top2: 485, top3: 578 }, '○': { n: 786, win: 164, top2: 332, top3: 451 }, '▲': { n: 786, win: 88, top2: 219, top3: 354 }, '△': { n: 786, win: 51, top2: 158, top3: 278 }, '×': { n: 1572, win: 79, top2: 196, top3: 364 } } },
+    '2022': { raceCount: 705, startDate: '2022/01/01', endDate: '2022/12/31', excludedIncompleteScore: 469, excludedInvalidTop3: 4,
+      agg: { '◎': { n: 705, win: 311, top2: 449, top3: 521 }, '○': { n: 705, win: 126, top2: 288, top3: 409 }, '▲': { n: 705, win: 77, top2: 198, top3: 314 }, '△': { n: 705, win: 60, top2: 140, top3: 252 }, '×': { n: 1407, win: 65, top2: 171, top3: 321 } } },
+    '2023': { raceCount: 702, startDate: '2023/01/01', endDate: '2023/12/31', excludedIncompleteScore: 474, excludedInvalidTop3: 7,
+      agg: { '◎': { n: 702, win: 297, top2: 415, top3: 504 }, '○': { n: 702, win: 133, top2: 303, top3: 405 }, '▲': { n: 702, win: 75, top2: 172, top3: 296 }, '△': { n: 702, win: 54, top2: 151, top3: 240 }, '×': { n: 1403, win: 82, top2: 202, top3: 342 } } },
+    '2024': { raceCount: 776, startDate: '2024/01/01', endDate: '2024/12/31', excludedIncompleteScore: 422, excludedInvalidTop3: 5,
+      agg: { '◎': { n: 776, win: 316, top2: 475, top3: 574 }, '○': { n: 776, win: 171, top2: 342, top3: 474 }, '▲': { n: 776, win: 98, top2: 226, top3: 348 }, '△': { n: 776, win: 52, top2: 148, top3: 249 }, '×': { n: 1548, win: 76, top2: 192, top3: 357 } } },
+    '2025': { raceCount: 779, startDate: '2025/01/01', endDate: '2025/12/31', excludedIncompleteScore: 374, excludedInvalidTop3: 9,
+      agg: { '◎': { n: 779, win: 324, top2: 482, top3: 569 }, '○': { n: 779, win: 146, top2: 309, top3: 421 }, '▲': { n: 779, win: 90, top2: 238, top3: 375 }, '△': { n: 779, win: 60, top2: 145, top3: 259 }, '×': { n: 1552, win: 77, top2: 196, top3: 379 } } },
+    '2026': { raceCount: 462, startDate: '2026/01/01', endDate: '2026/07/11', excludedIncompleteScore: 186, excludedInvalidTop3: 4,
+      agg: { '◎': { n: 462, win: 196, top2: 285, top3: 331 }, '○': { n: 462, win: 104, top2: 210, top3: 275 }, '▲': { n: 462, win: 50, top2: 116, top3: 199 }, '△': { n: 462, win: 29, top2: 95, top3: 180 }, '×': { n: 921, win: 45, top2: 121, top3: 223 } } },
   },
 });
 let _aiSeisekiVisibleResult = null;
@@ -9686,7 +9600,7 @@ function _aiSeisekiInitialResult() {
         lastDate: dates.length ? dates[dates.length - 1].replace('-', '/') : '',
         skipped: Object.keys(cache.failed || {}).length, cached: true } };
   }
-  return { byMonth: {}, cumulative: AI_SEISEKI_SHIPPED.cumulative, model: null,
+  return { byMonth: {}, byYear: AI_SEISEKI_SHIPPED.byYear, cumulative: AI_SEISEKI_SHIPPED.cumulative, model: null,
     meta: { sourceKind: 'shipped_audit', selectedRaceCount: AI_SEISEKI_SHIPPED.raceCount,
       firstDate: AI_SEISEKI_SHIPPED.startDate, lastDate: AI_SEISEKI_SHIPPED.endDate,
       skipped: 0, cached: true } };
@@ -9706,11 +9620,18 @@ function _renderAiSeisekiResult(el, result, prevSel) {
     </div>`;
     return;
   }
+  // 期間の刻みは出所で変わる：配信の監査済み固定評価＝年度別、端末の再集計＝月別。
+  const byYear = result.byYear || {};
+  const years = Object.keys(byYear).sort((a, b) => b.localeCompare(a));
   const months = Object.keys(byMonth).sort((a, b) => b.localeCompare(a));
-  const curSel = months.includes(prevSel) || prevSel === 'cumulative' ? prevSel : 'cumulative';
-  const monthOptions = ['<option value="cumulative">対象期間の累計</option>']
-    .concat(months.map(m => `<option value="${m}">${m.replace('-', '年')}月</option>`)).join('');
-  const agg = curSel === 'cumulative' ? cumulative : (byMonth[curSel] || _aiSeisekiEmptyAgg());
+  const periods = years.length
+    ? years.map(y => ({ key: y, label: `${y}年`, agg: byYear[y].agg }))
+    : months.map(m => ({ key: m, label: `${m.replace('-', '年')}月`, agg: byMonth[m] }));
+  const periodMap = Object.fromEntries(periods.map(p => [p.key, p.agg]));
+  const curSel = periodMap[prevSel] ? prevSel : 'cumulative';
+  const periodOptions = ['<option value="cumulative">対象期間の累計</option>']
+    .concat(periods.map(p => `<option value="${p.key}">${p.label}</option>`)).join('');
+  const agg = curSel === 'cumulative' ? cumulative : (periodMap[curSel] || _aiSeisekiEmptyAgg());
   const pct = (num, den) => den > 0 ? (num / den * 100).toFixed(1) + '%' : '—';
   const rows = ['◎', '○', '▲', '△', '×'].map(mark => {
     const a = agg[mark] || { n: 0, win: 0, top2: 0, top3: 0 };
@@ -9726,11 +9647,25 @@ function _renderAiSeisekiResult(el, result, prevSel) {
     meta.dataChanged ? '⚠ 過去データの同期中に内容が変わったため、今回は暫定値です。' : '',
     meta.skipped ? `⚠ データ不足または例外のある${meta.skipped}Rを除外しました。` : ''
   ].filter(Boolean).join('<br>');
-  const controls = months.length
-    ? `<label>集計期間：<select id="aiseiseki-month-sel" onchange="renderAiSeisekiPage()">${monthOptions}</select></label>`
-    : `<span style="font-size:12px;color:#bae6fd;font-weight:700">監査済み固定評価・2025〜2026</span>`;
+  const controls = periods.length
+    ? `<label>集計期間：<select id="aiseiseki-month-sel" onchange="renderAiSeisekiPage()">${periodOptions}</select></label>`
+    : `<span style="font-size:12px;color:#bae6fd;font-weight:700">監査済み固定評価</span>`;
+  // 年度別の一覧（各年を1行で見比べる）。年の刻みがある時だけ出す。
+  const yearTable = years.length ? `
+    <h3 class="ais-h3">年度別の成績</h3>
+    <div style="overflow-x:auto"><table class="ais-table">
+      <thead><tr><th>年</th><th>対象レース</th><th>◎1着率</th><th>◎複勝率</th><th>○複勝率</th><th>▲複勝率</th></tr></thead>
+      <tbody>${years.map(y => {
+        const v = byYear[y], a = v.agg || {};
+        const h = m => a[m] || { n: 0, win: 0, top2: 0, top3: 0 };
+        const partial = v.endDate && v.endDate < `${y}/12/31` ? `<span class="ais-partial">（${escapeHTML(v.endDate.slice(5))}まで）</span>` : '';
+        return `<tr><td class="ais-year">${escapeHTML(y)}年${partial}</td><td>${v.raceCount || 0}</td>
+          <td>${pct(h('◎').win, h('◎').n)}</td><td>${pct(h('◎').top3, h('◎').n)}</td>
+          <td>${pct(h('○').top3, h('○').n)}</td><td>${pct(h('▲').top3, h('▲').n)}</td></tr>`;
+      }).join('')}</tbody>
+    </table></div>` : '';
   const note = isShipped
-    ? `<strong>集計範囲:</strong> ${scope}。完全な出走馬集合のうち、現行AI近似スコアが全頭揃い1〜3着が一意のレースです。スコア欠損${AI_SEISEKI_SHIPPED.excludedIncompleteScore}R・同着等${AI_SEISEKI_SHIPPED.excludedInvalidTop3}Rは除外しています。<br>
+    ? `<strong>集計範囲:</strong> ${scope}。完全な出走馬集合のうち、現行AI近似スコアが全頭揃い1〜3着が一意のレースです。スコア欠損${AI_SEISEKI_SHIPPED.excludedIncompleteScore}R・同着等${AI_SEISEKI_SHIPPED.excludedInvalidTop3}Rは除外しています（古い年ほど欠損が多く、対象レース数は実際の開催数より少なくなります）。${AI_SEISEKI_SHIPPED.endDate}以降は未集計です。<br>
        <strong>評価方法:</strong> ${AI_SEISEKI_SHIPPED.rankingLabel}による監査用の固定参考値です。当時表示した実印でも、端末の現在係数による完全な再計算でもありません。`
     : `<strong>集計範囲:</strong> ${scope}${totalNote}。この端末の現在AIを過去へ当てはめ直した参考値で、当時表示した実印ではありません。<br>
        集計モデル: <code>${escapeHTML(model?.fingerprint || '不明')}</code>／${escapeHTML(model?.source || '不明')}。`;
@@ -9744,6 +9679,7 @@ function _renderAiSeisekiResult(el, result, prevSel) {
       <thead><tr><th>印</th><th>対象頭数</th><th>1着率</th><th>連対率</th><th>複勝率</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
+    ${yearTable}
     <div class="ais-note">${note}</div>
     <div id="ai-opponent-audit"></div>`;
   const sel = document.getElementById('aiseiseki-month-sel');
