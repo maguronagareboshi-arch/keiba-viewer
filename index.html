@@ -2886,7 +2886,9 @@ const KV_APP_CSS = [
   </div>
 </div>
 
-<script defer src="modules/app-main.js?v=20260727-fix1"></script>
+<!-- ユーザー手計測の区間ラップ(259レース)。app-main より先に window.KOCHI_USER_LAPS を用意する -->
+<script defer src="data/kochi-user-laps.js?v=20260728-v1"></script>
+<script defer src="modules/app-main.js?v=20260728-lap1"></script>
 
 <!-- AI予想・詳細分析は modules/ai-analysis.js を必要時に読み込む -->
 <!-- D: レースサマリーバー（画面下部固定） -->

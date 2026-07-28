@@ -5802,18 +5802,49 @@ async function exportCommentImage(raceNo) {
  * 実際には各200m区間のラップ秒数を入力してもらう
  * 高知競馬の主要距離に合わせたラベル付け
  */
+/** 高知の距離ごとの区間の切り方（各区間の「終わりの地点(m)」）。
+ *  ⛔以前は `Math.round(距離/200)` の200m均等割りだった。それだと
+ *    ・1300m → 7区間で「200m…1400m」と、**先頭の半ハロン(100m)が消えて距離を超えるラベル**になる
+ *    ・1900m → `Math.min(d,1800)` で打ち切られ、末尾の300mが表示されない
+ *  ⛔端数の置き場所は距離で違う。**推測せず実測どおりに固定する**（2026-07-28に、ユーザーの
+ *    ラップ表259レースと、既にビューアへ手入力済みの130レースの実物で確認。両者は完全一致）:
+ *    ・1300m = 100m + 200m×6   （先頭が半ハロン。表の「0.5F」列。例 6.9秒）
+ *    ・1900m = 200m×8 + 300m   （末尾が1ハロン半。表の「9F」が約20秒＝300m相当）
+ *  区間数はどの距離も従来と同数なので、**保存済み lapTimes の並びはずれない**。 */
+const LAP_SEG_ENDS = {
+  800:  [200, 400, 600, 800],
+  1300: [100, 300, 500, 700, 900, 1100, 1300],
+  1400: [200, 400, 600, 800, 1000, 1200, 1400],
+  1600: [200, 400, 600, 800, 1000, 1200, 1400, 1600],
+  1800: [200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800],
+  1900: [200, 400, 600, 800, 1000, 1200, 1400, 1600, 1900],
+};
+
 function getLapSegments(distStr) {
   if (!distStr) return [];
   const m = distStr.match(/(\d+)/); if (!m) return [];
   const d = parseInt(m[1]);
-  // 200m ごとに区間を分割（1800m まで対応、それ以上は1800m打ち切り）
-  const effectiveDist = Math.min(d, 1800);
-  const n = Math.round(effectiveDist / 200);
-  const segs = [];
-  for (let i = 1; i <= n; i++) {
-    segs.push({ label: `${i * 200}m`, meters: 200 });
+  if (!(d > 0)) return [];
+  // ⛔未確認の距離は「200mずつ・端数は最後の区間にまとめる」で描く。高知の実施距離は上表で尽きている。
+  let ends = LAP_SEG_ENDS[d];
+  if (!ends) {
+    ends = [];
+    for (let x = 200; x + 200 <= d; x += 200) ends.push(x);
+    ends.push(d);
   }
-  return segs;
+  return ends.map((end, i) => ({ label: `${end}m`, meters: end - (i ? ends[i - 1] : 0) }));
+}
+
+/** サイト同梱のユーザー手計測ラップ（data/kochi-user-laps.js）を引く。
+ *  ⛔**DBに値があるレースでは絶対に使わない**。呼び出し側で「空のときだけ」に限定している。
+ *  ⛔ここは表示を埋めるだけでDBには書かない。管理者が保存を押したときに初めてDBへ入る。 */
+function userLapsFor(dateStr, raceNo) {
+  const t = window.KOCHI_USER_LAPS && window.KOCHI_USER_LAPS.laps;
+  if (!t || !dateStr) return null;
+  const day = t[String(dateStr).replace(/-/g, '/')];
+  if (!day) return null;
+  const a = day[String(parseInt(raceNo, 10))];
+  return (Array.isArray(a) && a.some(v => v != null)) ? a.slice() : null;
 }
 
 /** ラップ入力UIをレンダリング（raceNo, distStr, 保存済みラップ配列） — 改良デザイン */
@@ -6744,6 +6775,11 @@ function _putRaceRow(row) {
   const key = `race_${row.baba_code}_${row.race_date}_${row.race_no}`;
   let lapTimesArr = null;
   try { if (row.lap_times) lapTimesArr = JSON.parse(row.lap_times); } catch(e) {}
+  // ⛔サーバーにラップが無いレースだけ、同梱のユーザー手計測ラップで埋める(2026-07-28)。
+  //   DBに1つでも値があるレースには触らない=手入力を潰さない。
+  if (!lapTimesArr || !lapTimesArr.some(v => v != null)) {
+    lapTimesArr = userLapsFor(row.race_date, row.race_no) || lapTimesArr;
+  }
   const _existing = _idbCache && _idbCache[key];
   const _serverHasFirst3f = String(row.first3f || '').trim() !== '';
   const _first3f = _serverHasFirst3f ? row.first3f : (_existing?.first3f || '');
@@ -10315,6 +10351,8 @@ async function restoreFromSaved(date, baba, silent) {
     const horses=horseEntries.sort((a,b)=>(parseInt(a[0].replace(hp,''))||0)-(parseInt(b[0].replace(hp,''))||0)).map(([k,v])=>{const umaBan=parseInt(k.replace(hp,''));return{chakujun:v.chakujun||'',wakuBan:v.wakuBan||String(Math.ceil(umaBan/2)),umaBan,horseName:v.horseName||`馬番${umaBan}`,belong:v.belong||'',sexAge:v.sexAge||'',kinryo:v.kinryo||'',jockey:v.jockey||'',trainer:v.trainer||'',weight:v.weight||'',ninki:v.ninki||'',odds:v.odds||'',time:v.time||'',diff:v.diff||'',agari3f:v.agari3f||'',corner:v.corner||'',first3f:v.first3f||'',paceType:v.paceType||'',mukaeShoumen:v.mukaeShoumen||'',shoumenStraight:v.shoumenStraight||'',postComment:v.postComment||'',lineageLoginCode:v.lineageLoginCode||''};});
     let _lapTimes = raceVal.lapTimes || null;
     if (!_lapTimes && raceVal.lap_times) { try { _lapTimes = JSON.parse(raceVal.lap_times); } catch(e){} }
+    // ⛔保存データ側にも無いときだけ、同梱のユーザー手計測ラップで埋める(2026-07-28)。
+    if (!_lapTimes || !_lapTimes.some(v => v != null)) _lapTimes = userLapsFor(date, rn) || _lapTimes;
     allRacesData[rn]={raceInfo:{raceDate:date,raceNo:rn,babaCode:baba,raceName:raceVal.race_name||`第${rn}レース`,distance:raceVal.distance||'',raceClass:migrateRaceClass(raceVal.race_class||raceVal.raceClass||'',raceVal.race_name||''),trackCond:raceVal.track_cond||raceVal.trackCond||'',first3f:raceVal.first3f||'',first3fSource:raceVal.first3fSource||raceVal.first3f_source||'',agari4f:raceVal.agari4f||'',agari3f_race:raceVal.agari3f_race||'',paceType:raceVal.paceType||raceVal.pace_type||'',memo:raceVal.memo||'',lapTimes:_lapTimes},horses};
     restoredCount++;
   });
