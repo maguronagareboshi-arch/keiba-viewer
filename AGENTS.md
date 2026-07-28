@@ -1,10 +1,26 @@
 # 高知競馬ビューア (yukochi.com) 開発ガイド — Claude / Codex 共通
 
-このリポジトリ (`C:\Users\kouki\keiba-deploy`) が高知競馬ビューアの**唯一の開発・デプロイ場所**。
+このリポジトリ (`C:\Users\kouki\keiba-deploy`) が高知競馬ビューアの**アプリコードの正本**。
 ここで直接編集 → commit → push が正式フロー。**push = 本番デプロイ**(GitHub Pages・反映まで最大10分)。
 
 - 旧ソースrepo(`デスクトップ\高知競馬`)の index.html は **2026-07-15 で凍結・アーカイブ**。もう編集しない。
+- ⛔**`ドキュメント\高知競馬ビューア改善` にもアプリコードの複製がある**(Codexの旧作業場・最終コミット2026-07-23・未コミット79ファイル)。**アプリコードとしては2026-07-27で止まった写しなので編集しない**。ただし**このrepoに無い研究資産の唯一の置き場**なので消さないこと(下記「研究・データ生成」)。
 - 門別/南関ビューア(keiba.html 等)は**別プロジェクト「他場」の所有物**。このプロジェクトからは読み取り専用。
+
+## 0. 研究・データ生成の置き場(このrepoの外)
+
+`C:\Users\kouki\OneDrive\ドキュメント\高知競馬ビューア改善` にだけ存在する(gitignore対象でGitHubには無い):
+
+| パス | 中身 |
+|---|---|
+| `data\complete-v3\2026-07-11\generated\ranking_choice_sets_v3.jsonl` | 501MB・15,185レース(2014〜2026/07/11)。`legacy_v2_anchor.score_approx`＝現行AI順位の近似を全馬に付けた凍結データセット |
+| `experiments\ranking_vnext\build_shipped_ai_seiseki.py` | 「AIの成績」2025〜2026版の生成元(**凍結**・再現性のため変更しない) |
+| `experiments\ranking_vnext\build_shipped_ai_seiseki_years.py` | 同・**年度別2021〜2026版**の生成元。出力を `AI_SEISEKI_SHIPPED` へ貼る |
+| `experiments\ranking_vnext\build_ai_insights.py` | `ai-insights.js` の相手候補監査定数の生成元 |
+| `experiments\complete_v3\generate_v3.py` | 上のデータセット自体の生成(score_approx の式もここ) |
+| `research\shadow-v2-frozen-source\scandata_by_year_v2\` | 2014〜2026の年別スキャンデータ(manifest.json 必須) |
+
+⛔ここで作った集計を貼るときは、**必ず既存の窓で数字が再現することを確認**してから差し替える(年度別版は2025〜2026の1241Rを完全再現することを確認済み)。
 
 ## 1. ファイル地図
 
@@ -68,6 +84,7 @@ push すると `.github/workflows/pages.yml` → `validate-production.py` が走
 ## 7. 周辺プロジェクト(このrepoの外)
 
 - **映像計測**(3F/ラップの生産): `デスクトップ\高知競馬\01_高知映像計測\auto3f` — `newday.py` が fetch→OCR→DB を自動化。出力がこの repo の `data/` に入る。
+- **研究・データ生成**: `ドキュメント\高知競馬ビューア改善` — 上の「0. 研究・データ生成の置き場」参照。
 - **門別/南関ソース**: `デスクトップ\他場` — `bash deploy.sh` がこの repo へコピーして push する。
 - **DB**: Supabase(project jcrcftvrsgmsewwdkqha)。ビューアは匿名キーで読むだけ。書き込みはローカルスクリプト経由のみ。
 - **オッズ自動記録**: ローカル `capture_odds.py` + Windows タスクスケジューラ。
