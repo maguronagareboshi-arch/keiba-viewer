@@ -57,6 +57,22 @@ function _updateFirst3fSourceBadge(raceNo) {
   if (el && info) el.innerHTML = _first3fSourceBadgeHtml(info.first3fSource, info.first3f);
 }
 
+/** 区間ラップから前半3F(=先頭3区間の和)。発走基準200m刻みの距離だけ。
+ *  ⛔1300mは配列がポール基準(先頭0.5F≈7秒)なので先頭3区間の和は前半3Fではない→対象外。
+ *  2026-07-29追加: 4/19 R4(1600m)で推定式39.0 vs ラップ真値38.2の食い違いをユーザーが発見。
+ *  LAP_SUM はランク40で全自動ソースの最上位——定義だけあって未実装だった。 */
+function first3fFromLaps(distance, lapTimes) {
+  const dist = String(distance || '').replace(/[^\d]/g, '');
+  if (!['800', '1400', '1600', '1800'].includes(dist)) return null;
+  const laps = Array.isArray(lapTimes) ? lapTimes : null;
+  if (!laps || laps.length < 3) return null;
+  const head = laps.slice(0, 3).map(v => parseFloat(v));
+  if (head.some(v => !Number.isFinite(v) || v < 9 || v > 20)) return null;
+  const sum = +(head[0] + head[1] + head[2]).toFixed(1);
+  if (sum < 33 || sum > 46) return null;
+  return { value: sum.toFixed(1), source: FIRST3F_SOURCE.LAP_SUM };
+}
+
 /** 距離・決着時計・上がりから、レース全体の前半3F候補を返す。 */
 function calculateRaceFirst3f(distance, winnerTime, agari4f, agari3fRace, trackCond) {
   const dist = String(distance || '').replace(/[^\d]/g, '');
@@ -98,6 +114,15 @@ function _autofillFirst3fInData(data, options) {
   const info = data.raceInfo || {};
   const existing = String(info.first3f || '').trim();
   const replaceAuto = !!options?.replaceAuto;
+  // ラップ和は全自動ソースの最上位: 空欄を埋めるだけでなく、下位の自動推定値を置き換える。
+  // 手入力(manual)は絶対に触らない。
+  const lap = first3fFromLaps(info.distance, info.lapTimes);
+  if (lap && (!existing || (_isAutoFirst3fSource(info.first3fSource)
+      && _first3fAutoRank(info.first3fSource) < _first3fAutoRank(lap.source)))) {
+    info.first3f = lap.value;
+    info.first3fSource = lap.source;
+    return true;
+  }
   if (existing && info.first3fSource === FIRST3F_SOURCE.LAP_SUM) return false;
   if (existing && !(replaceAuto && _isAutoFirst3fSource(info.first3fSource))) return false;
   const winner = (data.horses || []).find(h => String(h.chakujun) === '1');
@@ -212,9 +237,26 @@ function backfillFirst3fFrom1400m() {
     if (p.length >= 4) winTime[`${p[0]}_${p[1]}_${p[2]}`] = t;
   }
   const count = { 1300:0, 1400:0, 1600:0 };
+  let lapFilled = 0;
   for (const [key, race] of Object.entries(lsData)) {
     if (!key.startsWith('race_')) continue;
     const dist = String(race.distance || race.dist || '').replace(/[^\d]/g, '');
+    // ── ラップ和(最優先)。空欄と、下位の自動推定値(estimate_1600等)を置き換える ──
+    let lapArr = race.lapTimes || null;
+    if (!lapArr && race.lap_times) { try { lapArr = JSON.parse(race.lap_times); } catch (_) {} }
+    const lap = first3fFromLaps(dist, lapArr);
+    if (lap) {
+      const cur = String(race.first3f || '').trim();
+      const curSrc = String(race.first3fSource || race.first3f_source || '');
+      const canReplace = !cur || (_isAutoFirst3fSource(curSrc)
+        && _first3fAutoRank(curSrc) < _first3fAutoRank(lap.source));
+      if (canReplace && !(cur === lap.value && curSrc === lap.source)) {
+        lsWrite(key, { ...race, first3f:lap.value, first3fSource:lap.source });
+        lapFilled++;
+        continue;
+      }
+      if (curSrc === FIRST3F_SOURCE.LAP_SUM) continue;
+    }
     if (!Object.prototype.hasOwnProperty.call(count, dist) || String(race.first3f || '').trim()) continue;
     const raceNo = String(race.race_no || '');
     const win = winTime[`${race.baba_code}_${race.race_date}_${raceNo}`];
@@ -224,8 +266,8 @@ function backfillFirst3fFrom1400m() {
     lsWrite(key, { ...race, first3f:calc.value, first3fSource:calc.source });
     count[dist]++;
   }
-  const total = count[1300] + count[1400] + count[1600];
-  if (total) console.log(`[backfillF3] 前半3F補完: 1300m=${count[1300]} / 1400m=${count[1400]} / 1600m=${count[1600]}`);
+  const total = count[1300] + count[1400] + count[1600] + lapFilled;
+  if (total) console.log(`[backfillF3] 前半3F補完: ラップ和=${lapFilled} / 1300m=${count[1300]} / 1400m=${count[1400]} / 1600m=${count[1600]}`);
   return total;
 }
 
