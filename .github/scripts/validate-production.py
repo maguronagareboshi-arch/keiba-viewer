@@ -17,6 +17,8 @@ SUPPORT_FILES = {
     ".github/scripts/validate-production.py",
     ".github/workflows/odds-capture.yml",
     ".github/workflows/pages.yml",
+    "AGENTS.md",
+    "CLAUDE.md",
 }
 SECRET_NAMES = {
     ".env",
