@@ -952,9 +952,9 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const TRACKS = {
   '門別': { prefix: 'monbetsu', baba: '36', slug: 'monbetsu', noken: true, sim: true, ai: true, data: true },
   '大井': { prefix: 'ooi', baba: '20', slug: 'ooi', noken: true, sim: true, ai: true, data: true },
-  '船橋': { prefix: 'funabashi', baba: '19', slug: 'funabashi', data: true },
-  '川崎': { prefix: 'kawasaki', baba: '21', slug: 'kawasaki' },
-  '浦和': { prefix: 'urawa', baba: '18', slug: 'urawa' },
+  '船橋': { prefix: 'funabashi', baba: '19', slug: 'funabashi', noken: true, data: true },
+  '川崎': { prefix: 'kawasaki', baba: '21', slug: 'kawasaki', noken: true },
+  '浦和': { prefix: 'urawa', baba: '18', slug: 'urawa', noken: true },
 };
 const trackCfg = () => TRACKS[state.track] || TRACKS['門別'];
 // race_id内の場コード（[6:8]・競馬ブック採番）→ 場名。過去走の映像ジャンプ等で他場レースの場を特定する
@@ -1191,7 +1191,8 @@ const providers = {
     async loadV3RaceArchive() { return null; },
     async hasRecordedPreRaceOdds() { return false; },
     async loadNoken() {
-      try { return await jsonGet('data/noken.json'); } catch (e) { return null; }
+      const file = state.track === '門別' ? 'data/noken.json' : `data/noken_${trackCfg().prefix}.json`;
+      try { return await jsonGet(file); } catch (e) { return null; }
     },
     async loadPoints() { return null; },
   },
@@ -1874,7 +1875,7 @@ function renderDeck() {
   tickCountdowns();
 }
 
-// 上部ビュータブ（今日/レース/分析/調教＋門別のみ能検・シミュレータ）を場に応じて再構築
+// 上部ビュータブ（今日/レース/分析/調教＋場ごとの能検・シミュレータ）を場に応じて再構築
 function renderViewTabs() {
   const cfg = trackCfg();
   const tabs = [['deck', '● 今日'], ['race', 'レース'], ['analysis', '分析'], ['cyokyo', '調教']];
@@ -3836,7 +3837,7 @@ async function renderRaceView() {
       const history = {};
       for (const id in rawHistory) history[id] = rawHistory[id].filter((r) => !r.date || !tgtDate || r.date < tgtDate);
       if (state.statsPromise) await state.statsPromise;  // 指数計算に基準タイムが要る
-      // 門別2歳戦のみ能検成績を出馬表/予想に出す（能検はホッカイドウ専用・南関では呼ばない）
+      // 能検対応場の2歳戦では、同じ馬の能検成績を出馬表/予想へ添える。
       if (trackCfg().noken && /2歳|２歳/.test((raceMeta.klass || '') + (raceMeta.name || raceMeta.race_name || '')) && !state.nokenByHorse) {
         try { state.noken = state.noken || await state.provider.loadNoken(); buildNokenIndex(); }
         catch (e) { /* 能検が無くても続行 */ }
@@ -5063,11 +5064,11 @@ function selectDate(d) {
 function renderTrackSwitch() {
   document.body.dataset.track = state.track;
   const today = state.todayTracks;   // {場: R数} / 未取得なら undefined
-  $('trackSwitch').innerHTML = ['門別', '大井'].map((t) => {
+  $('trackSwitch').innerHTML = Object.keys(TRACKS).map((t) => {
     const cfg = TRACKS[t];
     let badge = '';
     let cls = t === state.track ? 'active' : '';
-    if (!cfg.data) badge = '<small>準備中</small>';       // 川崎/浦和はまだデータを取っていない
+    if (!cfg.data) badge = '<small>能検</small>';         // 川崎/浦和は能検から先行対応
     else if (today) {
       const n = today[t] || 0;
       badge = n ? `<small>${n}R</small>` : '<small>―</small>';
@@ -5076,7 +5077,8 @@ function renderTrackSwitch() {
     return `<button class="${cls}" data-track="${t}">${t}${badge}</button>`;
   }).join('');
   const status = $('topDataStatus');
-  if (status) status.textContent = `${state.track}データ確認済み`;
+  if (status) status.textContent = trackCfg().data
+    ? `${state.track}データ確認済み` : `${state.track}能検データ対応`;
 }
 
 // ---- レースを探す（条件でレースを横断） ----------------------------------
@@ -5144,7 +5146,7 @@ async function loadTrackData(track) {
   state.stats = null; state.model = null; state.v3Predictions = null; state.dates = {}; state.raceId = null;
   state.deckDataCheckedAt = null; state.deckRefreshError = null;
   state.record = undefined;   // 運用成績も場別。持ち越すと別の場の数字が残る
-  state.noken = null; state.nokenByHorse = null;   // 能検は門別専用＝場切替でクリア
+  state.noken = null; state.nokenByHorse = null;   // 能検データは場別なので切替時にクリア
   cyokyoState.data = null; cyokyoState.date = null; cyokyoState.year = null; cyokyoState.byYear = {};
   cyokyoState.years = []; cyokyoState.base = null; cyokyoState.baseHonba = null; cyokyoState.local = null;   // 調教データも場ごとに読み直す
   if (state.sub === 'sim') state.sub = 'seiseki';   // シミュレータsubからも離脱
@@ -5183,8 +5185,8 @@ async function selectTrack(track) {
     setDeckDate(state.dates[today] ? today : ds[0]);
     await switchView('race');
   } else {
-    state.deckNotice = TRACKS[track].data ? null : `${track}のデータはまだ取り込んでいません（準備中）。`;
-    renderMonths(); renderDates(); renderTabs(); switchView('deck');
+    state.deckNotice = TRACKS[track].data ? null : `${track}は現在、能検データを先行して公開しています。`;
+    renderMonths(); renderDates(); renderTabs(); switchView(TRACKS[track].noken ? 'noken' : 'deck');
   }
 }
 
