@@ -458,24 +458,27 @@ function _kvParseHash() {
 }
 let _kvNavFromPop = false; // popstate起因のページ遷移では履歴へ積まない（restoreFromSaved経由のswitchPage対策）
 
-// ══ 閲覧者の公開範囲（2026-07-11導入・段階公開／2026-07-15に先週分まで拡大）══
-// 閲覧者に見せる出馬表は「先週の月曜0時以降の開催日」のみ。それより前の出馬表はまだ公開しない。
+// ══ 閲覧者の公開範囲（2026-07-11導入・段階公開／2026-07-15に先週分まで／2026-07-29に1か月へ拡大）══
+// 閲覧者に見せる出馬表は「今日から数えて過去 _KV_VIEWER_PAST_DAYS 日以内の開催日」のみ。
 // 管理者（書き込みトークン保有端末）は全期間閲覧できる。
 // 対象＝出馬表（開催日一覧・レース表示・検索取得・ディープリンク）。
 // 分析・馬場傾向などの集計ページは個別レースの出馬表ではないため対象外。
+// ⛔曜日アンカー（旧: 先週の月曜0時）はやめた。曜日で窓の長さが8〜14日に伸縮して分かりにくいため。
+// ⛔`setMonth(-1)` の暦月引き算は使わない。3/31 → 3/3 のように**1か月より短くなる日がある**。
+//   日数固定なら常に31日ぶん見える。範囲を変えるときはこの定数1つだけを動かす。
+const _KV_VIEWER_PAST_DAYS = 31;
 function _kvViewerDateAllowed(date) {
   try {
     if (typeof isAdminMode === 'function' && isAdminMode()) return true;
     if (!date) return false;
     const d = new Date(String(date).replace(/\//g, '-') + 'T00:00:00');
     if (isNaN(d)) return false;
-    const now = new Date(); now.setHours(0, 0, 0, 0);
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - ((now.getDay() + 6) % 7) - 7); // 先週の月曜0時（2026-07-15公開範囲拡大）
-    return d >= monday;
+    const from = new Date(); from.setHours(0, 0, 0, 0);
+    from.setDate(from.getDate() - _KV_VIEWER_PAST_DAYS);
+    return d >= from;
   } catch (e) { return false; }
 }
-const _KV_PAST_HIDDEN_MSG = '過去の出馬表は現在公開していません（先週以降の開催のみ閲覧できます）';
+const _KV_PAST_HIDDEN_MSG = '過去の出馬表は現在公開していません（直近1か月の開催のみ閲覧できます）';
 
 // ブラウザ戻る/進むの処理
 function _initNavHistory() {
@@ -1714,7 +1717,7 @@ function _xsChaku(ch) {
   return `<span class="rf-chip ${cls}">${isNaN(n) ? '－' : n}</span>`;
 }
 /** 保存レースが存在すればその日をロードして該当レースを開く */
-// 閲覧者は「先週以降の開催のみ」出馬表を開けるが、横断検索の過去レースはこの範囲外にもヒットする。
+// 閲覧者は「直近1か月の開催のみ」出馬表を開けるが、横断検索の過去レースはこの範囲外にもヒットする。
 // 従来は範囲外を開こうとするとalertで行き止まりだったため、horseNameが分かる場合は
 // 全期間の成績を見られる馬モーダル(openHorseModal)へ誘導し、導線を活かす（管理者は従来通り開ける）。
 async function kvJumpToRace(date, raceNo, horseName) {
@@ -10125,7 +10128,7 @@ function renderDebanDateList() {
   if (!el) return;
   buildSavedGroups();
   const DOW = ['日','月','火','水','木','金','土'];
-  // 閲覧者には公開範囲内（先週月曜0時以降）の開催日のみ表示（段階公開のためそれ以前はまだ出さない）
+  // 閲覧者には公開範囲内（直近1か月＝_KV_VIEWER_PAST_DAYS 日以内）の開催日のみ表示
   const groups = (_savedGroups || []).filter(g => g.baba === '31' && _kvViewerDateAllowed(g.date));
   if (!groups.length) {
     el.innerHTML = (typeof isAdminMode === 'function' && isAdminMode())
