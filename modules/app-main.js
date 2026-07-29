@@ -2696,7 +2696,7 @@ function renderRaceContent(raceNo) {
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
           <i class="fas fa-stopwatch" style="color:#7c3aed;font-size:13px;"></i>
           <span style="font-size:12px;font-weight:700;color:#374151;">ラップタイム</span>
-          <span style="font-size:11px;color:#9ca3af;">（200m区間ごと）</span>
+          <span style="font-size:11px;color:#9ca3af;" id="lap-seg-note-${raceNo}">${getLapSegNote(raceInfo.distance)}</span>
         </div>
         <div id="lap-inputs-${raceNo}"><span style="font-size:12px;color:#9ca3af">距離情報読み込み中...</span></div>
       </div>
@@ -5808,6 +5808,18 @@ function getLapSegments(distStr) {
   return ends.map((end, i) => ({ label: `${end}m`, meters: end - (i ? ends[i - 1] : 0) }));
 }
 
+/** ラップ欄の見出しに出す「区間の切り方」の一言。
+ *  ⛔固定文言にしない。端数の置き場所が距離で違うので「200m区間ごと」と書くと事実と違う
+ *    （1300m=最初が100m / 1900m=最後が300m）。LAP_SEG_ENDS から毎回作る。 */
+function getLapSegNote(distStr) {
+  const segs = getLapSegments(distStr);
+  if (!segs.length) return '';
+  if (segs[0].meters !== 200) return `（最初が${segs[0].meters}m・以降200mごと）`;
+  const last = segs[segs.length - 1];
+  if (last.meters !== 200) return `（200mごと・最後が${last.meters}m）`;
+  return '（200mごと）';
+}
+
 /** サイト同梱のユーザー手計測ラップ（data/kochi-user-laps.js）を引く。
  *  ⛔**DBに値があるレースでは絶対に使わない**。呼び出し側で「空のときだけ」に限定している。
  *  ⛔ここは表示を埋めるだけでDBには書かない。管理者が保存を押したときに初めてDBへ入る。 */
@@ -5825,6 +5837,9 @@ function renderLapInputs(raceNo, distStr, savedLaps) {
   const container = document.getElementById(`lap-inputs-${raceNo}`);
   if (!container) return;
   const segs = getLapSegments(distStr);
+  // 距離が後から届く経路があるので、見出しの「区間の切り方」もここで追随させる
+  const noteEl = document.getElementById(`lap-seg-note-${raceNo}`);
+  if (noteEl) noteEl.textContent = getLapSegNote(distStr);
   if (!segs.length) { container.innerHTML = '<span style="font-size:12px;color:#9ca3af">距離情報がないため入力できません</span>'; return; }
 
   // 区間ごとのカラーグラデーション（スタートから後半へ）
@@ -5849,12 +5864,13 @@ function renderLapInputs(raceNo, distStr, savedLaps) {
         <span style="width:7px;height:7px;border-radius:50%;background:${c.dot};display:inline-block;flex-shrink:0;"></span>
         <span style="font-size:9px;color:${c.text};font-weight:800;white-space:nowrap;letter-spacing:.03em;">${seg.label}</span>
       </div>
-      <input type="text" inputmode="decimal" id="lap-${raceNo}-${i}" placeholder="--.-"
+      <input type="text" inputmode="decimal" id="lap-${raceNo}-${i}" placeholder="--.-" class="admin-only"
         value="${savedVal != null && savedVal !== '' ? parseFloat(savedVal).toFixed(1) : ''}"
         oninput="onLapInput(${raceNo})"
         style="width:56px;padding:6px 4px;border:2px solid ${c.border};border-radius:8px;font-size:13px;font-weight:700;text-align:center;font-family:monospace;color:${c.text};background:${c.bg};transition:box-shadow .15s,border-color .15s;outline:none;"
         onfocus="this.style.boxShadow='0 0 0 3px ${c.dot}40';this.style.borderColor='${c.dot}';"
         onblur="if(this.value&&!isNaN(parseFloat(this.value)))this.value=parseFloat(this.value).toFixed(1);this.style.boxShadow='';this.style.borderColor='${c.border}';">
+      <span class="viewer-only lap-val${savedVal === '' ? ' lap-val--none' : ''}">${savedVal === '' ? '—' : parseFloat(savedVal).toFixed(1)}</span>
       <span id="lap-cumul-${raceNo}-${i}" style="font-size:8px;color:${c.dot};font-weight:800;white-space:nowrap;min-height:12px;text-align:center;"></span>
     </div>
     ${i < segs.length - 1 ? `<div style="flex-shrink:0;align-self:center;padding-top:14px;color:#c4b5fd;font-size:16px;line-height:1;opacity:0.5;">›</div>` : ''}`;

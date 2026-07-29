@@ -1638,6 +1638,14 @@ const KV_APP_CSS = [
       'body.public-mode .viewer-only{display:inline!important}',
       '.vw-val{font-size:12px;color:#374151;font-variant-numeric:tabular-nums}',
       'body.dark-mode .vw-val{color:#cbd5e1}',
+      // ⑨-2 区間ラップの閲覧者表示（管理者の入力欄と同じ大きさの枠で、値だけ見せる）
+      //     ⛔`body.public-mode .viewer-only{display:inline}` が効くので、幅を持たせるには
+      //       クラスを1つ足した同じ強さのセレクタで inline-block に上書きする必要がある。
+      'body.public-mode .viewer-only.lap-val{display:inline-block!important}',
+      '.lap-val{width:56px;padding:6px 4px;border:2px solid #c4b5fd;border-radius:8px;font-size:13px;font-weight:700;text-align:center;font-family:monospace;color:#4c1d95;background:#f5f3ff;font-variant-numeric:tabular-nums}',
+      '.lap-val--none{color:#9ca3af;border-style:dashed}',
+      'body.dark-mode .lap-val{border-color:#5b4a9e;color:#ddd6fe;background:#1b1733}',
+      'body.dark-mode .lap-val--none{color:#64748b}',
       // ⑩ 近5走インライン展開（出馬表の中で能力表のエッセンスを見る）
       '.kv-hist-row>td{background:#f8fafc;padding:8px 12px 10px;border-bottom:1px solid #e2e8f0}',
       '.kv-hist-tbl{width:100%;border-collapse:collapse;font-size:11.5px}',
@@ -2868,7 +2876,7 @@ const KV_APP_CSS = [
 
 <!-- ユーザー手計測の区間ラップ(259レース)。app-main より先に window.KOCHI_USER_LAPS を用意する -->
 <script defer src="data/kochi-user-laps.js?v=20260728-v1"></script>
-<script defer src="modules/app-main.js?v=20260729-psf-years"></script>
+<script defer src="modules/app-main.js?v=20260729-lapview"></script>
 
 <!-- AI予想・詳細分析は modules/ai-analysis.js を必要時に読み込む -->
 <!-- D: レースサマリーバー（画面下部固定） -->
