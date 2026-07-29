@@ -203,6 +203,9 @@ td.best { background: var(--hl-best) !important; font-weight: bold; }
 .nk-aftercell { white-space: nowrap; }
 .nk-after { display: inline-block; }
 .nk-badge { background: #7a5cc0; color: #fff; }
+.nk-inline-video { border: 1px solid var(--border); background: var(--chip-bg); color: var(--text);
+  border-radius: 6px; padding: 2px 7px; margin-left: 4px; cursor: pointer; font-size: 11px; white-space: nowrap; }
+.nk-inline-video:hover { border-color: var(--accent); color: var(--accent); }
 .cyo-more { margin-top: 2px; }
 .cyo-more > summary { cursor: pointer; color: var(--accent); font-size: 11px; list-style: none; }
 .cyo-more > summary::-webkit-details-marker { display: none; }
@@ -2391,13 +2394,15 @@ function sireLineHtml(nouEntry) {
   return `<b>父 ${esc(father)}</b> 複勝率${(s.rate * 100).toFixed(1)}%・勝率${(s.win * 100).toFixed(1)}%<span class="kyaku">（産駒${s.n}走）</span>`;
 }
 // 能検成績の1行表示（新馬/未勝利の出馬表・予想に埋め込む）。無ければ空。
-function nokenLineHtml(hid) {
+function nokenLineHtml(hid, showVideo = false) {
   const n = (state.nokenByHorse || {})[hid];
   if (!n) return '';
   const okCls = n.ok === '合格' ? 'nk-ok' : n.ok === '不合格' ? 'nk-ng' : '';
+  const videoBtn = showVideo && (n.mp4 || n.dayVideo)
+    ? ` <button type="button" class="nk-inline-video" data-noken-video="${esc(hid)}">▶ 能検映像</button>` : '';
   return `<span class="badge nk-badge">能検</span> ${mmdd(n.date)} ${n.dist || ''}m <b>${esc(n.time)}</b>`
     + `（テン${esc(n.ten)}/上${esc(n.last3f)}）<span class="${okCls}">${esc(n.ok)}</span>`
-    + `${n.comment ? ` ${esc(n.comment)}` : ''}`;
+    + `${n.comment ? ` ${esc(n.comment)}` : ''}${videoBtn}`;
 }
 
 // 厩舎の話に添える「前走」参考表示: 着順(距離・日付・クラス)。コメントの文脈を読むための最小限の材料。
@@ -2690,7 +2695,7 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
       const s = shisuOf(e.horse_id);
       const runCells = runs.length
         ? [0, 1, 2, 3, 4].map((i) => npRunBox(runs[i], ['前走', '2走前', '3走前', '4走前', '5走前'][i])).join('')
-        : `<div class="np-run np-fallback">${[nokenLineHtml(e.horse_id),
+        : `<div class="np-run np-fallback">${[nokenLineHtml(e.horse_id, isDebutRace(raceMeta)),
             isDebutRace(raceMeta) ? sireLineHtml(nouByUma[e.umaban]) : '',
             nouRuns(nouByUma, e.umaban, 3).map((r) => nouRunHtml(r) + ' <span class="badge">能力表</span>').join('<br>')]
             .filter(Boolean).join('<br>') || '出走歴なし（初出走）'}</div>`;
@@ -2736,7 +2741,7 @@ function syutubaHtml(raceMeta, entries, cyokyo, history, nouryoku, danwaByUma) {
       <td class="num ${h != null && h === topH ? 'f1' : ''}">${h != null ? h.toFixed(1) : '-'}</td>
       <td class="num ${cz != null && cz === topC ? 'a1' : ''}">${cz != null ? cz.toFixed(1) : '-'}</td>
       <td class="small fold"><div class="kv">${(() => {
-        const nk = nokenLineHtml(e.horse_id);
+        const nk = nokenLineHtml(e.horse_id, isDebutRace(raceMeta));
         const nkEntry = (state.nokenByHorse || {})[e.horse_id];
         const sire = isDebutRace(raceMeta) ? sireLineHtml(nouByUma[e.umaban]) : '';
         const past = runs.map(pastRunHtml).join('<br>')
@@ -3701,6 +3706,38 @@ function openRaceVideoModal(date, raceNo, track) {
     <div class="note">NAR公式レース映像。再生ボタンで再生。未配信・古いレースは再生できないことがあります。</div></div>`;
   m.hidden = false;
   initVideoScale(m);
+}
+
+// 新馬の能検映像を出馬表から離れずに再生する。
+function openNokenVideoModal(hid) {
+  const n = (state.nokenByHorse || {})[hid];
+  if (!n || (!n.mp4 && !n.dayVideo)) return;
+  let m = document.getElementById('nokenVideoModal');
+  if (!m) {
+    m = document.createElement('div'); m.id = 'nokenVideoModal'; m.className = 'modal';
+    m.style.zIndex = '60';
+    m.addEventListener('click', (e) => {
+      if (e.target.id === 'nokenVideoModal' || e.target.dataset.close) {
+        m.hidden = true;
+        m.innerHTML = '';
+      }
+    });
+    document.body.appendChild(m);
+  }
+  const title = `${mmdd(n.date)} ${n.no || ''}R・${n.dist || ''}m 能検映像`;
+  let player = '';
+  if (n.mp4) {
+    player = `<video class="nk-video" controls preload="metadata" playsinline src="${esc(n.mp4)}#t=0.1"></video>`;
+  } else {
+    const youtubeId = String(n.dayVideo || '').split('/').pop().split('?')[0];
+    player = `<div style="position:relative;padding-top:56.25%"><iframe title="能検映像" loading="lazy"
+      src="https://www.youtube.com/embed/${esc(youtubeId)}" allowfullscreen
+      style="position:absolute;inset:0;width:100%;height:100%;border:0"></iframe></div>`;
+  }
+  m.innerHTML = `<div class="modal-box" style="max-width:720px">
+    <div class="modal-head"><b>${esc(title)}</b><button type="button" data-close="1">× 閉じる</button></div>
+    ${player}<div class="note">能力検査の映像です。映像はクリックしたときだけ読み込みます。</div></div>`;
+  m.hidden = false;
 }
 
 // 固定680px幅の公式映像プレーヤーを画面幅に合わせて縮小表示（transform:scaleで内容ごと縮小。iframeのwidth指定だけでは中身が縮まらず見切れるだけなので必須）
@@ -4909,7 +4946,8 @@ function buildNokenIndex() {
       const prev = idx[h.horse_id];
       if (!prev || d.date > prev.date) {
         idx[h.horse_id] = { date: d.date, no: r.no, dist: r.dist, going: r.going,
-          time: h.time, last3f: h.last3f, ten: nkTen(h), ok: h.ok, comment: h.comment, fin: h.fin };
+          time: h.time, last3f: h.last3f, ten: nkTen(h), ok: h.ok, comment: h.comment, fin: h.fin,
+          mp4: r.mp4 || '', dayVideo: d.video || '' };
       }
     }
   }
@@ -5242,6 +5280,8 @@ async function init() {
   });
   // 馬名リンク（レース各ビュー）と モーダルを閉じる
   $('raceView').addEventListener('click', (e) => {
+    const nv = e.target.closest('button[data-noken-video]');
+    if (nv) { e.preventDefault(); e.stopPropagation(); openNokenVideoModal(nv.dataset.nokenVideo); return; }
     const pl = e.target.closest('a.person-link');
     if (pl) { e.preventDefault(); openPersonModal(pl.dataset.personKind, pl.dataset.person); return; }
     const hl = e.target.closest('a.horse-link');
