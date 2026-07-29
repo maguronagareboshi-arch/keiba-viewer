@@ -4861,7 +4861,8 @@ async function renderNoken() {
   const dateBtns = days.map((d) =>
     `<button class="nk-date-btn${d.date === state.nokenDate ? ' active' : ''}" data-nkdate="${d.date}">${mmdd(d.date)}</button>`).join('');
   const hasDayVideo = !!day.video;   // 大井等: レース単位ではなく開催日単位のYouTube動画
-  const nvid = hasDayVideo ? 1 : day.races.filter((r) => r.mp4).length;
+  const raceVideoCount = day.races.filter((r) => r.mp4).length;
+  const nvid = raceVideoCount || (hasDayVideo ? 1 : 0);
   const sort = state.nokenSort || 'race';
   const racesShown = twoOnly ? day.races.filter((r) => (r.rows || []).length) : day.races;
   const body = sort === 'debut' ? nokenDebutCard()
