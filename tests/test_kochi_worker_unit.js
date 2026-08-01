@@ -4,6 +4,14 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 
+// Keep checkpoint arithmetic deterministic even when CI itself runs near JST midnight.
+const RealDate = Date;
+const FIXED_NOW = RealDate.parse('2026-08-01T06:00:00Z'); // 15:00 JST
+global.Date = class extends RealDate {
+  constructor(...args) { super(...(args.length ? args : [FIXED_NOW])); }
+  static now() { return FIXED_NOW; }
+};
+
 function postTime(minutesAhead) {
   const jst = new Date(Date.now() + 9 * 3600 * 1000);
   const total = jst.getUTCHours() * 60 + jst.getUTCMinutes() + minutesAhead;
