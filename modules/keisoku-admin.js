@@ -160,9 +160,10 @@
     if (btn) { btn.disabled = true; btn.textContent = '登録中…'; }
     try {
       // ⛔既に同じ日がキューにあると unique 制約で落ちる。merge-duplicates で「依頼」に戻す。
+      //   ⛔day は主キーではなく unique 制約なので `on_conflict=day` が必須(無いと409。2026-08-01実測)。
       var body = days.map(function (d) { return { day: d, status: '依頼', note: '管理画面から依頼' }; });
       var h = Object.assign({}, c.headers, { Prefer: 'resolution=merge-duplicates,return=minimal' });
-      var res = await fetch(c.url + '/rest/v1/kochi_backfill_queue', {
+      var res = await fetch(c.url + '/rest/v1/kochi_backfill_queue?on_conflict=day', {
         method: 'POST', headers: h, body: JSON.stringify(body)
       });
       if (!res.ok) throw new Error('HTTP ' + res.status);
