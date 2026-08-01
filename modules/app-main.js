@@ -72,6 +72,11 @@ const _kvLibSpecs = {
     ready: () => typeof window.kvComputeT10ValueShadow === 'function' &&
       typeof window.kvCaptureT10ValueShadow === 'function' && typeof window.kvPersistT10DecisionLedger === 'function',
   },
+  umarenDistortionShadow: {
+    src: 'modules/umaren-distortion-shadow.js?v=20260730-v1',
+    ready: () => typeof window.kvCaptureUmarenAxisT10 === 'function' &&
+      typeof window.kvCaptureUmarenDecisionT5 === 'function' && typeof window.kvGetUmarenDistortionState === 'function',
+  },
   kochiRoster: {
     src: 'data/kochi-roster-baselines.js?v=20260725',
     ready: () => !!window.KOCHI_ROSTER_BASELINES?.seasons,
@@ -158,18 +163,20 @@ function _ensureVnextPartnerShadowModule() {
 }
 
 function _ensureValueT10ShadowModule() { return _kvLoadLibrary('valueT10Shadow'); }
+function _ensureUmarenDistortionShadowModule() { return _kvLoadLibrary('umarenDistortionShadow'); }
 
 function _ensureRaceIntelligence() {
   const _t10 = (() => { try { return window.KV_T10_PARTNER_ROLLOUT_ENABLED === true && localStorage.getItem('kv_t10_partner_rollout_disabled_v1') !== '1'; } catch(e) { return false; } })();
   const _admin = typeof isAdminMode === 'function' && isAdminMode();
   const partnerShadow = (_admin || _t10) ? _ensureVnextPartnerShadowModule() : Promise.resolve();
   const valueShadow = _admin ? _ensureValueT10ShadowModule() : Promise.resolve();
+  const umarenShadow = _admin ? _ensureUmarenDistortionShadowModule() : Promise.resolve();
   const calibration = _admin ? _kvLoadLibrary('probabilityCalibration') : Promise.resolve();
   // ◎○▲△を作る本体は全履歴＋aiAnalysisだけ。影予想・期待値・校正の一時障害で
   // 本体まで利用不能にしない。補助群は同時に開始するが、失敗は個別に隔離する。
-  Promise.allSettled([partnerShadow, valueShadow, calibration]).then(results => {
+  Promise.allSettled([partnerShadow, valueShadow, umarenShadow, calibration]).then(results => {
     results.forEach((result, index) => {
-      if (result.status === 'rejected') console.warn('[optional AI module]', ['partner','value','calibration'][index], result.reason);
+      if (result.status === 'rejected') console.warn('[optional AI module]', ['partner','value','umaren','calibration'][index], result.reason);
     });
   });
   return Promise.all([_ensureFullIDBCache(), _ensureAiAnalysisModule()]);
@@ -3006,6 +3013,31 @@ function _cockpitReasonFor(scoredHorse) {
   return scoredHorse.baseScore != null ? '基礎走力を評価' : '総合評価上位';
 }
 
+/** 管理者の前向き記録だけに、馬連評価差モデルの固定結果を表示する。 */
+function _cockpitUmarenDistortionHtml(raceNo,scored) {
+  if (typeof isAdminMode !== 'function' || !isAdminMode() || !window.KvUmarenDistortionShadow) return '';
+  const data=allRacesData[raceNo], state=window.KvUmarenDistortionShadow.getState(data?.raceInfo?.raceDate,raceNo);
+  if (!state?.t10 && !state?.t5) return '';
+  const byUma=new Map((scored || []).map(row => [parseInt(row?.horse?.umaBan,10),row?.horse]));
+  const axis=state.t5?.axis ?? state.t10?.selected;
+  const axisHorse=byUma.get(Number(axis));
+  const axisLabel=axis ? `${axis}番 ${axisHorse?.horseName || state.t5?.axisRow?.name || state.t10?.rows?.find(row => row.u === axis)?.name || ''}`.trim() : '';
+  if (state.t5) {
+    if (!state.t5.trigger) {
+      return `<div class="cockpit-value-note"><span class="cockpit-rank-mark">馬連</span><span><strong>馬連評価差・今回は対象外</strong><br><span style="color:var(--kc-muted)">5分前の全組合せを確認しましたが、基準を満たす評価差はありません</span></span><small>前向き検証中</small></div>`;
+    }
+    const tickets=(state.t5.tickets || []).map(ticket => {
+      const partner=byUma.get(Number(ticket.partner));
+      return `${ticket.combo.join('-')}（${partner?.horseName || ticket.partnerName || ''}・${Number(ticket.odds).toFixed(1)}倍・2,500円換算）`;
+    }).join(' / ');
+    return `<div class="cockpit-value-note"><span class="cockpit-rank-mark">馬連</span><span><strong>馬連評価差・検証候補</strong> 軸 ${escapeHTML(axisLabel)}<br><span style="color:var(--kc-muted)">${escapeHTML(tickets)}</span></span><small>計5,000円換算・前向き検証中</small></div>`;
+  }
+  if (state.t10?.selected) {
+    return `<div class="cockpit-value-note"><span class="cockpit-rank-mark">馬連</span><span><strong>回収率型の軸を10分前に固定</strong> ${escapeHTML(axisLabel)}<br><span style="color:var(--kc-muted)">5分前の馬連評価差を待っています</span></span><small>前向き検証中</small></div>`;
+  }
+  return `<div class="cockpit-value-note"><span class="cockpit-rank-mark">馬連</span><span><strong>回収率型の軸なし</strong><br><span style="color:var(--kc-muted)">10分前の条件に合う馬がいませんでした</span></span><small>前向き検証中</small></div>`;
+}
+
 /** 能力印と期待値を混ぜず、◎○▲△××と検証中のT10価値候補を分けて描画する。 */
 function renderCockpitSummary(raceNo) {
   const dock = document.getElementById(`cockpit-picks-${raceNo}`);
@@ -3124,8 +3156,9 @@ function renderCockpitSummary(raceNo) {
       valueNote = `<div class="cockpit-value-note"><span class="cockpit-rank-mark">EV</span><span><strong>${valueResearchOnly ? '価格評価の検証候補' : '期待値候補'}</strong> ${escapeHTML(h.umaBan || '—')}番 ${escapeHTML(h.horseName) || '—'}<br><span style="color:var(--kc-muted)">${escapeHTML(reason)}</span></span><small>能力AI ${idx}位・${escapeHTML(market)}</small></div>`;
     }
     const buyLine = buyLineHtmlFor(valueShadow, valueMeta);
+    const umarenDistortion = _cockpitUmarenDistortionHtml(raceNo,scored);
     panel.innerHTML = `<div class="cockpit-panel-head"><div><h3>能力予想</h3><p>◎○▲△はオッズを見ない能力順。市場との差と相手の役割を後から重ねています</p></div><span>全印 ${marked.length}頭</span></div>
-      ${longshotPanelHtml}<div class="table-wrapper"><table class="cockpit-table"><thead><tr><th>印・馬</th><th>市場・評価差</th><th>判断材料</th></tr></thead><tbody>${rows}</tbody></table></div>${buyLine}${valueNote}`;
+      ${longshotPanelHtml}<div class="table-wrapper"><table class="cockpit-table"><thead><tr><th>印・馬</th><th>市場・評価差</th><th>判断材料</th></tr></thead><tbody>${rows}</tbody></table></div>${umarenDistortion}${buyLine}${valueNote}`;
   }
 }
 
@@ -3306,6 +3339,50 @@ async function fetchLiveOdds(raceNo, options) {
   }
   return hit;
 }
+
+/** 公式の馬連複ページから全組合せを一括取得する。前向き検証では自前Worker経由だけを採用する。 */
+async function fetchLiveUmarenOdds(raceNo, options) {
+  const verifiedOnly = !!(options && options.verifiedOnly);
+  const data = allRacesData[raceNo];
+  if (!data || !Array.isArray(data.horses)) throw new Error('レースデータなし');
+  const d = data.raceInfo.raceDate, baba = data.raceInfo.babaCode || currentBaba || '31';
+  const requestNonce = Date.now();
+  const url = `https://www.keiba.go.jp/KeibaWeb/TodayRaceInfo/OddsUmLenFuku?k_raceDate=${encodeURIComponent(d)}&k_raceNo=${raceNo}&k_babaCode=${baba}&kv_ts=${requestNonce}`;
+  const html = await fetchHtmlWithProxy(url, 14000, { firstPartyOnly:verifiedOnly });
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const pending = new Map();
+  for (const tr of doc.querySelectorAll('table.odd_ranking_table tr')) {
+    const cells = [...tr.querySelectorAll('td,th')].map(cell => (cell.textContent || '').trim());
+    if (cells.length < 2) continue;
+    const match = cells[0].match(/^(\d{1,2})\s*[-－]\s*(\d{1,2})$/);
+    const odds = parseFloat(String(cells[1]).replace(/,/g,''));
+    if (!match || !Number.isFinite(odds) || odds <= 0) continue;
+    const first = parseInt(match[1],10), second = parseInt(match[2],10);
+    const low = Math.min(first,second), high = Math.max(first,second), key = `${low}-${high}`;
+    if (low === high || pending.has(key)) throw new Error('馬連オッズの組合せ重複');
+    pending.set(key, { first:low, second:high, odds });
+  }
+  const runners = data.horses.map(h => parseInt(h.umaBan,10)).filter(Number.isFinite).sort((a,b) => a-b);
+  if (new Set(runners).size !== data.horses.length) throw new Error('出走馬集合が不正');
+  const expected = [];
+  for (let left=0; left<runners.length; left++) {
+    for (let right=left+1; right<runners.length; right++) expected.push(`${runners[left]}-${runners[right]}`);
+  }
+  if (pending.size !== expected.length || expected.some(key => !pending.has(key))) {
+    throw new Error(`馬連オッズ取得不完全（${pending.size}/${expected.length}組）`);
+  }
+  const rows = [...pending.values()].sort((a,b) => a.first-b.first || a.second-b.second);
+  data._liveUmarenOdds = rows;
+  data._liveUmarenObservedAt = new Date().toISOString();
+  data._liveUmarenSource = verifiedOnly
+    ? 'first_party_worker:keiba.go.jp/OddsUmLenFuku'
+    : 'display_fallback:keiba.go.jp/OddsUmLenFuku';
+  data._liveUmarenVerified = verifiedOnly;
+  data._liveUmarenRequestNonce = requestNonce;
+  data._liveUmarenPairCount = rows.length;
+  return rows;
+}
+
 async function fetchLiveOddsBtn(raceNo) {
   const btn = document.getElementById(`odds-btn-${raceNo}`);
   if (btn) { btn.disabled = true; btn.innerHTML = '💹 取得中...'; }
@@ -3340,8 +3417,10 @@ function _kvStartTickers() {
   setInterval(_kvTickCountdown, 15000);
   setInterval(_kvTickOddsAuto, 30000);
   setInterval(_kvTickOpponentShadowCapture, 30000);
+  setInterval(_kvTickUmarenDistortionCapture, 30000);
   setTimeout(_kvTickCountdown, 500);
   setTimeout(_kvTickOpponentShadowCapture, 2500);
+  setTimeout(_kvTickUmarenDistortionCapture, 7500);
 }
 function _kvTodaySlash() {
   const t = new Date();
@@ -3382,6 +3461,74 @@ function _kvSetOddsAutoNote(raceNo, how) {
 const _kvSettledFetched = {};
 let _kvOpponentCaptureBusy = false;
 const _kvOpponentCaptureRetryAt = {};
+let _kvUmarenCaptureBusy = false;
+const _kvUmarenCaptureRetryAt = {};
+
+function _kvUmarenCaptureSlot(minutesBeforeStart) {
+  const minutes = Number(minutesBeforeStart);
+  if (Number.isFinite(minutes) && minutes >= 10 && minutes <= 10.9) return 't10';
+  if (Number.isFinite(minutes) && minutes >= 5 && minutes <= 5.9) return 't5';
+  return null;
+}
+
+/** T10で軸を固定し、T5で公式馬連全組合せを取得して前向き判定を保存する。 */
+async function _kvTickUmarenDistortionCapture() {
+  if (_kvUmarenCaptureBusy || typeof isAdminMode !== 'function' || !isAdminMode() ||
+      typeof _currentPage === 'undefined' || _currentPage !== 'deban' ||
+      String(currentBaba || '') !== '31' || currentDate !== _kvTodaySlash()) return;
+  const candidates = Object.keys(allRacesData || {}).map(Number).filter(Number.isFinite).map(raceNo => {
+    const data = allRacesData[raceNo];
+    if (!data?.raceInfo || data.raceInfo.raceDate !== currentDate || !Array.isArray(data.horses)) return null;
+    const timing = _aiPredictionTimeMeta(currentDate,raceNo);
+    const slot = timing && _kvUmarenCaptureSlot(timing.minutesBeforeStart);
+    return slot ? { raceNo,data,timing,slot } : null;
+  }).filter(Boolean).sort((a,b) => Number(a.timing.minutesBeforeStart)-Number(b.timing.minutesBeforeStart));
+  if (!candidates.length) return;
+  try {
+    await Promise.all([_ensureRaceIntelligence(),_ensureVnextPartnerShadowModule(),_ensureUmarenDistortionShadowModule()]);
+  } catch (error) { console.warn('[umaren distortion modules]',error); return; }
+  if (typeof computeYosoScored !== 'function' || !window.KvUmarenDistortionShadow) return;
+  const target = candidates.find(candidate => {
+    const state = window.KvUmarenDistortionShadow.getState(candidate.data.raceInfo.raceDate,candidate.raceNo);
+    if (candidate.slot === 't10' && state.t10) return false;
+    if (candidate.slot === 't5' && (!state.t10?.selected || state.t5)) return false;
+    return Date.now() >= Number(_kvUmarenCaptureRetryAt[`${candidate.raceNo}|${candidate.slot}`] || 0);
+  });
+  if (!target) return;
+  const retryKey = `${target.raceNo}|${target.slot}`;
+  _kvUmarenCaptureRetryAt[retryKey] = Date.now() + 25000;
+  _kvUmarenCaptureBusy = true;
+  try {
+    const computed = computeYosoScored(target.raceNo,null);
+    if (!computed || !Array.isArray(computed.scored)) throw new Error('能力AIを計算できません');
+    let result;
+    if (target.slot === 't10') {
+      const fetched = await fetchLiveOdds(target.raceNo,{ verifiedOnly:true });
+      if (fetched !== target.data.horses.length) throw new Error('T10単勝オッズが不完全です');
+      result = window.KvUmarenDistortionShadow.captureT10({
+        raceDate:target.data.raceInfo.raceDate,raceNo:target.raceNo,scored:computed.scored,timing:target.timing,
+        market:{ source:target.data._liveOddsSource,
+          requestedAt:new Date(Number(target.data._liveOddsRequestNonce)).toISOString(),
+          observedAt:target.data._liveOddsObservedAt,
+          rows:target.data.horses.map(h => ({ u:parseInt(h.umaBan,10),odds:Number(h.odds) })) },
+      });
+    } else {
+      const rows = await fetchLiveUmarenOdds(target.raceNo,{ verifiedOnly:true });
+      result = window.KvUmarenDistortionShadow.captureT5({
+        raceDate:target.data.raceInfo.raceDate,raceNo:target.raceNo,scored:computed.scored,timing:target.timing,
+        market:{ source:target.data._liveUmarenSource,
+          requestedAt:new Date(Number(target.data._liveUmarenRequestNonce)).toISOString(),
+          observedAt:target.data._liveUmarenObservedAt,rows },
+      });
+    }
+    if (!result?.saved && result?.reason !== 'DUPLICATE') console.warn('[umaren distortion capture]',target.slot,result);
+    if (Number(currentRaceNo) === target.raceNo) renderCockpitSummary(target.raceNo);
+  } catch (error) {
+    console.warn('[umaren distortion capture]',target.slot,error);
+  } finally {
+    _kvUmarenCaptureBusy = false;
+  }
+}
 
 function _kvOpponentCaptureSlot(minutesBeforeStart) {
   const m = Number(minutesBeforeStart);

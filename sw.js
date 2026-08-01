@@ -1,10 +1,11 @@
-const CACHE = 'kochi-viewer-v19';
-const REQUIRED = ['./index.html', './manifest.webmanifest', './modules/app-main.js?v=20260727-fix1'];
+const CACHE = 'kochi-viewer-v20';
+const REQUIRED = ['./index.html', './manifest.webmanifest', './modules/app-main.js?v=20260730-umaren1'];
 const CORE = [
   './modules/ai-insights.js?v=20260727-fix1',
   './modules/performance-observer.js',
   './modules/first3f-autofill.js?v=20260725-v1',
   './modules/track-bias-v2.js?v=20260726-v2',
+  './modules/umaren-distortion-shadow.js?v=20260730-v1',
 ];
 
 self.addEventListener('install', event => {
