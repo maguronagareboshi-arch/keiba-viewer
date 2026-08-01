@@ -17,8 +17,14 @@ SUPPORT_FILES = {
     ".github/scripts/validate-production.py",
     ".github/workflows/odds-capture.yml",
     ".github/workflows/pages.yml",
+    ".github/workflows/worker-check.yml",
     "AGENTS.md",
     "CLAUDE.md",
+    "cloudflare-worker.js",
+    "supabase-cloud-capture.sql",
+    "tests/test_kochi_worker_scope.js",
+    "tests/test_kochi_worker_unit.js",
+    "wrangler.toml",
 }
 SECRET_NAMES = {
     ".env",

@@ -1,0 +1,30 @@
+name: Kochi cloud capture check
+
+on:
+  pull_request:
+    paths:
+      - cloudflare-worker.js
+      - supabase-cloud-capture.sql
+      - wrangler.toml
+      - tests/test_kochi_worker_*.js
+  push:
+    branches: [main]
+    paths:
+      - cloudflare-worker.js
+      - supabase-cloud-capture.sql
+      - wrangler.toml
+      - tests/test_kochi_worker_*.js
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Kochi-only scope
+        run: node tests/test_kochi_worker_scope.js
+      - name: Verify exact T10/T5 capture
+        run: node tests/test_kochi_worker_unit.js
