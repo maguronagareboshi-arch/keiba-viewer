@@ -59,6 +59,7 @@ const pairHtml = `<table class="odd_ranking_table"><tbody>
     const url = String(input); requested.push(url);
     if (url.includes('/OddsTanFuku?')) return new Response(singleHtml(minutesAhead), { status:200 });
     if (url.includes('/OddsUmLenFuku?')) return new Response(pairHtml, { status:200 });
+    if (url.includes('?select=')) return new Response('[]', { status:200, headers:{'Content-Type':'application/json'} });
     const body = init.body ? JSON.parse(String(init.body)) : null;
     writes.push({ url, body, headers:init.headers || {} });
     return new Response('', { status:201 });

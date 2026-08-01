@@ -136,6 +136,44 @@
     return null;
   }
 
+  // T10/T5 is executed by the Kochi Worker.  Persist the market-free inputs
+  // while the full local history is available; official odds are deliberately
+  // added only by the Worker at the checkpoint.
+  function buildUmarenCloudInput(raceNo, scored) {
+    try {
+      const model = global.KvUmarenDistortionShadow;
+      if (!model || typeof model.buildVnextRanks !== 'function') return null;
+      const ranks = model.buildVnextRanks(raceNo, scored);
+      if (!(ranks instanceof Map) || ranks.size !== scored.length) return null;
+      const runners = scored.map(row => {
+        const u = parseInt(row?.horse?.umaBan, 10);
+        const vnextRank = ranks.get(u);
+        if (!Number.isInteger(u) || u <= 0 || !Number.isInteger(vnextRank)) return null;
+        const numberOrNull = value => value !== null && value !== undefined && value !== '' &&
+          Number.isFinite(Number(value)) ? Number(value) : null;
+        return {
+          u, name:String(row?.horse?.horseName || ''), totalScore:numberOrNull(row?.totalScore), vnextRank,
+          x:{
+            baseScore:numberOrNull(row?.baseScore), condMod:numberOrNull(row?.condMod),
+            distMod:numberOrNull(row?.distMod), rotMod:numberOrNull(row?.rotMod),
+            classMod:numberOrNull(row?.classMod), cornModRaw:numberOrNull(row?._cornModRaw),
+            trendMod:numberOrNull(row?.trendMod), weightMod:numberOrNull(row?.weightMod),
+            agariMod:numberOrNull(row?.agariMod), comboMod:numberOrNull(row?.comboMod),
+            marginMod:numberOrNull(row?.marginMod), winStrMod:numberOrNull(row?.winStrMod),
+            takiMod:numberOrNull(row?.takiMod), cornConsistMod:numberOrNull(row?.cornConsistMod),
+            rakuMod:numberOrNull(row?.rakuMod),
+          },
+        };
+      });
+      if (runners.some(row => !row || row.totalScore == null) || new Set(runners.map(row => row.u)).size !== runners.length) return null;
+      return {
+        schema:'kochi_umaren_cloud_input/v1', babaCode:'31', raceNo:parseInt(raceNo, 10),
+        modelId:model.contract?.modelId || '', modelFingerprint:model.modelFingerprint || '',
+        runnerSet:runners.map(row => row.u).sort((a,b) => a-b), runners,
+      };
+    } catch (_) { return null; }
+  }
+
   function cachePrediction(raceNo, computed, options) {
     try {
       if (typeof lsRead !== 'function' || typeof lsWrite !== 'function' || typeof buildRankingModelIdentity !== 'function') return null;
@@ -155,10 +193,12 @@
         ninki:Number.isFinite(parseInt(s.horse.ninki, 10)) ? parseInt(s.horse.ninki, 10) : null
       }));
       const now = new Date().toISOString();
+      const umarenCloudInput = retrospective ? null : buildUmarenCloudInput(raceNo, scored);
       const snapshot = { type:'aiPredictionPrecalc', schema:PRECALC_SCHEMA, babaCode:'31', raceDate,
         raceNo:parseInt(raceNo, 10), computedAt:now, modelFingerprint:model.fingerprint,
         modelVersion:model.version, runnerSignature:runnerSignature(data), runners,
         calculationMode:retrospective ? 'retrospective_current_model' : 'prestart',
+        umarenCloudInput,
         value:value || null, confidence:confidenceForPopularity(runners[0] && runners[0].ninki) };
       snapshot.outputFingerprint = typeof _aiFingerprint === 'function'
         ? _aiFingerprint(runners.map(r => [r.u, r.rank, r.totalScore])) : '';
@@ -184,7 +224,9 @@
       if (!snapshot || typeof apiUpsert !== 'function' || typeof isAdminMode !== 'function' || !isAdminMode() ||
           typeof getWriteToken !== 'function' || !getWriteToken()) return;
       const id = serverId(snapshot);
-      const signature = `${id}|${snapshot.runnerSignature}|${snapshot.outputFingerprint}`;
+      const cloudFingerprint = snapshot.umarenCloudInput && typeof _aiFingerprint === 'function'
+        ? _aiFingerprint(snapshot.umarenCloudInput) : 'no-cloud-input';
+      const signature = `${id}|${snapshot.runnerSignature}|${snapshot.outputFingerprint}|${cloudFingerprint}`;
       if (serverPublishes.has(signature)) return;
       serverPublishes.add(signature);
       Promise.resolve(apiUpsert(SERVER_TABLE, id, {
@@ -313,6 +355,8 @@
   function scheduleDayPrecompute(date) {
     if (typeof _idbFullReady !== 'undefined' && !_idbFullReady) return;
     if (typeof computeYosoScored !== 'function') return;
+    if (!global.KvUmarenDistortionShadow || typeof global.KvUmarenDistortionShadow.buildVnextRanks !== 'function' ||
+        typeof global.kvVnextRawForScored !== 'function') return;
     const wanted = String(date || currentDate || ''), token = `${wanted}|${buildRankingModelIdentity().fingerprint}`;
     if (scheduledDays.has(token)) return;
     scheduledDays.add(token);

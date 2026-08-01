@@ -267,6 +267,148 @@ const BABA = '31';               // Kochi
 const CAPTURE_MINUTES = new Set([10, 5]); // Low-volume, model-required checkpoints only.
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
+// Exact server-side port of kochi-umaren-distortion-shadow-v1.  Ability
+// inputs are prepared before post time and contain no market information.
+const UMAREN_MODEL_ID = 'kochi-umaren-distortion-shadow-v1';
+const UMAREN_MODEL_FINGERPRINT = 'a6437e2b3c416b36';
+const UMAREN_AXIS_RULE = Object.freeze({ oddsMin:8, oddsMax:50, evMin:0.5, marketRankMin:3, currentRankMax:5, vnextRankMax:3 });
+const UMAREN_PAIR_RULE = Object.freeze({ calibrationAlpha:0.9173336186692329, oddsMax:50, evMin:0, gapMin:1, currentPartnerCount:2 });
+const UMAREN_REFERENCE = Object.freeze({ raceYen:5000, perTicketYen:2500, tickets:2 });
+const UMAREN_ADDITIVE = Object.freeze({
+  features:['base','condNew','distNew','rotN','clsN','cornN','trendN','weightN','agariN','comboN','marginN','winStrN','takiN','cornConsistN','rakuN'],
+  mean:[41.32801595491268,0.0020473612921104245,-0.07084211348685605,-0.19869143170747447,-0.00025725457913150854,-0.9749531770538747,-0.035359581578582405,-0.026176510941894205,-1.148061948884481,0.03340430712068965,-0.00000675293270177859,0.08164831584002123,0.013377238114837983,0.0031333607738218785,0.13458702064896755],
+  sd:[9.946127386540878,0.7559050374959382,0.3830344803411909,0.39587899451602265,0.38527370268303895,1.3658917072854169,0.7534613600017239,0.09476023325628567,0.33615523158006205,0.5611413822096927,0.44853693809948136,0.17894687179303576,0.08858550879983638,0.6088507006405194,0.7024965324613972],
+  w:[1.606183708761838,0.0273270585864609,0.027882738146400105,0.006245247732827066,0.15423734138248832,0.24575641323886596,0.1311015684275099,0.044403344615545015,0.11678458406458045,0.28802836589206543,0.04417364560887074,-0.03586296481417553,-0.0003007276171790805,-0.11390036426742269,0.07448651694374255],
+});
+const UMAREN_OFFSET = Object.freeze({
+  features:['base','distNew','clsN','cornN','trendN','weightN','agariN','comboN','marginN','cornConsistN','rotTakiN'],
+  mean:[41.32801595491268,-0.07084211348685605,-0.00025725457913150854,-0.9749531770538747,-0.035359581578582405,-0.026176510941894205,-1.148061948884481,0.03340430712068965,-0.00000675293270177859,0.0031333607738218785,-0.1853141935926545],
+  sd:[9.946127386540878,0.3830344803411909,0.38527370268303895,1.3658917072854169,0.7534613600017239,0.09476023325628567,0.33615523158006205,0.5611413822096927,0.44853693809948136,0.6088507006405194,0.4106685206767861],
+  w:[0.38517760144823615,-0.016054218219129533,0.0391511278280639,-0.034268446807129184,-0.001903264269807987,0.02703319236209095,0.02209957519840687,0.022646602643800137,-0.019540346760428123,-0.10017290243089289,-0.04434197027185414],
+});
+
+function cloudFinite(value) {
+  if (value == null || value === '' || typeof value === 'boolean') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+function cloudUma(value) {
+  const number = Number.parseInt(value, 10);
+  return Number.isInteger(number) && number > 0 ? number : null;
+}
+function cloudRound8(value) { return Math.round((Number(value) + Number.EPSILON) * 1e8) / 1e8; }
+function cloudSameSet(left, right) { return left.length === right.length && left.every((value, index) => value === right[index]); }
+function cloudSoftmax(scores) {
+  if (!Array.isArray(scores) || !scores.length || scores.some(value => !Number.isFinite(value))) return null;
+  const maximum = Math.max(...scores), exponents = scores.map(value => Math.exp(value - maximum));
+  const total = exponents.reduce((sum, value) => sum + value, 0);
+  return Number.isFinite(total) && total > 0 ? exponents.map(value => value / total) : null;
+}
+function cloudStandardizedScore(raw, specification) {
+  return specification.features.reduce((sum, name, index) => {
+    const value = cloudFinite(raw[name]), clean = value == null ? 0 : value;
+    return sum + ((clean - specification.mean[index]) / specification.sd[index]) * specification.w[index];
+  }, 0);
+}
+function cloudFeatureMap(runner) {
+  const x = runner && runner.x || {}, rot = cloudFinite(x.rotMod) ?? 0, taki = cloudFinite(x.takiMod) ?? 0;
+  return { base:x.baseScore, condNew:x.condMod, distNew:x.distMod, rotN:x.rotMod, clsN:x.classMod,
+    cornN:x.cornModRaw, trendN:x.trendMod, weightN:x.weightMod, agariN:x.agariMod,
+    comboN:x.comboMod, marginN:x.marginMod, winStrN:x.winStrMod, takiN:x.takiMod,
+    cornConsistN:x.cornConsistMod, rakuN:x.rakuMod, rotTakiN:rot + taki };
+}
+function validCloudInput(input) {
+  return !!(input && input.schema === 'kochi_umaren_cloud_input/v1' && String(input.babaCode) === BABA &&
+    input.modelId === UMAREN_MODEL_ID && input.modelFingerprint === UMAREN_MODEL_FINGERPRINT &&
+    Array.isArray(input.runners) && input.runners.length >= 4);
+}
+
+function scoreCloudUmarenAxis(input, marketRows) {
+  if (!validCloudInput(input)) return { ok:false, reason:'INVALID_CLOUD_INPUT', rows:[], candidate:null };
+  const runners = input.runners.map(row => ({ u:cloudUma(row.u), name:String(row.name || ''),
+    currentScore:cloudFinite(row.totalScore), vnextRank:Number(row.vnextRank), raw:cloudFeatureMap(row) }));
+  const market = Array.isArray(marketRows) ? marketRows.map(row => ({ u:cloudUma(row.u ?? row.uma_ban), odds:cloudFinite(row.odds) })) : [];
+  if (market.length !== runners.length) return { ok:false, reason:'RUNNER_UNIVERSE_MISMATCH', rows:[], candidate:null };
+  if (runners.some(row => !row.u || row.currentScore == null || !Number.isInteger(row.vnextRank)) ||
+      new Set(runners.map(row => row.u)).size !== runners.length) return { ok:false, reason:'INCOMPLETE_ABILITY_UNIVERSE', rows:[], candidate:null };
+  const runnerSet = runners.map(row => row.u).sort((a,b) => a-b), marketSet = market.map(row => row.u).sort((a,b) => a-b);
+  if (market.some(row => !row.u || row.odds == null || row.odds <= 0) || new Set(marketSet).size !== market.length ||
+      !cloudSameSet(runnerSet, marketSet)) return { ok:false, reason:'INCOMPLETE_T10_MARKET', rows:[], candidate:null };
+  const oddsByUma = new Map(market.map(row => [row.u,row.odds]));
+  const currentOrder = runners.slice().sort((a,b) => b.currentScore-a.currentScore || a.u-b.u);
+  const currentRank = new Map(currentOrder.map((row,index) => [row.u,index+1]));
+  const marketOrder = market.slice().sort((a,b) => a.odds-b.odds || a.u-b.u);
+  const marketRank = new Map(marketOrder.map((row,index) => [row.u,index+1]));
+  const additiveScores = runners.map(row => cloudStandardizedScore(row.raw, UMAREN_ADDITIVE));
+  const inverseTotal = market.reduce((sum,row) => sum + 1/row.odds,0);
+  const offsetScores = runners.map(row => Math.log(Math.max((1/oddsByUma.get(row.u))/inverseTotal,1e-9)) + cloudStandardizedScore(row.raw, UMAREN_OFFSET));
+  const pAdditive = cloudSoftmax(additiveScores), pOffset = cloudSoftmax(offsetScores);
+  if (!pAdditive || !pOffset) return { ok:false, reason:'PROBABILITY_FAILURE', rows:[], candidate:null };
+  const exactEv = new Map();
+  const rows = runners.map((row,index) => {
+    const probability=(pAdditive[index]+pOffset[index])/2, odds=oddsByUma.get(row.u), ev=probability*odds-1;
+    exactEv.set(row.u,ev);
+    let reason=null;
+    if (!(odds >= UMAREN_AXIS_RULE.oddsMin && odds < UMAREN_AXIS_RULE.oddsMax)) reason='ODDS_OUT_OF_BAND';
+    else if (marketRank.get(row.u) < UMAREN_AXIS_RULE.marketRankMin) reason='TOO_POPULAR';
+    else if (currentRank.get(row.u) > UMAREN_AXIS_RULE.currentRankMax) reason='ABILITY_RANK_TOO_LOW';
+    else if (row.vnextRank > UMAREN_AXIS_RULE.vnextRankMax) reason='VNEXT_RANK_TOO_LOW';
+    else if (ev < UMAREN_AXIS_RULE.evMin) reason='EV_BELOW_THRESHOLD';
+    return { u:row.u, name:row.name, odds:cloudRound8(odds), probability:cloudRound8(probability),
+      pAdditive:cloudRound8(pAdditive[index]), pOffset:cloudRound8(pOffset[index]), ev:cloudRound8(ev),
+      marketRank:marketRank.get(row.u), currentRank:currentRank.get(row.u), vnextRank:row.vnextRank,
+      eligible:reason == null, reason };
+  });
+  const eligible=rows.filter(row => row.eligible).sort((a,b) => exactEv.get(b.u)-exactEv.get(a.u) || a.u-b.u);
+  const candidate=eligible[0] || null;
+  rows.forEach(row => { if (row.eligible && row !== candidate) row.reason='NOT_MAX_EV'; });
+  return { ok:true, reason:candidate ? 'AXIS_SELECTED' : 'NO_AXIS', rows, candidate, runnerSet,
+    modelId:UMAREN_MODEL_ID, modelFingerprint:UMAREN_MODEL_FINGERPRINT };
+}
+
+function cloudComboKey(first, second) { return [cloudUma(first),cloudUma(second)].sort((a,b) => a-b).join('-'); }
+function scoreCloudUmarenPairs(axisSnapshot, input, pairRows) {
+  if (!validCloudInput(input)) return { ok:false, reason:'INVALID_CLOUD_INPUT', trigger:false, tickets:[] };
+  if (!axisSnapshot?.selected || !Array.isArray(axisSnapshot.rows)) return { ok:false, reason:'NO_T10_AXIS', trigger:false, tickets:[] };
+  const currentSet=input.runners.map(row => cloudUma(row.u)).filter(Boolean).sort((a,b) => a-b);
+  if (!cloudSameSet(currentSet,(axisSnapshot.runnerSet || []).slice().sort((a,b) => a-b))) return { ok:false, reason:'RUNNER_UNIVERSE_MISMATCH', trigger:false, tickets:[] };
+  const board=new Map();
+  for (const row of Array.isArray(pairRows) ? pairRows : []) {
+    const first=cloudUma(row?.first ?? row?.combo?.[0]), second=cloudUma(row?.second ?? row?.combo?.[1]), odds=cloudFinite(row?.odds);
+    if (!first || !second || first === second || odds == null || odds <= 0) return { ok:false, reason:'INVALID_T5_PAIR_MARKET', trigger:false, tickets:[] };
+    const key=cloudComboKey(first,second); if (board.has(key)) return { ok:false, reason:'DUPLICATE_T5_PAIR', trigger:false, tickets:[] };
+    board.set(key,{ first:Math.min(first,second), second:Math.max(first,second), odds });
+  }
+  const expected=[];
+  for (let left=0;left<currentSet.length;left++) for (let right=left+1;right<currentSet.length;right++) expected.push(cloudComboKey(currentSet[left],currentSet[right]));
+  if (board.size !== expected.length || expected.some(key => !board.has(key))) return { ok:false, reason:'INCOMPLETE_T5_PAIR_MARKET', trigger:false, tickets:[] };
+  const probabilityByUma=new Map(axisSnapshot.rows.map(row => [cloudUma(row.u),cloudFinite(row.probability)]));
+  if (currentSet.some(value => probabilityByUma.get(value) == null)) return { ok:false, reason:'INCOMPLETE_AXIS_PROBABILITIES', trigger:false, tickets:[] };
+  const rawPair=new Map();
+  for (const key of expected) { const [first,second]=key.split('-').map(Number),p1=probabilityByUma.get(first),p2=probabilityByUma.get(second); rawPair.set(key,(p1*p2/(1-p1))+(p2*p1/(1-p2))); }
+  const rawTotal=[...rawPair.values()].reduce((sum,value) => sum+value,0);
+  const powered=new Map([...rawPair].map(([key,value]) => [key,Math.pow(value/rawTotal,UMAREN_PAIR_RULE.calibrationAlpha)]));
+  const poweredTotal=[...powered.values()].reduce((sum,value) => sum+value,0);
+  const inverseTotal=[...board.values()].reduce((sum,row) => sum+1/row.odds,0), axis=cloudUma(axisSnapshot.selected), choices=[];
+  for (const value of currentSet) {
+    if (value === axis) continue;
+    const key=cloudComboKey(axis,value), market=board.get(key), probability=powered.get(key)/poweredTotal;
+    const marketProbability=(1/market.odds)/inverseTotal, ev=probability*market.odds-1, gap=probability/marketProbability;
+    choices.push({ combo:[market.first,market.second], partner:value, odds:cloudRound8(market.odds), probability:cloudRound8(probability),
+      marketProbability:cloudRound8(marketProbability), ev:cloudRound8(ev), gapRatio:cloudRound8(gap),
+      eligible:market.odds <= UMAREN_PAIR_RULE.oddsMax && ev >= UMAREN_PAIR_RULE.evMin && gap >= UMAREN_PAIR_RULE.gapMin });
+  }
+  choices.sort((a,b) => b.ev-a.ev || b.gapRatio-a.gapRatio || a.partner-b.partner);
+  const triggerChoice=choices.find(row => row.eligible) || null;
+  const currentOrder=input.runners.map(row => ({ u:cloudUma(row.u), score:cloudFinite(row.totalScore), name:String(row.name || '') }))
+    .filter(row => row.u !== axis).sort((a,b) => b.score-a.score || a.u-b.u).slice(0,UMAREN_PAIR_RULE.currentPartnerCount);
+  const tickets=currentOrder.map(row => { const market=board.get(cloudComboKey(axis,row.u)); return { combo:[market.first,market.second], partner:row.u,
+    partnerName:row.name, odds:cloudRound8(market.odds), referenceStakeYen:UMAREN_REFERENCE.perTicketYen }; });
+  return { ok:true, reason:triggerChoice ? 'DISTORTION_TRIGGER' : 'NO_DISTORTION', trigger:!!triggerChoice, axis, choices,
+    triggerChoice, partners:currentOrder.map(row => row.u), tickets:triggerChoice ? tickets : [],
+    referenceBudgetYen:triggerChoice ? UMAREN_REFERENCE.raceYen : 0, modelId:UMAREN_MODEL_ID, modelFingerprint:UMAREN_MODEL_FINGERPRINT };
+}
+
 function jstNow() {
   const j = new Date(Date.now() + 9 * 3600 * 1000);
   return {
@@ -534,6 +676,102 @@ async function recordT10Coverage(env, captureResult) {
   return { rows:rows.length };
 }
 
+async function supabaseServiceGet(env, path) {
+  const response = await fetch(SUPABASE_URL + path, { headers:{
+    'apikey':env.SUPABASE_SERVICE_KEY, 'Authorization':'Bearer ' + env.SUPABASE_SERVICE_KEY,
+  }});
+  if (!response.ok) throw new Error('Supabase read failed: ' + response.status + ' ' + (await response.text()).slice(0,200));
+  const body = await response.json();
+  return Array.isArray(body) ? body : [];
+}
+
+async function loadCloudInputs(env, date) {
+  const rows = await supabaseServiceGet(env, '/rest/v1/keiba_ai_predictions?select=race_no,computed_at,payload' +
+    '&baba_code=eq.31&race_date=eq.' + encodeURIComponent(date) + '&order=computed_at.desc&limit=48');
+  const byRace = new Map();
+  for (const row of rows) {
+    const raceNo = Number(row.race_no), input = row?.payload?.umarenCloudInput;
+    if (!Number.isInteger(raceNo) || byRace.has(raceNo) || !validCloudInput(input) || Number(input.raceNo) !== raceNo) continue;
+    byRace.set(raceNo, input);
+  }
+  return byRace;
+}
+
+async function loadT10CloudSnapshots(env, date) {
+  const rows = await supabaseServiceGet(env, '/rest/v1/keiba_value_t10_ledger?select=race_no,payload' +
+    '&baba_code=eq.31&race_date=eq.' + encodeURIComponent(date) + '&id=like.umaren_t10_31_*&limit=24');
+  const byRace = new Map();
+  for (const row of rows) {
+    const raceNo = Number(row.race_no), payload = row?.payload;
+    if (Number.isInteger(raceNo) && payload?.schema === 'kochi_umaren_distortion_t10/v1' && payload.babaCode === BABA) byRace.set(raceNo,payload);
+  }
+  return byRace;
+}
+
+async function writeInferenceRows(env, rows) {
+  if (!rows.length) return;
+  const response = await fetch(SUPABASE_URL + '/rest/v1/keiba_value_t10_ledger', {
+    method:'POST', headers:{ 'Content-Type':'application/json', 'apikey':env.SUPABASE_SERVICE_KEY,
+      'Authorization':'Bearer ' + env.SUPABASE_SERVICE_KEY, 'Prefer':'resolution=merge-duplicates,return=minimal' },
+    body:JSON.stringify(rows),
+  });
+  if (!response.ok) throw new Error('cloud inference save failed: ' + response.status + ' ' + (await response.text()).slice(0,200));
+}
+
+async function runCloudUmarenInference(env, captureResult) {
+  const date = String(captureResult.date || ''), ymd = date.replace(/\D/g,''), capturedAt = new Date().toISOString();
+  const checkpoints = (captureResult.races || []).filter(row => row.status === 'CAPTURED' && CAPTURE_MINUTES.has(row.minutes_to_post));
+  if (!checkpoints.length) return { attempted:0, saved:0, unavailable:0, failed:0, reasons:{} };
+  const inputs = await loadCloudInputs(env,date), rows=[], reasons={};
+  let unavailable=0, failed=0;
+  if (checkpoints[0].minutes_to_post === 10) {
+    for (const race of checkpoints) {
+      const input=inputs.get(race.race_no);
+      if (!input) { unavailable++; reasons.NO_CLOUD_INPUT=(reasons.NO_CLOUD_INPUT || 0)+1; continue; }
+      const result=scoreCloudUmarenAxis(input,race.market_rows || []);
+      if (!result.ok) { failed++; reasons[result.reason]=(reasons[result.reason] || 0)+1; continue; }
+      const snapshot={ type:'umarenDistortionT10', schema:'kochi_umaren_distortion_t10/v1', status:'forward_shadow_only',
+        execution:'cloud_worker', babaCode:BABA, raceDate:date, raceNo:race.race_no, capturedAt,
+        scheduledStartAt:race.post_time ? `${date.replace(/\//g,'-')}T${race.post_time}:00+09:00` : null,
+        minutesBeforeStart:10, market:{ source:'first_party_worker:keiba.go.jp/OddsTanFuku', observedAt:capturedAt, rows:race.market_rows || [] },
+        runnerSet:result.runnerSet, model:{ id:UMAREN_MODEL_ID, fingerprint:UMAREN_MODEL_FINGERPRINT, axisRule:UMAREN_AXIS_RULE },
+        rows:result.rows, selected:result.candidate?.u ?? null, selectionReason:result.reason,
+        inputFingerprint:`${UMAREN_MODEL_FINGERPRINT}:${race.raw_sha256 || ''}` };
+      rows.push({ id:`umaren_t10_31_${ymd}_${String(race.race_no).padStart(2,'0')}`, baba_code:BABA, race_date:date,
+        race_no:race.race_no, scheduled_post_at:snapshot.scheduledStartAt, status:snapshot.selected ? 'axis' : 'no_axis',
+        transport:'first_party_worker', raw_sha256:race.raw_sha256 || '', runner_count:snapshot.runnerSet.length,
+        model_fingerprint:UMAREN_MODEL_FINGERPRINT, payload:snapshot });
+    }
+  } else {
+    const t10ByRace=await loadT10CloudSnapshots(env,date);
+    for (const race of checkpoints) {
+      const input=inputs.get(race.race_no), t10=t10ByRace.get(race.race_no);
+      if (!input) { unavailable++; reasons.NO_CLOUD_INPUT=(reasons.NO_CLOUD_INPUT || 0)+1; continue; }
+      if (!t10) { unavailable++; reasons.NO_T10_SNAPSHOT=(reasons.NO_T10_SNAPSHOT || 0)+1; continue; }
+      if (!t10.selected) { reasons.NO_T10_AXIS=(reasons.NO_T10_AXIS || 0)+1; continue; }
+      const result=scoreCloudUmarenPairs(t10,input,race.pair_rows || []);
+      if (!result.ok) { failed++; reasons[result.reason]=(reasons[result.reason] || 0)+1; continue; }
+      const snapshot={ type:'umarenDistortionT5', schema:'kochi_umaren_distortion_t5/v1', status:'forward_shadow_only',
+        execution:'cloud_worker', babaCode:BABA, raceDate:date, raceNo:race.race_no, capturedAt,
+        scheduledStartAt:race.post_time ? `${date.replace(/\//g,'-')}T${race.post_time}:00+09:00` : null,
+        minutesBeforeStart:5, market:{ source:'first_party_worker:keiba.go.jp/OddsUmLenFuku', observedAt:capturedAt, rows:race.pair_rows || [] },
+        runnerSet:t10.runnerSet, model:{ id:UMAREN_MODEL_ID, fingerprint:UMAREN_MODEL_FINGERPRINT,
+          pairRule:UMAREN_PAIR_RULE, referenceBudget:UMAREN_REFERENCE }, axis:t10.selected,
+        axisRow:t10.rows.find(row => row.u === t10.selected) || null, trigger:result.trigger,
+        triggerChoice:result.triggerChoice, tickets:result.tickets, choices:result.choices,
+        referenceBudgetYen:result.referenceBudgetYen, selectionReason:result.reason,
+        t10InputFingerprint:t10.inputFingerprint,
+        inputFingerprint:`${t10.inputFingerprint}:${race.pair_raw_sha256 || ''}` };
+      rows.push({ id:`umaren_t5_31_${ymd}_${String(race.race_no).padStart(2,'0')}`, baba_code:BABA, race_date:date,
+        race_no:race.race_no, scheduled_post_at:snapshot.scheduledStartAt, status:snapshot.trigger ? 'trigger' : 'no_bet',
+        transport:'first_party_worker', raw_sha256:race.pair_raw_sha256 || '', runner_count:snapshot.runnerSet.length,
+        model_fingerprint:UMAREN_MODEL_FINGERPRINT, payload:snapshot });
+    }
+  }
+  await writeInferenceRows(env,rows);
+  return { attempted:checkpoints.length, saved:rows.length, unavailable, failed, reasons };
+}
+
 async function runCapture(env) {
   const startedAt = new Date().toISOString();
   const runBase = startedAt.replace(/[^0-9]/g, '').slice(0,17);
@@ -542,6 +780,7 @@ async function runCapture(env) {
   kochi.runId = kochiRunId;
   const marketCheckpoints = await recordMarketCheckpoints(env, kochi);
   const t10Coverage = await recordT10Coverage(env, kochi);
+  const cloudInference = await runCloudUmarenInference(env, kochi);
   const finishedAt = new Date().toISOString();
   const failed = kochi.ok === false;
   const shouldAudit = failed || kochi.captured > 0 || jstNow().minutes % 5 === 0;
@@ -554,9 +793,11 @@ async function runCapture(env) {
     });
   }
   if (failed) throw new Error('Kochi odds capture failed');
-  return { kochi, marketCheckpoints, t10Coverage, audited:shouldAudit,
+  return { kochi, marketCheckpoints, t10Coverage, cloudInference, audited:shouldAudit,
     received_at:finishedAt, release_sha:env.RELEASE_SHA || '' };
 }
+
+export { scoreCloudUmarenAxis, scoreCloudUmarenPairs, runCloudUmarenInference };
 
 export default {
   // cron: Kochi odds snapshots only. Monbetsu/Ooi are owned by the other-track project.

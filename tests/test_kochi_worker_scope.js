@@ -24,6 +24,9 @@ assert(worker.includes('snapshot_key:`${BABA}|${dateStr}|${rno}|${r.uma}|${mtp}`
 assert(worker.includes("'Prefer':'resolution=ignore-duplicates,return=minimal'"), 'checkpoint retries must ignore duplicate ids');
 assert(worker.includes('await recordMarketCheckpoints(env, kochi)'), 'every T10/T5 board must be persisted server-side');
 assert(worker.includes('await recordT10Coverage(env, kochi)'), 'T10 denominator must be recorded without an open browser');
+assert(worker.includes('await runCloudUmarenInference(env, kochi)'), 'T10/T5 model inference must run without an open browser');
+assert(worker.includes("UMAREN_MODEL_ID = 'kochi-umaren-distortion-shadow-v1'"), 'cloud inference must pin the Kochi model');
+assert(worker.includes("input.schema === 'kochi_umaren_cloud_input/v1'"), 'cloud inference must reject unversioned inputs');
 
 assert(wrangler.includes('name = "keiba-proxydeploy"'), 'deployment must target the existing Kochi worker');
 assert(wrangler.includes('keep_vars = true'), 'deployments must preserve dashboard-managed variables and secrets');

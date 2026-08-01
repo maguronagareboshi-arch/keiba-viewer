@@ -33,7 +33,7 @@ const _kvLibSpecs = {
     ready: () => typeof window.computeYosoScored === 'function' && typeof window.renderPredictionPanel === 'function' && typeof window.renderAnalysis === 'function',
   },
   aiInsights: {
-    src: 'modules/ai-insights.js?v=20260727-fix1',
+    src: 'modules/ai-insights.js?v=20260801-cloud1',
     ready: () => window.kvAiInsightsReady === true,
   },
   vnextPartnerScorer: {
@@ -178,6 +178,9 @@ function _ensureRaceIntelligence() {
     results.forEach((result, index) => {
       if (result.status === 'rejected') console.warn('[optional AI module]', ['partner','value','umaren','calibration'][index], result.reason);
     });
+    // Optional modules are now ready, so publish the market-free cloud inputs
+    // for every prestart Kochi race.  The Worker will add official T10/T5 odds.
+    if (_admin && window.kvAiScheduleDayPrecompute) window.kvAiScheduleDayPrecompute(currentDate);
   });
   return Promise.all([_ensureFullIDBCache(), _ensureAiAnalysisModule()]);
 }
