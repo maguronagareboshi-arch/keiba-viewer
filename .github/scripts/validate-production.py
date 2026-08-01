@@ -24,6 +24,7 @@ SUPPORT_FILES = {
     "supabase-cloud-capture.sql",
     "tests/test_kochi_worker_scope.js",
     "tests/test_kochi_worker_unit.js",
+    "tests/test_umaren_cloud_equivalence.js",
     "wrangler.toml",
 }
 SECRET_NAMES = {

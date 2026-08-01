@@ -7,6 +7,7 @@ on:
       - supabase-cloud-capture.sql
       - wrangler.toml
       - tests/test_kochi_worker_*.js
+      - tests/test_umaren_cloud_equivalence.js
   push:
     branches: [main]
     paths:
@@ -14,6 +15,7 @@ on:
       - supabase-cloud-capture.sql
       - wrangler.toml
       - tests/test_kochi_worker_*.js
+      - tests/test_umaren_cloud_equivalence.js
 
 permissions:
   contents: read
@@ -28,3 +30,5 @@ jobs:
         run: node tests/test_kochi_worker_scope.js
       - name: Verify exact T10/T5 capture
         run: node tests/test_kochi_worker_unit.js
+      - name: Verify browser and cloud model equivalence
+        run: node tests/test_umaren_cloud_equivalence.js
