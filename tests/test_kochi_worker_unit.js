@@ -23,7 +23,8 @@ const pairHtml = `<table class="odd_ranking_table"><tbody>
 
 (async () => {
   const root = path.resolve(__dirname, '..');
-  const source = fs.readFileSync(path.join(root, 'cloudflare-worker.js'), 'utf8');
+  const source = fs.readFileSync(path.join(root, 'cloudflare-worker.js'), 'utf8')
+    .replace("import puppeteer from '@cloudflare/puppeteer';", 'const puppeteer = globalThis.__KV_TEST_PUPPETEER__;');
   const moduleUrl = `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
   const worker = (await import(moduleUrl)).default;
   const health = await worker.fetch(new Request('https://worker.example/health'), { RELEASE_SHA:'unit-test' });

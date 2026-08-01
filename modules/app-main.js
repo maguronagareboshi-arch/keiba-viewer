@@ -33,7 +33,7 @@ const _kvLibSpecs = {
     ready: () => typeof window.computeYosoScored === 'function' && typeof window.renderPredictionPanel === 'function' && typeof window.renderAnalysis === 'function',
   },
   aiInsights: {
-    src: 'modules/ai-insights.js?v=20260801-cloud1',
+    src: 'modules/ai-insights.js?v=20260801-cloud2',
     ready: () => window.kvAiInsightsReady === true,
   },
   vnextPartnerScorer: {

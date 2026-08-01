@@ -30,5 +30,7 @@ jobs:
         run: node tests/test_kochi_worker_scope.js
       - name: Verify exact T10/T5 capture
         run: node tests/test_kochi_worker_unit.js
+      - name: Verify automatic cloud precompute
+        run: node tests/test_kochi_worker_precompute.js
       - name: Verify browser and cloud model equivalence
         run: node tests/test_umaren_cloud_equivalence.js

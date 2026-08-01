@@ -1,3 +1,5 @@
+import puppeteer from '@cloudflare/puppeteer';
+
 /**
  * keiba-viewer Worker (keiba-proxydeploy) - 3 features in one
  *  1. GET ?url=...        HTML proxy (keiba.go.jp / keiba.rakuten.co.jp only, open CORS)
@@ -266,6 +268,8 @@ const CORS_ANY = { 'Access-Control-Allow-Origin': '*' };
 const BABA = '31';               // Kochi
 const CAPTURE_MINUTES = new Set([10, 5]); // Low-volume, model-required checkpoints only.
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+const CLOUD_PRECOMPUTE_URL = 'https://yukochi.com/';
+const CLOUD_PRECOMPUTE_RETRY_MS = 60 * 60 * 1000;
 
 // Exact server-side port of kochi-umaren-distortion-shadow-v1.  Ability
 // inputs are prepared before post time and contain no market information.
@@ -685,6 +689,116 @@ async function supabaseServiceGet(env, path) {
   return Array.isArray(body) ? body : [];
 }
 
+function cloudStableStringify(value) {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return '[' + value.map(cloudStableStringify).join(',') + ']';
+  return '{' + Object.keys(value).sort().map(key => JSON.stringify(key) + ':' + cloudStableStringify(value[key])).join(',') + '}';
+}
+
+function cloudFingerprint(value) {
+  const text=typeof value === 'string' ? value : cloudStableStringify(value);
+  let hash=0xcbf29ce484222325n;
+  for (let i=0;i<text.length;i++) {
+    hash ^= BigInt(text.charCodeAt(i));
+    hash = BigInt.asUintN(64,hash * 0x100000001b3n);
+  }
+  return hash.toString(16).padStart(16,'0');
+}
+
+function cloudRunnerSignature(race, horses) {
+  const runners=horses.map(row => [
+    Number.parseInt(row.uma_ban,10) || null, String(row.horse_name || ''), String(row.jockey || ''),
+    String(row.trainer || ''), String(row.kinryo || ''), String(row.weight || ''), String(row.sex_age || ''),
+  ]).sort((a,b) => (a[0] || 0) - (b[0] || 0));
+  return cloudFingerprint({
+    distance:String(race?.distance || ''), trackCond:String(race?.track_cond || ''),
+    raceClass:String(race?.race_class || ''), runners,
+  });
+}
+
+async function cloudPrecomputeNeed(env, date) {
+  const horses = await supabaseServiceGet(env, '/rest/v1/keiba_horses?select=race_no,uma_ban,chakujun,horse_name,jockey,trainer,kinryo,weight,sex_age' +
+    '&baba_code=eq.31&race_date=eq.' + encodeURIComponent(date) + '&order=race_no.asc,uma_ban.asc&limit=500');
+  const races = await supabaseServiceGet(env, '/rest/v1/keiba_races?select=race_no,distance,track_cond,race_class' +
+    '&baba_code=eq.31&race_date=eq.' + encodeURIComponent(date) + '&order=race_no.asc&limit=24');
+  const raceByNo=new Map(races.map(row => [Number(row.race_no),row]));
+  const byRace = new Map();
+  for (const row of horses) {
+    const raceNo=Number(row.race_no); if (!Number.isInteger(raceNo)) continue;
+    if (!byRace.has(raceNo)) byRace.set(raceNo,[]);
+    byRace.get(raceNo).push(row);
+  }
+  const eligible = [...byRace].filter(([,rows]) => rows.length >= 4 && !rows.some(row => /^\d+$/.test(String(row.chakujun || ''))));
+  if (!eligible.length) return { needed:false, reason:'no_prestart_races', eligible:0 };
+
+  const predictions = await supabaseServiceGet(env, '/rest/v1/keiba_ai_predictions?select=race_no,runner_signature,payload' +
+    '&baba_code=eq.31&race_date=eq.' + encodeURIComponent(date) + '&order=computed_at.desc&limit=48');
+  const fresh = new Set();
+  for (const [raceNo,rows] of eligible) {
+    const prediction=predictions.find(row => Number(row.race_no) === raceNo && validCloudInput(row?.payload?.umarenCloudInput));
+    const signature=cloudRunnerSignature(raceByNo.get(raceNo),rows);
+    if (prediction && prediction.runner_signature === signature) fresh.add(raceNo);
+  }
+
+  const ymd=date.replace(/\D/g,''), auditId=`precompute_31_${ymd}`;
+  const audit=await supabaseServiceGet(env, '/rest/v1/keiba_capture_runs?select=status,finished_at,release_sha,details&id=eq.' + auditId + '&limit=1');
+  const currentRelease=String(env.RELEASE_SHA || '');
+  if (fresh.size === eligible.length && audit[0]?.status === 'success' &&
+      (!currentRelease || String(audit[0]?.release_sha || '') === currentRelease)) {
+    return { needed:false, reason:'fresh_inputs_available', eligible:eligible.length, fresh:fresh.size, auditId };
+  }
+  const lastMs=Date.parse(audit[0]?.finished_at || '');
+  if (Number.isFinite(lastMs) && Date.now()-lastMs < CLOUD_PRECOMPUTE_RETRY_MS) {
+    return { needed:false, reason:'retry_cooldown', eligible:eligible.length, fresh:fresh.size, auditId };
+  }
+  return { needed:true, reason:'missing_or_stale_inputs', eligible:eligible.length, fresh:fresh.size, auditId };
+}
+
+async function runCloudBrowserPrecompute(env, date) {
+  if (!env.BROWSER || !env.ADMIN_WRITE_TOKEN || !env.SUPABASE_SERVICE_KEY) {
+    return { attempted:false, reason:'browser_or_secret_unavailable' };
+  }
+  const need=await cloudPrecomputeNeed(env,date);
+  if (!need.needed) return { attempted:false, ...need };
+  const startedAt=new Date().toISOString();
+  const auditBase={ id:need.auditId, started_at:startedAt, finished_at:startedAt, capture_date:date,
+    baba_code:BABA, expected_races:need.eligible, attempted_races:0, captured_races:0, captured_rows:0,
+    status:'failed', release_sha:env.RELEASE_SHA || '' };
+  // Reserve the once-per-hour attempt before launching so overlapping cron
+  // invocations cannot consume multiple browser sessions.
+  await recordCaptureRun(env,{ ...auditBase, details:{ schema:'kochi_cloud_precompute_audit/v1', state:'running', need } });
+  let browser=null;
+  try {
+    browser=await puppeteer.launch(env.BROWSER);
+    const page=await browser.newPage();
+    if (typeof page.emulateTimezone === 'function') await page.emulateTimezone('Asia/Tokyo');
+    await page.evaluateOnNewDocument(token => {
+      sessionStorage.setItem('kv_write_token', token);
+      localStorage.removeItem('kv_write_token');
+    }, env.ADMIN_WRITE_TOKEN);
+    const target=CLOUD_PRECOMPUTE_URL + '?sim=1&date=' + encodeURIComponent(date) + '&cloud-precompute=1';
+    await page.goto(target,{ waitUntil:'domcontentloaded', timeout:120000 });
+    await page.waitForFunction(() => typeof window._ensureAiInsightsModule === 'function',{ timeout:60000 });
+    await page.evaluate(() => window._ensureAiInsightsModule());
+    await page.waitForFunction(() => typeof window.kvAiCloudPrecomputeDay === 'function',{ timeout:60000 });
+    const result=await page.evaluate(wanted => window.kvAiCloudPrecomputeDay(wanted),date);
+    const ok=!!result?.ok;
+    const finishedAt=new Date().toISOString();
+    await recordCaptureRun(env,{ ...auditBase, finished_at:finishedAt,
+      attempted_races:Number(result?.eligible || 0), captured_races:Number(result?.published || 0),
+      captured_rows:Number(result?.published || 0), status:ok ? 'success' : 'failed',
+      details:{ schema:'kochi_cloud_precompute_audit/v1', state:ok ? 'complete' : 'incomplete', need, result } });
+    return { attempted:true, ok, need, result };
+  } catch (error) {
+    const message=String(error?.message || error).slice(0,300), finishedAt=new Date().toISOString();
+    await recordCaptureRun(env,{ ...auditBase, finished_at:finishedAt, status:'failed',
+      details:{ schema:'kochi_cloud_precompute_audit/v1', state:'failed', need, error:message } }).catch(() => {});
+    return { attempted:true, ok:false, need, error:message };
+  } finally {
+    if (browser) await browser.close().catch(() => {});
+  }
+}
+
 async function loadCloudInputs(env, date) {
   const rows = await supabaseServiceGet(env, '/rest/v1/keiba_ai_predictions?select=race_no,computed_at,payload' +
     '&baba_code=eq.31&race_date=eq.' + encodeURIComponent(date) + '&order=computed_at.desc&limit=48');
@@ -776,11 +890,14 @@ async function runCapture(env) {
   const startedAt = new Date().toISOString();
   const runBase = startedAt.replace(/[^0-9]/g, '').slice(0,17);
   const kochiRunId = `31_${runBase}`;
+  const dateForPrecompute=jstNow().dateStr;
+  const precomputeJob=runCloudBrowserPrecompute(env,dateForPrecompute).catch(error => ({ attempted:true, ok:false, error:String(error?.message || error).slice(0,300) }));
   const kochi = await captureKochiOdds(env, kochiRunId);
   kochi.runId = kochiRunId;
   const marketCheckpoints = await recordMarketCheckpoints(env, kochi);
   const t10Coverage = await recordT10Coverage(env, kochi);
   const cloudInference = await runCloudUmarenInference(env, kochi);
+  const cloudPrecompute = await precomputeJob;
   const finishedAt = new Date().toISOString();
   const failed = kochi.ok === false;
   const shouldAudit = failed || kochi.captured > 0 || jstNow().minutes % 5 === 0;
@@ -793,11 +910,11 @@ async function runCapture(env) {
     });
   }
   if (failed) throw new Error('Kochi odds capture failed');
-  return { kochi, marketCheckpoints, t10Coverage, cloudInference, audited:shouldAudit,
+  return { kochi, marketCheckpoints, t10Coverage, cloudInference, cloudPrecompute, audited:shouldAudit,
     received_at:finishedAt, release_sha:env.RELEASE_SHA || '' };
 }
 
-export { scoreCloudUmarenAxis, scoreCloudUmarenPairs, runCloudUmarenInference };
+export { scoreCloudUmarenAxis, scoreCloudUmarenPairs, runCloudUmarenInference, runCloudBrowserPrecompute, cloudRunnerSignature };
 
 export default {
   // cron: Kochi odds snapshots only. Monbetsu/Ooi are owned by the other-track project.

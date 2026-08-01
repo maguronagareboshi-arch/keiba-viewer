@@ -12,6 +12,7 @@ from pathlib import Path
 
 
 SUPPORT_FILES = {
+    ".gitignore",
     ".production-files",
     ".preserved-production-files",
     ".github/scripts/validate-production.py",
@@ -21,8 +22,11 @@ SUPPORT_FILES = {
     "AGENTS.md",
     "CLAUDE.md",
     "cloudflare-worker.js",
+    "package.json",
+    "pnpm-lock.yaml",
     "supabase-cloud-capture.sql",
     "tests/test_kochi_worker_scope.js",
+    "tests/test_kochi_worker_precompute.js",
     "tests/test_kochi_worker_unit.js",
     "tests/test_umaren_cloud_equivalence.js",
     "wrangler.toml",

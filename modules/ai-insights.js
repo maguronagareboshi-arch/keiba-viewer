@@ -11,6 +11,7 @@
   const serverCache = new Map();
   const serverLoads = new Map();
   const serverPublishes = new Set();
+  const serverPublishJobs = new Map();
   const INSIGHTS = Object.freeze({
     schema:'ai_insights_shipped/v1',source:'complete-v3 legacy_v2_anchor.score_approx + final market',rankingLabel:'現行AI近似順位',marketLabel:'確定単勝人気・最終単勝オッズ（事後監査専用）',startDate:'2025/01/01',endDate:'2026/07/11',raceCount:1241,choiceSetSha256:'699f63e95dfa47f1fdc5f6ff0c0db8fa5d005f11c11a012a2df9e75b89bbc0ec',marketSha256:'16406e68cf41e3b372bc36a4736b24270afcef8d0e6f022b79e8938e8c43b3ec',excluded:{incompleteScore:560,invalidTop3:13,missingMarket:0},
     confidence:{'全体':{n:1241,win:520,top3:900,oddsN:1239,winReturn:1099.7},'1人気':{n:835,win:418,top3:675,oddsN:834,winReturn:678.5},'2-3人気':{n:304,win:86,top3:190,oddsN:303,winReturn:299.0},'4-6人気':{n:83,win:15,top3:30,oddsN:83,winReturn:109.2},'7人気以下':{n:19,win:1,top3:5,oddsN:19,winReturn:13.0},'4人気以下':{n:102,win:16,top3:35,oddsN:102,winReturn:122.2}},
@@ -222,25 +223,82 @@
   function publishServerPrediction(snapshot) {
     try {
       if (!snapshot || typeof apiUpsert !== 'function' || typeof isAdminMode !== 'function' || !isAdminMode() ||
-          typeof getWriteToken !== 'function' || !getWriteToken()) return;
+          typeof getWriteToken !== 'function' || !getWriteToken()) return null;
       const id = serverId(snapshot);
       const cloudFingerprint = snapshot.umarenCloudInput && typeof _aiFingerprint === 'function'
         ? _aiFingerprint(snapshot.umarenCloudInput) : 'no-cloud-input';
       const signature = `${id}|${snapshot.runnerSignature}|${snapshot.outputFingerprint}|${cloudFingerprint}`;
-      if (serverPublishes.has(signature)) return;
+      if (serverPublishes.has(signature)) return serverPublishJobs.get(signature) || Promise.resolve(true);
       serverPublishes.add(signature);
-      Promise.resolve(apiUpsert(SERVER_TABLE, id, {
+      const job = Promise.resolve(apiUpsert(SERVER_TABLE, id, {
         baba_code:'31', race_date:snapshot.raceDate, race_no:parseInt(snapshot.raceNo, 10),
         model_fingerprint:snapshot.modelFingerprint, runner_signature:snapshot.runnerSignature,
         output_fingerprint:snapshot.outputFingerprint || '', computed_at:snapshot.computedAt,
         payload:snapshot,
-      })).catch(error => {
+      })).then(() => true).catch(error => {
         serverPublishes.delete(signature);
+        serverPublishJobs.delete(signature);
         console.warn('[ai server cache publish]', error);
+        return false;
       });
+      serverPublishJobs.set(signature, job);
+      return job;
     } catch (error) {
       console.warn('[ai server cache publish]', error);
+      return null;
     }
+  }
+
+  /**
+   * Cloudflare Browser Run entry point.  The isolated browser starts without
+   * local IndexedDB, so it deliberately rebuilds the Kochi-only history from
+   * Supabase before invoking the unchanged production ranking calculation.
+   */
+  async function cloudPrecomputeDay(date) {
+    const wanted = String(date || '').replace(/-/g, '/');
+    if (!/^\d{4}\/\d{2}\/\d{2}$/.test(wanted)) throw new Error('INVALID_DATE');
+    if (typeof isAdminMode !== 'function' || !isAdminMode() || typeof getWriteToken !== 'function' || !getWriteToken()) {
+      throw new Error('NOT_ADMIN');
+    }
+    const required = ['_fetchTablePaged','_putRaceRow','_putHorseRowsBatch','_ensureFullIDBCache','restoreFromSaved',
+      '_ensureAiAnalysisModule','_ensureVnextPartnerShadowModule','_ensureUmarenDistortionShadowModule'];
+    const missing = required.filter(name => typeof global[name] !== 'function');
+    if (missing.length) throw new Error(`MISSING_RUNTIME:${missing.join(',')}`);
+
+    const raceSync = await global._fetchTablePaged('keiba_races', null, rows => rows.forEach(global._putRaceRow));
+    const horseSync = await global._fetchTablePaged('keiba_horses', null, rows => global._putHorseRowsBatch(rows, false));
+    if (raceSync?.incomplete || horseSync?.incomplete) throw new Error('INCOMPLETE_KOCHI_HISTORY_SYNC');
+    if (typeof global._loadDaySettings === 'function') await global._loadDaySettings();
+    await global._ensureFullIDBCache();
+    await global.restoreFromSaved(wanted, '31', true);
+    if (typeof global._hydrateOfficialHistoriesForDay === 'function') {
+      await global._hydrateOfficialHistoriesForDay(wanted, '31');
+    }
+    await global._ensureAiAnalysisModule();
+    await global._ensureVnextPartnerShadowModule();
+    await global._ensureUmarenDistortionShadowModule();
+
+    const raceNos = Object.keys(allRacesData || {}).map(Number).filter(Number.isFinite).sort((a,b) => a-b);
+    const result = { schema:'kochi_cloud_precompute_result/v1', babaCode:'31', raceDate:wanted,
+      history:{ races:Number(raceSync?.total || 0), horses:Number(horseSync?.total || 0) },
+      raceCount:raceNos.length, eligible:0, published:0, failures:[] };
+    for (const raceNo of raceNos) {
+      const data = allRacesData[raceNo];
+      if (!data?.raceInfo || data.raceInfo.raceDate !== wanted ||
+          data.horses.some(h => /^\d+$/.test(String(h.chakujun || '')))) continue;
+      result.eligible++;
+      try {
+        const snapshot = cachePrediction(raceNo, computeYosoScored(raceNo, null));
+        if (!snapshot?.umarenCloudInput) { result.failures.push({ raceNo, reason:'INCOMPLETE_CLOUD_INPUT' }); continue; }
+        const saved = await publishServerPrediction(snapshot);
+        if (saved) result.published++;
+        else result.failures.push({ raceNo, reason:'PUBLISH_FAILED' });
+      } catch (error) {
+        result.failures.push({ raceNo, reason:String(error?.message || error).slice(0,160) });
+      }
+    }
+    result.ok = result.eligible > 0 && result.published === result.eligible && result.failures.length === 0;
+    return result;
   }
 
   async function hydrateServerDay(date) {
@@ -403,6 +461,7 @@
   global.kvAiRenderCachedPrediction = renderCachedPrediction;
   global.kvAiHydrateServerDay = hydrateServerDay;
   global.kvAiScheduleDayPrecompute = scheduleDayPrecompute;
+  global.kvAiCloudPrecomputeDay = cloudPrecomputeDay;
   global.kvAiRenderOpponentAudit = renderOpponentAudit;
   global.kvAiInsightsReady = true;
 })(window);

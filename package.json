@@ -1,0 +1,7 @@
+{
+  "name": "kochi-keiba-viewer-worker",
+  "private": true,
+  "devDependencies": {
+    "@cloudflare/puppeteer": "1.1.0"
+  }
+}

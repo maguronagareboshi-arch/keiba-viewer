@@ -27,10 +27,14 @@ assert(worker.includes('await recordT10Coverage(env, kochi)'), 'T10 denominator 
 assert(worker.includes('await runCloudUmarenInference(env, kochi)'), 'T10/T5 model inference must run without an open browser');
 assert(worker.includes("UMAREN_MODEL_ID = 'kochi-umaren-distortion-shadow-v1'"), 'cloud inference must pin the Kochi model');
 assert(worker.includes("input.schema === 'kochi_umaren_cloud_input/v1'"), 'cloud inference must reject unversioned inputs');
+assert(worker.includes("import puppeteer from '@cloudflare/puppeteer'"), 'worker must use Cloudflare Browser Run, not the user PC');
+assert(worker.includes('runCloudBrowserPrecompute(env,dateForPrecompute)'), 'cron must prepare missing AI inputs automatically');
+assert(worker.includes("String(input.babaCode) === BABA"), 'automatic inputs must remain Kochi-only');
 
 assert(wrangler.includes('name = "keiba-proxydeploy"'), 'deployment must target the existing Kochi worker');
 assert(wrangler.includes('keep_vars = true'), 'deployments must preserve dashboard-managed variables and secrets');
 assert(wrangler.includes('crons = ["* 5-12 * * *"]'), 'Kochi checkpoint detection must run every minute');
+assert(wrangler.includes('binding = "BROWSER"'), 'Cloudflare Browser Run binding must be configured');
 assert(migration.includes("check (baba_code = '31')"), 'database storage must reject non-Kochi rows');
 assert(migration.includes("phase in ('t10','t5')"), 'database storage must accept only T10/T5 phases');
 
