@@ -19,6 +19,7 @@ modules/app-main.js
 modules/era-drift-shadow.js
 modules/first3f-autofill.js
 modules/jra-transfer-shadow.js
+modules/keisoku-admin.js
 modules/pace-v2-shadow.js
 modules/partner-vnext-live.js
 modules/partner-vnext-market-blend.js

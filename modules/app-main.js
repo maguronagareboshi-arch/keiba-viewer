@@ -389,12 +389,12 @@ function _renderPageWithHistory(pageId, renderFn, needsAiModule) {
   }, 0);
 }
 
-const KV_PAGE_IDS = ['search','deban','bunseki','baba','jchg','saved','f3avg','bets','aiseiseki'];
+const KV_PAGE_IDS = ['search','deban','bunseki','baba','jchg','saved','f3avg','bets','aiseiseki','keisoku'];
 function switchPage(pageId, _fromPop) {
   // 廃止したページ（旧PSF履歴など）の古いブックマークで真っ白にしない
   if (!KV_PAGE_IDS.includes(pageId)) pageId = 'search';
-  // 閲覧者は管理者専用ページ（保存データ・収支ノート）へは入れない
-  if (typeof isAdminMode === 'function' && !isAdminMode() && ['saved', 'bets'].includes(pageId)) pageId = 'search';
+  // 閲覧者は管理者専用ページ（保存データ・収支ノート・計測管理）へは入れない
+  if (typeof isAdminMode === 'function' && !isAdminMode() && ['saved', 'bets', 'keisoku'].includes(pageId)) pageId = 'search';
   KV_PAGE_IDS.forEach(id => {
     const el = document.getElementById('page-' + id);
     if (el) el.classList.toggle('page-hidden', id !== pageId);
@@ -405,7 +405,7 @@ function switchPage(pageId, _fromPop) {
     if (active) btn.setAttribute('aria-current','page'); else btn.removeAttribute('aria-current');
   });
   // 「その他」配下のページでは上下ナビの⋯をアクティブに
-  const _morePages = ['jchg', 'saved', 'f3avg', 'bets', 'aiseiseki'];
+  const _morePages = ['jchg', 'saved', 'f3avg', 'bets', 'aiseiseki', 'keisoku'];
   const _headerMoreBtn = document.getElementById('header-more-btn');
   if (_headerMoreBtn) _headerMoreBtn.classList.toggle('active', _morePages.includes(pageId));
   const _moreBtn = document.getElementById('kbn-more');
@@ -437,6 +437,8 @@ function switchPage(pageId, _fromPop) {
     _ensureValueT10ShadowModule().then(() => kvRefreshT10LedgerMonitor(true)).catch(()=>{});
   }
   if (pageId === 'f3avg')   { _renderPageWithHistory(pageId, renderF3Averages); }
+  // 計測管理（管理者専用・modules/keisoku-admin.js が window.ksOpen を定義する）
+  if (pageId === 'keisoku') { setTimeout(() => { try { if (typeof ksOpen === 'function') ksOpen(); } catch(e){} }, 0); }
   if (pageId === 'aiseiseki') {
     setTimeout(() => _ensureAiInsightsModule().then(() => {
       if (_currentPage === pageId) renderAiSeisekiPage();
