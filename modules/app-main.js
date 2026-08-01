@@ -10449,6 +10449,10 @@ async function restoreFromSaved(date, baba, silent) {
   if (_emptyRns.length) _refetchEmptyRaces(date, baba, _emptyRns);
   // 手動で当日カードを開いた時も、表示中レース＋次レースだけを最新化する。
   if (!silent) _kvRefreshTodayPriorityRaces(date, baba, currentRaceNo).catch(e => console.warn('[today priority refresh]', e));
+  // 出馬表を開いたら、その日の出走馬の公式成績を共有DBから端末へ入れておく（管理者のみ・裏で実行）。
+  _hydrateOfficialHistoriesForDay(date, baba)
+    .then(n => { if (n) console.log(`[official history] ${n}頭ぶんを共有DBから取得しました`); })
+    .catch(e => console.warn('[official history hydrate]', e));
 }
 
 // 保存に馬が無いレースをライブ再取得して差し替える（restoreFromSavedの補修）
@@ -11632,10 +11636,13 @@ async function openHorseModal(horseName, raceNo) {
         // 公式成績追加後もスクロール位置を先頭に戻す
         if(content) content.scrollTop = 0;
       });
-    } else if(cached?.races?.length) {
+    } else {
+      // キャッシュが無い/古い場合は自動で取りに行く。取得先は Worker で、
+      // 共有DBに有ればそれが返り、無ければ公式から取って共有DBへ保存される。
+      // 端末を替えても手動ボタンを押さずに公式成績が出るのはこの経路。
       requestAnimationFrame(()=>{
         const fb=document.getElementById('horse-fetch-btn');
-        if(fb?.dataset.code===lineageCode) fetchHorseMarkInfo();
+        if(fb?.dataset.code===lineageCode) fetchHorseMarkInfo(true);
       });
     }
   }
@@ -12042,13 +12049,33 @@ function _renderOfficialSection(parsed, code, horseName) {
     return;
   }
 
+  // ── 表示中の開催日より前だけを使う ──
+  // 過去のレースを開いた時に、その後に走った成績が混ざらないようにする。
+  // キャッシュへは全走ぶんを保存したままにし、ここで絞るのは画面と集計だけ。
+  const viewedDate=parseDateStr(currentDate)||new Date();
+  const _viewCutoffMs=viewedDate.getTime();
+  const viewRaces=parsed.races.filter(r=>{
+    const ms=_officialHistoryDateMs(r?.raceDate);
+    return !Number.isFinite(ms)||ms<_viewCutoffMs;
+  });
+
+  if(!viewRaces.length){
+    _saveOfficialHistoryCache(parsed, code, horseName);
+    const noPast=document.createElement('div');
+    noPast.id='official-race-section';
+    noPast.style.cssText='background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 16px;margin-top:12px;font-size:13px;color:#475569';
+    noPast.innerHTML='<i class="fas fa-info-circle"></i> この開催日より前の公式成績はありません';
+    content.appendChild(noPast);
+    return;
+  }
+
   // ── JRA除外: 高知・地方競馬の成績のみ使用 ──
   const _normCourse = s => (s||'').replace(/\s/g,'')
     .replace(/[Ａ-Ｚａ-ｚ０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0));
   const isJRACourse = c => /^J[^\d]/.test(_normCourse(c));
   // JRAを除いた全成績・高知のみ成績
-  const nonJRARaces = parsed.races.filter(r => !isJRACourse(r.course||''));
-  const kochiRaces   = parsed.races.filter(r => {
+  const nonJRARaces = viewRaces.filter(r => !isJRACourse(r.course||''));
+  const kochiRaces   = viewRaces.filter(r => {
     const cn = _normCourse(r.course||'');
     return !isJRACourse(r.course||'') && (cn.includes('高知') || cn === '');
   });
@@ -12074,13 +12101,12 @@ function _renderOfficialSection(parsed, code, horseName) {
     </div>`:'';
 
   // ── 閲覧中の開催日時点。公式在籍馬の基準額＋基準日後の本賞金で再現する ──
-  const viewedDate=parseDateStr(currentDate)||new Date();
-  const prizeSummary=calcHorsePrizeSummary(parsed.races,viewedDate,parsed.baseline);
+  const prizeSummary=calcHorsePrizeSummary(viewRaces,viewedDate,parsed.baseline);
 
   const prizeCardHtml = prizeSummary ? (()=>{
     const ec = prizeSummary.estimatedClass;
     const total = prizeSummary.totalPrize;
-    const cycleProjection=calcNextBangumiCycleProjection(parsed.races,viewedDate,prizeSummary);
+    const cycleProjection=calcNextBangumiCycleProjection(viewRaces,viewedDate,prizeSummary);
     const rules=prizeSummary.classRules;
     const curIdx=rules.findIndex(r=>r.cls===ec.cls);
     const nextClass=curIdx>0?rules[curIdx-1]:null;
@@ -12185,9 +12211,9 @@ function _renderOfficialSection(parsed, code, horseName) {
   })() : '';
 
   // ── 公式成績テーブル（JRA含む全成績・JRA行はグレーアウト） ──
-  const hasPrize = parsed.races.some(r=>r.prize&&r.prize!=='0');
-  const hasWinner = parsed.races.some(r=>r.winner);
-  const raceRows=parsed.races.slice(0,50).map(r=>{
+  const hasPrize = viewRaces.some(r=>r.prize&&r.prize!=='0');
+  const hasWinner = viewRaces.some(r=>r.winner);
+  const raceRows=viewRaces.slice(0,50).map(r=>{
     const c=parseInt(r.chakujun)||999;
     const isWin=c<=3;
     const cCls=c===1?'chakujun-1':c===2?'chakujun-2':c===3?'chakujun-3':'';
@@ -12257,7 +12283,7 @@ function _renderOfficialSection(parsed, code, horseName) {
     }).call(this)"
     style="cursor:pointer;padding:12px 16px;display:flex;align-items:center;gap:8px;background:#f0f9ff;user-select:none">
       <i class="fas fa-globe" style="color:#0369a1"></i>
-      <span style="font-size:13px;font-weight:700;color:#0369a1;flex:1">keiba.go.jp 公式成績（全${parsed.races.length}走 / 地方${nonJRARaces.length}走 / JRA${parsed.races.length-nonJRARaces.length}走）</span>
+      <span style="font-size:13px;font-weight:700;color:#0369a1;flex:1">keiba.go.jp 公式成績（全${viewRaces.length}走 / 地方${nonJRARaces.length}走 / JRA${viewRaces.length-nonJRARaces.length}走）${parsed.races.length>viewRaces.length?`<span style="font-size:10px;font-weight:600;color:#6b7280;margin-left:4px">この開催日より後の${parsed.races.length-viewRaces.length}走は非表示</span>`:''}</span>
       <span style="font-size:11px;color:#6b7280">JRA成績はグレー表示・番組賞金へ30%換算</span>
       <span class="toggle-icon" style="font-size:12px;color:#0369a1;min-width:14px">${_initVisible?'▼':'▶'}</span>
     </div>
@@ -12341,25 +12367,110 @@ function _renderOfficialSection(parsed, code, horseName) {
   }
 
   // ── キャッシュ保存 ──
-  if(parsed._saveToCache !== false) {
-    const cacheKey = `official_${code}`;
-    lsWrite(cacheKey, {
-      type: 'official',
-      lineageCode: code,
-      horseName,
-      races: parsed.races,
-      basicInfo: parsed.basicInfo,
-      baseline: parsed.baseline||null,
-      savedAt: new Date().toISOString()
-    });
-  }
+  _saveOfficialHistoryCache(parsed, code, horseName);
+}
+
+/** 端末に置く公式成績の上限。共有DBが正本なので、あふれた分は捨ててよい（開けば戻る）。 */
+const OFFICIAL_HISTORY_LOCAL_MAX = 300;
+
+/** 上限を超えたローカルの公式成績を古い順に捨てる。共有DBは触らない（ローカルIDBのみ）。 */
+function _trimOfficialHistoryCache(limit = OFFICIAL_HISTORY_LOCAL_MAX) {
+  const store = lsRead();
+  const rows = Object.keys(store)
+    .filter(k => k.startsWith('official_') && store[k]?.type === 'official')
+    .map(k => ({ k, at: Date.parse(String(store[k]?.savedAt || '')) || 0 }));
+  if (rows.length <= limit) return 0;
+  rows.sort((a, b) => a.at - b.at);
+  const drop = rows.slice(0, rows.length - limit);
+  drop.forEach(r => idbDelete(r.k));
+  return drop.length;
 }
 
 /**
- * fetchHorseMarkInfo()
- * モーダルのボタンから呼ばれる。公式ページの成績を取得してモーダルに追加表示する
+ * 出馬表を開いた時に、その日の出走馬の公式成績を共有DBから端末へ入れておく（管理者のみ）。
+ * 取得は Worker 経由なので、共有DBに無い馬はここで公式から取られ共有DBにも残る＝
+ * 開催のたびに不足分だけが足されていく。閲覧者は馬を開いた時だけ個別に取る。
  */
-async function fetchHorseMarkInfo() {
+async function _hydrateOfficialHistoriesForDay(date, baba) {
+  if (baba !== '31') return 0;
+  if (typeof isAdminMode !== 'function' || !isAdminMode()) return 0;
+  const store = lsRead();
+  const seen = new Set(), wanted = [];
+  Object.values(allRacesData || {}).forEach(d => (d?.horses || []).forEach(h => {
+    const code = String(h.lineageLoginCode || h.lineage_login_code || '').trim();
+    if (!/^\d{8,14}$/.test(code) || seen.has(code)) return;
+    seen.add(code);
+    const state = getOfficialHistoryCacheState(store[`official_${code}`], date, null);
+    if (state.usable && !state.shouldRefresh) return;   // 既に足りている馬は触らない
+    wanted.push({ code, name: h.horseName || '' });
+  }));
+  if (!wanted.length) return 0;
+
+  let got = 0;
+  for (let i = 0; i < wanted.length; i += 3) {
+    if (date !== currentDate || baba !== currentBaba) break;   // 別の日へ移ったら中止
+    await Promise.all(wanted.slice(i, i + 3).map(async ({ code, name }) => {
+      try {
+        const fetched = await fetchOfficialHorseHistory(code, name);
+        _saveOfficialHistoryCache({ races: fetched.races, basicInfo: fetched.basicInfo }, code, name);
+        got++;
+      } catch (_) { /* 公式に成績が無い馬・通信失敗は次回に回す */ }
+    }));
+    await new Promise(r => setTimeout(r, 250));
+  }
+  _trimOfficialHistoryCache();
+  return got;
+}
+
+/**
+ * 取得し直した公式成績を、既に持っている分へ足し込む。
+ * 既存の走は消さない・入っている値は上書きしない（空欄だけ埋める）・
+ * 走数が減る結果は取得の失敗とみなして既存を残す。Worker 側と同じ規則。
+ */
+function _mergeOfficialRaces(stored, fetched) {
+  const older = Array.isArray(stored) ? stored : [];
+  const newer = Array.isArray(fetched) ? fetched : [];
+  // 壊れた既存データに足し込むと誤りが消せなくなるので、その時だけは総取り替えにする
+  if(!older.length || !isOfficialHistoryCacheValid(older)) return newer;
+  if(!newer.length) return older;
+  const keyOf = r => [r?.raceDate, r?.course, r?.raceNo].join('|');
+  const merged = new Map();
+  older.forEach(r => merged.set(keyOf(r), {...r}));
+  newer.forEach(r => {
+    const kept = merged.get(keyOf(r));
+    if(!kept) { merged.set(keyOf(r), {...r}); return; }
+    Object.keys(r).forEach(f => {
+      const had = kept[f];
+      if(had === undefined || had === null || String(had).trim() === '') kept[f] = r[f];
+    });
+  });
+  const out = [...merged.values()].sort((a,b)=>String(b.raceDate||'').localeCompare(String(a.raceDate||'')));
+  return out.length >= older.length ? out : older;
+}
+
+/** 公式成績のローカルキャッシュ保存。表示は開催日で絞るが、保存は全走ぶんのまま。 */
+function _saveOfficialHistoryCache(parsed, code, horseName) {
+  if(!parsed || parsed._saveToCache === false) return;
+  const prev = lsRead()[`official_${code}`];
+  const hasBasic = parsed.basicInfo && Object.keys(parsed.basicInfo).length;
+  lsWrite(`official_${code}`, {
+    type: 'official',
+    lineageCode: code,
+    horseName: horseName || prev?.horseName || '',
+    races: _mergeOfficialRaces(prev?.races, parsed.races),
+    basicInfo: hasBasic ? parsed.basicInfo : (prev?.basicInfo || {}),
+    baseline: parsed.baseline || prev?.baseline || null,
+    savedAt: new Date().toISOString()
+  });
+}
+
+/**
+ * fetchHorseMarkInfo(auto)
+ * モーダルのボタン、またはキャッシュが無い時の自動取得から呼ばれる。
+ * @param {boolean} [auto] モーダルを開いた時の自動取得。失敗しても警告を出さない
+ *   （公式に成績が無い馬でモーダルを開くたびに赤い箱が出るのを避けるため）
+ */
+async function fetchHorseMarkInfo(auto) {
   const btn=document.getElementById('horse-fetch-btn');
   if(!btn) return;
   const code=btn.dataset.code;
@@ -12373,11 +12484,12 @@ async function fetchHorseMarkInfo() {
   try {
     const [fetched,baseline]=await Promise.all([fetchOfficialHorseHistory(code,horseName),getKochiOfficialBaseline(code,parseDateStr(currentDate)).catch(()=>null)]);
     const cached=lsRead()[`official_${code}`];
-    parsed={races:fetched.races,basicInfo:Object.keys(fetched.basicInfo).length?fetched.basicInfo:(cached?.basicInfo||{}),baseline,_saveToCache:true};
+    // 表示も保存も「既存＋不足分」で揃える（取りこぼしのある取得で走が減らないように）
+    parsed={races:_mergeOfficialRaces(cached?.races,fetched.races),basicInfo:Object.keys(fetched.basicInfo).length?fetched.basicInfo:(cached?.basicInfo||{}),baseline,_saveToCache:true};
     btn.innerHTML='<i class="fas fa-sync-alt"></i> 再取得';
   } catch(e) {
     btn.innerHTML='<i class="fas fa-database"></i> 公式成績を取得';
-    const content=document.getElementById('horse-modal-content');
+    const content=auto?null:document.getElementById('horse-modal-content');
     if(content){
       document.getElementById('official-fetch-error')?.remove();
       const error=document.createElement('div');
@@ -12396,6 +12508,8 @@ async function fetchHorseMarkInfo() {
   if(!content) return;
   document.getElementById('official-fetch-error')?.remove();
   _renderOfficialSection(parsed, code, horseName);
+  // 馬を開くたびに1頭ぶん増えるので、ここでも端末の上限を効かせる（閲覧者はこの経路しか通らない）
+  _trimOfficialHistoryCache();
 }
 
 // ============================================================
