@@ -2,6 +2,7 @@ name = "keiba-proxydeploy"
 main = "cloudflare-worker.js"
 compatibility_date = "2026-07-22"
 preview_urls = false
+keep_vars = true
 
 [observability]
 enabled = true

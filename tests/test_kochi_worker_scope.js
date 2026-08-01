@@ -26,6 +26,7 @@ assert(worker.includes('await recordMarketCheckpoints(env, kochi)'), 'every T10/
 assert(worker.includes('await recordT10Coverage(env, kochi)'), 'T10 denominator must be recorded without an open browser');
 
 assert(wrangler.includes('name = "keiba-proxydeploy"'), 'deployment must target the existing Kochi worker');
+assert(wrangler.includes('keep_vars = true'), 'deployments must preserve dashboard-managed variables and secrets');
 assert(wrangler.includes('crons = ["* 5-12 * * *"]'), 'Kochi checkpoint detection must run every minute');
 assert(migration.includes("check (baba_code = '31')"), 'database storage must reject non-Kochi rows');
 assert(migration.includes("phase in ('t10','t5')"), 'database storage must accept only T10/T5 phases');
