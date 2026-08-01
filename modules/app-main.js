@@ -10653,10 +10653,16 @@ function normalizeWidth(s){return(s||'').replace(/[Ａ-Ｚａ-ｚ０-９]/g,c=>S
 function detectRaceClass(rawText){
   const text=normalizeWidth(rawText||'');
   if(!text)return'';
+  // 「N歳以上」は年齢限定戦ではない（3歳戦と混同しない）
+  const seniorOpen=/(?<![0-9])[2-9]歳以上/.test(text);
+  // 年齢クラス最優先（直前が数字でないこと）。「3歳C3以下」は3歳戦のまま。
+  if(!seniorOpen){const ageM=text.match(/(?<![0-9])([23])歳/);if(ageM)return ageM[1]+'歳';}
+  // 「◯級以下」はその級の枠組みとして扱う（B級以下=B / C級以下=C1）。
+  // 「3歳以上B級以下」を年齢限定オープン(A)と誤判定しないよう、A扱いより先に見る。
+  const kaigM=text.match(/(?<![A-Za-z])([ABC])([1-5])?級?以下/i);
+  if(kaigM){const k=kaigM[1].toUpperCase();return k==='C'?'C'+(kaigM[2]||'1'):k;}
   // N歳以上はA級扱い（年齢限定オープン）
-  if(/(?<![0-9])[2-9]歳以上/.test(text))return'A';
-  // 年齢クラス最優先（直前が数字でないこと）
-  const ageM=text.match(/(?<![0-9])([23])歳/);if(ageM)return ageM[1]+'歳';
+  if(seniorOpen)return'A';
   // 混合戦: 先頭（上位）クラスを返す
   if(/混合/.test(text)){if(/(?<![A-Za-z])A/i.test(text))return'A';if(/(?<![A-Za-z])B/i.test(text))return'B';const cM2=text.match(/(?<![A-Za-z])C([1-5])/i);if(cM2)return'C'+cM2[1];}
   // Cクラス（直前が英字でないこと）
