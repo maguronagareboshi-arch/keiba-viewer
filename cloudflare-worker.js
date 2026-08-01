@@ -133,6 +133,36 @@ function isHorseHistoryCacheValid(races) {
     && races.some(race => /^\d+:\d{2}\.\d$/.test(String(race.time || '')));
 }
 
+function horseHistoryRaceKey(race) {
+  return [race && race.raceDate, race && race.course, race && race.raceNo].join('|');
+}
+
+/* Merge a freshly fetched history into what is already stored.
+ * Stored races are never dropped and stored values are never overwritten:
+ * a re-fetch can only add missing races and fill blank fields. A fetch that
+ * would shrink the history is treated as a bad read and ignored. A broken
+ * stored row is replaced outright, so a bad value can never become permanent. */
+function mergeHorseHistories(stored, fetched) {
+  const older = Array.isArray(stored) ? stored : [];
+  const newer = Array.isArray(fetched) ? fetched : [];
+  if (!older.length || !isHorseHistoryCacheValid(older)) return newer;
+  if (!newer.length) return older;
+
+  const merged = new Map();
+  for (const race of older) merged.set(horseHistoryRaceKey(race), Object.assign({}, race));
+  for (const race of newer) {
+    const key = horseHistoryRaceKey(race);
+    const kept = merged.get(key);
+    if (!kept) { merged.set(key, Object.assign({}, race)); continue; }
+    for (const field of Object.keys(race)) {
+      const had = kept[field];
+      if (had === undefined || had === null || String(had).trim() === '') kept[field] = race[field];
+    }
+  }
+  const out = [...merged.values()].sort((a, b) => String(b.raceDate || '').localeCompare(String(a.raceDate || '')));
+  return out.length >= older.length ? out : older;
+}
+
 /* Header-driven HorseMarkInfo parser. The official page currently expands
  * its weather/track header to three data cells, including one blank cell. */
 function parseHorseMarkInfo(html) {
@@ -180,11 +210,13 @@ function parseHorseMarkInfo(html) {
 async function getSharedHorseHistory(env, lineage, horseName) {
   const query = SUPABASE_URL + '/rest/v1/keiba_official_histories?select=lineage_code,horse_name,races,fetched_at,source_sha256&lineage_code=eq.' + encodeURIComponent(lineage) + '&limit=1';
   const serviceHeaders = { 'apikey':env.SUPABASE_SERVICE_KEY, 'Authorization':'Bearer ' + env.SUPABASE_SERVICE_KEY };
+  let storedRow = null;
   try {
     const cached = await fetch(query, { headers:serviceHeaders });
     if (cached.ok) {
       const rows = await cached.json();
       const row = rows && rows[0];
+      if (row && Array.isArray(row.races)) storedRow = row;
       const age = row ? Date.now() - Date.parse(row.fetched_at || 0) : Infinity;
       if (row && isHorseHistoryCacheValid(row.races) && age < 7 * 86400000) {
         return { ...row, cache:'server', persisted:true };
@@ -197,11 +229,14 @@ async function getSharedHorseHistory(env, lineage, horseName) {
   if (!upstream.ok) throw new Error('official history HTTP ' + upstream.status);
   const html = await upstream.text();
   if (html.length > MAX_PROXY_BYTES) throw new Error('official history too large');
-  const races = parseHorseMarkInfo(html);
-  if (!races.length) throw new Error('official history parse failed');
+  const fresh = parseHorseMarkInfo(html);
+  if (!fresh.length) throw new Error('official history parse failed');
+  // Re-fetches add to the stored history; they never delete a race or blank a field.
+  const races = mergeHorseHistories(storedRow && storedRow.races, fresh);
   const fetchedAt = new Date().toISOString();
   const sha = await sha256Hex(html);
-  const record = { lineage_code:lineage, horse_name:String(horseName || '').slice(0, 80),
+  const record = { lineage_code:lineage,
+    horse_name:String(horseName || (storedRow && storedRow.horse_name) || '').slice(0, 80),
     races, fetched_at:fetchedAt, source_sha256:sha, source_url:sourceUrl, updated_at:fetchedAt };
   let persisted = false;
   try {
