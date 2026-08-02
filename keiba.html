@@ -2563,7 +2563,7 @@ function nokenLineHtml(hid, showVideo = false) {
   const n = (state.nokenByHorse || {})[hid];
   if (!n) return '';
   const okCls = n.ok === '合格' ? 'nk-ok' : n.ok === '不合格' ? 'nk-ng' : '';
-  const videoBtn = showVideo && (n.mp4 || n.dayVideo)
+  const videoBtn = showVideo && (n.mp4 || n.raceVideo || n.dayVideo)
     ? ` <button type="button" class="nk-inline-video" data-noken-video="${esc(hid)}">▶ 能検映像</button>` : '';
   return `<span class="badge nk-badge">能検</span> ${mmdd(n.date)} ${n.dist || ''}m <b>${esc(n.time)}</b>`
     + `（テン${esc(n.ten)}/上${esc(n.last3f)}）<span class="${okCls}">${esc(n.ok)}</span>`
@@ -3878,7 +3878,7 @@ function openRaceVideoModal(date, raceNo, track) {
 // 新馬の能検映像を出馬表から離れずに再生する。
 function openNokenVideoModal(hid) {
   const n = (state.nokenByHorse || {})[hid];
-  if (!n || (!n.mp4 && !n.dayVideo)) return;
+  if (!n || (!n.mp4 && !n.raceVideo && !n.dayVideo)) return;
   let m = document.getElementById('nokenVideoModal');
   if (!m) {
     m = document.createElement('div'); m.id = 'nokenVideoModal'; m.className = 'modal';
@@ -3896,10 +3896,8 @@ function openNokenVideoModal(hid) {
   if (n.mp4) {
     player = `<video class="nk-video" controls preload="metadata" playsinline src="${esc(n.mp4)}#t=0.1"></video>`;
   } else {
-    const youtubeId = String(n.dayVideo || '').split('/').pop().split('?')[0];
-    player = `<div style="position:relative;padding-top:56.25%"><iframe title="能検映像" loading="lazy"
-      src="https://www.youtube.com/embed/${esc(youtubeId)}" allowfullscreen
-      style="position:absolute;inset:0;width:100%;height:100%;border:0"></iframe></div>`;
+    player = nkYoutubeEmbed(n.raceVideo || n.dayVideo,
+      n.raceVideo ? n.videoStart : 0, n.raceVideo ? n.videoEnd : 0, '能検映像');
   }
   m.innerHTML = `<div class="modal-box" style="max-width:720px">
     <div class="modal-head"><b>${esc(title)}</b><button type="button" data-close="1">× 閉じる</button></div>
@@ -4933,6 +4931,19 @@ function nkTen(h) {
 }
 const nkOkCls = (v) => v === '合格' ? 'nk-ok' : v === '不合格' ? 'nk-ng' : '';
 
+function nkYoutubeEmbed(url, start = 0, end = 0, title = '能検映像', lazy = false) {
+  const idMatch = String(url || '').match(/(?:youtu\.be\/|[?&]v=|\/embed\/)([A-Za-z0-9_-]{6,})/i);
+  if (!idMatch) return '';
+  const startSec = Math.max(0, Math.floor(Number(start) || 0));
+  const endSec = Math.floor(Number(end) || 0);
+  const params = [`start=${startSec}`, 'rel=0'];
+  if (endSec > startSec) params.push(`end=${endSec}`);
+  const source = `https://www.youtube.com/embed/${idMatch[1]}?${params.join('&')}`;
+  return `<div style="position:relative;padding-top:56.25%"><iframe title="${esc(title)}" loading="lazy"
+    ${lazy ? `data-src="${esc(source)}"` : `src="${esc(source)}"`} allowfullscreen
+    style="position:absolute;inset:0;width:100%;height:100%;border:0"></iframe></div>`;
+}
+
 // その後の成績（能検日より後の出走）を着順/騎手/馬体重/距離/タイムで。無ければ未出走。
 function nkAfterHtml(hid, afterDate) {
   const hist = state.nokenHist || {};
@@ -4979,10 +4990,13 @@ function nokenRaceCard(r, afterDate, hasDayVideo) {
     </table></div>` : '<div class="note">成績データなし</div>';
   const meta = [r.dist ? `${r.dist}m` : '', r.weather && r.going ? `${r.weather}・${r.going}` : (r.going || '')]
     .filter(Boolean).join('　');
-  // 動画: 門別=レース単位のmp4、大井等=開催日単位のYouTube（下のnk-day-head側で1本表示・ここでは重複案内しない）
+  // 動画: mp4または、公式YouTubeのレース開始・終了秒を指定してレース単位で表示。
   const videoBlock = r.mp4
     ? `<details class="nk-vid"><summary>▶ 動画を見る</summary>
         <video class="nk-video" controls preload="none" playsinline src="${esc(r.mp4)}#t=0.1"></video></details>`
+    : r.video
+      ? `<details class="nk-vid"><summary>▶ このレースの動画を見る</summary>
+          ${nkYoutubeEmbed(r.video, r.video_start, r.video_end, `${r.no}R 能検映像`, true)}</details>`
     : (hasDayVideo ? '' : '<div class="note nk-novid">動画なし（2歳馬以外・未配信）</div>');
   return `
     <div class="nk-card">
@@ -5153,7 +5167,7 @@ async function renderNoken() {
   const dateBtns = days.map((d) =>
     `<button class="nk-date-btn${d.date === state.nokenDate ? ' active' : ''}" data-nkdate="${d.date}">${mmdd(d.date)}</button>`).join('');
   const hasDayVideo = !!day.video;   // 大井等: レース単位ではなく開催日単位のYouTube動画
-  const raceVideoCount = day.races.filter((r) => r.mp4).length;
+  const raceVideoCount = day.races.filter((r) => r.mp4 || r.video).length;
   const nvid = raceVideoCount || (hasDayVideo ? 1 : 0);
   const sort = state.nokenSort || 'race';
   const racesShown = twoOnly ? day.races.filter((r) => (r.rows || []).length) : day.races;
@@ -5249,7 +5263,8 @@ function buildNokenIndex() {
         idx[h.horse_id] = { date: d.date, no: r.no, dist: r.dist, going: r.going,
           time: h.time, last3f: h.last3f, ten: nkTen(h), ok: h.ok, comment: h.comment, fin: h.fin,
           name: h.name, sexage: h.sexage, jockey: h.jockey, trainer: h.trainer,
-          mp4: r.mp4 || '', dayVideo: d.video || '' };
+          mp4: r.mp4 || '', raceVideo: r.video || '', videoStart: r.video_start || 0,
+          videoEnd: r.video_end || 0, dayVideo: d.video || '' };
       }
     }
   }
@@ -5578,6 +5593,11 @@ async function init() {
     if (d) { cyokyoState.date = d.dataset.cdate; renderCyokyo(); }
   });
   $('nokenRoot').addEventListener('click', (e) => {
+    const videoSummary = e.target.closest('.nk-vid summary');
+    if (videoSummary) {
+      const iframe = videoSummary.parentElement.querySelector('iframe[data-src]');
+      if (iframe) { iframe.src = iframe.dataset.src; iframe.removeAttribute('data-src'); }
+    }
     const pl = e.target.closest('a.person-link');
     if (pl) { e.preventDefault(); openPersonModal(pl.dataset.personKind, pl.dataset.person); return; }
     const hl = e.target.closest('a.horse-link');
