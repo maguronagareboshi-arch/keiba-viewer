@@ -202,6 +202,11 @@ td.best { background: var(--hl-best) !important; font-weight: bold; }
 .nk-unraced { color: var(--sub); }
 .nk-aftercell { white-space: nowrap; }
 .nk-after { display: inline-block; }
+.nk-first { color: var(--accent); font-size: 10px; font-weight: bold; margin-right: 2px; }
+.nk-stats-summary { display: grid; grid-template-columns: repeat(auto-fit,minmax(150px,1fr)); gap: 8px; margin: 10px 0; }
+.nk-stat-box { border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px; background: var(--chip-bg); }
+.nk-stat-box b { display: block; font-size: 18px; margin-top: 2px; }
+.nk-rate-good { color: #2f9c50; font-weight: bold; }
 .nk-badge { background: #7a5cc0; color: #fff; }
 .nk-inline-video { border: 1px solid var(--border); background: var(--chip-bg); color: var(--text);
   border-radius: 6px; padding: 2px 7px; margin-left: 4px; cursor: pointer; font-size: 11px; white-space: nowrap; }
@@ -1359,6 +1364,7 @@ const providers = {
 const state = { provider: null, dates: {}, month: null, date: null, raceId: null, track: '門別',
   sub: 'yosou', railSection: 'yosou', stats: null, model: null, view: 'deck', prevRace: null,
   noken: null, nokenDate: null, nokenSort: 'race', nokenTwoOnly: false, nokenHist: null, nokenByHorse: null,
+  nokenRaced: null, nokenStats: null, nokenStatsLoading: false, nokenStatsError: null,
   v3Predictions: null, v3ArchiveChecked: {}, preRaceOddsCoverage: {},
   deckDataCheckedAt: null, deckRefreshBusy: false, deckRefreshError: null,
   dayResults: {}, dayResultsFetchedAt: {}, dayResultsLoading: new Set() };
@@ -2561,6 +2567,8 @@ function nokenLineHtml(hid, showVideo = false) {
     ? ` <button type="button" class="nk-inline-video" data-noken-video="${esc(hid)}">▶ 能検映像</button>` : '';
   return `<span class="badge nk-badge">能検</span> ${mmdd(n.date)} ${n.dist || ''}m <b>${esc(n.time)}</b>`
     + `（テン${esc(n.ten)}/上${esc(n.last3f)}）<span class="${okCls}">${esc(n.ok)}</span>`
+    + `${state.track !== '門別' && n.jockey ? `　能検騎手 ${personLink('jockey', n.jockey)}` : ''}`
+    + `${state.track !== '門別' && n.trainer ? `　厩舎 ${personLink('trainer', n.trainer)}` : ''}`
     + `${n.comment ? ` ${esc(n.comment)}` : ''}${videoBtn}`;
 }
 
@@ -4925,21 +4933,23 @@ function nkTen(h) {
 }
 const nkOkCls = (v) => v === '合格' ? 'nk-ok' : v === '不合格' ? 'nk-ng' : '';
 
-// その後の成績（能検日より後の出走）を着順/馬体重/距離/タイムで。無ければ未出走。
+// その後の成績（能検日より後の出走）を着順/騎手/馬体重/距離/タイムで。無ければ未出走。
 function nkAfterHtml(hid, afterDate) {
   const hist = state.nokenHist || {};
   const runs = (hist[hid] || []).filter((r) => r.date && r.date > afterDate)
     .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   if (!hid || !(hid in hist)) return '<span class="sub">…</span>';
   if (!runs.length) return '<span class="nk-unraced">未出走</span>';
-  return runs.map((r) => {
+  return runs.map((r, i) => {
     const fin = r.fin != null ? `${r.fin}着` : '-';
     const finCls = r.fin >= 1 && r.fin <= 3 ? `fin${r.fin}` : '';
-    return `<span class="nk-after"><b class="${finCls}">${fin}</b> ${mmdd(r.date)} ${r.dist || '?'}m ${esc(r.time || '')}${r.weight ? ` ${r.weight}kg` : ''}</span>`;
+    return `<span class="nk-after">${i === 0 && state.track !== '門別' ? '<span class="nk-first">初戦</span>' : ''}<b class="${finCls}">${fin}</b> ${mmdd(r.date)} ${r.dist || '?'}m ${esc(r.time || '')}${state.track !== '門別' && r.jockey ? ` ${personLink('jockey', r.jockey)}` : ''}${r.weight ? ` ${r.weight}kg` : ''}</span>`;
   }).join('<br>');
 }
 
 function nkRowHtml(h, afterDate, extra) {
+  const peopleCells = state.track === '門別' ? ''
+    : `<td>${personLink('jockey', h.jockey)}</td><td>${personLink('trainer', h.trainer)}</td>`;
   return `<tr>
     ${extra || ''}
     <td class="${h.fin >= 1 && h.fin <= 3 ? 'fin' + h.fin : ''}">${esc(h.fin)}</td>
@@ -4948,6 +4958,7 @@ function nkRowHtml(h, afterDate, extra) {
       ? `<a class="horse-link" data-hid="${esc(h.horse_id)}">${esc(h.name)}</a>`
       : esc(h.name)}</td>
     <td>${esc(h.sexage)}</td>
+    ${peopleCells}
     <td class="num"><b>${esc(h.time)}</b></td>
     <td class="num">${nkTen(h)}</td>
     <td class="num">${esc(h.last3f)}</td>
@@ -4960,9 +4971,10 @@ function nkRowHtml(h, afterDate, extra) {
 
 function nokenRaceCard(r, afterDate, hasDayVideo) {
   const rows = (r.rows || []).map((h) => nkRowHtml(h, afterDate)).join('');
+  const peopleHeads = state.track === '門別' ? '' : '<th>能検騎手</th><th>厩舎</th>';
   const table = (r.rows || []).length ? `
     <div class="tablewrap"><table class="nk-table">
-      <tr><th>着</th><th>番</th><th>馬名</th><th>性齢</th><th>タイム</th><th>テン1F</th><th>上3F</th><th>寸評</th><th>馬体重</th><th>合否</th><th>その後の成績</th></tr>
+      <tr><th>着</th><th>番</th><th>馬名</th><th>性齢</th>${peopleHeads}<th>タイム</th><th>テン1F</th><th>上3F</th><th>寸評</th><th>馬体重</th><th>合否</th><th>その後の成績${state.track === '門別' ? '' : '（本番騎手）'}</th></tr>
       ${rows}
     </table></div>` : '<div class="note">成績データなし</div>';
   const meta = [r.dist ? `${r.dist}m` : '', r.weather && r.going ? `${r.weather}・${r.going}` : (r.going || '')]
@@ -4995,6 +5007,7 @@ function nokenTimeCard(day) {
       ? `<a class="horse-link" data-hid="${esc(h.horse_id)}">${esc(h.name)}</a>`
       : esc(h.name)}</td>
     <td>${esc(h.sexage)}</td>
+    ${state.track === '門別' ? '' : `<td>${personLink('jockey', h.jockey)}</td><td>${personLink('trainer', h.trainer)}</td>`}
     <td class="num"><b>${esc(h.time)}</b></td>
     <td class="num">${nkTen(h)}</td>
     <td class="num">${esc(h.last3f)}</td>
@@ -5003,8 +5016,9 @@ function nokenTimeCard(day) {
     <td class="${nkOkCls(h.ok)}">${esc(h.ok)}</td>
     <td class="l small nk-aftercell">${nkAfterHtml(h.horse_id, day.date)}</td>
   </tr>`).join('');
+  const peopleHeads = state.track === '門別' ? '' : '<th>能検騎手</th><th>厩舎</th>';
   return `<div class="nk-card"><div class="tablewrap"><table class="nk-table">
-    <tr><th>順</th><th>R</th><th>距離</th><th>番</th><th>馬名</th><th>性齢</th><th>タイム</th><th>テン1F</th><th>上3F</th><th>寸評</th><th>馬体重</th><th>合否</th><th>その後の成績</th></tr>
+    <tr><th>順</th><th>R</th><th>距離</th><th>番</th><th>馬名</th><th>性齢</th>${peopleHeads}<th>タイム</th><th>テン1F</th><th>上3F</th><th>寸評</th><th>馬体重</th><th>合否</th><th>その後の成績${state.track === '門別' ? '' : '（本番騎手）'}</th></tr>
     ${rows}
   </table></div>
   <div class="note">※距離をまたいで純タイム最速順（800mと1000mが混在。距離列でご確認を）。2歳と古馬は同条件で走っても体力差でタイムが比較にならないため、上の「2歳限定」で絞り込み可。</div></div>`;
@@ -5012,6 +5026,108 @@ function nokenTimeCard(day) {
 
 // 性齢文字列（牡2/牝3等）から馬齢を取り出す。2歳限定フィルタで使用。
 const nkAge = (sexage) => { const m = String(sexage || '').match(/(\d+)/); return m ? +m[1] : null; };
+
+const nkPct = (n, total) => total ? `${(n / total * 100).toFixed(1)}%` : '-';
+function nkOutcome(records) {
+  return {
+    n: records.length,
+    win: records.filter((r) => r.fin === 1).length,
+    top2: records.filter((r) => r.fin >= 1 && r.fin <= 2).length,
+    top3: records.filter((r) => r.fin >= 1 && r.fin <= 3).length,
+  };
+}
+function nkOutcomeCells(s) {
+  return `<td class="num">${s.n}</td><td class="num nk-rate-good">${nkPct(s.win, s.n)}</td>`
+    + `<td class="num">${nkPct(s.top2, s.n)}</td><td class="num">${nkPct(s.top3, s.n)}</td>`;
+}
+
+// 南関だけの集計。画面を開いた時に初めて各馬の履歴を読むため、通常のビューア表示は重くしない。
+async function loadNokenStats() {
+  if (state.track === '門別' || state.nokenStats || state.nokenStatsLoading) return;
+  const track = state.track;
+  state.nokenStatsLoading = true;
+  state.nokenStatsError = null;
+  const tests = {};
+  for (const d of ((state.noken && state.noken.days) || [])) {
+    for (const r of (d.races || [])) for (const h of (r.rows || [])) {
+      if (!h.horse_id || nkAge(h.sexage) !== 2 || h.ok === '不合格') continue;
+      (tests[h.horse_id] = tests[h.horse_id] || []).push({
+        date: d.date, horseId: h.horse_id, horse: h.name || '', jockey: h.jockey || '',
+        trainer: h.trainer || '', ok: h.ok || '', time: h.time || '',
+      });
+    }
+  }
+  const ids = Object.keys(tests);
+  const histories = {};
+  try {
+    for (let i = 0; i < ids.length; i += 80) {
+      if (state.track !== track) return;
+      const chunk = ids.slice(i, i + 80);
+      const got = await state.provider.loadHistory(chunk);
+      Object.assign(histories, got || {});
+    }
+    const records = [];
+    for (const id of ids) {
+      const horseTests = tests[id].sort((a, b) => a.date.localeCompare(b.date));
+      const firstTestDate = horseTests[0].date;
+      const debut = (histories[id] || [])
+        .filter((r) => r.date && r.date > firstTestDate)
+        .sort((a, b) => (a.date || '').localeCompare(b.date || ''))[0];
+      if (!debut) continue;
+      const test = horseTests.filter((t) => t.date < debut.date).slice(-1)[0];
+      if (!test || !test.jockey || !test.trainer || !debut.jockey) continue;
+      const fin = Number(debut.fin);
+      records.push({ ...test, debutDate: debut.date, debutJockey: debut.jockey,
+        fin: Number.isFinite(fin) ? fin : null, same: test.jockey === debut.jockey });
+    }
+    if (state.track === track) state.nokenStats = { records, tested: ids.length };
+  } catch (e) {
+    if (state.track === track) state.nokenStatsError = '集計データを取得できませんでした。通信状態を確認して、もう一度開いてください。';
+  } finally {
+    if (state.track === track) {
+      state.nokenStatsLoading = false;
+      if (state.view === 'noken' && state.nokenSort === 'stats') renderNoken();
+    }
+  }
+}
+
+function nokenStatsCard() {
+  if (state.track === '門別') return '<div class="empty">この集計は南関4場限定です</div>';
+  if (state.nokenStatsError) return `<div class="empty">${esc(state.nokenStatsError)}<br><button class="nk-sort-btn" data-nkstats-retry>再試行</button></div>`;
+  if (!state.nokenStats) {
+    loadNokenStats();
+    return '<div class="empty">能検騎手と本番騎手を照合しています…</div>';
+  }
+  const records = state.nokenStats.records || [];
+  if (!records.length) return '<div class="empty">本番出走まで照合できる2歳馬がまだいません</div>';
+  const all = nkOutcome(records);
+  const same = nkOutcome(records.filter((r) => r.same));
+  const changed = nkOutcome(records.filter((r) => !r.same));
+  const groups = new Map();
+  for (const r of records) {
+    const key = `${r.trainer}\u0000${r.jockey}\u0000${r.debutJockey}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(r);
+  }
+  const rows = [...groups.values()].map((rs) => ({ rs, s: nkOutcome(rs) }))
+    .sort((a, b) => b.s.n - a.s.n || b.s.win - a.s.win || a.rs[0].trainer.localeCompare(b.rs[0].trainer, 'ja'))
+    .map(({ rs, s }) => {
+      const r = rs[0];
+      return `<tr><td>${personLink('trainer', r.trainer)}</td><td>${personLink('jockey', r.jockey)}</td>`
+        + `<td>${r.same ? `<b>継続</b> ${personLink('jockey', r.debutJockey)}` : personLink('jockey', r.debutJockey)}</td>${nkOutcomeCells(s)}</tr>`;
+    }).join('');
+  return `<div class="card">
+    <h2 style="margin:0 0 4px">能検騎手 → 本番騎手（厩舎別）</h2>
+    <div class="note">収録済みの2歳能検合格馬について、能検後の最初の実戦を「本番初戦」として照合。複数回能検を受けた馬は、本番前の直近能検を採用しています。</div>
+    <div class="nk-stats-summary">
+      <div class="nk-stat-box">全体 ${all.n}頭<b>勝率 ${nkPct(all.win, all.n)}</b><span class="sub">連対率 ${nkPct(all.top2, all.n)}・複勝率 ${nkPct(all.top3, all.n)}</span></div>
+      <div class="nk-stat-box">同じ騎手で本番 ${same.n}頭<b>勝率 ${nkPct(same.win, same.n)}</b><span class="sub">複勝率 ${nkPct(same.top3, same.n)}</span></div>
+      <div class="nk-stat-box">騎手交代で本番 ${changed.n}頭<b>勝率 ${nkPct(changed.win, changed.n)}</b><span class="sub">複勝率 ${nkPct(changed.top3, changed.n)}</span></div>
+    </div>
+    <div class="tablewrap"><table class="nk-table"><tr><th>厩舎</th><th>能検騎手</th><th>本番騎手</th><th>頭数</th><th>勝率</th><th>連対率</th><th>複勝率</th></tr>${rows}</table></div>
+    <div class="legend">対象 ${state.nokenStats.tested}頭中、本番初戦と騎手を照合できた${all.n}頭。少頭数の組み合わせは参考値です。データ追加に合わせて自動更新されます。</div>
+  </div>`;
+}
 
 async function renderNoken() {
   const root = $('nokenRoot');
@@ -5041,30 +5157,36 @@ async function renderNoken() {
   const nvid = raceVideoCount || (hasDayVideo ? 1 : 0);
   const sort = state.nokenSort || 'race';
   const racesShown = twoOnly ? day.races.filter((r) => (r.rows || []).length) : day.races;
-  const body = sort === 'debut' ? nokenDebutCard()
+  const isNankan = state.track !== '門別';
+  const body = sort === 'stats' && isNankan ? nokenStatsCard()
+    : sort === 'debut' ? nokenDebutCard()
     : sort === 'time' ? nokenTimeCard(day)
       : racesShown.map((r) => nokenRaceCard(r, day.date, hasDayVideo)).join('');
   const videoSrc = state.track === '門別' ? 'ホッカイドウ競馬公式' : '南関競馬公式(nankankeiba.com)';
+  const resultGuide = isNankan
+    ? '成績（タイム・上り3F・寸評・合否・能検騎手・厩舎）=競馬ブック。「その後の成績」=能検後の実戦（着順/本番騎手/距離/タイム/馬体重）。馬名・騎手・厩舎名タップで詳細へ。'
+    : '成績（タイム・上り3F・寸評・合否）=競馬ブック。「その後の成績」=能検後の実戦（着順/距離/タイム/馬体重）。馬名タップで詳細へ。';
   const dayVideoBlock = hasDayVideo ? `<details class="nk-vid"><summary>▶ 能試映像を見る（${dayRaw.races.length}R分・1本）</summary>
     <iframe width="100%" height="400" style="border:0;max-width:640px;aspect-ratio:16/9;height:auto" loading="lazy"
       src="https://www.youtube.com/embed/${esc(day.video.split('/').pop())}" allowfullscreen></iframe></details>` : '';
   root.innerHTML = `
     <div class="card">
       <h2 style="margin:0 0 4px">🎓 能力検査（能検）</h2>
-      <div class="note">2歳馬の競走資格を確認する試験走（古馬の調教試験も同じ日に混在）。合格が新馬・未勝利への出走資格。動画=${videoSrc}／成績（タイム・上り3F・寸評・合否）=競馬ブック。「その後の成績」=能検後の実戦（着順/距離/タイム/馬体重）。馬名タップで詳細へ。${nk.updated ? `${esc(nk.updated)}更新。` : ''}</div>
-      <div class="nk-dates">${dateBtns}</div>
-      <div class="nk-day-head">${dayRaw.date}（${dayRaw.races.length}R・動画${nvid}）
+      <div class="note">2歳馬の競走資格を確認する試験走（古馬の調教試験も同じ日に混在）。合格が新馬・未勝利への出走資格。動画=${videoSrc}／${resultGuide}${nk.updated ? `${esc(nk.updated)}更新。` : ''}</div>
+      ${sort === 'stats' ? '' : `<div class="nk-dates">${dateBtns}</div>`}
+      <div class="nk-day-head">${sort === 'stats' ? '収録済み全能検日' : `${dayRaw.date}（${dayRaw.races.length}R・動画${nvid}）`}
         <span class="nk-sort">
           <button class="nk-sort-btn${sort === 'race' ? ' active' : ''}" data-nksort="race">レース別</button>
           <button class="nk-sort-btn${sort === 'time' ? ' active' : ''}" data-nksort="time">タイム順</button>
           <button class="nk-sort-btn${sort === 'debut' ? ' active' : ''}" data-nksort="debut">デビュー待ち</button>
+          ${isNankan ? `<button class="nk-sort-btn${sort === 'stats' ? ' active' : ''}" data-nksort="stats">騎手×厩舎</button>` : ''}
         </span>
-        <button class="nk-sort-btn${twoOnly ? ' active' : ''}" data-nktwoonly style="margin-left:6px">2歳限定${twoOnly ? ' ✓' : ''}</button>
-        ${day.all_pdf ? `<a href="${esc(day.all_pdf)}" target="_blank" rel="noopener" class="nk-pdf">📄 全レース成績表PDF</a>` : ''}</div>
-      ${dayVideoBlock}
+        ${sort === 'stats' ? '' : `<button class="nk-sort-btn${twoOnly ? ' active' : ''}" data-nktwoonly style="margin-left:6px">2歳限定${twoOnly ? ' ✓' : ''}</button>`}
+        ${sort !== 'stats' && day.all_pdf ? `<a href="${esc(day.all_pdf)}" target="_blank" rel="noopener" class="nk-pdf">📄 全レース成績表PDF</a>` : ''}</div>
+      ${sort === 'stats' ? '' : dayVideoBlock}
     </div>
-    <div class="nk-grid${sort === 'time' ? ' nk-grid-1' : ''}">${body || '<div class="empty">この開催日のデータがありません</div>'}</div>`;
-  loadNokenHist(dayRaw);   // その後の成績を裏で取得して該当セルを更新（絞り込み前の全馬分をキャッシュ）
+    <div class="nk-grid${sort === 'time' || sort === 'stats' ? ' nk-grid-1' : ''}">${body || '<div class="empty">この開催日のデータがありません</div>'}</div>`;
+  if (sort !== 'stats') loadNokenHist(dayRaw);   // その後の成績を裏で取得して該当セルを更新（絞り込み前の全馬分をキャッシュ）
 }
 
 // 「デビュー待ち」＝能検を受けたのに、まだ1度も実戦に出ていない馬の横断リスト。
@@ -5106,12 +5228,13 @@ function nokenDebutCard() {
     <td class="num"><b>${esc(n.time || '-')}</b></td>
     <td>${mmdd(n.date)} ${n.dist || ''}m</td>
     <td class="l"><a class="horse-link" data-hid="${esc(id)}">${esc(h.name || h.horse_name || '')}</a> <span class="kyaku">${esc(h.sexage || '')}</span></td>
+    ${state.track === '門別' ? '' : `<td>${personLink('jockey', n.jockey)}</td><td>${personLink('trainer', n.trainer)}</td>`}
     <td>${esc(n.ok || '')}</td>
     <td class="l small">${esc(n.comment || '')}</td>
     <td class="nk-unraced">出走待ち（${days}日）</td></tr>`).join('');
   return `<div class="card tablewrap">
     <div class="nk-day-head" style="margin-top:0">まだ走っていない合格馬（${list.length}頭・能検タイムの速い順）</div>
-    <table><tr><th>能検タイム</th><th>能検日</th><th>馬名</th><th>合否</th><th>寸評</th><th>状況</th></tr>${rows}</table>
+    <table><tr><th>能検タイム</th><th>能検日</th><th>馬名</th>${state.track === '門別' ? '' : '<th>能検騎手</th><th>厩舎</th>'}<th>合否</th><th>寸評</th><th>状況</th></tr>${rows}</table>
     <div class="legend">実戦に出た馬はこの一覧から自動で消えます。不合格の馬は除いています。</div></div>`;
 }
 
@@ -5125,6 +5248,7 @@ function buildNokenIndex() {
       if (!prev || d.date > prev.date) {
         idx[h.horse_id] = { date: d.date, no: r.no, dist: r.dist, going: r.going,
           time: h.time, last3f: h.last3f, ten: nkTen(h), ok: h.ok, comment: h.comment, fin: h.fin,
+          name: h.name, sexage: h.sexage, jockey: h.jockey, trainer: h.trainer,
           mp4: r.mp4 || '', dayVideo: d.video || '' };
       }
     }
@@ -5320,10 +5444,12 @@ async function loadTodayTracks() {
 // 場切替ボタンと、他場のレースへ直接飛ぶ導線（馬モーダルの過去走）の両方から使う。
 async function loadTrackData(track) {
   state.track = track;
+  if (track === '門別' && state.nokenSort === 'stats') state.nokenSort = 'race';
   state.stats = null; state.model = null; state.v3Predictions = null; state.dates = {}; state.raceId = null;
   state.deckDataCheckedAt = null; state.deckRefreshError = null;
   state.record = undefined;   // 運用成績も場別。持ち越すと別の場の数字が残る
-  state.noken = null; state.nokenByHorse = null;   // 能検データは場別なので切替時にクリア
+  state.noken = null; state.nokenByHorse = null; state.nokenHist = null; state.nokenRaced = null;
+  state.nokenStats = null; state.nokenStatsLoading = false; state.nokenStatsError = null;   // 能検データは場別なので切替時にクリア
   cyokyoState.data = null; cyokyoState.date = null; cyokyoState.year = null; cyokyoState.byYear = {};
   cyokyoState.years = []; cyokyoState.base = null; cyokyoState.baseHonba = null; cyokyoState.local = null;   // 調教データも場ごとに読み直す
   if (state.sub === 'sim') state.sub = 'seiseki';   // シミュレータsubからも離脱
@@ -5452,12 +5578,16 @@ async function init() {
     if (d) { cyokyoState.date = d.dataset.cdate; renderCyokyo(); }
   });
   $('nokenRoot').addEventListener('click', (e) => {
+    const pl = e.target.closest('a.person-link');
+    if (pl) { e.preventDefault(); openPersonModal(pl.dataset.personKind, pl.dataset.person); return; }
     const hl = e.target.closest('a.horse-link');
     if (hl && hl.dataset.hid) { e.preventDefault(); openHorseModal(hl.dataset.hid, true, hl.textContent.trim()); return; }
     const s = e.target.closest('button[data-nksort]');
     if (s) { state.nokenSort = s.dataset.nksort; renderNoken(); return; }
     const two = e.target.closest('button[data-nktwoonly]');
     if (two) { state.nokenTwoOnly = !state.nokenTwoOnly; renderNoken(); return; }
+    const retry = e.target.closest('button[data-nkstats-retry]');
+    if (retry) { state.nokenStatsError = null; state.nokenStats = null; renderNoken(); return; }
     const b = e.target.closest('button[data-nkdate]');
     if (b) { state.nokenDate = b.dataset.nkdate; renderNoken(); }
   });
