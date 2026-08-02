@@ -8,3 +8,4 @@ vendor/BufferGeometryUtils.js
 vendor/Horse.glb
 vendor/gltfloader-r158.js
 vendor/three.module.min.js
+viewer-data/

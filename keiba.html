@@ -953,8 +953,8 @@ const TRACKS = {
   '門別': { prefix: 'monbetsu', baba: '36', slug: 'monbetsu', noken: true, sim: true, ai: true, data: true },
   '大井': { prefix: 'ooi', baba: '20', slug: 'ooi', noken: true, sim: true, ai: true, data: true },
   '船橋': { prefix: 'funabashi', baba: '19', slug: 'funabashi', noken: true, data: true },
-  '川崎': { prefix: 'kawasaki', baba: '21', slug: 'kawasaki', noken: true },
-  '浦和': { prefix: 'urawa', baba: '18', slug: 'urawa', noken: true },
+  '川崎': { prefix: 'kawasaki', baba: '21', slug: 'kawasaki', noken: true, data: true },
+  '浦和': { prefix: 'urawa', baba: '18', slug: 'urawa', noken: true, data: true },
 };
 const trackCfg = () => TRACKS[state.track] || TRACKS['門別'];
 // race_id内の場コード（[6:8]・競馬ブック採番）→ 場名。過去走の映像ジャンプ等で他場レースの場を特定する
@@ -974,6 +974,110 @@ async function jsonGet(path) {
   const res = await fetch(path);
   if (!res.ok) throw new Error(`${path} ${res.status}`);
   return res.json();
+}
+
+// 川崎・浦和の5年分はDBへ積まず、月単位のgzipアーカイブを必要時だけ読む。
+// 初回は各場0.1MB未満の索引だけ、レース選択時も該当月（最大約0.22MB）だけを展開する。
+const STATIC_ARCHIVE_TRACKS = new Set(['川崎', '浦和']);
+async function gzipJsonGet(path, cache = 'force-cache') {
+  const res = await fetch(path, { cache });
+  if (!res.ok) throw new Error(`${path} ${res.status}`);
+  if (res.headers.get('content-encoding') === 'gzip') return res.json();
+  if (!res.body || typeof DecompressionStream !== 'function') {
+    throw new Error('このブラウザはgzipアーカイブの展開に対応していません');
+  }
+  const body = res.body.pipeThrough(new DecompressionStream('gzip'));
+  return new Response(body).json();
+}
+
+const staticArchive = {
+  _indexes: {}, _meta: {}, _packs: {}, _history: {}, _cyokyo: {},
+  enabled(track = state.track) { return STATIC_ARCHIVE_TRACKS.has(track); },
+  prefix(track = state.track) { return (TRACKS[track] || {}).prefix; },
+  async index(track = state.track) {
+    if (!this.enabled(track)) return null;
+    if (!this._indexes[track]) {
+      const prefix = this.prefix(track);
+      this._indexes[track] = gzipJsonGet(`viewer-data/${prefix}/index.json.gz`, 'no-cache').then((doc) => {
+        const racePack = {};
+        for (const [date, races] of Object.entries(doc.dates || {})) {
+          for (const race of races) racePack[race.race_id] = date.slice(0, 7);
+        }
+        doc.racePack = racePack;
+        return doc;
+      });
+    }
+    return this._indexes[track];
+  },
+  async meta(track = state.track) {
+    if (!this.enabled(track)) return null;
+    if (!this._meta[track]) {
+      this._meta[track] = gzipJsonGet(`viewer-data/${this.prefix(track)}/meta.json.gz`, 'no-cache');
+    }
+    return this._meta[track];
+  },
+  async pack(raceId, track = state.track) {
+    const index = await this.index(track);
+    const month = index && index.racePack[raceId];
+    if (!month) return null;
+    const key = `${track}:${month}`;
+    if (!this._packs[key]) {
+      this._packs[key] = gzipJsonGet(`viewer-data/${this.prefix(track)}/packs/${month}.json.gz`);
+    }
+    const doc = await this._packs[key];
+    return (doc.races || {})[raceId] || null;
+  },
+  async listDates(track = state.track) {
+    const index = await this.index(track);
+    return index ? index.dates : null;
+  },
+  async loadRace(raceId, track = state.track) {
+    const row = await this.pack(raceId, track);
+    return row ? { race: row.race || {}, results: row.results || [], payouts: [] } : null;
+  },
+  async loadEntries(raceId, track = state.track) {
+    const row = await this.pack(raceId, track);
+    return row ? row.entries || [] : [];
+  },
+  async loadCyokyo(raceId, track = state.track) {
+    const row = await this.pack(raceId, track);
+    return row ? (row.cyokyo || []).map((horse) => ({ ...horse, race_id: raceId })) : [];
+  },
+  async loadHistory(horseIds, track = state.track) {
+    if (!this.enabled(track)) return {};
+    const prefix = this.prefix(track);
+    const buckets = [...new Set(horseIds.map((id) => String(id || '').slice(-2).padStart(2, '0')))];
+    const docs = await Promise.all(buckets.map(async (bucket) => {
+      const key = `${track}:${bucket}`;
+      if (!this._history[key]) {
+        this._history[key] = gzipJsonGet(`viewer-data/${prefix}/history/${bucket}.json.gz`).catch(() => ({}));
+      }
+      return this._history[key];
+    }));
+    const all = Object.assign({}, ...docs);
+    return Object.fromEntries(horseIds.filter((id) => all[id]).map((id) => [id, all[id]]));
+  },
+  async loadCyokyoYear(year, track = state.track) {
+    if (!this.enabled(track)) return null;
+    const key = `${track}:${year}`;
+    if (!this._cyokyo[key]) {
+      this._cyokyo[key] = gzipJsonGet(`viewer-data/${this.prefix(track)}/cyokyo/${year}.json.gz`)
+        .then((doc) => doc.dates || {}).catch(() => ({}));
+    }
+    return this._cyokyo[key];
+  },
+};
+
+function mergeRaceDates(primary, archive) {
+  const merged = {};
+  for (const source of [archive || {}, primary || {}]) {
+    for (const [date, races] of Object.entries(source)) {
+      const byId = new Map((merged[date] || []).map((race) => [race.race_id, race]));
+      for (const race of races || []) byId.set(race.race_id, race);
+      merged[date] = [...byId.values()].sort((a, b) => (a.race_no || 0) - (b.race_no || 0));
+    }
+  }
+  return merged;
 }
 
 // ============================================================
@@ -998,7 +1102,13 @@ const providers = {
     async listDates() {
       const cut = new Date(); cut.setDate(cut.getDate() - 60);
       const cutStr = `${cut.getFullYear()}-${String(cut.getMonth() + 1).padStart(2, '0')}-${String(cut.getDate()).padStart(2, '0')}`;
-      const rows = await sbGet(`chihou_races?select=race_id,race_date,race_no,track,klass,race_name,distance_m,going,weather,hasso_time,pace&track=eq.${encodeURIComponent(state.track)}&race_date=gte.${cutStr}&order=race_date.desc,race_no.asc&limit=3000`);
+      const rows = await sbGet(`chihou_races?select=race_id,race_date,race_no,track,klass,race_name,distance_m,going,weather,hasso_time,pace&track=eq.${encodeURIComponent(state.track)}&race_date=gte.${cutStr}&order=race_date.desc,race_no.asc&limit=3000`).catch(() => []);
+      const recent = this._rowsToDates(rows);
+      if (staticArchive.enabled()) {
+        const archive = await staticArchive.listDates().catch(() => null);
+        const merged = mergeRaceDates(recent, archive);
+        if (Object.keys(merged).length) return merged;
+      }
       // 直近60日が空でも失敗にはせず全期間へ切り替える。門別は11月中旬〜4月中旬が丸ごとオフシーズンで
       // この窓が必ず空になり、ここで throw するとローカルへ退避→公開サイトには data/ が無いので
       // 起動が止まる（トップが「準備中…」のまま・場切替も効かない）。
@@ -1007,39 +1117,61 @@ const providers = {
         if (full) return full;
         throw new Error('empty');
       }
-      return this._rowsToDates(rows);
+      return recent;
     },
     // 全期間分（過去の月をさかのぼる用）。バックグラウンドで呼ぶ想定。
     async listDatesFull() {
-      const rows = await sbGet(`chihou_races?select=race_id,race_date,race_no,track,klass,race_name,distance_m,going,weather,hasso_time,pace&track=eq.${encodeURIComponent(state.track)}&order=race_date.desc,race_no.asc&limit=10000`);
-      return rows.length ? this._rowsToDates(rows) : null;
+      const rows = await sbGet(`chihou_races?select=race_id,race_date,race_no,track,klass,race_name,distance_m,going,weather,hasso_time,pace&track=eq.${encodeURIComponent(state.track)}&order=race_date.desc,race_no.asc&limit=10000`).catch(() => []);
+      const remote = this._rowsToDates(rows);
+      if (staticArchive.enabled()) {
+        const archive = await staticArchive.listDates().catch(() => null);
+        const merged = mergeRaceDates(remote, archive);
+        return Object.keys(merged).length ? merged : null;
+      }
+      return rows.length ? remote : null;
     },
     async loadRace(raceId) {
-      const [races, results, payouts] = await Promise.all([
-        sbGet(`chihou_races?race_id=eq.${raceId}&select=*`),
-        sbGet(`chihou_results?race_id=eq.${raceId}&select=*&order=finish.asc.nullslast`),
-        // chihou_payoutsは後発テーブル（未作成/未backfillの環境もある）なので失敗しても静かに空扱い
-        sbGet(`chihou_payouts?race_id=eq.${raceId}&select=ticket_type,combination,official_payout_per_100,popularity`).catch(() => []),
-      ]);
-      return { race: races[0] || {}, results, payouts };
+      try {
+        const [races, results, payouts] = await Promise.all([
+          sbGet(`chihou_races?race_id=eq.${raceId}&select=*`),
+          sbGet(`chihou_results?race_id=eq.${raceId}&select=*&order=finish.asc.nullslast`),
+          // chihou_payoutsは後発テーブル（未作成/未backfillの環境もある）なので失敗しても静かに空扱い
+          sbGet(`chihou_payouts?race_id=eq.${raceId}&select=ticket_type,combination,official_payout_per_100,popularity`).catch(() => []),
+        ]);
+        if (races.length) return { race: races[0], results, payouts };
+      } catch (e) { /* 静的アーカイブへ */ }
+      return (await staticArchive.loadRace(raceId).catch(() => null)) || { race: {}, results: [], payouts: [] };
     },
     async loadDayResults(raceIds) {
       if (!raceIds.length) return {};
       const ids = raceIds.map(encodeURIComponent).join(',');
-      const rows = await sbGet(`chihou_results?race_id=in.(${ids})&select=race_id,umaban,horse_name,finish,finish_note,pop,win_odds,time_str&order=race_id.asc,finish.asc.nullslast&limit=1000`);
+      const rows = await sbGet(`chihou_results?race_id=in.(${ids})&select=race_id,umaban,horse_name,finish,finish_note,pop,win_odds,time_str&order=race_id.asc,finish.asc.nullslast&limit=1000`).catch(() => []);
       const byRace = {};
       for (const row of rows) (byRace[row.race_id] = byRace[row.race_id] || []).push(row);
+      if (staticArchive.enabled()) {
+        await Promise.all(raceIds.filter((raceId) => !byRace[raceId]).map(async (raceId) => {
+          const archived = await staticArchive.loadRace(raceId).catch(() => null);
+          if (archived && archived.results.length) byRace[raceId] = archived.results;
+        }));
+      }
       return byRace;
     },
     async loadEntries(raceId) {
-      try { return await sbGet(`chihou_entries?race_id=eq.${raceId}&select=*&order=umaban.asc`); }
-      catch (e) { return []; }
+      try {
+        const rows = await sbGet(`chihou_entries?race_id=eq.${raceId}&select=*&order=umaban.asc`);
+        if (rows.length) return rows;
+      } catch (e) { /* 静的アーカイブへ */ }
+      return staticArchive.loadEntries(raceId).catch(() => []);
     },
     async loadCyokyo(raceId) {
       try {
         const rows = await sbGet(`chihou_cyokyo?race_id=eq.${raceId}&select=*&order=umaban.asc`);
         if (rows.length) return rows;
       } catch (e) { /* テーブル未作成 → ローカルへ */ }
+      if (staticArchive.enabled()) {
+        const rows = await staticArchive.loadCyokyo(raceId).catch(() => []);
+        if (rows.length) return rows;
+      }
       return providers.local.loadCyokyo(raceId);
     },
     async loadNouryoku(raceId) {
@@ -1059,8 +1191,9 @@ const providers = {
     async loadHistory(horseIds) {
       if (!horseIds.length) return {};
       const idlist = horseIds.map(encodeURIComponent).join(',');
-      const rows = await sbGet(`chihou_results?horse_id=in.(${idlist})&select=horse_id,umaban,finish,pop,first3f,last3f,time_sec,kinryo,sex_age,passing,corner4_pos,comment,time_str,margin,body_weight,jockey,race_id,chihou_races(race_date,distance_m,going,pace,klass,race_name,soubi:extra->>馬装具,laps:extra->laps)&order=race_id.desc&limit=2000`);
-      const map = {};
+      const rows = await sbGet(`chihou_results?horse_id=in.(${idlist})&select=horse_id,umaban,finish,pop,first3f,last3f,time_sec,kinryo,sex_age,passing,corner4_pos,comment,time_str,margin,body_weight,jockey,race_id,chihou_races(race_date,distance_m,going,pace,klass,race_name,soubi:extra->>馬装具,laps:extra->laps)&order=race_id.desc&limit=2000`).catch(() => []);
+      const archived = staticArchive.enabled() ? await staticArchive.loadHistory(horseIds).catch(() => ({})) : {};
+      const map = Object.fromEntries(Object.entries(archived).map(([id, runs]) => [id, [...runs]]));
       for (const r of rows) {
         const ra = r.chihou_races || {};
         (map[r.horse_id] = map[r.horse_id] || []).push({
@@ -1073,12 +1206,19 @@ const providers = {
         });
       }
       for (const k in map) {
-        map[k].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-        markFirstBlinker(map[k], (run) => run.equip);
+        // 静的アーカイブと直近DBの重複は、後から入れたDB側を優先して1走にまとめる。
+        const dedup = new Map();
+        for (const run of map[k]) dedup.set(run.race_id || `${run.date}:${run.fin}:${run.time}`, run);
+        map[k] = [...dedup.values()].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        markFirstBlinker(map[k], (run) => run.equip || []);
       }
       return map;
     },
     async loadStats() {
+      if (staticArchive.enabled()) {
+        const meta = await staticArchive.meta().catch(() => null);
+        if (meta && meta.stats) return meta.stats;
+      }
       try {
         const rows = await sbGet(`chihou_meta?key=eq.${trackCfg().prefix}_stats&select=value`);
         if (rows.length) return rows[0].value;
@@ -1086,6 +1226,10 @@ const providers = {
       return providers.local.loadStats();
     },
     async loadModel() {
+      if (staticArchive.enabled()) {
+        const meta = await staticArchive.meta().catch(() => null);
+        if (meta && meta.model) return meta.model;
+      }
       try {
         const rows = await sbGet(`chihou_meta?key=eq.${trackCfg().prefix}_model&select=value`);
         if (rows.length) return rows[0].value;
@@ -1138,7 +1282,16 @@ const providers = {
   local: {
     label: 'ローカルJSON',
     _horses: null,
-    async listDates() { return (await jsonGet('data/index.json')).dates; },
+    _horsesTrack: null,
+    async listDates() {
+      const all = (await jsonGet('data/index.json')).dates || {};
+      const dates = {};
+      for (const [date, races] of Object.entries(all)) {
+        const own = (races || []).filter((race) => race.track === state.track);
+        if (own.length) dates[date] = own;
+      }
+      return dates;
+    },
     async loadRace(raceId) {
       try { return await jsonGet(`data/json/seiseki/${raceId}.json`); }
       catch (e) { return { race: {}, results: [] }; }
@@ -1171,18 +1324,23 @@ const providers = {
       } catch (e) { return []; }
     },
     async loadHistory(horseIds) {
-      if (this._horses === null) {
-        try { this._horses = await jsonGet('data/horses.json'); } catch (e) { this._horses = {}; }
+      const prefix = trackCfg().prefix;
+      if (this._horses === null || this._horsesTrack !== prefix) {
+        const file = state.track === '門別' ? 'data/horses.json' : `data/horses_${prefix}.json`;
+        try { this._horses = await jsonGet(file); } catch (e) { this._horses = {}; }
+        this._horsesTrack = prefix;
       }
       const map = {};
       for (const id of horseIds) if (this._horses[id]) map[id] = this._horses[id];
       return map;
     },
     async loadStats() {
-      try { return await jsonGet('data/stats.json'); } catch (e) { return null; }
+      const file = state.track === '門別' ? 'data/stats.json' : `data/stats_${trackCfg().prefix}.json`;
+      try { return await jsonGet(file); } catch (e) { return null; }
     },
     async loadModel() {
-      try { return await jsonGet('data/model.json'); } catch (e) { return null; }
+      const file = state.track === '門別' ? 'data/model.json' : `data/model_${trackCfg().prefix}.json`;
+      try { return await jsonGet(file); } catch (e) { return null; }
     },
     async loadV3Predictions() {
       if (state.track !== '門別') return null;
@@ -4285,6 +4443,10 @@ const cyoAge = (s) => { const m = String(s || '').match(/(\d+)/); return m ? +m[
 // 指定年の調教日データを取得（既定メタ＝最新年、過去年はキー別に遅延ロード、ローカルは全期間から抽出）
 async function cyoLoadYear(y) {
   if (cyokyoState.byYear[y]) return cyokyoState.byYear[y];
+  if (staticArchive.enabled()) {
+    const dates = await staticArchive.loadCyokyoYear(y).catch(() => null);
+    if (dates) return (cyokyoState.byYear[y] = dates);
+  }
   if (cyokyoState.local) {
     const dd = {};
     for (const d in cyokyoState.local) if (d.slice(0, 4) === y) dd[d] = cyokyoState.local[d];
@@ -4304,15 +4466,29 @@ async function renderCyokyo() {
   const track = state.track;
   if (!cyokyoState.data) {
     root.innerHTML = '<div class="empty">読み込み中…（調教データ）</div>';
-    // Supabase（既定＝最新年＋年リスト）→ ローカル全期間 の順で取得
-    try {
-      const rows = await sbGet(`chihou_meta?key=eq.${trackCfg().prefix}_cyokyo&select=value`);
+    // 川崎・浦和は5年分をDBへ積まず、年別の軽量アーカイブから遅延ロードする。
+    if (staticArchive.enabled(track)) {
+      const meta = await staticArchive.meta(track).catch(() => null);
       if (state.track !== track) return;
-      if (rows.length && rows[0].value && rows[0].value.dates) cyokyoState.data = rows[0].value;
-    } catch (e) { /* 次へ */ }
+      if (meta && meta.cyokyo && meta.cyokyo.years && meta.cyokyo.years.length) {
+        const latestYear = meta.cyokyo.years[0];
+        const latestDates = await staticArchive.loadCyokyoYear(latestYear, track).catch(() => ({}));
+        cyokyoState.data = { ...meta.cyokyo, dates: latestDates };
+      }
+    }
+    // Supabase（既定＝最新年＋年リスト）→ ローカル全期間 の順で取得
+    if (!cyokyoState.data) {
+      try {
+        const rows = await sbGet(`chihou_meta?key=eq.${trackCfg().prefix}_cyokyo&select=value`);
+        if (state.track !== track) return;
+        if (rows.length && rows[0].value && rows[0].value.dates) cyokyoState.data = rows[0].value;
+      } catch (e) { /* 次へ */ }
+    }
     if (state.track !== track) return;
     if (!cyokyoState.data) {
-      try { cyokyoState.data = await jsonGet('data/cyokyo_works.json'); cyokyoState.local = cyokyoState.data.dates; }
+      const localFile = state.track === '門別'
+        ? 'data/cyokyo_works.json' : `data/cyokyo_works_${trackCfg().prefix}.json`;
+      try { cyokyoState.data = await jsonGet(localFile); cyokyoState.local = cyokyoState.data.dates; }
       catch (e) {
         root.innerHTML = `<div class="empty">調教データを読み込めませんでした（${esc(e.message)}）。<br>
           <button onclick="renderCyokyo()">↻ 再試行</button></div>`;
@@ -5197,7 +5373,11 @@ async function init() {
   if (qtrack && TRACKS[qtrack]) state.track = qtrack;
   renderTrackSwitch();
   renderViewTabs();
-  for (const name of ['supabase', 'local']) {
+  // ローカルでバックフィルを確認するときは ?provider=local を付け、
+  // 接続可能なSupabaseよりローカルJSONを明示的に優先する。
+  const requestedProvider = new URLSearchParams(location.search).get('provider');
+  const providerOrder = requestedProvider === 'local' ? ['local', 'supabase'] : ['supabase', 'local'];
+  for (const name of providerOrder) {
     try {
       state.dates = await providers[name].listDates();
       state.provider = providers[name];
