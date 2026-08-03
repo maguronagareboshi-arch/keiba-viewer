@@ -2869,6 +2869,13 @@ const KV_APP_CSS = [
         <h2 class="section-title" style="margin-bottom:0"><i class="fas fa-chart-area"></i> 馬場傾向まとめ</h2>
         <span style="font-size:11px;color:#6b7280">馬場差：マイナス＝速い馬場 / プラス＝遅い馬場</span>
         <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+          <select id="track-trend-period" onchange="renderTrackTrend()" aria-label="表示期間"
+            style="padding:5px 10px;border:1.5px solid #e2e8f0;border-radius:6px;font-size:13px">
+            <option value="90">直近3ヶ月</option>
+            <option value="365" selected>直近1年</option>
+            <option value="1095">直近3年</option>
+            <option value="0">全期間</option>
+          </select>
           <select id="track-trend-baba" onchange="renderTrackTrend()"
             style="padding:5px 10px;border:1.5px solid #e2e8f0;border-radius:6px;font-size:13px">
             <option value="">全競馬場</option>
@@ -2995,7 +3002,7 @@ const KV_APP_CSS = [
 
 <!-- ユーザー手計測の区間ラップ(259レース)。app-main より先に window.KOCHI_USER_LAPS を用意する -->
 <script defer src="data/kochi-user-laps.js?v=20260728-v1"></script>
-<script defer src="modules/app-main.js?v=20260803-video1"></script>
+<script defer src="modules/app-main.js?v=20260804-perf1"></script>
 <script defer src="modules/race-video.js?v=20260803-v1"></script>
 <script defer src="modules/paddock-clips.js?v=20260803-v1"></script>
 <!-- 計測管理(管理者専用)。app-main の kvSupabaseReadConfig を使うので後に読む -->

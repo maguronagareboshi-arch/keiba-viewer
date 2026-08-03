@@ -29,7 +29,7 @@ const _kvLibSpecs = {
       window.KvJraTransferShadow?.contract?.status === 'production_first_start',
   },
   aiAnalysis: {
-    src: 'modules/ai-analysis.js?v=20260726-transfer3-bias1',
+    src: 'modules/ai-analysis.js?v=20260804-perf1',
     ready: () => typeof window.computeYosoScored === 'function' && typeof window.renderPredictionPanel === 'function' && typeof window.renderAnalysis === 'function',
   },
   aiInsights: {
@@ -7911,6 +7911,36 @@ async function _bulkFetchRun(monthsList, label) {
 }
 function bulkCancel() { _bulkCancel = true; _bulkLog('⏳ 中止処理中…現在のレース完了後に停止します。'); }
 
+// ── 乗り替わり分析の土台（フィルタ非依存なので履歴が変わるまで使い回す）──
+// 【2026-08-04】全履歴(約17万件)の2周と馬ごとの時系列ソートは、年/厩舎/騎手/ファイナルの
+// どれを選んでも同じ結果になる。renderJockeyChangeAnalysis はこれを毎回やり直していたため、
+// 画面を開くたび・フィルタを変えるたびに0.7〜1.1秒メインスレッドが止まっていた。
+// 無効化の鍵は _kvHistoryRevision（馬/レース行の追加・削除で増える）と、
+// 部分キャッシュから全履歴へ切り替わる _idbFullReady の2つ。
+function _jcScanHistory() {
+  const rev = `${Number(window._kvHistoryRevision || 0)}|${_idbFullReady ? 1 : 0}`;
+  if (window._jcScanCache && window._jcScanCache.rev === rev) return window._jcScanCache;
+  const store = lsRead();
+  // ファイナルレース（race_nameに「ファイナル」を含む）の日R集合
+  const finalSet = new Set();
+  for (const k of Object.keys(store)) { if (!k.startsWith('race_31_')) continue; const r = store[k]; if (/ファイナル/.test(r.race_name || '')) finalSet.add(`${r.race_date}_${parseInt(r.race_no)}`); }
+  const runs = {}, trAll = {}, years = new Set();
+  for (const k of Object.keys(store)) {
+    const p = k.split('_'); if (p.length !== 4 || p[0] !== '31') continue;
+    const v = store[k]; if (!v || v.type !== 'horse') continue;
+    const ch = parseInt(v.chakujun); if (isNaN(ch)) continue;
+    const jk = (v.jockey || '').trim(); if (!jk) continue;
+    const tr = (v.trainer || '').trim();
+    const rno = parseInt(p[2]);
+    const yr = String(p[1]).slice(0, 4); if (/^\d{4}$/.test(yr)) years.add(yr);
+    if (tr) trAll[tr] = (trAll[tr] || 0) + 1;   // 厩舎の総騎乗（高知所属判定用・全期間）
+    (runs[v.horseName] = runs[v.horseName] || []).push({ d: p[1], rno, jk, ch, tr, fin: finalSet.has(`${p[1]}_${rno}`) });
+  }
+  for (const n of Object.keys(runs)) runs[n].sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : a.rno - b.rno);
+  window._jcScanCache = { rev, finalSet, runs, trAll, years };
+  return window._jcScanCache;
+}
+
 // ── 乗り替わり分析（前走から騎手が替わった全レースを集計） ──
 // 「誰に乗せ替えたら来る/危険か（乗替先ランキング）」＋「A→Bペア別」。表示専用・分析ページ。
 function renderJockeyChangeAnalysis() {
@@ -7930,23 +7960,17 @@ function renderJockeyChangeAnalysis() {
     return String(d).slice(0, 4) === yf;
   };
   const yfLabel = yf === 'L3' ? '過去3年' : yf === 'L5' ? '過去5年' : yf ? yf + '年' : '';
-  const store = lsRead();
-  // ファイナルレース（race_nameに「ファイナル」を含む）の日R集合
-  const finalSet = new Set();
-  for (const k of Object.keys(store)) { if (!k.startsWith('race_31_')) continue; const r = store[k]; if (/ファイナル/.test(r.race_name || '')) finalSet.add(`${r.race_date}_${parseInt(r.race_no)}`); }
+  // 全履歴の走査（約17万件×2周）と馬ごとの時系列ソートは、年/厩舎/騎手/ファイナルの
+  // どれを変えても結果が同じ。毎回やり直していたのが、この画面を開くたび・フィルタを
+  // 変えるたびに0.7〜1.1秒固まっていた原因だったため、履歴が変わるまで使い回す。
+  const { finalSet, runs, trAll, years } = _jcScanHistory();
   const isFinal = (d, rno) => finalSet.has(`${d}_${rno}`);
-  const runs = {}, jkAll = {}, years = new Set(), trAll = {}, trainers = {}, trJk = {}, jkAllCnt = {}, jfTr = {};
-  for (const k of Object.keys(store)) {
-    const p = k.split('_'); if (p.length !== 4 || p[0] !== '31') continue;
-    const v = store[k]; if (!v || v.type !== 'horse') continue;
-    const ch = parseInt(v.chakujun); if (isNaN(ch)) continue;
-    const jk = (v.jockey || '').trim(); if (!jk) continue;
-    const tr = (v.trainer || '').trim();
-    const rno = parseInt(p[2]);
-    const yr = String(p[1]).slice(0, 4); if (/^\d{4}$/.test(yr)) years.add(yr);
-    if (tr) trAll[tr] = (trAll[tr] || 0) + 1;   // 厩舎の総騎乗（高知所属判定用・全期間）
-    (runs[v.horseName] = runs[v.horseName] || []).push({ d: p[1], rno, jk, ch, tr, fin: isFinal(p[1], rno) });
-    if (inYear(p[1]) && (!finalOnly || isFinal(p[1], rno))) {
+  const jkAll = {}, trainers = {}, trJk = {}, jkAllCnt = {}, jfTr = {};
+  // 集計はすべて件数の足し上げ（順序に依存しない）ので、store の代わりに runs を回しても同値。
+  for (const rs of Object.values(runs)) {
+    for (const r of rs) {
+      if (!(inYear(r.d) && (!finalOnly || r.fin))) continue;
+      const jk = r.jk, tr = r.tr, ch = r.ch;
       (jkAll[jk] = jkAll[jk] || { n: 0, f: 0 }); jkAll[jk].n++; if (ch <= 3) jkAll[jk].f++;
       if (tr) jkAllCnt[jk] = (jkAllCnt[jk] || 0) + 1;   // 騎手ドロップダウン用（高知所属騎乗数）
       if (tr) { trainers[tr] = (trainers[tr] || 0) + 1;
@@ -7990,7 +8014,7 @@ function renderJockeyChangeAnalysis() {
       if (cur && jsel.value !== cur) { renderJockeyChangeAnalysis(); return; }
     }
   }
-  for (const n of Object.keys(runs)) runs[n].sort((a, b) => a.d < b.d ? -1 : a.d > b.d ? 1 : a.rno - b.rno);
+  // runs は _jcScanHistory() 内で馬ごとに時系列ソート済み
   const byB = {}, pair = {}, sameB = {}, jkTr = {}, jfSrcTr = {};   // sameB＝同騎手継続の基準／jkTr＝騎手×厩舎／jfSrcTr＝選択騎手の厩舎別・乗せ替え元
   const chgTot = { n: 0, f: 0 }, contTot = { n: 0, f: 0 };
   for (const n of Object.keys(runs)) {
@@ -9909,6 +9933,22 @@ function renderTrackTrend() {
     wrap.innerHTML = '<p class="no-data">データがありません</p>';
     return;
   }
+  // ── 表示期間で絞る（既定＝直近1年）──
+  // 【2026-08-04】保存済みの全開催日（高知だけで1,349日）を一度に描くと1行あたり約20要素・
+  // HTML約2.5MBになり、この画面を開くと4.4秒メインスレッドが止まっていた。
+  // 古い日まで見たい時は「全期間」を選べば従来と同じ表になる。
+  const _periodSel = document.getElementById('track-trend-period');
+  const _periodDays = _periodSel ? (parseInt(_periodSel.value) || 0) : 365;
+  const _totalDays = groups.length;
+  if (_periodDays > 0) {
+    const _today = _kvTodayYmd();
+    const _inPeriod = groups.filter(g => dateDiffDays(_today, g.date) <= _periodDays);
+    // 期間内が空（長く開いていない等）なら、空表にせず直近ぶんだけ出す
+    groups = _inPeriod.length ? _inPeriod : groups.slice(0, 60);
+  }
+  const _shownNote = _totalDays > groups.length
+    ? `<p style="font-size:11px;color:#6b7280;margin:0 0 8px">全${_totalDays.toLocaleString()}日のうち直近${groups.length.toLocaleString()}日を表示中（右上の期間で切り替え）</p>`
+    : '';
   const lsData = lsRead();
 
   // 全グループのbias・condを事前計算
@@ -10001,7 +10041,7 @@ function renderTrackTrend() {
 
   // 2026-07-11：閲覧者もメモ以外は今まで通り見えるが、日付/競馬場/馬場状態/R数は幅を絞り、
   // 馬場傾向メモに横幅を回して長文でも折り返し表示できるようにする（テーブルは固定レイアウト化）。
-  wrap.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed">
+  wrap.innerHTML = `${_shownNote}<table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed">
     <colgroup>
       <col style="width:9%"><col style="width:7%"><col style="width:7%">
       <col style="width:13%"><col style="width:13%"><col style="width:11%">
@@ -13060,6 +13100,21 @@ function timeToSec(str) {
     return parseInt(parts[0]) * 60 + parseFloat(parts[1]);
   }
   return parseFloat(str) || null;
+}
+
+// ── 日数差ヘルパー（d1 > d2、両方 YYYYMMDD or YYYY/MM/DD 文字列） ──
+// 【2026-08-04 移設】元は ai-analysis.js にしか無く、同モジュールの遅延ロードを待たない経路
+// （renderTrackTrend → getHorseAnchoredBias → _horseBiasDiffs、および 4899/4908行のランキング集計）
+// から呼ぶと ReferenceError になっていた。_renderPageWithHistory の try{}catch{} が例外を
+// 握り潰すため、馬場ページが「エラーも出ないまま真っ白」になる無言の故障だった。
+// app-main.js は必ず先に読まれるのでここを唯一の定義とする（ai-analysis.js 側は削除済み・実装は同一）。
+function dateDiffDays(d1str, d2str) {
+  if (!d1str || !d2str) return 999;
+  const norm = s => String(s).replace(/\//g, '');
+  const n1 = norm(d1str), n2 = norm(d2str);
+  if (n1.length < 8 || n2.length < 8) return 999;
+  const p = s => new Date(s.slice(0,4), parseInt(s.slice(4,6))-1, parseInt(s.slice(6,8))).getTime();
+  return Math.round((p(n1) - p(n2)) / 86400000);
 }
 
 /**

@@ -1634,14 +1634,8 @@ function lookupJockeyStats(name) {
 }
 
 // ── 日数差ヘルパー（d1 > d2、両方 YYYYMMDD 文字列） ──
-function dateDiffDays(d1str, d2str) {
-  if (!d1str || !d2str) return 999;
-  const norm = s => String(s).replace(/\//g, '');
-  const n1 = norm(d1str), n2 = norm(d2str);
-  if (n1.length < 8 || n2.length < 8) return 999;
-  const p = s => new Date(s.slice(0,4), parseInt(s.slice(4,6))-1, parseInt(s.slice(6,8))).getTime();
-  return Math.round((p(n1) - p(n2)) / 86400000);
-}
+// 【2026-08-04】app-main.js へ移設（実装は同一）。ここにしか無かった時代は、
+// このモジュールを遅延ロードしない画面（馬場ページ等）から呼ぶと ReferenceError になっていた。
 
 // ══════════════ 時系列インデックス：コンボ統計の未来情報混入対策（2026-07-10）══════════════
 // 【問題】getComboStats()等は全期間のplace/totalを合算しており、過去レースを評価するとき
