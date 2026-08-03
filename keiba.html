@@ -3894,7 +3894,7 @@ function openNokenVideoModal(hid) {
   const title = `${mmdd(n.date)} ${n.no || ''}R・${n.dist || ''}m 能検映像`;
   let player = '';
   if (n.mp4) {
-    player = `<video class="nk-video" controls preload="metadata" playsinline src="${esc(n.mp4)}#t=0.1"></video>`;
+    player = nkNativeVideo(n.mp4, n.mp4Start, n.mp4End, false);
   } else {
     player = nkYoutubeEmbed(n.raceVideo || n.dayVideo,
       n.raceVideo ? n.videoStart : 0, n.raceVideo ? n.videoEnd : 0, '能検映像');
@@ -4931,6 +4931,17 @@ function nkTen(h) {
 }
 const nkOkCls = (v) => v === '合格' ? 'nk-ok' : v === '不合格' ? 'nk-ng' : '';
 
+function nkNativeVideo(url, start = 0, end = 0, lazy = false) {
+  const base = String(url || '').split('#')[0];
+  if (!/^https:\/\//i.test(base)) return '';
+  const startSec = Math.max(0, Math.floor(Number(start) || 0));
+  const endSec = Math.floor(Number(end) || 0);
+  const fragment = endSec > startSec ? `#t=${startSec},${endSec}` : '#t=0.1';
+  const source = `${base}${fragment}`;
+  return `<video class="nk-video" controls preload="none" playsinline
+    ${lazy ? `data-src="${esc(source)}"` : `src="${esc(source)}"`}></video>`;
+}
+
 function nkYoutubeEmbed(url, start = 0, end = 0, title = '能検映像', lazy = false) {
   const idMatch = String(url || '').match(/(?:youtu\.be\/|[?&]v=|\/embed\/)([A-Za-z0-9_-]{6,})/i);
   if (!idMatch) return '';
@@ -4993,7 +5004,7 @@ function nokenRaceCard(r, afterDate, hasDayVideo) {
   // 動画: mp4または、公式YouTubeのレース開始・終了秒を指定してレース単位で表示。
   const videoBlock = r.mp4
     ? `<details class="nk-vid"><summary>▶ 動画を見る</summary>
-        <video class="nk-video" controls preload="none" playsinline src="${esc(r.mp4)}#t=0.1"></video></details>`
+        ${nkNativeVideo(r.mp4, r.mp4_start, r.mp4_end, !!r.mp4_source)}</details>`
     : r.video
       ? `<details class="nk-vid"><summary>▶ このレースの動画を見る</summary>
           ${nkYoutubeEmbed(r.video, r.video_start, r.video_end, `${r.no}R 能検映像`, true)}</details>`
@@ -5166,7 +5177,8 @@ async function renderNoken() {
     : dayRaw;
   const dateBtns = days.map((d) =>
     `<button class="nk-date-btn${d.date === state.nokenDate ? ' active' : ''}" data-nkdate="${d.date}">${mmdd(d.date)}</button>`).join('');
-  const hasDayVideo = !!day.video;   // 大井等: レース単位ではなく開催日単位のYouTube動画
+  // R2開催日MP4がある日はYouTube iframeを出さず、通常プレイヤーだけを表示する。
+  const hasDayVideo = !!day.video && !day.r2_video;
   const raceVideoCount = day.races.filter((r) => r.mp4 || r.video).length;
   const nvid = raceVideoCount || (hasDayVideo ? 1 : 0);
   const sort = state.nokenSort || 'race';
@@ -5176,7 +5188,8 @@ async function renderNoken() {
     : sort === 'debut' ? nokenDebutCard()
     : sort === 'time' ? nokenTimeCard(day)
       : racesShown.map((r) => nokenRaceCard(r, day.date, hasDayVideo)).join('');
-  const videoSrc = state.track === '門別' ? 'ホッカイドウ競馬公式' : '南関競馬公式(nankankeiba.com)';
+  const videoSrc = state.track === '門別' ? 'ホッカイドウ競馬公式'
+    : day.r2_video ? '南関競馬公式映像（軽量MP4）' : '南関競馬公式(nankankeiba.com)';
   const resultGuide = isNankan
     ? '成績（タイム・上り3F・寸評・合否・能検騎手・厩舎）=競馬ブック。「その後の成績」=能検後の実戦（着順/本番騎手/距離/タイム/馬体重）。馬名・騎手・厩舎名タップで詳細へ。'
     : '成績（タイム・上り3F・寸評・合否）=競馬ブック。「その後の成績」=能検後の実戦（着順/距離/タイム/馬体重）。馬名タップで詳細へ。';
@@ -5263,7 +5276,8 @@ function buildNokenIndex() {
         idx[h.horse_id] = { date: d.date, no: r.no, dist: r.dist, going: r.going,
           time: h.time, last3f: h.last3f, ten: nkTen(h), ok: h.ok, comment: h.comment, fin: h.fin,
           name: h.name, sexage: h.sexage, jockey: h.jockey, trainer: h.trainer,
-          mp4: r.mp4 || '', raceVideo: r.video || '', videoStart: r.video_start || 0,
+          mp4: r.mp4 || '', mp4Start: r.mp4_start || 0, mp4End: r.mp4_end || 0,
+          mp4Source: r.mp4_source || '', raceVideo: r.video || '', videoStart: r.video_start || 0,
           videoEnd: r.video_end || 0, dayVideo: d.video || '' };
       }
     }
@@ -5597,6 +5611,8 @@ async function init() {
     if (videoSummary) {
       const iframe = videoSummary.parentElement.querySelector('iframe[data-src]');
       if (iframe) { iframe.src = iframe.dataset.src; iframe.removeAttribute('data-src'); }
+      const video = videoSummary.parentElement.querySelector('video[data-src]');
+      if (video) { video.src = video.dataset.src; video.removeAttribute('data-src'); video.load(); }
     }
     const pl = e.target.closest('a.person-link');
     if (pl) { e.preventDefault(); openPersonModal(pl.dataset.personKind, pl.dataset.person); return; }
