@@ -968,15 +968,41 @@ const RACEID_TRACK = { '42': '門別', '10': '大井', '11': '川崎', '12': '�
 const personLink = (kind, name) => (name
   ? `<a class="person-link" data-person-kind="${kind}" data-person="${esc(name)}">${esc(name)}</a>` : '');
 
-async function sbGet(pathq) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${pathq}`, {
+const FETCH_TIMEOUT_MS = 12000;
+async function fetchTimed(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (e) {
+    if (e && e.name === 'AbortError') throw new Error(`通信が${Math.round(timeoutMs / 1000)}秒でタイムアウトしました`);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+async function sbGet(pathq, timeoutMs = FETCH_TIMEOUT_MS) {
+  const res = await fetchTimed(`${SUPABASE_URL}/rest/v1/${pathq}`, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
-  });
+  }, timeoutMs);
   if (!res.ok) throw new Error(`supabase ${res.status}`);
   return res.json();
 }
+async function sbGetPaged(pathq, pageSize = 1000, maxRows = 20000) {
+  const rows = [];
+  const joiner = pathq.includes('?') ? '&' : '?';
+  for (let offset = 0; offset < maxRows; offset += pageSize) {
+    const page = await sbGet(`${pathq}${joiner}limit=${pageSize}&offset=${offset}`);
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+  // 件数が上限のちょうど倍数でも誤って超過扱いにしない。1行だけ先を確認する。
+  const overflow = await sbGet(`${pathq}${joiner}limit=1&offset=${maxRows}`);
+  if (!overflow.length) return rows;
+  throw new Error(`取得件数が安全上限（${maxRows}件）に達しました。条件を絞ってください。`);
+}
 async function jsonGet(path) {
-  const res = await fetch(path);
+  const res = await fetchTimed(path);
   if (!res.ok) throw new Error(`${path} ${res.status}`);
   return res.json();
 }
@@ -985,7 +1011,7 @@ async function jsonGet(path) {
 // 初回は各場0.1MB未満の索引だけ、レース選択時も該当月（最大約0.22MB）だけを展開する。
 const STATIC_ARCHIVE_TRACKS = new Set(['川崎', '浦和']);
 async function gzipJsonGet(path, cache = 'force-cache') {
-  const res = await fetch(path, { cache });
+  const res = await fetchTimed(path, { cache });
   if (!res.ok) throw new Error(`${path} ${res.status}`);
   if (res.headers.get('content-encoding') === 'gzip') return res.json();
   if (!res.body || typeof DecompressionStream !== 'function') {
@@ -1050,17 +1076,33 @@ const staticArchive = {
   },
   async loadHistory(horseIds, track = state.track) {
     if (!this.enabled(track)) return {};
-    const prefix = this.prefix(track);
     const buckets = [...new Set(horseIds.map((id) => String(id || '').slice(-2).padStart(2, '0')))];
     const docs = await Promise.all(buckets.map(async (bucket) => {
-      const key = `${track}:${bucket}`;
+      const key = `nankan:${bucket}`;
       if (!this._history[key]) {
-        this._history[key] = gzipJsonGet(`viewer-data/${prefix}/history/${bucket}.json.gz`).catch(() => ({}));
+        this._history[key] = gzipJsonGet(`viewer-data/nankan/history/${bucket}.json.gz`).catch(async () => {
+          const oldDocs = await Promise.all(['川崎', '浦和'].map(async (oldTrack) => {
+            const oldKey = `${oldTrack}:${bucket}`;
+            if (!this._history[oldKey]) {
+              this._history[oldKey] = gzipJsonGet(
+                `viewer-data/${this.prefix(oldTrack)}/history/${bucket}.json.gz`).catch(() => ({}));
+            }
+            return this._history[oldKey];
+          }));
+          const merged = {};
+          for (const doc of oldDocs) for (const [id, runs] of Object.entries(doc || {})) {
+            merged[id] = [...(merged[id] || []), ...(runs || [])];
+          }
+          return merged;
+        });
       }
       return this._history[key];
     }));
     const all = Object.assign({}, ...docs);
-    return Object.fromEntries(horseIds.filter((id) => all[id]).map((id) => [id, all[id]]));
+    return Object.fromEntries(horseIds.filter((id) => all[id]).map((id) => {
+      const dedup = new Map((all[id] || []).map((run) => [run.race_id || `${run.date}:${run.fin}:${run.time}`, run]));
+      return [id, [...dedup.values()].sort((a, b) => (b.date || '').localeCompare(a.date || ''))];
+    }));
   },
   async loadCyokyoYear(year, track = state.track) {
     if (!this.enabled(track)) return null;
@@ -1102,8 +1144,8 @@ const providers = {
       }
       return dates;
     },
-    // 起動を速くするため直近分だけ先に取得（全期間分は裏でlistDatesFullが追って読み込む）
-    // ※このビューアは門別専用。他場(大井等)データが同テーブルに入っても track=門別 で必ず絞る。
+    // 起動を速くするため直近分だけ先に取得。全期間分は過去月を開く時だけ読む。
+    // 他場データが同テーブルに入っても、現在のtrackで必ず絞る。
     async listDates() {
       const cut = new Date(); cut.setDate(cut.getDate() - 60);
       const cutStr = `${cut.getFullYear()}-${String(cut.getMonth() + 1).padStart(2, '0')}-${String(cut.getDate()).padStart(2, '0')}`;
@@ -1124,12 +1166,12 @@ const providers = {
       }
       return recent;
     },
-    // 全期間分（過去の月をさかのぼる用）。バックグラウンドで呼ぶ想定。
-    async listDatesFull() {
-      const rows = await sbGet(`chihou_races?select=race_id,race_date,race_no,track,klass,race_name,distance_m,going,weather,hasso_time,pace&track=eq.${encodeURIComponent(state.track)}&order=race_date.desc,race_no.asc&limit=10000`).catch(() => []);
+    // 全期間分（過去の月をさかのぼる用）。PostgRESTの行上限で欠けないようページングする。
+    async listDatesFull(track = state.track) {
+      const rows = await sbGetPaged(`chihou_races?select=race_id,race_date,race_no,track,klass,race_name,distance_m,going,weather,hasso_time,pace&track=eq.${encodeURIComponent(track)}&order=race_date.desc,race_no.asc`, 1000, 30000).catch(() => []);
       const remote = this._rowsToDates(rows);
-      if (staticArchive.enabled()) {
-        const archive = await staticArchive.listDates().catch(() => null);
+      if (staticArchive.enabled(track)) {
+        const archive = await staticArchive.listDates(track).catch(() => null);
         const merged = mergeRaceDates(remote, archive);
         return Object.keys(merged).length ? merged : null;
       }
@@ -1196,7 +1238,7 @@ const providers = {
     async loadHistory(horseIds) {
       if (!horseIds.length) return {};
       const idlist = horseIds.map(encodeURIComponent).join(',');
-      const rows = await sbGet(`chihou_results?horse_id=in.(${idlist})&select=horse_id,umaban,finish,pop,first3f,last3f,time_sec,kinryo,sex_age,passing,corner4_pos,comment,time_str,margin,body_weight,jockey,race_id,chihou_races(race_date,distance_m,going,pace,klass,race_name,soubi:extra->>馬装具,laps:extra->laps)&order=race_id.desc&limit=2000`).catch(() => []);
+      const rows = await sbGetPaged(`chihou_results?horse_id=in.(${idlist})&select=horse_id,umaban,finish,pop,first3f,last3f,time_sec,kinryo,sex_age,passing,corner4_pos,comment,time_str,margin,body_weight,jockey,race_id,chihou_races(race_date,distance_m,going,pace,klass,race_name,soubi:extra->>馬装具,laps:extra->laps)&order=chihou_races(race_date).desc,race_id.desc`, 1000, 20000).catch(() => []);
       const archived = staticArchive.enabled() ? await staticArchive.loadHistory(horseIds).catch(() => ({})) : {};
       const map = Object.fromEntries(Object.entries(archived).map(([id, runs]) => [id, [...runs]]));
       for (const r of rows) {
@@ -1275,6 +1317,13 @@ const providers = {
         if (rows.length) return rows[0].value;
       } catch (e) { /* ローカルへ */ }
       return providers.local.loadNoken();
+    },
+    async loadNokenStats() {
+      try {
+        const rows = await sbGet(`chihou_meta?key=eq.${trackCfg().prefix}_noken_stats_5y&select=value`);
+        if (rows.length) return rows[0].value;
+      } catch (e) { /* ローカルへ */ }
+      return providers.local.loadNokenStats();
     },
     async loadPoints() {   // 南関の格付ポイント(馬名→{p,k,asof})。無い場はnull
       try {
@@ -1357,6 +1406,10 @@ const providers = {
       const file = state.track === '門別' ? 'data/noken.json' : `data/noken_${trackCfg().prefix}.json`;
       try { return await jsonGet(file); } catch (e) { return null; }
     },
+    async loadNokenStats() {
+      if (state.track === '門別') return null;
+      try { return await jsonGet(`data/noken_stats_${trackCfg().prefix}.json`); } catch (e) { return null; }
+    },
     async loadPoints() { return null; },
   },
 };
@@ -1367,6 +1420,7 @@ const state = { provider: null, dates: {}, month: null, date: null, raceId: null
   nokenRaced: null, nokenStats: null, nokenStatsLoading: false, nokenStatsError: null,
   v3Predictions: null, v3ArchiveChecked: {}, preRaceOddsCoverage: {},
   deckDataCheckedAt: null, deckRefreshBusy: false, deckRefreshError: null,
+  fullDatesByTrack: {}, fullDatesPromises: {},
   dayResults: {}, dayResultsFetchedAt: {}, dayResultsLoading: new Set() };
 
 // ============================================================
@@ -1397,6 +1451,13 @@ function toggleTheme() {
 }
 const fmtDiff = (v) => (v == null ? '' : v > 0 ? `+${v}` : `${v}`);
 const mmdd = (iso) => (iso ? `${+iso.slice(5, 7)}/${+iso.slice(8, 10)}` : '');
+const raceDateFromId = (raceId) => {
+  const text = String(raceId || '');
+  return /^\d{16}$/.test(text) ? `${text.slice(0, 4)}-${text.slice(12, 14)}-${text.slice(14, 16)}` : '';
+};
+const rowRaceDate = (row) => ((row && row.chihou_races) || {}).race_date || raceDateFromId(row && row.race_id);
+const sortRowsByRaceDateDesc = (rows) => rows.sort((a, b) =>
+  rowRaceDate(b).localeCompare(rowRaceDate(a)) || String(b.race_id || '').localeCompare(String(a.race_id || '')));
 
 // 通過順位は区切り付き（例 '5-7-4-4', '11-11-11'）。
 // 旧区切りなし形式は1-1と11を判別できないので、推測せず不明扱いにする。
@@ -2633,7 +2694,24 @@ function renderDanwaPastInto(wrap, hid, rawRows, curRid) {
 // 1頭分の過去コメントをSupabaseから取得（個別クリック・一括表示の両方が使う共通フェッチ）
 async function fetchDanwaPast(hid, hname, curRid) {
   const filt = hid ? `horse_id=eq.${encodeURIComponent(hid)}` : `horse_name=eq.${encodeURIComponent(hname)}`;
-  return sbGet(`chihou_danwa?${filt}&select=race_id,headline,trainer,comment,raw&order=race_id.desc&limit=8`);
+  const rows = await sbGetPaged(`chihou_danwa?${filt}&select=race_id,headline,trainer,comment,raw&order=race_id.desc`, 200, 2000);
+  return sortRowsByRaceDateDesc(rows).filter((r) => r.race_id !== curRid).slice(0, 8);
+}
+async function fetchDanwaPastBatch(items) {
+  const ids = [...new Set(items.map(({ btn }) => btn.dataset.hid).filter(Boolean))];
+  const names = [...new Set(items.filter(({ btn }) => !btn.dataset.hid).map(({ btn }) => btn.dataset.hname).filter(Boolean))];
+  const queries = [];
+  if (ids.length) queries.push(sbGetPaged(
+    `chihou_danwa?horse_id=in.(${ids.map(encodeURIComponent).join(',')})&select=horse_id,horse_name,race_id,headline,trainer,comment,raw&order=race_id.desc`, 500, 5000));
+  if (names.length) queries.push(sbGetPaged(
+    `chihou_danwa?horse_name=in.(${names.map(encodeURIComponent).join(',')})&select=horse_id,horse_name,race_id,headline,trainer,comment,raw&order=race_id.desc`, 500, 5000));
+  const rows = (await Promise.all(queries)).flat();
+  const byId = {}, byName = {};
+  for (const row of rows) {
+    if (row.horse_id) (byId[row.horse_id] = byId[row.horse_id] || []).push(row);
+    if (row.horse_name) (byName[row.horse_name] = byName[row.horse_name] || []).push(row);
+  }
+  return { byId, byName };
 }
 // 1頭分の過去コメントを取得して描画（無ければフェッチを開始）。dataset.loading/loadedの2状態で、
 // 個別クリックと一括表示が同じ馬を同時に触っても「フェッチ二重発行」「表示状態の後勝ち上書き」が
@@ -2646,10 +2724,10 @@ async function ensureDanwaPastLoaded(btn, wrap) {
     const hid = btn.dataset.hid, hname = btn.dataset.hname, curRid = btn.dataset.curRid;
     const rows = await fetchDanwaPast(hid, hname, curRid);
     renderDanwaPastInto(wrap, hid, rows, curRid);
-  } catch (e) {
-    wrap.innerHTML = '<div style="font-size:12px;color:var(--sub)">読み込み失敗</div>';
-  } finally {
     wrap.dataset.loaded = '1';
+  } catch (e) {
+    wrap.innerHTML = '<div style="font-size:12px;color:var(--sub)">読み込み失敗（閉じてもう一度開くと再試行します）</div>';
+  } finally {
     delete wrap.dataset.loading;
   }
 }
@@ -2681,9 +2759,27 @@ async function toggleDanwaPastAll(btn) {
   btn.disabled = true;
   btn.textContent = '読み込み中…';
   for (const { btn: b, wrap } of items) { wrap.hidden = false; b.textContent = '▲閉じる'; }
-  // 個別クリックと同じ1頭ずつのクエリをPromise.allで並列実行するだけなので、1頭ずつ開いた場合と
-  // 結果が完全に一致する（1クエリへまとめると「馬ごとに最新8件」の保証が崩れるため、あえて分けている）。
-  await Promise.all(items.map(({ btn: b, wrap }) => ensureDanwaPastLoaded(b, wrap)));
+  const pending = items.filter(({ wrap }) => !wrap.dataset.loaded && !wrap.dataset.loading);
+  for (const { wrap } of pending) {
+    wrap.dataset.loading = '1';
+    wrap.innerHTML = '<div style="font-size:12px;color:var(--sub)">読み込み中…</div>';
+  }
+  try {
+    const grouped = await fetchDanwaPastBatch(pending);
+    for (const { btn: b, wrap } of pending) {
+      const hid = b.dataset.hid, hname = b.dataset.hname, curRid = b.dataset.curRid;
+      const rows = sortRowsByRaceDateDesc([...(hid ? grouped.byId[hid] : grouped.byName[hname]) || []])
+        .filter((r) => r.race_id !== curRid).slice(0, 8);
+      renderDanwaPastInto(wrap, hid, rows, curRid);
+      wrap.dataset.loaded = '1';
+    }
+  } catch (e) {
+    for (const { wrap } of pending) {
+      wrap.innerHTML = '<div style="font-size:12px;color:var(--sub)">読み込み失敗（閉じて再試行できます）</div>';
+    }
+  } finally {
+    for (const { wrap } of pending) delete wrap.dataset.loading;
+  }
   btn.disabled = false;
   btn.textContent = '▲全馬の過去コメントを閉じる';
 }
@@ -3861,7 +3957,12 @@ function openRaceVideoModal(date, raceNo, track) {
   if (!m) {
     m = document.createElement('div'); m.id = 'raceVideoModal'; m.className = 'modal';
     m.style.zIndex = '60';
-    m.addEventListener('click', (e) => { if (e.target.id === 'raceVideoModal' || e.target.dataset.close) m.hidden = true; });
+    m.addEventListener('click', (e) => {
+      if (e.target.id === 'raceVideoModal' || e.target.dataset.close) {
+        m.hidden = true;
+        disposeVideoScale(m);
+      }
+    });
     document.body.appendChild(m);
   }
   m.innerHTML = `<div class="modal-box" style="max-width:720px">
@@ -3905,8 +4006,15 @@ function openNokenVideoModal(hid) {
   m.hidden = false;
 }
 
-// 固定680px幅の公式映像プレーヤーを画面幅に合わせて縮小表示（transform:scaleで内容ごと縮小。iframeのwidth指定だけでは中身が縮まらず見切れるだけなので必須）
+// 固定680px幅の公式映像プレーヤーを画面幅に合わせて縮小表示（transform:scaleで内容ごと縮小）。
+const videoScaleCleanups = new WeakMap();
+function disposeVideoScale(container) {
+  const cleanup = videoScaleCleanups.get(container);
+  if (cleanup) cleanup();
+  videoScaleCleanups.delete(container);
+}
 function initVideoScale(container) {
+  disposeVideoScale(container);
   const wrap = container.querySelector('.vidwrap');
   if (!wrap) return;
   const card = wrap.querySelector('.vidcard');
@@ -3917,14 +4025,18 @@ function initVideoScale(container) {
     wrap.style.height = `${baseH * scale}px`;
   };
   fit();
-  if (wrap._ro) wrap._ro.disconnect();
-  wrap._ro = new ResizeObserver(fit);
-  wrap._ro.observe(wrap);
+  const observer = new ResizeObserver(fit);
+  observer.observe(wrap);
   window.addEventListener('resize', fit);   // 端末回転などResizeObserverが拾い損ねる場合の保険
+  videoScaleCleanups.set(container, () => {
+    observer.disconnect();
+    window.removeEventListener('resize', fit);
+  });
 }
 
 async function renderRaceView() {
   clearInterval(state.oddsTimer); state.oddsTimer = null;
+  disposeVideoScale($('raceView'));
   // 世代トークン: レース/タブを連打すると renderRaceView が並走し、遅れて解決した古い方が
   // 新しい画面を上書きしてしまう（タブとURLは3R・中身は2R）。各awaitの後、自分が最新でなければ捨てる。
   const gen = (state.viewGen = (state.viewGen || 0) + 1);
@@ -4635,8 +4747,13 @@ async function renderCyokyo() {
 // ============================================================
 // 馬詳細モーダル（成績＋調教履歴）
 // ============================================================
-const withTimeout = (p, ms) => Promise.race([p,
-  new Promise((_, rej) => setTimeout(() => rej(new Error('タイムアウト（通信が遅い可能性）')), ms))]);
+const withTimeout = (p, ms) => new Promise((resolve, reject) => {
+  const timer = setTimeout(() => reject(new Error('タイムアウト（通信が遅い可能性）')), ms);
+  Promise.resolve(p).then(
+    (value) => { clearTimeout(timer); resolve(value); },
+    (error) => { clearTimeout(timer); reject(error); },
+  );
+});
 
 // 父/母父タップ → その血統の産駒一覧（既存の馬モーダルを流用）。産駒名タップで各馬詳細へ。
 function openPedModal(type, name) {
@@ -4673,12 +4790,11 @@ async function openPersonModal(kind, name) {
     // 全期間から limit で切ると古い分しか返らず、当日分に届かない。
     const ymd = (state.date || '').replace(/-/g, '');
     const [runs, todays] = await Promise.all([
-      withTimeout(sbGet(`chihou_results?${col}=eq.${encodeURIComponent(name)}&select=${sel}&order=race_id.desc&limit=40`), 10000),
+      withTimeout(sbGet(`chihou_results?${col}=eq.${encodeURIComponent(name)}&select=${sel}&order=chihou_races(race_date).desc,race_id.desc&limit=30`), 10000),
       ymd ? withTimeout(sbGet(`chihou_entries?${col}=eq.${encodeURIComponent(name)}&race_id=like.${ymd.slice(0, 4)}*${ymd.slice(4)}&select=race_id,umaban,horse_id,horse_name,pop&order=race_id.asc&limit=20`), 10000).catch(() => []) : [],
     ]);
-    // 場をまたぐと race_id 順は時系列にならないので、日付で並べ直す
-    runs.sort((a, b) => String((b.chihou_races || {}).race_date || '').localeCompare(String((a.chihou_races || {}).race_date || '')));
-    runs.splice(30);
+    // サーバ側でも関連開催日順に絞り、念のため表示前にも日付順を保証する。
+    sortRowsByRaceDateDesc(runs);
     const wins = runs.filter((r) => r.finish === 1).length;
     const top3 = runs.filter((r) => r.finish != null && r.finish <= 3).length;
     const todayHtml = todays.length ? `<h3 class="sec" style="margin-top:0">この日の${kind === 'jockey' ? '騎乗' : '出走'}（${todays.length}鞍）</h3>
@@ -4714,10 +4830,12 @@ async function openHorseModal(nameOrId, byId, displayName) {
   try {
     const sel = 'horse_name,umaban,finish,pop,win_odds,time_str,first3f,last3f,passing,corner4_pos,comment,sex_age,jockey,body_weight,weight_diff,race_id,chihou_races(race_date,track,race_no,klass,race_name,distance_m,going,soubi:extra->>馬装具)';
     const filt = byId ? `horse_id=eq.${encodeURIComponent(nameOrId)}` : `horse_name=eq.${encodeURIComponent(nameOrId)}`;
-    const results = await withTimeout(sbGet(`chihou_results?${filt}&select=${sel}&order=race_id.desc&limit=40`), 10000);
+    const results = await withTimeout(sbGet(`chihou_results?${filt}&select=${sel}&order=chihou_races(race_date).desc,race_id.desc&limit=40`), 10000);
+    sortRowsByRaceDateDesc(results);
     const name = displayName || (results[0] && results[0].horse_name) || (byId ? null : nameOrId);
     const cyokyo = name
-      ? await withTimeout(sbGet(`chihou_cyokyo?horse_name=eq.${encodeURIComponent(name)}&select=race_id,works&order=race_id.desc&limit=20`), 10000).catch(() => [])
+      ? await withTimeout(sbGetPaged(`chihou_cyokyo?horse_name=eq.${encodeURIComponent(name)}&select=race_id,works&order=race_id.desc`, 200, 2000), 10000)
+        .then((rows) => sortRowsByRaceDateDesc(rows).slice(0, 20)).catch(() => [])
       : [];
     if (name) $('horseModalTitle').textContent = name + ' の成績・調教';
     renderHorseModal(results, cyokyo);
@@ -4942,6 +5060,30 @@ function nkNativeVideo(url, start = 0, end = 0, lazy = false) {
     ${lazy ? `data-src="${esc(source)}"` : `src="${esc(source)}"`}></video>`;
 }
 
+function releaseNokenMedia(details) {
+  if (!details) return;
+  const video = details.querySelector('video');
+  if (video) {
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+  }
+  const iframe = details.querySelector('iframe');
+  if (iframe) iframe.removeAttribute('src');
+}
+
+function openOnlyNokenMedia(details) {
+  document.querySelectorAll('#nokenRoot .nk-vid[open]').forEach((other) => {
+    if (other === details) return;
+    releaseNokenMedia(other);
+    other.open = false;
+  });
+  const iframe = details.querySelector('iframe[data-src]');
+  if (iframe) iframe.src = iframe.dataset.src;
+  const video = details.querySelector('video[data-src]');
+  if (video) { video.src = video.dataset.src; video.load(); }
+}
+
 function nkYoutubeEmbed(url, start = 0, end = 0, title = '能検映像', lazy = false) {
   const idMatch = String(url || '').match(/(?:youtu\.be\/|[?&]v=|\/embed\/)([A-Za-z0-9_-]{6,})/i);
   if (!idMatch) return '';
@@ -5066,25 +5208,32 @@ function nkOutcomeCells(s) {
     + `<td class="num">${nkPct(s.top2, s.n)}</td><td class="num">${nkPct(s.top3, s.n)}</td>`;
 }
 
-// 南関だけの集計。画面を開いた時に初めて各馬の履歴を読むため、通常のビューア表示は重くしない。
+// 南関だけの集計。通常は日次生成済みの軽量な5年集計を1回だけ読む。
+// 生成物がまだ無い環境だけ、現在の能検manifestと各馬履歴から従来方式で集計する。
 async function loadNokenStats() {
   if (state.track === '門別' || state.nokenStats || state.nokenStatsLoading) return;
   const track = state.track;
   state.nokenStatsLoading = true;
   state.nokenStatsError = null;
-  const tests = {};
-  for (const d of ((state.noken && state.noken.days) || [])) {
-    for (const r of (d.races || [])) for (const h of (r.rows || [])) {
-      if (!h.horse_id || nkAge(h.sexage) !== 2 || h.ok === '不合格') continue;
-      (tests[h.horse_id] = tests[h.horse_id] || []).push({
-        date: d.date, horseId: h.horse_id, horse: h.name || '', jockey: h.jockey || '',
-        trainer: h.trainer || '', ok: h.ok || '', time: h.time || '',
-      });
-    }
-  }
-  const ids = Object.keys(tests);
-  const histories = {};
   try {
+    const precomputed = await state.provider.loadNokenStats?.();
+    if (state.track !== track) return;
+    if (precomputed && Array.isArray(precomputed.records)) {
+      state.nokenStats = precomputed;
+      return;
+    }
+    const tests = {};
+    for (const d of ((state.noken && state.noken.days) || [])) {
+      for (const r of (d.races || [])) for (const h of (r.rows || [])) {
+        if (!h.horse_id || nkAge(h.sexage) !== 2 || h.ok === '不合格') continue;
+        (tests[h.horse_id] = tests[h.horse_id] || []).push({
+          date: d.date, horseId: h.horse_id, horse: h.name || '', jockey: h.jockey || '',
+          trainer: h.trainer || '', ok: h.ok || '', time: h.time || '',
+        });
+      }
+    }
+    const ids = Object.keys(tests);
+    const histories = {};
     for (let i = 0; i < ids.length; i += 80) {
       if (state.track !== track) return;
       const chunk = ids.slice(i, i + 80);
@@ -5105,7 +5254,7 @@ async function loadNokenStats() {
       records.push({ ...test, debutDate: debut.date, debutJockey: debut.jockey,
         fin: Number.isFinite(fin) ? fin : null, same: test.jockey === debut.jockey });
     }
-    if (state.track === track) state.nokenStats = { records, tested: ids.length };
+    if (state.track === track) state.nokenStats = { records, tested: ids.length, fallback: true };
   } catch (e) {
     if (state.track === track) state.nokenStatsError = '集計データを取得できませんでした。通信状態を確認して、もう一度開いてください。';
   } finally {
@@ -5121,13 +5270,21 @@ function nokenStatsCard() {
   if (state.nokenStatsError) return `<div class="empty">${esc(state.nokenStatsError)}<br><button class="nk-sort-btn" data-nkstats-retry>再試行</button></div>`;
   if (!state.nokenStats) {
     loadNokenStats();
-    return '<div class="empty">能検騎手と本番騎手を照合しています…</div>';
+    return '<div class="empty">過去5年分の能検騎手と本番騎手を読み込んでいます…</div>';
   }
   const records = state.nokenStats.records || [];
   if (!records.length) return '<div class="empty">本番出走まで照合できる2歳馬がまだいません</div>';
   const all = nkOutcome(records);
   const same = nkOutcome(records.filter((r) => r.same));
   const changed = nkOutcome(records.filter((r) => !r.same));
+  const coverage = state.nokenStats.coverage || {};
+  const covered = coverage.from && coverage.to ? `${esc(coverage.from)}〜${esc(coverage.to)}` : '';
+  const intended = state.nokenStats.cutoff && state.nokenStats.asof
+    ? `${esc(state.nokenStats.cutoff)}〜${esc(state.nokenStats.asof)}` : '';
+  const isPartial = covered && state.nokenStats.cutoff && coverage.from > state.nokenStats.cutoff;
+  const rangeNote = state.nokenStats.fallback
+    ? '現在収録済みの能検日を集計'
+    : `直近5年を対象${covered ? `（保存データ範囲 ${covered}）` : ''}`;
   const groups = new Map();
   for (const r of records) {
     const key = `${r.trainer}\u0000${r.jockey}\u0000${r.debutJockey}`;
@@ -5142,8 +5299,8 @@ function nokenStatsCard() {
         + `<td>${r.same ? `<b>継続</b> ${personLink('jockey', r.debutJockey)}` : personLink('jockey', r.debutJockey)}</td>${nkOutcomeCells(s)}</tr>`;
     }).join('');
   return `<div class="card">
-    <h2 style="margin:0 0 4px">能検騎手 → 本番騎手（厩舎別）</h2>
-    <div class="note">収録済みの2歳能検合格馬について、能検後の最初の実戦を「本番初戦」として照合。複数回能検を受けた馬は、本番前の直近能検を採用しています。</div>
+    <h2 style="margin:0 0 4px">過去5年・能検騎手 → 本番騎手（厩舎別）</h2>
+    <div class="note">${rangeNote}。2歳能検馬について、能検後の最初の実戦を「本番初戦」として照合。複数回能検を受けた馬は、本番前の直近能検を採用しています。${isPartial ? ` 5年対象期間（${intended}）のうち、現在保存済みの範囲を表示しています。` : ''}</div>
     <div class="nk-stats-summary">
       <div class="nk-stat-box">全体 ${all.n}頭<b>勝率 ${nkPct(all.win, all.n)}</b><span class="sub">連対率 ${nkPct(all.top2, all.n)}・複勝率 ${nkPct(all.top3, all.n)}</span></div>
       <div class="nk-stat-box">同じ騎手で本番 ${same.n}頭<b>勝率 ${nkPct(same.win, same.n)}</b><span class="sub">複勝率 ${nkPct(same.top3, same.n)}</span></div>
@@ -5195,13 +5352,13 @@ async function renderNoken() {
     : '成績（タイム・上り3F・寸評・合否）=競馬ブック。「その後の成績」=能検後の実戦（着順/距離/タイム/馬体重）。馬名タップで詳細へ。';
   const dayVideoBlock = hasDayVideo ? `<details class="nk-vid"><summary>▶ 能試映像を見る（${dayRaw.races.length}R分・1本）</summary>
     <iframe width="100%" height="400" style="border:0;max-width:640px;aspect-ratio:16/9;height:auto" loading="lazy"
-      src="https://www.youtube.com/embed/${esc(day.video.split('/').pop())}" allowfullscreen></iframe></details>` : '';
+      data-src="https://www.youtube.com/embed/${esc(day.video.split('/').pop())}" allowfullscreen></iframe></details>` : '';
   root.innerHTML = `
     <div class="card">
       <h2 style="margin:0 0 4px">🎓 能力検査（能検）</h2>
       <div class="note">2歳馬の競走資格を確認する試験走（古馬の調教試験も同じ日に混在）。合格が新馬・未勝利への出走資格。動画=${videoSrc}／${resultGuide}${nk.updated ? `${esc(nk.updated)}更新。` : ''}</div>
       ${sort === 'stats' ? '' : `<div class="nk-dates">${dateBtns}</div>`}
-      <div class="nk-day-head">${sort === 'stats' ? '収録済み全能検日' : `${dayRaw.date}（${dayRaw.races.length}R・動画${nvid}）`}
+      <div class="nk-day-head">${sort === 'stats' ? '過去5年集計' : `${dayRaw.date}（${dayRaw.races.length}R・動画${nvid}）`}
         <span class="nk-sort">
           <button class="nk-sort-btn${sort === 'race' ? ' active' : ''}" data-nksort="race">レース別</button>
           <button class="nk-sort-btn${sort === 'time' ? ' active' : ''}" data-nksort="time">タイム順</button>
@@ -5227,7 +5384,7 @@ async function loadNokenDebut() {
   for (let i = 0; i < ids.length; i += 100) {
     const chunk = ids.slice(i, i + 100).map(encodeURIComponent).join(',');
     try {
-      const rows = await sbGet(`chihou_results?horse_id=in.(${chunk})&select=horse_id&limit=5000`);
+      const rows = await sbGetPaged(`chihou_results?horse_id=in.(${chunk})&select=horse_id&order=horse_id.asc`, 1000, 20000);
       for (const r of rows) raced.add(r.horse_id);
     } catch (e) { /* 取れなかった分は「出走あり」に倒して未出走の誤表示を避ける */
       ids.slice(i, i + 100).forEach((id) => raced.add(id));
@@ -5428,20 +5585,30 @@ async function runRaceFinder(more) {
   const box = $('finderResult');
   const dist = $('fDist').value, klass = $('fClass').value, going = $('fGoing').value, year = $('fYear').value;
   if (!more) state.finderOffset = 0;
-  const limit = klass ? 400 : 60;   // クラス条件は取ってから絞るので多めに引く
-  const q = [`track=eq.${encodeURIComponent(state.track)}`,
-    'select=race_id,race_date,race_no,klass,race_name,distance_m,going,pace',
-    'order=race_date.desc,race_no.asc', `limit=${limit}`, `offset=${state.finderOffset || 0}`];
-  if (dist) q.push(`distance_m=eq.${dist}`);
-  if (going) q.push(`going=eq.${encodeURIComponent(going)}`);
-  if (year) q.push(`race_date=gte.${year}-01-01`, `race_date=lte.${year}-12-31`);
   box.innerHTML = '<div class="empty">探しています…</div>';
   try {
-    let rows = await sbGet(`chihou_races?${q.join('&')}`);
-    if (klass) {
-      rows = rows.filter((r) => (classMajor(r.race_name) || classGroup((r.klass || '') + (r.race_name || ''))) === klass);
-    }
-    state.finderOffset = (state.finderOffset || 0) + limit;
+    const pageSize = klass ? 500 : 60;
+    const targetCount = 60;
+    const maxScan = 30000;
+    let offset = state.finderOffset || 0;
+    let rows = [], hasMore = false;
+    do {
+      const q = [`track=eq.${encodeURIComponent(state.track)}`,
+        'select=race_id,race_date,race_no,klass,race_name,distance_m,going,pace',
+        'order=race_date.desc,race_no.asc', `limit=${pageSize}`, `offset=${offset}`];
+      if (dist) q.push(`distance_m=eq.${dist}`);
+      if (going) q.push(`going=eq.${encodeURIComponent(going)}`);
+      if (year) q.push(`race_date=gte.${year}-01-01`, `race_date=lte.${year}-12-31`);
+      const page = await sbGet(`chihou_races?${q.join('&')}`);
+      offset += page.length;
+      const matched = klass ? page.filter((r) =>
+        (classMajor(r.race_name) || classGroup((r.klass || '') + (r.race_name || ''))) === klass) : page;
+      rows.push(...matched);
+      hasMore = page.length === pageSize && offset < maxScan;
+      if (!klass || !hasMore || rows.length >= targetCount) break;
+    } while (offset < maxScan);
+    state.finderOffset = offset;
+    state.finderHasMore = hasMore;
     const html = rows.map((r) => `<div class="finder-row" data-rid="${esc(r.race_id)}" data-rd="${esc(r.race_date)}">
       <b>${mmdd(r.race_date)}</b><b>${r.race_no}R</b>
       <span>${esc(classMajor(r.race_name) || r.klass || '')}</span>
@@ -5450,7 +5617,7 @@ async function runRaceFinder(more) {
     state.finderHtml = prev + html;
     box.innerHTML = state.finderHtml
       ? `<div class="legend">条件に合うレース（新しい順）</div>${state.finderHtml}
-         <button class="foldbtn" id="fMore">さらに読み込む</button>
+         ${state.finderHasMore ? '<button class="foldbtn" id="fMore">さらに読み込む</button>' : ''}
          <div class="legend">馬場と天候は終わったレースにだけ付きます（これから走るレースは空欄）。行をタップでそのレースへ。</div>`
       : '<div class="empty">この条件のレースは見つかりませんでした</div>';
   } catch (e) {
@@ -5467,6 +5634,31 @@ async function loadTodayTracks() {
     state.todayTracks = by;
     renderTrackSwitch();
   } catch (e) { /* 出せなければバッジ無しのまま */ }
+}
+
+// 過去月が必要になった時だけ全期間日程を読む。場ごとに1回だけ取得し、同時操作も同じPromiseを共有する。
+async function ensureFullDates() {
+  if (state.provider !== providers.supabase) return state.dates;
+  const track = state.track;
+  if (state.fullDatesByTrack[track]) {
+    if (state.track === track) state.dates = state.fullDatesByTrack[track];
+    return state.fullDatesByTrack[track];
+  }
+  if (!state.fullDatesPromises[track]) {
+    state.fullDatesPromises[track] = providers.supabase.listDatesFull(track)
+      .then((full) => {
+        if (full) state.fullDatesByTrack[track] = full;
+        return full;
+      })
+      .finally(() => { delete state.fullDatesPromises[track]; });
+  }
+  const full = await state.fullDatesPromises[track];
+  if (full && state.track === track) {
+    state.dates = full;
+    renderMonths(); renderDates();
+    if (state.view === 'deck') renderDeck();
+  }
+  return full || state.dates;
 }
 
 // 場のデータ一式（日程・統計・モデル・予想）を読み直す。ビューの遷移はしない。
@@ -5492,12 +5684,6 @@ async function loadTrackData(track) {
     state.provider.loadV3Predictions().then((v) => { state.v3Predictions = v; state.deckDataCheckedAt = new Date(); }),
     state.provider.loadPoints().then((p) => { state.kakuPoints = p; }),
   ]);
-  // 全期間分は裏で取得して月/日セレクトへ反映
-  if (state.provider === providers.supabase) {
-    providers.supabase.listDatesFull().then((full) => {
-      if (full && state.track === track) { state.dates = full; renderMonths(); renderDates(); if (state.view === 'deck') renderDeck(); }
-    }).catch(() => {});
-  }
 }
 
 async function selectTrack(track) {
@@ -5551,15 +5737,6 @@ async function init() {
     state.dates = {};
   }
   loadTodayTracks();   // 場ボタンの「本日開催」バッジ（裏で1回だけ）
-  // 起動は直近分だけで即表示→全期間分は裏で追って取得し月/日セレクトへ反映（表示中のレースは邪魔しない）
-  if (state.provider === providers.supabase) {
-    providers.supabase.listDatesFull().then((full) => {
-      if (!full) return;
-      state.dates = full;
-      renderMonths(); renderDates();
-      if (state.view === 'deck') renderDeck();
-    }).catch(() => { /* 直近分のみで継続 */ });
-  }
   // 統計は裏で読み込み（指数・テン偏差値に使う）
   state.statsPromise = Promise.all([
     state.provider.loadPoints().then((p) => { state.kakuPoints = p; }),
@@ -5574,8 +5751,13 @@ async function init() {
     const ds = Object.keys(state.dates).filter((d) => d.startsWith(state.month));
     if (ds.length) selectDate(ds[0]);
   });
+  $('monthSel').addEventListener('focus', () => { ensureFullDates().catch(() => {}); });
   $('dateSel').addEventListener('change', (e) => selectDate(e.target.value));
-  $('raceFinder').addEventListener('toggle', (e) => { if (e.target.open) initRaceFinder(); });
+  $('raceFinder').addEventListener('toggle', async (e) => {
+    if (!e.target.open) return;
+    await ensureFullDates().catch(() => {});
+    initRaceFinder();
+  });
   $('fRun').addEventListener('click', () => runRaceFinder(false));
   $('finderResult').addEventListener('click', (e) => {
     if (e.target.id === 'fMore') { runRaceFinder(true); return; }
@@ -5609,10 +5791,9 @@ async function init() {
   $('nokenRoot').addEventListener('click', (e) => {
     const videoSummary = e.target.closest('.nk-vid summary');
     if (videoSummary) {
-      const iframe = videoSummary.parentElement.querySelector('iframe[data-src]');
-      if (iframe) { iframe.src = iframe.dataset.src; iframe.removeAttribute('data-src'); }
-      const video = videoSummary.parentElement.querySelector('video[data-src]');
-      if (video) { video.src = video.dataset.src; video.removeAttribute('data-src'); video.load(); }
+      const details = videoSummary.parentElement;
+      if (details.open) releaseNokenMedia(details);
+      else openOnlyNokenMedia(details);
     }
     const pl = e.target.closest('a.person-link');
     if (pl) { e.preventDefault(); openPersonModal(pl.dataset.personKind, pl.dataset.person); return; }
