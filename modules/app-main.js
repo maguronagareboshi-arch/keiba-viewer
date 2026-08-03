@@ -11509,7 +11509,11 @@ async function openHorseModal(horseName, raceNo) {
     const commentCell = !_hasComments ? '' : commentTxt
       ? `<td class="col-comment" style="font-size:9.5px;color:#0e7490;white-space:normal;line-height:1.4;padding:4px 4px;vertical-align:top"><i class="fas fa-comment-dots" style="margin-right:2px;opacity:.7"></i>${escapeHTML(commentTxt)}</td>`
       : `<td class="col-comment" style="color:#d1d5db;font-size:10px;text-align:center;vertical-align:middle">—</td>`;
+    // パドック映像(自前クリップ)。索引に無い過去走は空セルのまま(modules/paddock-clips.js)
+    const _pdkCell = (typeof paddockCellHtml === 'function')
+      ? paddockCellHtml(h.raceDate, h.raceNo, h.umaBan, h.babaCode) : '<td class="col-paddock"></td>';
     return `<tr class="hm-row ${isWin?'hm-row-win':''}">
+      ${_pdkCell}
       <td class="col-date" style="font-size:9.5px">${escapeHTML(h.raceDate)}</td>
       <td class="col-rname" style="text-align:left;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h.raceName?escapeHTML(h.raceName):'—'}</td>
       <td class="col-cls"><span class="race-class-badge ${raceClassCssClass(h.raceClass)}" style="font-size:9px;padding:1px 4px">${escapeHTML(h.raceClass)||'—'}</span></td>
@@ -11540,6 +11544,7 @@ async function openHorseModal(horseName, raceNo) {
     <div class="table-wrapper" style="max-height:260px;overflow-y:auto;overflow-x:auto">
       <table class="deban-table hm-table">
         <thead><tr>
+          <th class="col-paddock" title="この日のこの馬のパドック映像">🐴</th>
           <th class="col-date">日付</th><th class="col-rname">レース名</th><th class="col-cls">クラス</th>
           <th class="col-dist">距離</th><th class="col-track">馬場</th><th class="col-rank">着順</th>
           <th class="col-first3f">前半3F</th><th class="col-last3f">上がり3F</th>

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="referrer" content="strict-origin-when-cross-origin">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' data: https://cdn.jsdelivr.net; img-src 'self' data: blob:; connect-src 'self' https://jcrcftvrsgmsewwdkqha.supabase.co https://keiba-proxydeploy.maguronagareboshi.workers.dev https://www.keiba.go.jp https://keiba.rakuten.co.jp https://www.keiba.or.jp https://cdn.jsdelivr.net; frame-src 'self' https://keiba-lv-st.jp https://www.youtube-nocookie.com; worker-src 'self'; manifest-src 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' data: https://cdn.jsdelivr.net; img-src 'self' data: blob: https://pub-6ea7b8235a544efb83e9e096b8133bd7.r2.dev; media-src 'self' https://pub-6ea7b8235a544efb83e9e096b8133bd7.r2.dev; connect-src 'self' https://jcrcftvrsgmsewwdkqha.supabase.co https://keiba-proxydeploy.maguronagareboshi.workers.dev https://www.keiba.go.jp https://keiba.rakuten.co.jp https://www.keiba.or.jp https://cdn.jsdelivr.net; frame-src 'self' https://keiba-lv-st.jp https://www.youtube-nocookie.com; worker-src 'self'; manifest-src 'self'">
   <title>高知競馬ビューア</title>
   <!-- PWA（ホーム画面追加でアプリとして起動）。パスは相対＝github.io/keiba-viewer と独自ドメイン両対応 -->
   <link rel="manifest" href="manifest.webmanifest">
@@ -2143,6 +2143,14 @@ const KV_APP_CSS = [
       'body.kv-cockpit .cockpit-ai-details>summary::-webkit-details-marker{display:none}',
       'body.kv-cockpit .cockpit-ai-details-body{padding:10px;border-top:1px solid var(--kc-border)}',
       '@media(max-width:640px){body.kv-cockpit .header-sub{display:block!important;margin-left:32px!important}body.kv-cockpit .cockpit-live-status{flex-direction:column;align-items:flex-end;gap:3px}body.kv-cockpit .cockpit-live-status span{padding:2px 5px;font-size:8px}body.kv-cockpit #cockpit-global-odds i{display:none}body.kv-cockpit #race-tabs-section.sidebar-mode .race-tabs{grid-template-columns:repeat(6,minmax(0,1fr))!important}body.kv-cockpit .cockpit-race-heading{align-items:flex-start}body.kv-cockpit .race-name{font-size:16px!important}body.kv-cockpit .cockpit-race-time>strong{font-size:12px}body.kv-cockpit .cockpit-race-meta{font-size:10px}body.kv-cockpit .cockpit-picks{grid-template-columns:1fr;gap:6px}body.kv-cockpit .cockpit-pick{min-height:64px;padding:9px 10px}body.public-mode.kv-cockpit .kv-vtabs{grid-template-columns:repeat(5,minmax(0,1fr));gap:4px}body.public-mode.kv-cockpit .kv-vtab{height:44px!important;padding:0 3px!important;font-size:10px!important}body.public-mode.kv-cockpit .kv-vtab i{display:none}body.kv-cockpit .cockpit-decision{grid-template-columns:1fr 1fr;gap:6px}.decision-risk{grid-column:1/-1;grid-row:2}.decision-action{text-align:right}body.kv-cockpit .cockpit-panel-head{align-items:flex-start}body.kv-cockpit .cockpit-table{min-width:620px}body.kv-cockpit .cockpit-value-note{align-items:flex-start;flex-wrap:wrap}body.kv-cockpit .cockpit-value-note small{width:100%;margin-left:36px}.kv-async-state{align-items:flex-start;flex-wrap:wrap}.kv-async-state .btn{width:100%;margin-left:0}.kv-fav-btn{width:44px;height:44px}.spr-l1{min-height:44px}.spr-more>summary{min-height:44px;display:flex;align-items:center}}',
+      /* 各馬パドック(自前クリップ) — modules/paddock-clips.js */
+      '.col-paddock{width:26px;padding:2px 0!important;text-align:center}',
+      '.kv-pdk-btn{border:0;background:transparent;font-size:14px;line-height:1;cursor:pointer;padding:2px 3px;border-radius:4px}',
+      '.kv-pdk-btn:hover{background:rgba(37,99,235,.16)}',
+      '.kv-pdk-player{position:fixed;inset:0;z-index:11000;display:grid;place-content:center;gap:8px;padding:16px;background:rgba(0,0,0,.82)}',
+      '.kv-pdk-player video{width:min(88vw,640px);border-radius:10px;background:#000;display:block}',
+      '.kv-pdk-head{display:flex;align-items:center;gap:12px;color:#fff;font-size:13px;font-weight:700}',
+      '.kv-pdk-head .btn{margin-left:auto}',
       /* 中継映像(パドック/レース)ジャンプ — modules/race-video.js */
       '.kv-video-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px;margin:0 0 8px;border:1px solid var(--kc-border,#e2e8f0);border-radius:8px;background:var(--kc-surface-2,#f8fafc)}',
       '.kv-video-cap{font-size:11px;font-weight:800;color:var(--kc-muted,#64748b);white-space:nowrap}',
@@ -2989,6 +2997,7 @@ const KV_APP_CSS = [
 <script defer src="data/kochi-user-laps.js?v=20260728-v1"></script>
 <script defer src="modules/app-main.js?v=20260803-video1"></script>
 <script defer src="modules/race-video.js?v=20260803-v1"></script>
+<script defer src="modules/paddock-clips.js?v=20260803-v1"></script>
 <!-- 計測管理(管理者専用)。app-main の kvSupabaseReadConfig を使うので後に読む -->
 <script defer src="modules/keisoku-admin.js?v=20260801-v2"></script>
 

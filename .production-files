@@ -6,6 +6,7 @@ data/kochi-pace-baselines-v2.js
 data/kochi-roster-baselines.js
 data/kochi-roster-baselines.json
 data/kochi-user-laps.js
+data/kochi_paddock_index.json
 data/kochi_video_index.json
 data/replay/
 icons/apple-touch-icon.png
@@ -22,6 +23,7 @@ modules/first3f-autofill.js
 modules/jra-transfer-shadow.js
 modules/keisoku-admin.js
 modules/pace-v2-shadow.js
+modules/paddock-clips.js
 modules/partner-vnext-live.js
 modules/partner-vnext-market-blend.js
 modules/partner-vnext-shadow.js
