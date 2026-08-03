@@ -6,6 +6,7 @@ data/kochi-pace-baselines-v2.js
 data/kochi-roster-baselines.js
 data/kochi-roster-baselines.json
 data/kochi-user-laps.js
+data/kochi_video_index.json
 data/replay/
 icons/apple-touch-icon.png
 icons/icon-192.png
@@ -26,6 +27,7 @@ modules/partner-vnext-market-blend.js
 modules/partner-vnext-shadow.js
 modules/performance-observer.js
 modules/probability-calibration.js
+modules/race-video.js
 modules/track-bias-v2.js
 modules/umaren-distortion-shadow.js
 modules/value-t10-shadow.js

@@ -3278,6 +3278,8 @@ function renderDebanExtra(raceNo) {
   let html = '';
   try { html += buildPaceFormationHtml(raceNo); } catch(e) { console.warn('[buildPaceFormationHtml]', e); }
   try { html += buildJockeyChangeDiag(raceNo); } catch(e) { console.warn('[buildJockeyChangeDiag]', e); }
+  // 中継映像(パドック/レース)ジャンプ — modules/race-video.js(映像インデックスがある日だけ表示)
+  try { if (window.buildRaceVideoHtml) html += buildRaceVideoHtml(raceNo); } catch(e) { console.warn('[buildRaceVideoHtml]', e); }
   el.innerHTML = html;
 }
 
