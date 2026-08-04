@@ -749,6 +749,9 @@ const KV_APP_CSS = [
       '.pace-input--agari{color:#c2410c;background:#fff7ed;border-color:#fed7aa}.pace-input--agari:focus{border-color:#ea580c}',
       '.pace-badge{font-size:18px;font-weight:800;padding:3px 18px;border-radius:20px;letter-spacing:2px;min-width:76px;text-align:center}',
       '.pace-none{background:#f0f0f0;color:#999}.pace-high{background:#fee2e2;color:#e84040}.pace-mid{background:#fef3c7;color:#e8a020}.pace-slow{background:#e0f0ff;color:#3090e0}',
+      /* 馬ごとの自動ペース。手入力が無い時だけ出る推定値なので、破線で実測と区別する */
+      '.pace-auto{display:inline-block;font-size:10px;font-weight:700;line-height:1.6;padding:0 5px;border-radius:8px;border:1px dashed currentColor;opacity:.9;white-space:nowrap}',
+      '.pace-auto.pace-dot-high{color:#e84040}.pace-auto.pace-dot-mid{color:#c98a10}.pace-auto.pace-dot-slow{color:#3090e0}',
       /* 前半3Fが記録されておらず、同条件の基準から推定した値。実測と見分けが付くよう破線＋「推定」を出す */
       '.pace-badge.is-estimated{border:2px dashed currentColor;opacity:.85;position:relative}',
       '.pace-badge.is-estimated::after{content:"推定";position:absolute;top:-8px;right:-6px;font-size:8px;font-weight:700;letter-spacing:0;line-height:1.5;padding:0 4px;border-radius:7px;background:var(--kc-surface-2,#f1f5f9);color:var(--kc-muted,#64748b);border:1px solid var(--kc-border,#dbe3ef)}',
@@ -3017,7 +3020,7 @@ const KV_APP_CSS = [
 
 <!-- ユーザー手計測の区間ラップ(259レース)。app-main より先に window.KOCHI_USER_LAPS を用意する -->
 <script defer src="data/kochi-user-laps.js?v=20260728-v1"></script>
-<script defer src="modules/app-main.js?v=20260804-pace2"></script>
+<script defer src="modules/app-main.js?v=20260804-hpace1"></script>
 <script defer src="modules/race-video.js?v=20260803-v1"></script>
 <script defer src="modules/paddock-clips.js?v=20260803-v1"></script>
 <!-- 計測管理(管理者専用)。app-main の kvSupabaseReadConfig を使うので後に読む -->

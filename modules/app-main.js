@@ -2305,6 +2305,8 @@ function parseDebaTable(html, raceDate, raceNo, babaCode) {
       lineageLoginCode: debaLineage,
       first3f:         savedPace?.first3f         || '',
       paceType:        savedPace?.paceType        || '',
+      paceTypeAuto:    savedPace?.paceTypeAuto    || '',
+      paceDevAuto:     savedPace?.paceDevAuto     ?? null,
       mukaeShoumen:    savedPace?.mukaeShoumen    || '',
       shoumenStraight: savedPace?.shoumenStraight || '',
       _isDebaTable: true,
@@ -2518,7 +2520,7 @@ function parseRaceMarkTable(html, raceDate, raceNo, babaCode) {
     const savedPace = getSavedHorsePace(savedKey);
     horses.push({ chakujun, wakuBan, umaBan, horseName, belong, sexAge, kinryo, jockey, trainer, weight, ninki, odds, time, diff, agari3f, corner,
       lineageLoginCode,
-      first3f: savedPace?.first3f||'', paceType: savedPace?.paceType||'', mukaeShoumen: savedPace?.mukaeShoumen||'', shoumenStraight: savedPace?.shoumenStraight||'' });
+      first3f: savedPace?.first3f||'', paceType: savedPace?.paceType||'', paceTypeAuto: savedPace?.paceTypeAuto||'', paceDevAuto: savedPace?.paceDevAuto??null, mukaeShoumen: savedPace?.mukaeShoumen||'', shoumenStraight: savedPace?.shoumenStraight||'' });
   }
   // 除外・取消馬の前走タイム誤読対策: 距離から算出した現実的最短タイムを下回る馬のデータをクリア
   // keiba.go.jpの除外馬行は列ズレが発生し、人気→着順、前走タイム→タイム として誤読される
@@ -4086,6 +4088,12 @@ function renderHorseRows(raceNo, horses) {
     const _cornerHtml=escapeHTML(horse.corner||'');
     const _first3fHtml=escapeHTML(horse.first3f||'');
     const _paceTypeHtml=escapeHTML(horse.paceType||'');
+    // 手入力が無い馬は、同じ距離×クラス×馬場の基準と比べた自動判定を「推定」印付きで出す。
+    // 手入力(paceType)には触れず、別フィールド(paceTypeAuto)を読むだけ。
+    const _paceAuto = (!horse.paceType && horse.paceTypeAuto) ? String(horse.paceTypeAuto) : '';
+    const _paceAutoHtml = _paceAuto
+      ? `<span class="pace-auto ${getPaceDotClass(_paceAuto)}" title="${escapeHTML(`同じ距離・クラス・馬場の基準と比べた推定です（基準との差 ${horse.paceDevAuto != null ? (horse.paceDevAuto > 0 ? '+' : '') + horse.paceDevAuto : '—'}σ）`)}">${escapeHTML(_paceAuto)}</span>`
+      : '';
     const _raced=/^\d+$/.test(String(horse.chakujun));
     return `<tr class="horse-row">
       <td class="col-chakujun">${horse.chakujun?`<span class="chakujun-badge ${chakujunClass(horse.chakujun)}">${horse.chakujun}</span>`:'<span class="data-empty">—</span>'}</td>
@@ -4108,7 +4116,7 @@ function renderHorseRows(raceNo, horses) {
       <td class="col-agari3f">${_agari3fHtml||'<span class="data-empty">—</span>'}</td>
       <td class="col-corner">${horse.corner?`<span class="corner-text">${_cornerHtml}</span>`:'<span class="data-empty">—</span>'}</td>
       <td class="col-3f"><div class="threef-cell admin-only"><input type="number" class="threef-input" value="${_first3fHtml}" step="0.1" min="30" max="60" placeholder="--.-" oninput="onHorse3FInput(this,${raceNo},${horse.umaBan})"><span class="threef-unit">秒</span></div><span class="viewer-only vw-val">${horse.first3f?_first3fHtml+'秒':'—'}</span></td>
-      <td class="col-pace"><div class="horse-pace-cell admin-only"><select class="pace-select" onchange="onHorsePaceChange(this,${raceNo},${horse.umaBan})"><option value="">－</option><option value="ハイ" ${horse.paceType==='ハイ'?'selected':''}>ハイ</option><option value="ミドル" ${horse.paceType==='ミドル'?'selected':''}>ミドル</option><option value="スロー" ${horse.paceType==='スロー'?'selected':''}>スロー</option></select><span class="pace-dot ${getPaceDotClass(horse.paceType)}"></span></div><span class="viewer-only vw-val">${_paceTypeHtml||'—'}</span></td>
+      <td class="col-pace"><div class="horse-pace-cell admin-only"><select class="pace-select" onchange="onHorsePaceChange(this,${raceNo},${horse.umaBan})"><option value="">－</option><option value="ハイ" ${horse.paceType==='ハイ'?'selected':''}>ハイ</option><option value="ミドル" ${horse.paceType==='ミドル'?'selected':''}>ミドル</option><option value="スロー" ${horse.paceType==='スロー'?'selected':''}>スロー</option></select><span class="pace-dot ${getPaceDotClass(horse.paceType)}"></span>${_paceAutoHtml}</div><span class="viewer-only vw-val">${_paceTypeHtml||_paceAutoHtml||'—'}</span></td>
       <td class="col-mukae${mukaeCls}"><select class="pos-select admin-only" onchange="onHorsePosChange(this,${raceNo},${horse.umaBan},'mukaeShoumen')" tabindex="0"><option value="">－</option><option value="最内" ${horse.mukaeShoumen==='最内'?'selected':''}>最内</option><option value="内" ${horse.mukaeShoumen==='内'?'selected':''}>内</option><option value="外2" ${horse.mukaeShoumen==='外2'?'selected':''}>外2</option><option value="外3" ${horse.mukaeShoumen==='外3'?'selected':''}>外3</option><option value="大外" ${horse.mukaeShoumen==='大外'?'selected':''}>大外</option></select><span class="viewer-only vw-val">${horse.mukaeShoumen||'—'}</span></td>
       <td class="col-straight${strCls}"><select class="pos-select admin-only" onchange="onHorsePosChange(this,${raceNo},${horse.umaBan},'shoumenStraight')" tabindex="0"><option value="">－</option><option value="内" ${horse.shoumenStraight==='内'?'selected':''}>内</option><option value="中" ${horse.shoumenStraight==='中'?'selected':''}>中</option><option value="外" ${horse.shoumenStraight==='外'?'selected':''}>外</option></select><span class="viewer-only vw-val">${horse.shoumenStraight||'—'}</span></td>
     </tr>
@@ -6569,8 +6577,11 @@ async function _ensureFullIDBCache() {
           //   計算されると、その空の表が使われ続け、古いレースのラベルが永久に付かなかった。
           window._leadFrontBench = null;
           window._f3BenchCache = null;
+          window._horseF3Bench = null;
           const n = backfillPaceLabels();
           if (n > 0) console.log(`[paceLabels] 全履歴が揃ったので古いレースにも付与: ${n}件`);
+          // 馬ごとの自動ペースも同じ理由でここでしか付けられない（基準表に全期間の馬が要る）
+          backfillHorsePaceLabels();
         } catch (e) { _kvSwallow('paceLabels:fullPass', e); }
       }, 1200);
     }
@@ -7120,6 +7131,7 @@ function _putRaceRow(row) {
 
 function _horseRowKV(row) {
   const key = `${row.baba_code}_${row.race_date}_${row.race_no}_${row.uma_ban}`;
+  const _existing = _idbCache && _idbCache[key];
   const _newVal = {
     type:'horse', race_date:row.race_date, race_no:row.race_no, baba_code:row.baba_code,
     chakujun:row.chakujun||'', wakuBan:row.waku_ban||'', horseName:row.horse_name||'',
@@ -7132,6 +7144,10 @@ function _horseRowKV(row) {
     lineageLoginCode:row.lineage_login_code||'',
     savedAt:new Date(row.updated_at||row.created_at||Date.now()).toISOString()
   };
+  // ⛔レース側と同じ理由でローカル計算値を引き継ぐ（2026-08-04）。keiba_horses に
+  //   paceTypeAuto / paceDevAuto の列は無いので、ここで拾わないと同期のたびに黙って消える。
+  if (_existing?.paceTypeAuto != null) _newVal.paceTypeAuto = _existing.paceTypeAuto;
+  if (_existing?.paceDevAuto  != null) _newVal.paceDevAuto  = _existing.paceDevAuto;
   return [key, _newVal];
 }
 
@@ -7429,6 +7445,10 @@ async function initDB() {
   // 補完は全履歴同期の要否と切り離す。従来はfresh判定や別タブの同期ロックで処理ごと飛ばされていた。
   _kvScheduleIdle(() => {
     try { backfillFirst3fFrom1400m(); } catch(e) { console.warn('[backfillF3 phase1]', e); }
+    // 馬ごとの自動ペースは Phase1 で取り直した直近1,000件から消えるので、ここで付け直す
+    // （2026-08-04 実測: 再読込のたび 17,620頭 → 16,937頭 に欠けていた）。
+    // 保存済みの基準表を使うので全履歴の展開は要らない。
+    try { backfillHorsePaceLabels(); } catch(e) { _kvSwallow('horsePace:phase1', e); }
   }, 600);
 
   // 全履歴同期は約90MBになるため、完全同期済みキャッシュが新しければ省略する。
@@ -9657,6 +9677,106 @@ function getFrontPaceLabel(raceDate, raceNo, distance, raceClass, trackCond) {
   return { dev, label: dev <= -0.8 ? 'ハイ' : dev >= 0.5 ? 'スロー' : 'ミドル', src: 'front' };
 }
 
+// ══════════ 馬ごとの自動ペースラベル（2026-08-04 導入）══════════
+// 「その馬がそのレースで速い前半を踏んだか」を、同じ距離×クラス×馬場の基準と比べて出す。
+// ⛔クラスを混ぜてはいけない。実測(17,708頭・2025〜2026年)では 1300m良の前半3F中央値が
+//   A 38.60 / B 39.40 / C1 39.50 / C2 39.60 / C3 40.20 と最大1.6秒違い、距離でも
+//   1300m 40.20 → 1600m 41.30（+1.1秒）、馬場でも 良 40.20 → 不良 39.10（−1.1秒）ずれる。
+// 判定はそのセルの標準偏差で割った z で行うので、閾値は自動的に条件ごとの秒数になる。
+//   例) 1300m良のハイ境界: A 37.81秒 / C1 38.84秒 / C3 39.47秒
+// 閾値±0.75σの根拠(実測): ハイ21.6%/ミドル54.8%/スロー23.6% に分かれ、複勝率は
+//   44.4% / 31.6% / 15.3%（29pt差）、1角の相対位置も 0.32 / 0.54 / 0.77 と単調。
+//   ±1.0σは分離が最大(32.7pt)だがミドルが69%を占めて見分けにくく、±0.5σは分離が26.4ptへ落ちる。
+// ⛔手入力の paceType には触れない。完全に別フィールド（レース側の paceType/paceTypeAuto と同じ関係）。
+const HORSE_PACE_MIN_N = 30;       // 基準を作るのに要る頭数（下回る条件は距離×馬場へ落とす）
+const HORSE_PACE_Z_HIGH = -0.75;   // これ以下 → ハイ
+const HORSE_PACE_Z_SLOW = 0.75;    // これ超   → スロー
+
+const _HORSE_F3_BENCH_KEY = 'kv_horse_f3_bench_v1';
+
+/** 基準表。全履歴が載っている時だけ作り直し、結果は localStorage に残す。
+ *  ⛔残さないと、起動直後（レースと直近の馬しか載っていない状態）では基準を作れず、
+ *    Phase1で取り直した馬にラベルを付け直せない。表は70セル程度なので数KBで収まる。 */
+function getHorseF3BenchTable() {
+  if (window._horseF3Bench) return window._horseF3Bench;
+  if (!_idbFullReady) {
+    try {
+      const saved = JSON.parse(localStorage.getItem(_HORSE_F3_BENCH_KEY) || 'null');
+      if (saved && saved.cell) { window._horseF3Bench = saved; return saved; }
+    } catch (e) { _kvSwallow('getHorseF3BenchTable:load', e); }
+    return { cell: {}, fb: {} };     // 基準を作れない＝ラベルも付けない
+  }
+  const store = lsRead();
+  const cell = {}, fb = {};
+  for (const [, v] of Object.entries(store)) {
+    if (!v || v.type !== 'horse' || v.baba_code !== '31' || !v.first3f) continue;
+    const f = parseFloat(v.first3f);
+    if (!isFinite(f) || f < 33 || f > 48) continue;
+    const rr = store[`race_31_${v.race_date}_${v.race_no}`];
+    if (!rr) continue;
+    const d = String(rr.distance || '').replace(/[^\d]/g, '');
+    const c = getEffectiveClass(rr.race_class || rr.raceClass || '');
+    const cond = rr.track_cond || rr.trackCond || '';
+    if (!d) continue;
+    if (c) (cell[`${d}|${c}|${cond}`] = cell[`${d}|${c}|${cond}`] || []).push(f);
+    (fb[`${d}|${cond}`] = fb[`${d}|${cond}`] || []).push(f);
+  }
+  const summarize = src => {
+    const out = {};
+    for (const [k, a] of Object.entries(src)) {
+      if (a.length < HORSE_PACE_MIN_N) continue;
+      a.sort((x, y) => x - y);
+      const mid = a.length % 2 ? a[(a.length - 1) / 2] : (a[a.length / 2 - 1] + a[a.length / 2]) / 2;
+      const mean = a.reduce((s, x) => s + x, 0) / a.length;
+      const sd = Math.sqrt(a.reduce((s, x) => s + (x - mean) * (x - mean), 0) / a.length);
+      if (sd > 0.01) out[k] = { med: mid, sd, n: a.length };
+    }
+    return out;
+  };
+  window._horseF3Bench = { cell: summarize(cell), fb: summarize(fb), at: Date.now() };
+  try { localStorage.setItem(_HORSE_F3_BENCH_KEY, JSON.stringify(window._horseF3Bench)); }
+  catch (e) { _kvSwallow('getHorseF3BenchTable:save', e); }
+  return window._horseF3Bench;
+}
+
+/** 馬1頭の前半3F → 同条件の基準と比べた {label, z, dev}。基準が無い条件では null。 */
+function getHorsePaceLabel(first3f, distance, raceClass, trackCond) {
+  const f = parseFloat(first3f);
+  if (!isFinite(f) || f < 33 || f > 48) return null;
+  const d = String(distance || '').replace(/[^\d]/g, '');
+  if (!d) return null;
+  const c = getEffectiveClass(raceClass || '');
+  const t = getHorseF3BenchTable();
+  const b = (c && t.cell[`${d}|${c}|${trackCond || ''}`]) || t.fb[`${d}|${trackCond || ''}`];
+  if (!b) return null;
+  const z = (f - b.med) / b.sd;
+  return {
+    z: +z.toFixed(2), dev: +(f - b.med).toFixed(2),
+    label: z <= HORSE_PACE_Z_HIGH ? 'ハイ' : (z <= HORSE_PACE_Z_SLOW ? 'ミドル' : 'スロー'),
+  };
+}
+
+/** 馬ごとの自動ペースを付ける。手入力(paceType)は読みも書きもしない。 */
+function backfillHorsePaceLabels() {
+  // 基準表が無い＝まだ一度も全履歴を展開していない端末。ここで無理に付けない。
+  const t = getHorseF3BenchTable();
+  if (!t || !Object.keys(t.cell).length) return 0;
+  const store = lsRead();
+  let n = 0;
+  for (const [k, v] of Object.entries(store)) {
+    if (!v || v.type !== 'horse' || v.baba_code !== '31' || !v.first3f) continue;
+    const rr = store[`race_31_${v.race_date}_${v.race_no}`];
+    if (!rr) continue;
+    const r = getHorsePaceLabel(v.first3f, rr.distance, rr.race_class || rr.raceClass, rr.track_cond || rr.trackCond);
+    if (!r) continue;
+    if (v.paceTypeAuto === r.label && v.paceDevAuto === r.z) continue;   // 変化なし
+    lsWrite(k, { ...v, paceTypeAuto: r.label, paceDevAuto: r.z });
+    n++;
+  }
+  if (n > 0) console.log(`[horsePace] 馬ごとの自動ペースを ${n} 頭に付与/更新`);
+  return n;
+}
+
 function backfillPaceLabels() {
   let n = 0;
   for (const [k, v] of Object.entries(lsRead())) {
@@ -9775,7 +9895,7 @@ function computeYosoScoredArchived(babaCode, raceDate, raceNo, horseKeys) {
       return { chakujun: v.chakujun || '', wakuBan: v.wakuBan || String(Math.ceil(umaBan / 2)), umaBan, horseName: v.horseName || `馬番${umaBan}`,
         belong: v.belong || '', sexAge: v.sexAge || '', kinryo: v.kinryo || '', jockey: v.jockey || '', trainer: v.trainer || '', weight: v.weight || '',
         ninki: v.ninki || '', odds: v.odds || '', time: v.time || '', diff: v.diff || '', agari3f: v.agari3f || '', corner: v.corner || '',
-        first3f: v.first3f || '', paceType: v.paceType || '', mukaeShoumen: v.mukaeShoumen || '', shoumenStraight: v.shoumenStraight || '',
+        first3f: v.first3f || '', paceType: v.paceType || '', paceTypeAuto: v.paceTypeAuto || '', paceDevAuto: v.paceDevAuto ?? null, mukaeShoumen: v.mukaeShoumen || '', shoumenStraight: v.shoumenStraight || '',
         postComment: v.postComment || '', lineageLoginCode: v.lineageLoginCode || '' };
     });
   if (!horses.length) return null;
@@ -10654,7 +10774,7 @@ async function restoreFromSaved(date, baba, silent) {
     const horseEntries = indexedKeys
       ? [...indexedKeys].map(k => [k, lsData[k]]).filter(([,v]) => v && v.type === 'horse')
       : Object.entries(lsData).filter(([k,v])=>v.type==='horse'&&k.startsWith(hp));
-    const horses=horseEntries.sort((a,b)=>(parseInt(a[0].replace(hp,''))||0)-(parseInt(b[0].replace(hp,''))||0)).map(([k,v])=>{const umaBan=parseInt(k.replace(hp,''));return{chakujun:v.chakujun||'',wakuBan:v.wakuBan||String(Math.ceil(umaBan/2)),umaBan,horseName:v.horseName||`馬番${umaBan}`,belong:v.belong||'',sexAge:v.sexAge||'',kinryo:v.kinryo||'',jockey:v.jockey||'',trainer:v.trainer||'',weight:v.weight||'',ninki:v.ninki||'',odds:v.odds||'',time:v.time||'',diff:v.diff||'',agari3f:v.agari3f||'',corner:v.corner||'',first3f:v.first3f||'',paceType:v.paceType||'',mukaeShoumen:v.mukaeShoumen||'',shoumenStraight:v.shoumenStraight||'',postComment:v.postComment||'',lineageLoginCode:v.lineageLoginCode||''};});
+    const horses=horseEntries.sort((a,b)=>(parseInt(a[0].replace(hp,''))||0)-(parseInt(b[0].replace(hp,''))||0)).map(([k,v])=>{const umaBan=parseInt(k.replace(hp,''));return{chakujun:v.chakujun||'',wakuBan:v.wakuBan||String(Math.ceil(umaBan/2)),umaBan,horseName:v.horseName||`馬番${umaBan}`,belong:v.belong||'',sexAge:v.sexAge||'',kinryo:v.kinryo||'',jockey:v.jockey||'',trainer:v.trainer||'',weight:v.weight||'',ninki:v.ninki||'',odds:v.odds||'',time:v.time||'',diff:v.diff||'',agari3f:v.agari3f||'',corner:v.corner||'',first3f:v.first3f||'',paceType:v.paceType||'',paceTypeAuto:v.paceTypeAuto||'',paceDevAuto:v.paceDevAuto??null,mukaeShoumen:v.mukaeShoumen||'',shoumenStraight:v.shoumenStraight||'',postComment:v.postComment||'',lineageLoginCode:v.lineageLoginCode||''};});
     let _lapTimes = raceVal.lapTimes || null;
     if (!_lapTimes && raceVal.lap_times) { try { _lapTimes = JSON.parse(raceVal.lap_times); } catch(e){ _kvSwallow('restoreFromSaved', e); } }
     // ⛔保存データ側にも無いときだけ、同梱のユーザー手計測ラップで埋める(2026-07-28)。
