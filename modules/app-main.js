@@ -200,6 +200,11 @@ function _ensureVnextPartnerShadowModule() {
       if (typeof isAdminMode === 'function' && isAdminMode() && window.KvEraDriftShadow?.hydrateServerSnapshots) {
         window.KvEraDriftShadow.hydrateServerSnapshots().catch(() => {});
       }
+      // 予想AI v3（印の並びを作る）。computeYosoScored は同期なので先に準備しておく。
+      // 準備前に描かれた場合は従来の並びが出て、準備完了時にキャッシュを捨てて描き直す。
+      _kvLoadLibrary('viewerAiV3Shadow')
+        .then(() => window.KvViewerAiV3?.prepare?.())
+        .catch(e => console.warn('[viewerAiV3 preload]', e));
     });
 }
 

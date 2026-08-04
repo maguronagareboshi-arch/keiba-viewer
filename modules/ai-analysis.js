@@ -2134,6 +2134,10 @@ function computeYosoScored(raceNo, selCondOverride) {
   const cacheKey = _yosoInputSignature(raceNo, data, selCondOverride);
   if (_yosoScoreCache.has(cacheKey)) return _yosoScoreCache.get(cacheKey);
   if (_yosoScoreCache.size > 24) _yosoScoreCache.clear();
+  // 予想AI v3 が後から準備完了したときに、古い並びのまま固定されないよう捨てられるようにする
+  if (typeof window !== 'undefined' && !window.kvInvalidateYosoCache) {
+    window.kvInvalidateYosoCache = () => _yosoScoreCache.clear();
+  }
 
   const { raceInfo, horses } = data;
   const raceDist     = raceInfo.distance ? String(raceInfo.distance).replace(/[^\d]/g, '') : '';
@@ -2436,6 +2440,22 @@ function computeYosoScored(raceNo, selCondOverride) {
     if (b.totalScore == null) return -1;
     return b.totalScore - a.totalScore;
   });
+  // ── 予想AI v3：印の並びだけを機械学習の再ランクへ差し替える（2026-08-05採用）──
+  // ◎=勝ちモデルの1位／以降=複勝モデル順。11,450レースの年次ウォークフォワードで
+  // ◎勝率+1.32pt★・上位2頭とも+2.60pt★・上位3頭に勝ち馬+1.41pt★（開催日ブートストラップ）。
+  // ⛔totalScore（AI総合指数）は変更しない＝表示の指数と印の順が一致しなくなる点に注意。
+  // 戻すときは window.KV_AI_V3_MARKS = false（この1行だけで現行の並びに復帰する）。
+  // v3の準備ができていなければ何もしない（従来どおりtotalScore順）。
+  if (window.KV_AI_V3_MARKS !== false && window.KvViewerAiV3?.applyMarkOrder) {
+    try {
+      const reordered = window.KvViewerAiV3.applyMarkOrder(raceNo, scored);
+      if (reordered && reordered.length === scored.length) {
+        scored.length = 0;
+        reordered.forEach(s => scored.push(s));
+        scored._aiV3Applied = true;
+      }
+    } catch (e) { console.warn('[viewerAiV3 marks]', e); }
+  }
   const output = { scored, comboStats: _comboStats, raceDist, raceCond, raceCls, selCond };
   _yosoScoreCache.set(cacheKey, output);
   return output;

@@ -462,9 +462,65 @@
     }
   }
 
+  /** 印の並びに使えるか（同期判定）。computeYosoScored は同期なので事前に prepare() が要る。 */
+  function isReady() { return !!(_assets && root._kvAiV3Index); }
+
+  /** モデルと索引を先に読み込む。終わったら予想のキャッシュを捨てて描き直させる。 */
+  function prepare() {
+    if (isReady()) return Promise.resolve(true);
+    return ensureAssets().then(() => {
+      buildIndex();
+      if (!isReady()) return false;
+      if (typeof root.kvInvalidateYosoCache === 'function') root.kvInvalidateYosoCache();
+      return true;
+    }).catch(e => { console.warn('[viewerAiV3 prepare]', e); return false; });
+  }
+
+  /** ⛔印の並びだけを差し替える（totalScore は変更しない）。
+   *  ◎＝勝ちモデルの1位／以降＝複勝モデル順。準備前や失敗時は null を返して現行の並びを保つ。 */
+  function applyMarkOrder(raceNo, scored) {
+    if (root.KV_AI_V3_MARKS === false || !isReady()) return null;
+    const data = (root.allRacesData || {})[raceNo];
+    if (!data || !data.raceInfo || !Array.isArray(scored) || !scored.length) return null;
+    const idx = root._kvAiV3Index;
+    const ctx = makeCtx(idx, _assets.win, _assets.p3, _assets.cst);
+    const info = data.raceInfo;
+    ctx.raceInfo = { raceDate: info.raceDate, raceNo: Number(raceNo), distance: info.distance,
+                     raceClass: info.raceClass, trackCond: info.trackCond || '' };
+    const withScore = scored.filter(s => s && s.horse && s.totalScore != null);
+    const nulls = scored.filter(s => !(s && s.horse && s.totalScore != null));
+    if (withScore.length < 2) return null;
+    ctx.entrants = withScore.map(s => ({
+      umaBan: Number(s.horse.umaBan), horseName: s.horse.horseName || '', jockey: s.horse.jockey || '',
+      trainer: s.horse.trainer || '', kinryo: s.horse.kinryo, weight: s.horse.weight,
+      wakuBan: s.horse.wakuBan, sexAge: s.horse.sexAge }));
+    const sm = new Map();
+    withScore.forEach(s => sm.set(Number(s.horse.umaBan), numv(s.totalScore)));
+    ctx.scoreOf = u => { const v = sm.get(Number(u)); return okv(v) ? v : NaN; };
+    const ranked = V3.scoreRace(ctx);          // pWin降順
+    if (!ranked || ranked.length !== withScore.length) return null;
+    const byUma = new Map();
+    withScore.forEach(s => byUma.set(Number(s.horse.umaBan), s));
+    const head = ranked[0];                    // ◎＝勝ちモデルの1位
+    const rest = ranked.slice(1).sort((a, b) => (b.pTop3 || 0) - (a.pTop3 || 0));
+    const out = [];
+    [head].concat(rest).forEach(r => {
+      const s = byUma.get(Number(r.umaBan));
+      if (!s) return;
+      s.aiV3 = { pWin: r.pWin, pTop3: r.pTop3 };
+      out.push(s);
+    });
+    if (out.length !== withScore.length) return null;
+    return out.concat(nulls);
+  }
+
   V3.buildIndex = buildIndex;
   V3.computeLive = computeLive;
   V3.recordLive = recordLive;
+  V3.isReady = isReady;
+  V3.prepare = prepare;
+  V3.applyMarkOrder = applyMarkOrder;
   root.kvComputeViewerAiV3 = computeLive;
   root.kvCaptureViewerAiV3 = recordLive;
+  root.kvPrepareViewerAiV3 = prepare;
 })(typeof window !== 'undefined' ? window : this);
