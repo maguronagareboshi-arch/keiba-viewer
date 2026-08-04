@@ -424,7 +424,7 @@
       while (index < raceNos.length) {
         const raceNo = raceNos[index++], data = allRacesData[raceNo];
         if (!data || data.raceInfo.raceDate !== wanted || data.horses.some(h => /^\d+$/.test(String(h.chakujun || '')))) continue;
-        try { cachePrediction(raceNo, computeYosoScored(raceNo, null)); } catch (_) {}
+        try { cachePrediction(raceNo, computeYosoScored(raceNo, null)); } catch (_) { window._kvSwallow && window._kvSwallow('step', _); }
         break;
       }
       if (index < raceNos.length) {

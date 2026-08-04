@@ -2,6 +2,39 @@
 // 高知競馬ビューア - メインスクリプト v5 (インライン版)
 // ============================================================
 
+// ── 握り潰した例外の記録（2026-08-04 導入）──────────────────
+// このコードには「握り潰す catch」が100箇所以上ある。多くは "失敗しても画面を
+// 止めない" ための意図的な設計だが、2026-08-04 に「馬場ページが例外も出さずに
+// 真っ白」という故障が起き、その原因が中身の空な catch の1つだったことが分かった。
+// 握り潰す方針は変えない（画面を止めない方が利用者には良い）が、痕跡は必ず残す。
+//
+//   window.kvSwallowedReport()  … 記録の一覧をコンソールへ
+//   window._kvDebug = true      … 以後は握り潰しをその場でconsole.warnする
+//
+// 記録は最大200件（それ以上は古いものから捨てる）。メモリを増やさないための上限。
+const _KV_SWALLOW_MAX = 200;
+function _kvSwallow(tag, e) {
+  try {
+    const log = (window._kvSwallowed = window._kvSwallowed || []);
+    const msg = String((e && (e.message || e.name)) || e || '');
+    // 同じ場所の同じ例外は件数だけ増やす（ループ内の catch で溢れさせない）
+    const last = log.find(r => r.tag === tag && r.msg === msg);
+    if (last) { last.count++; last.at = Date.now(); }
+    else {
+      log.push({ tag, msg, count: 1, at: Date.now(), stack: (e && e.stack) ? String(e.stack).split('\n').slice(0, 3).join(' / ') : '' });
+      if (log.length > _KV_SWALLOW_MAX) log.shift();
+    }
+    if (window._kvDebug) console.warn('[swallow]', tag, e);
+  } catch (_) { /* 記録側で落ちて本体を巻き込まないこと */ }
+}
+window._kvSwallow = _kvSwallow;
+window.kvSwallowedReport = function () {
+  const log = window._kvSwallowed || [];
+  if (!log.length) { console.log('[swallow] 記録なし'); return []; }
+  console.table(log.map(r => ({ 場所: r.tag, 例外: r.msg, 回数: r.count, 最後: new Date(r.at).toLocaleTimeString() })));
+  return log;
+};
+
 // 初回表示では不要な大容量ライブラリを、機能を使った時だけ読み込む。
 // 同時に複数箇所から要求されても同じscriptを二重追加しない。
 const _kvLibPromises = Object.create(null);
@@ -29,11 +62,11 @@ const _kvLibSpecs = {
       window.KvJraTransferShadow?.contract?.status === 'production_first_start',
   },
   aiAnalysis: {
-    src: 'modules/ai-analysis.js?v=20260804-perf1',
+    src: 'modules/ai-analysis.js?v=20260804-obs1',
     ready: () => typeof window.computeYosoScored === 'function' && typeof window.renderPredictionPanel === 'function' && typeof window.renderAnalysis === 'function',
   },
   aiInsights: {
-    src: 'modules/ai-insights.js?v=20260801-cloud2',
+    src: 'modules/ai-insights.js?v=20260804-obs1',
     ready: () => window.kvAiInsightsReady === true,
   },
   vnextPartnerScorer: {
@@ -133,12 +166,12 @@ function _ensureAiAnalysisModule() {
   return _kvLoadLibrary('jraTransferShadow').then(() => _kvLoadLibrary('aiAnalysis')).then(() => {
     if (window._kvAnalysisModuleInitialized) return;
     window._kvAnalysisModuleInitialized = true;
-    try { if (typeof initAnalysisDateSelect === 'function') initAnalysisDateSelect(); } catch (e) {}
+    try { if (typeof initAnalysisDateSelect === 'function') initAnalysisDateSelect(); } catch (e) { _kvSwallow('_ensureAiAnalysisModule', e); }
     const saveStatus = document.getElementById('save-status');
     if (saveStatus && window.MutationObserver) {
       new MutationObserver(() => {
         if (saveStatus.textContent.includes('保存しました')) {
-          try { initAnalysisDateSelect(); } catch (e) {}
+          try { initAnalysisDateSelect(); } catch (e) { _kvSwallow('_ensureAiAnalysisModule#2', e); }
         }
       }).observe(saveStatus, { childList:true, characterData:true, subtree:true });
     }
@@ -375,8 +408,55 @@ function fmtWeightDiff(w) {
 let _currentPage = 'search';
 let _navReady = false;
 
+/** 描画に失敗したページの先頭へ「表示できませんでした・再試行」を出す。
+ *  【2026-08-04】ここは以前 try{}catch{} で握り潰しており、renderTrackTrend が
+ *  ReferenceError を投げると馬場ページが「エラーも出ないまま真っ白」になっていた。
+ *  握り潰す方針自体は変えない（他ページは動かしたい）が、失敗した画面には必ず理由を出す。 */
+function _kvShowPageError(pageId) {
+  const host = document.getElementById('page-' + pageId);
+  if (!host) return;
+  let el = document.getElementById('kv-page-error-' + pageId);
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'kv-page-error-' + pageId;
+    el.style.marginBottom = '12px';
+    host.insertBefore(el, host.firstChild);
+  }
+  el.innerHTML = _kvAsyncStateHtml('error', 'この画面を表示できませんでした',
+    '一時的な不具合の可能性があります。再試行しても直らないときはページを再読み込みしてください。',
+    `switchPage('${pageId}')`);
+}
+function _kvClearPageError(pageId) {
+  const el = document.getElementById('kv-page-error-' + pageId);
+  if (el) el.remove();
+}
+
+/** 計測管理ページ（管理者専用）に、内部で伏せた不具合の一覧を出す。 */
+function renderSwallowLog() {
+  const el = document.getElementById('kv-swallow-log');
+  if (!el) return;
+  const log = (window._kvSwallowed || []).slice().sort((a, b) => b.at - a.at);
+  if (!log.length) {
+    el.innerHTML = '<p class="no-data">記録なし（この起動では何も起きていません）</p>';
+    return;
+  }
+  el.innerHTML = `<div class="table-wrapper"><table class="deban-table" style="font-size:12px">
+    <thead><tr><th style="text-align:left">場所</th><th style="text-align:left">内容</th><th style="text-align:right">回数</th><th style="text-align:right">最後</th></tr></thead>
+    <tbody>${log.map(r => `<tr>
+      <td style="white-space:nowrap">${escapeHTML(r.tag)}</td>
+      <td style="color:#dc2626">${escapeHTML(r.msg)}</td>
+      <td style="text-align:right">${Number(r.count) || 1}</td>
+      <td style="text-align:right;color:#94a3b8;white-space:nowrap">${escapeHTML(new Date(r.at).toLocaleTimeString('ja-JP'))}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+window.renderSwallowLog = renderSwallowLog;
+
 function _renderPageWithHistory(pageId, renderFn, needsAiModule) {
-  const run = () => { if (_currentPage === pageId) { try { renderFn(); } catch(e){} } };
+  const run = () => {
+    if (_currentPage !== pageId) return;
+    try { renderFn(); _kvClearPageError(pageId); }
+    catch (e) { _kvSwallow('renderPage:' + pageId, e); _kvShowPageError(pageId); }
+  };
   const moduleReady = !needsAiModule || typeof window.computeYosoScored === 'function';
   if (_idbFullReady && moduleReady) { setTimeout(run, 0); return; }
   const st = document.getElementById('save-status');
@@ -427,21 +507,21 @@ function switchPage(pageId, _fromPop) {
         '',
         _onDeban ? _kvHashFor(currentDate, currentRaceNo) : (location.pathname + location.search)
       );
-    } catch(e) {}
+    } catch(e) { _kvSwallow('switchPage', e); }
   }
   // 分析ページに切り替えたとき自動レンダリング
   if (pageId === 'bunseki') { _renderPageWithHistory(pageId, () => renderAnalysis(), true); }
   if (pageId === 'jchg')    { _renderPageWithHistory(pageId, renderJockeyChangeAnalysis); }
-  if (pageId === 'deban')   { setTimeout(() => { try { (Object.keys(allRacesData).length ? showDebanRaceView : showDebanDateList)(); } catch(e){} }, 0); }
+  if (pageId === 'deban')   { setTimeout(() => { try { (Object.keys(allRacesData).length ? showDebanRaceView : showDebanDateList)(); } catch(e){ _kvSwallow('switchPage#2', e); } }, 0); }
   if (pageId === 'baba')    { _renderPageWithHistory(pageId, renderTrackTrend); }
   if (pageId === 'saved')   {
-    setTimeout(() => { try { renderSavedList(); } catch(e){} }, 0);
+    setTimeout(() => { try { renderSavedList(); } catch(e){ _kvSwallow('switchPage#3', e); } }, 0);
     _renderPageWithHistory(pageId, refreshOpponentShadowCollectionStatus);
     _ensureValueT10ShadowModule().then(() => kvRefreshT10LedgerMonitor(true)).catch(()=>{});
   }
   if (pageId === 'f3avg')   { _renderPageWithHistory(pageId, renderF3Averages); }
   // 計測管理（管理者専用・modules/keisoku-admin.js が window.ksOpen を定義する）
-  if (pageId === 'keisoku') { setTimeout(() => { try { if (typeof ksOpen === 'function') ksOpen(); } catch(e){} }, 0); }
+  if (pageId === 'keisoku') { setTimeout(() => { try { if (typeof ksOpen === 'function') ksOpen(); } catch(e){ _kvSwallow('switchPage:keisoku', e); } renderSwallowLog(); }, 0); }
   if (pageId === 'aiseiseki') {
     setTimeout(() => _ensureAiInsightsModule().then(() => {
       if (_currentPage === pageId) renderAiSeisekiPage();
@@ -495,14 +575,14 @@ const _KV_PAST_HIDDEN_MSG = '過去の出馬表は現在公開していません
 // ブラウザ戻る/進むの処理
 function _initNavHistory() {
   if (_navReady) return;
-  try { history.replaceState({ kvPage: _currentPage }, ''); } catch(e) {}
+  try { history.replaceState({ kvPage: _currentPage }, ''); } catch(e) { _kvSwallow('_initNavHistory', e); }
   _navReady = true;
   window.addEventListener('popstate', async (e) => {
     // ① モーダルが開いていれば、まず閉じる（履歴位置は補填してアプリ内に留まる）
     const modal = document.getElementById('horse-modal');
     if (modal && !modal.classList.contains('hidden')) {
       closeHorseModal();
-      try { history.pushState({ kvPage: _currentPage }, ''); } catch(err) {}
+      try { history.pushState({ kvPage: _currentPage }, ''); } catch(err) { _kvSwallow('_initNavHistory#2', err); }
       return;
     }
     _kvNavFromPop = true;
@@ -515,7 +595,7 @@ function _initNavHistory() {
             await restoreFromSaved(dl.date, '31', true);
             if (dl.raceNo && allRacesData[dl.raceNo]) switchRaceTab(dl.raceNo);
             switchPage('deban', true);
-          } catch(err) {}
+          } catch(err) { _kvSwallow('_initNavHistory#3', err); }
           return;
         }
       }
@@ -528,7 +608,7 @@ function _initNavHistory() {
         } else if (st.kvRace && st.kvRace !== currentRaceNo && allRacesData[st.kvRace]) {
           switchRaceTab(st.kvRace);
         }
-      } catch(err) {}
+      } catch(err) { _kvSwallow('_initNavHistory#4', err); }
       switchPage(st.kvPage || 'search', true);
     } finally { _kvNavFromPop = false; }
   });
@@ -744,7 +824,7 @@ async function _bumpAccessCounter() {
       headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY },
       body: JSON.stringify({ k })
     }).catch(() => {});
-    try { await Promise.all([bump('total'), bump('d_' + dk)]); } catch (e) {}
+    try { await Promise.all([bump('total'), bump('d_' + dk)]); } catch (e) { _kvSwallow('_bumpAccessCounter', e); }
   }
   _renderAccessCounter();
 }
@@ -1087,7 +1167,7 @@ function _bnSetPayout(id, val) { const p = parseInt(val); if (isNaN(p) || p < 0)
 function _bnRenderChart(labels, pts) {
   const cv = document.getElementById('bn-chart'); if (!cv) return;
   if (typeof Chart === 'undefined') { ensureChartJs(() => _bnRenderChart(labels, pts)); return; }
-  if (window._bnChart) { try { window._bnChart.destroy(); } catch (e) {} window._bnChart = null; }
+  if (window._bnChart) { try { window._bnChart.destroy(); } catch (e) { _kvSwallow('_bnRenderChart', e); } window._bnChart = null; }
   const ctx = cv.getContext('2d');
   if (!pts.length) { ctx.clearRect(0, 0, cv.width, cv.height); return; }
   const dark = document.body.classList.contains('dark-mode');
@@ -1148,7 +1228,7 @@ function _simRestoreState() {
   const p = new URLSearchParams(location.search);
   const page = p.get('page');
   if (!page || page === 'search') return;
-  try { switchPage(page); } catch (e) {}
+  try { switchPage(page); } catch (e) { _kvSwallow('_simRestoreState', e); }
   if (page === 'deban' && p.get('date')) {
     const date = p.get('date'), baba = p.get('baba') || '31', r = parseInt(p.get('r'));
     const prefix = `race_${baba}_${date}_`;
@@ -1156,13 +1236,13 @@ function _simRestoreState() {
     const poll = (attempt) => {
       // ① 既にメモリに読み込み済み（保存復元 or ネット取得完了）→ レース切替して終了
       const loaded = (typeof allRacesData === 'object') && Object.values(allRacesData).some(d => d && d.raceInfo && d.raceInfo.raceDate === date);
-      if (loaded) { if (!isNaN(r) && typeof switchRaceTab === 'function') { try { switchRaceTab(r); } catch (e) {} } return; }
+      if (loaded) { if (!isNaN(r) && typeof switchRaceTab === 'function') { try { switchRaceTab(r); } catch (e) { _kvSwallow('poll', e); } } return; }
       // ② IDB(保存データ)にあれば保存復元（即時・オフラインOK）
       const ls = (typeof lsRead === 'function') ? lsRead() : {};
       const inIdb = Object.keys(ls).some(k => k.indexOf(prefix) === 0);
-      if (inIdb && !restored) { restored = true; try { restoreFromSaved(date, baba); } catch (e) {} }
+      if (inIdb && !restored) { restored = true; try { restoreFromSaved(date, baba); } catch (e) { _kvSwallow('poll#2', e); } }
       // ③ IDBに無ければ（今日のレース等・未保存）ネットから取得（1回だけ）
-      else if (!inIdb && !fetched && attempt >= 6 && typeof loadSavedDay === 'function') { fetched = true; try { loadSavedDay(date, baba); } catch (e) {} }
+      else if (!inIdb && !fetched && attempt >= 6 && typeof loadSavedDay === 'function') { fetched = true; try { loadSavedDay(date, baba); } catch (e) { _kvSwallow('poll#3', e); } }
       if (attempt < 60) setTimeout(() => poll(attempt + 1), 200);
     };
     poll(0);
@@ -1174,7 +1254,7 @@ function _simRestoreState() {
         const has = sel && [...sel.options].some(o => o.value === ad);
         if (!has) { if (attempt < 40) setTimeout(() => tryAna(attempt + 1), 150); return; }
         sel.value = ad;
-        if (typeof renderAnalysis === 'function') { try { renderAnalysis(); } catch (e) {} }
+        if (typeof renderAnalysis === 'function') { try { renderAnalysis(); } catch (e) { _kvSwallow('tryAna', e); } }
       };
       tryAna(0);
     }
@@ -1253,7 +1333,7 @@ function applyModeUI() {
   if (loginBtn) loginBtn.classList.add('hidden');
   if (badge) badge.classList.toggle('hidden', !isAdmin);
   if (logoutBtn) logoutBtn.classList.toggle('hidden', !isAdmin);
-  if (isAdmin && typeof _renderAccessCounter === 'function') { try { _renderAccessCounter(); } catch (e) {} }
+  if (isAdmin && typeof _renderAccessCounter === 'function') { try { _renderAccessCounter(); } catch (e) { _kvSwallow('applyModeUI', e); } }
   if (typeof kvxApplyShell === 'function') kvxApplyShell();
 }
 
@@ -1261,7 +1341,7 @@ function applyModeUI() {
 function _wireSecretAdminEntry() {
   const _hashOpen = () => {
     if (/^#(admin|kanri)$/i.test(location.hash) && !isAdminMode()) {
-      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { _kvSwallow('_hashOpen', e); }
       if (typeof openAdminLogin === 'function') openAdminLogin();
     }
   };
@@ -1354,7 +1434,7 @@ function adminLogout() {
 
 document.addEventListener('DOMContentLoaded', () => {
   applyModeUI();
-  try { _wireSecretAdminEntry(); } catch (e) {}
+  try { _wireSecretAdminEntry(); } catch (e) { _kvSwallow('adminLogout', e); }
 });
 // スクリプトはbody末尾にあるため、初回描画前にも公開UIを適用する。
 (function(){ applyModeUI(); })();
@@ -1404,10 +1484,10 @@ async function _kvTryDeepLink() {
   // 閲覧者に公開していない過去日へのリンク→ハッシュを消して通常起動（本日モード）へ
   if (!_kvViewerDateAllowed(dl.date)) {
     window._kvDeepLink = null;
-    try { history.replaceState(history.state, '', location.pathname + location.search); } catch(e) {}
+    try { history.replaceState(history.state, '', location.pathname + location.search); } catch(e) { _kvSwallow('_kvTryDeepLink', e); }
     const st = document.getElementById('save-status');
     if (st) { st.textContent = '🔒 ' + _KV_PAST_HIDDEN_MSG; setTimeout(() => { st.textContent = ''; }, 6000); }
-    try { await kvTodayMode(); } catch(e) {}
+    try { await kvTodayMode(); } catch(e) { _kvSwallow('_kvTryDeepLink#2', e); }
     return true;
   }
   // 日付索引を使い、ディープリンクを開くたびに全保存データを走査しない。
@@ -1602,7 +1682,7 @@ async function fetchRaceList(raceDate, babaCode) {
         // DOM上のリンク順により出馬表へ上書きされると、確定済みレースでも結果を二重取得していた。
         if (/RaceMark/i.test(u.pathname) || !prior) _raceListPreferredPage.set(key, u.pathname);
       }
-    } catch(e) {}
+    } catch(e) { _kvSwallow('fetchRaceList', e); }
   });
   const nos = [...new Set(links.map(a => {
     try {
@@ -1616,7 +1696,7 @@ async function fetchRaceList(raceDate, babaCode) {
     const timeMap = {};
     links.forEach(a => {
       let rn = NaN;
-      try { rn = parseInt(new URL(a.href, 'https://www.keiba.go.jp').searchParams.get('k_raceNo')); } catch(e) {}
+      try { rn = parseInt(new URL(a.href, 'https://www.keiba.go.jp').searchParams.get('k_raceNo')); } catch(e) { _kvSwallow('fetchRaceList#2', e); }
       if (isNaN(rn) || timeMap[rn]) return;
       const tr = a.closest('tr');
       if (!tr) return;
@@ -1667,8 +1747,8 @@ function _kvSaveRaceTimes(dateYmd, map, babaCode) {
   const lim = new Date(); lim.setDate(lim.getDate() - 14);
   const limStr = `${lim.getFullYear()}/${String(lim.getMonth() + 1).padStart(2, '0')}/${String(lim.getDate()).padStart(2, '0')}`;
   Object.keys(all).forEach(k => { const d = k.includes('|') ? k.slice(k.indexOf('|') + 1) : k; if (d < limStr) delete all[k]; });
-  try { localStorage.setItem(KV_RACETIMES_KEY, JSON.stringify(all)); } catch (e) {}
-  try { _kvDecorateRaceTabs(); } catch (e) {}
+  try { localStorage.setItem(KV_RACETIMES_KEY, JSON.stringify(all)); } catch (e) { _kvSwallow('_kvSaveRaceTimes', e); }
+  try { _kvDecorateRaceTabs(); } catch (e) { _kvSwallow('_kvSaveRaceTimes#2', e); }
 }
 function _kvGetRaceTime(dateYmd, raceNo, babaCode) {
   const all = _kvReadRaceTimes(), baba = String(babaCode || currentBaba || '31');
@@ -1714,7 +1794,7 @@ function _kvDecorateRaceTabs() {
     btn.classList.toggle('race-tab--next', dateYmd === today && rn === next);
   });
 }
-setInterval(() => { try { _kvDecorateRaceTabs(); } catch (e) {} }, 60000);
+setInterval(() => { try { _kvDecorateRaceTabs(); } catch (e) { _kvSwallow('_kvDecorateRaceTabs', e); } }, 60000);
 
 // ══════════════ 馬名・騎手 横断検索（2026-07-10）══════════════
 // 保存済み全データ（IDBキャッシュ）から馬名/騎手名で過去出走を横断検索し、
@@ -1848,7 +1928,7 @@ let _kvTodayModeDone = false;
 async function kvTodayMode() {
   if (_kvTodayModeDone) return;
   _kvTodayModeDone = true;
-  try { if (sessionStorage.getItem('kv_todayJumped')) return; } catch (e) {}
+  try { if (sessionStorage.getItem('kv_todayJumped')) return; } catch (e) { _kvSwallow('kvTodayMode', e); }
   const today = _kvTodayYmd();
   // 本日の有無だけを調べるために全開催日のグループを組み立てない。
   const day = _raceDayIndex?.get(`31|${today}`);
@@ -1856,7 +1936,7 @@ async function kvTodayMode() {
     ? [...day.values()].some(entry => entry.raceVal)
     : Object.values(lsRead()).some(v => v.type === 'race' && v.race_date === today && v.baba_code === '31');
   if (!hasToday) return; // 本日の保存データなし＝通常起動
-  try { sessionStorage.setItem('kv_todayJumped', '1'); } catch (e) {}
+  try { sessionStorage.setItem('kv_todayJumped', '1'); } catch (e) { _kvSwallow('kvTodayMode#2', e); }
   // まず保存済み出馬表を即表示する。RaceListは並行取得し、発走時刻が揃った後に
   // 「次のレース」だけ選び直すことで、時刻通信を初画面のブロッカーにしない。
   const raceListJob = !Object.keys(_kvReadRaceTimes()[today] || {}).length
@@ -1900,7 +1980,7 @@ async function loadWeeklySchedule(force) {
         renderWeeklySchedule(cached.days);
         return;
       }
-    } catch (e) {}
+    } catch (e) { _kvSwallow('loadWeeklySchedule', e); }
   }
 
   bodyEl.innerHTML = '<p style="color:#9ca3af;font-size:13px"><i class="fas fa-spinner fa-spin"></i> 高知の開催予定を確認中...</p>';
@@ -1921,7 +2001,7 @@ async function loadWeeklySchedule(force) {
     if (i + CONCURRENCY < days.length) await new Promise(r => setTimeout(r, GAP));
   }
 
-  try { localStorage.setItem(WEEKLY_CACHE_KEY, JSON.stringify({ baseDate: todayIso, days: results })); } catch (e) {}
+  try { localStorage.setItem(WEEKLY_CACHE_KEY, JSON.stringify({ baseDate: todayIso, days: results })); } catch (e) { _kvSwallow('loadWeeklySchedule#2', e); }
   renderWeeklySchedule(results);
 }
 
@@ -1994,7 +2074,7 @@ async function _loadWeeklyJockeyChanges(ymd, raceCount, targetEl) {
           const diff = jwr(curJockey) - jwr(prevJockey);
           if (Math.abs(diff) >= 5) found.push({ raceNo: rn, hName, prevJockey, curJockey, diff });
         }
-      } catch (e) {}
+      } catch (e) { _kvSwallow('_loadWeeklyJockeyChanges', e); }
     }));
     if (i + CONCURRENCY < targets.length) await new Promise(r => setTimeout(r, GAP));
   }
@@ -2249,7 +2329,7 @@ async function fetchDebaTableRace(raceDate, raceNo, babaCode) {
     const html = await fetchHtmlWithProxy(url, 12000);
     const parsed = parseDebaTable(html, raceDate, raceNo, babaCode);
     if (parsed && parsed.horses.length > 0) return parsed;
-  } catch(e) {}
+  } catch(e) { _kvSwallow('fetchDebaTableRace', e); }
   return null;
 }
 
@@ -2505,7 +2585,7 @@ function addRaceTab(raceNo) {
   section.classList.remove('hidden'); section.classList.add('sidebar-mode');
   document.getElementById('race-content-area').classList.add('sidebar-mode');
 }
-function rebuildAllTabs() { document.getElementById('race-tabs').innerHTML=''; Object.keys(allRacesData).map(Number).sort((a,b)=>a-b).forEach(addRaceTab); try{_kvDecorateRaceTabs();}catch(e){} }
+function rebuildAllTabs() { document.getElementById('race-tabs').innerHTML=''; Object.keys(allRacesData).map(Number).sort((a,b)=>a-b).forEach(addRaceTab); try{_kvDecorateRaceTabs();}catch(e){ _kvSwallow('rebuildAllTabs', e); } }
 function switchRaceTab(raceNo) {
   currentRaceNo=raceNo;
   // 当日は、開いたレースと次レースだけを非同期で最新化する。全12Rの一斉取得は行わない。
@@ -2521,7 +2601,7 @@ function switchRaceTab(raceNo) {
     existing.style.display='';
     _updateCockpitRaceStatus(raceNo);
     updateRaceSummaryBar(raceNo);
-    try{renderDebanBias();}catch(e){}
+    try{renderDebanBias();}catch(e){ _kvSwallow('switchRaceTab', e); }
     // 「AI予想」タブが表示中のレースに戻ってきた場合、共有DOM(AI予想ランキング)を
     // 他レースの枠へ移動済みのままにしないよう、このレース向けに再配置し直す
     // （移動済みだと表示が空白になるため）。renderPredictionPanelは再計算のみで
@@ -2529,20 +2609,20 @@ function switchRaceTab(raceNo) {
     try {
       const yv = document.getElementById(`view-yoso-${raceNo}`);
       if (yv && yv.style.display !== 'none') renderPredictionPanel(raceNo);
-    } catch(e){}
+    } catch(e){ _kvSwallow('switchRaceTab#2', e); }
     return;
   }
   renderRaceContent(raceNo);
   _updateCockpitRaceStatus(raceNo);
   updateRaceSummaryBar(raceNo);
-  try{renderDebanBias();}catch(e){}
+  try{renderDebanBias();}catch(e){ _kvSwallow('switchRaceTab#3', e); }
   // 新規レースは、直近このセッションで選んでいたサブタブがあればそれを復元する
   // （出馬表以外を見ていた場合、レースを進めるたびにタブを叩き直さずに済む）。
   if (_kvLastViewTab && _kvLastViewTab !== 'deban') {
     try {
       const btn = document.getElementById(`tab-btn-${_kvLastViewTab}-${raceNo}`);
       if (btn && getComputedStyle(btn).display !== 'none') switchViewTab(raceNo, _kvLastViewTab);
-    } catch(e){}
+    } catch(e){ _kvSwallow('switchRaceTab#4', e); }
   }
 }
 
@@ -2560,7 +2640,7 @@ function _kvSyncRaceHash(raceNo) {
     const _st = history.state;
     if (_st && _st.kvDate && _st.kvDate !== currentDate) return;
     history.replaceState({ kvPage: 'deban', kvDate: currentDate, kvRace: raceNo }, '', _kvHashFor(currentDate, raceNo));
-  } catch(e) {}
+  } catch(e) { _kvSwallow('_kvSyncRaceHash', e); }
 }
 
 function renderRaceContent(raceNo) {
@@ -3220,7 +3300,7 @@ async function renderOddsPanel(raceNo) {
     if (!_idbFullReady) throw new Error('history-not-ready');
     const scored = computeYosoScored(raceNo, null)?.scored || [];
     rankMap = new Map(scored.filter(s => s?.horse).map((s, i) => [s.horse.horseName, i + 1]));
-  } catch(e) {}
+  } catch(e) { _kvSwallow('renderOddsPanel', e); }
   const horses = [...(data.horses || [])].sort((a, b) => {
     const ao = parseFloat(a.odds), bo = parseFloat(b.odds);
     return (Number.isFinite(ao) ? ao : 99999) - (Number.isFinite(bo) ? bo : 99999) || (parseInt(a.umaBan) || 0) - (parseInt(b.umaBan) || 0);
@@ -3688,7 +3768,7 @@ async function _kvTickOddsAuto() {
           // セクションを破棄してから呼ばないと馬場状態などが再描画されない
           document.getElementById(`race-section-${raceNo}`)?.remove();
           if (currentRaceNo === raceNo) switchRaceTab(raceNo);
-          try { renderPredictionPanel(raceNo); } catch(e) {}
+          try { renderPredictionPanel(raceNo); } catch(e) { _kvSwallow('_kvTickOddsAuto', e); }
           _kvSetOddsAutoNote(raceNo, '結果を確定取得');
           _kvSettledFetched[raceNo] = true;
         } else {
@@ -3712,9 +3792,9 @@ async function _kvTickOddsAuto() {
     if (raceNo !== currentRaceNo || !allRacesData[raceNo]) return;  // 取得中にレース移動したら描画しない
     if (n > 0) {
       renderHorseRows(raceNo, allRacesData[raceNo].horses);
-      if (allRacesData[raceNo].horses.some(h => h.postComment)) { try { _renderCommentsInTable(raceNo); } catch(e) {} }
-      try { renderPredictionPanel(raceNo); } catch(e) {}      // オッズ変化でAI印・EVも見直す
-      try { renderCockpitSummary(raceNo); renderOddsPanel(raceNo); _updateCockpitRaceStatus(raceNo); } catch(e) {}
+      if (allRacesData[raceNo].horses.some(h => h.postComment)) { try { _renderCommentsInTable(raceNo); } catch(e) { _kvSwallow('_kvTickOddsAuto#2', e); } }
+      try { renderPredictionPanel(raceNo); } catch(e) { _kvSwallow('_kvTickOddsAuto#3', e); }      // オッズ変化でAI印・EVも見直す
+      try { renderCockpitSummary(raceNo); renderOddsPanel(raceNo); _updateCockpitRaceStatus(raceNo); } catch(e) { _kvSwallow('_kvTickOddsAuto#4', e); }
       _kvSetOddsAutoNote(raceNo, '自動更新');
     }
   } catch(e) { /* 未発売・プロキシ失敗などは静かに次回へ */ }
@@ -3740,7 +3820,7 @@ function toggleDebanMode(raceNo) {
 const KV_MYMARKS_KEY = 'kv_myMarks_v1';
 const KV_MARK_OPTS = ['', '◎', '○', '▲', '△', '☆', '✕'];
 function _kvMarksRead() { try { return JSON.parse(localStorage.getItem(KV_MYMARKS_KEY) || '{}'); } catch (e) { return {}; } }
-function _kvMarksWrite(all) { try { localStorage.setItem(KV_MYMARKS_KEY, JSON.stringify(all)); } catch (e) {} }
+function _kvMarksWrite(all) { try { localStorage.setItem(KV_MYMARKS_KEY, JSON.stringify(all)); } catch (e) { _kvSwallow('_kvMarksWrite', e); } }
 function kvGetMyMark(raceDate, raceNo, umaBan) {
   const rec = _kvMarksRead()[`${raceDate}_${raceNo}`];
   return (rec && rec[umaBan]) ? rec[umaBan] : { m: '', memo: '' };
@@ -3856,7 +3936,7 @@ function kvFavoriteButtonHtml(name, compact) {
 function kvToggleFavoriteHorse(name) {
   const rows = kvFavoriteHorses(), idx = rows.findIndex(x => x.name === name);
   if (idx >= 0) rows.splice(idx, 1); else rows.unshift({ name, addedAt: new Date().toISOString() });
-  try { localStorage.setItem(KV_FAVORITE_KEY, JSON.stringify(rows.slice(0, 50))); } catch(e) {}
+  try { localStorage.setItem(KV_FAVORITE_KEY, JSON.stringify(rows.slice(0, 50))); } catch(e) { _kvSwallow('kvToggleFavoriteHorse', e); }
   document.querySelectorAll('[data-favorite-horse]').forEach(btn => {
     if (btn.dataset.favoriteHorse !== name) return;
     const on = idx < 0; btn.classList.toggle('is-on', on); btn.textContent = on ? '♥' : '♡';
@@ -4062,7 +4142,7 @@ function renderHorseRows(raceNo, horses) {
   const _preDefault = allRacesData[raceNo]?._debanPre ?? (_isAdmin ? !_hasResults : true);
   setDebanMode(raceNo, _preDefault);
   // 結果タブの表示可否（結果ありレースのみ）
-  try { _kvSyncKekkaTab(raceNo, _hasResults); } catch (e) {}
+  try { _kvSyncKekkaTab(raceNo, _hasResults); } catch (e) { _kvSwallow('_rfHtml', e); }
   _restoreCommentRows(raceNo);
 }
 
@@ -4658,7 +4738,7 @@ function renderResultView(raceNo) {
     const _rvScored = (typeof computeYosoScored === 'function') ? computeYosoScored(raceNo, null).scored : null;
     const _RV_MARKS = ['◎', '○', '▲', '△', '×', '×'];
     if (_rvScored) _rvScored.forEach((s, i) => { if (s.totalScore != null) _rvAiMarkMap[s.horse.horseName] = _RV_MARKS[i] || ''; });
-  } catch (e) {}
+  } catch (e) { _kvSwallow('renderResultView', e); }
   const _rvMarkColor = { '◎': '#dc2626', '○': '#2563eb', '▲': '#d97706', '△': '#d97706', '×': '#6b7280' };
   const _rvHitCell = (chaku, mark) => {
     if (!mark) return '<span class="data-empty">—</span>';
@@ -6170,7 +6250,7 @@ function fetchRaceOddsHistory(raceDateSlash, raceNo) {
 }
 function destroyHorseOddsHistoryChart() {
   if (!window._hmOddsHistoryChart) return;
-  try { window._hmOddsHistoryChart.destroy(); } catch (_) {}
+  try { window._hmOddsHistoryChart.destroy(); } catch (_) { _kvSwallow('destroyHorseOddsHistoryChart', _); }
   window._hmOddsHistoryChart = null;
 }
 function oddsMoveBadgeHtml(hist) {
@@ -6269,7 +6349,7 @@ async function apiSaveRaceBundle(raceId, raceRow, horseRows) {
   const raw = await res.text();
   if (!res.ok) { const e = new Error(`レース一括保存に失敗しました（HTTP ${res.status}）${raw ? `: ${raw.slice(0, 240)}` : ''}`); e.status = res.status; throw e; }
   let result = null;
-  try { result = raw ? JSON.parse(raw) : null; } catch (_) {}
+  try { result = raw ? JSON.parse(raw) : null; } catch (_) { _kvSwallow('apiSaveRaceBundle', _); }
   const saved = Number(result?.saved_horses ?? result?.[0]?.saved_horses);
   if (!Number.isFinite(saved) || saved !== expected.length) throw new Error(`保存頭数が一致しません（予定${expected.length}頭／保存${Number.isFinite(saved) ? saved : '不明'}頭）`);
   return { savedHorses:saved, result };
@@ -6377,7 +6457,7 @@ function _idbStartupDate() {
     try {
       const d = new URLSearchParams(location.search).get('date');
       if (/^\d{4}\/\d{2}\/\d{2}$/.test(d || '')) return d;
-    } catch (e) {}
+    } catch (e) { _kvSwallow('_idbStartupDate', e); }
   }
   return _kvTodayYmd();
 }
@@ -6880,7 +6960,7 @@ async function _fetchKochiPage(table, offset, limit = _IDB_PAGE, retries = 3) {
         const rows = await res.json();
         if (Array.isArray(rows)) return rows;
       }
-    } catch(e) {}
+    } catch(e) { _kvSwallow('_fetchKochiPage', e); }
     if (attempt >= retries) return null;
     await new Promise(r => setTimeout(r, 600 * Math.pow(2, attempt)));   // 0.6s → 1.2s → 2.4s
   }
@@ -6895,7 +6975,7 @@ async function _fetchKochiDay(table, date, retries = 2) {
       url.searchParams.set('race_date', `eq.${date}`); url.searchParams.set('order', 'race_no.asc'); url.searchParams.set('limit', '500');
       const res = await fetch(url, { headers: SUPABASE_HEADERS });
       if (res.ok) { const rows = await res.json(); if (Array.isArray(rows)) return rows; }
-    } catch(e) {}
+    } catch(e) { _kvSwallow('_fetchKochiDay', e); }
     if (attempt >= retries) return null;
     await new Promise(r => setTimeout(r, 350 * Math.pow(2, attempt)));
   }
@@ -6920,7 +7000,7 @@ function _rowUnchanged(existing, fresh) {
 function _putRaceRow(row) {
   const key = `race_${row.baba_code}_${row.race_date}_${row.race_no}`;
   let lapTimesArr = null;
-  try { if (row.lap_times) lapTimesArr = JSON.parse(row.lap_times); } catch(e) {}
+  try { if (row.lap_times) lapTimesArr = JSON.parse(row.lap_times); } catch(e) { _kvSwallow('_putRaceRow', e); }
   // ⛔サーバーにラップが無いレースだけ、同梱のユーザー手計測ラップで埋める(2026-07-28)。
   //   DBに1つでも値があるレースには触らない=手入力を潰さない。
   if (!lapTimesArr || !lapTimesArr.some(v => v != null)) {
@@ -7004,7 +7084,7 @@ async function _fetchKochiPageAfter(table, afterId, limit = _IDB_PAGE, retries =
         const rows = await res.json();
         if (Array.isArray(rows)) return rows;
       }
-    } catch(e) {}
+    } catch(e) { _kvSwallow('_fetchKochiPageAfter', e); }
     if (attempt >= retries) return null;
     await new Promise(r => setTimeout(r, 600 * Math.pow(2, attempt)));   // 0.6s → 1.2s → 2.4s
   }
@@ -7147,7 +7227,7 @@ function _refreshSavedDebounced() {
   if (_savedRefreshTimer) return;
   _savedRefreshTimer = setTimeout(() => {
     _savedRefreshTimer = null;
-    try { loadSavedData(); } catch(e) {}
+    try { loadSavedData(); } catch(e) { _kvSwallow('_refreshSavedDebounced', e); }
   }, 800);
 }
 
@@ -7177,7 +7257,7 @@ async function initDB() {
   if (KV_IS_SIM) {
     loadSavedData();
     if (typeof initAnalysisDateSelect === 'function') initAnalysisDateSelect();
-    setTimeout(() => { try { _simRestoreState(); } catch (e) {} }, 0);
+    setTimeout(() => { try { _simRestoreState(); } catch (e) { _kvSwallow('initDB', e); } }, 0);
     _kvScheduleIdle(() => loadWeeklySchedule(), 2500);
     return;
   }
@@ -7258,7 +7338,7 @@ async function initDB() {
   // 全履歴同期は約90MBになるため、完全同期済みキャッシュが新しければ省略する。
   // 直近1000件は上のPhase1で毎回更新するので、当日データの鮮度は落とさない。
   let _fullSyncMeta = null;
-  try { _fullSyncMeta = JSON.parse(localStorage.getItem(_KV_FULL_SYNC_META_KEY) || 'null'); } catch(e) {}
+  try { _fullSyncMeta = JSON.parse(localStorage.getItem(_KV_FULL_SYNC_META_KEY) || 'null'); } catch(e) { _kvSwallow('initDB#2', e); }
   const _fullSyncFresh = !!(
     _fullSyncMeta?.at && _fullSyncMeta?.cacheSize > 0 &&
     Date.now() - _fullSyncMeta.at < _KV_FULL_SYNC_MAX_AGE &&
@@ -7323,7 +7403,7 @@ async function initDB() {
             serverUpdatedAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
             manifest: { raceRows:_raceRows, horseRows:_horseRows, schema:2 },
           }));
-        } catch(e) {}
+        } catch(e) { _kvSwallow('_pagedWithResume', e); }
       }
     } catch(e) {
       console.warn('[initDB] Phase2 背景読み込み失敗:', e);
@@ -7331,11 +7411,11 @@ async function initDB() {
     _setBgLoadIndicator(false);
     loadSavedData();
     if(typeof initAnalysisDateSelect==='function') initAnalysisDateSelect();
-    try { if (window._kvDeepLink) await _kvTryDeepLink(); } catch(e) {}
+    try { if (window._kvDeepLink) await _kvTryDeepLink(); } catch(e) { _kvSwallow('_pagedWithResume#2', e); }
     const _bfCount = backfillFirst3fFrom1400m();
     try { backfillPaceLabels(); backfillPaceType(); } catch(e) { console.warn('[paceLabels]', e); }
     if (_bfCount > 0 && typeof renderTrackTrend === 'function') {
-      try { renderTrackTrend(); } catch(e) {}
+      try { renderTrackTrend(); } catch(e) { _kvSwallow('_pagedWithResume#3', e); }
     }
     };
 
@@ -7681,7 +7761,7 @@ async function backfillOddsFromRakuten() {
           const uma = parseInt(k.split('_').pop(), 10);
           if (!(parseFloat(v.odds) > 0) && rk[uma] > 0) {
             const newOdds = String(rk[uma]);
-            try { await apiUpsert('keiba_horses', k, { odds: newOdds }); } catch(e) {}
+            try { await apiUpsert('keiba_horses', k, { odds: newOdds }); } catch(e) { _kvSwallow('backfillOddsFromRakuten', e); }
             v.odds = newOdds;
             lsWrite(k, v);
             filled++; raceFilled++;
@@ -7865,7 +7945,7 @@ async function _bulkFetchRun(monthsList, label) {
     for (let i = 0; i < raceDays.length && !_bulkCancel; i++) {
       const { date, raceNos } = raceDays[i];
       // その日の払戻オッズを1回だけ取得（古いレースの単勝オッズ空欄を勝ち馬分だけ復元）
-      let refund = {}; try { refund = await _fetchRefundOddsDay(date); } catch(e) {}
+      let refund = {}; try { refund = await _fetchRefundOddsDay(date); } catch(e) { _kvSwallow('_bulkFetchRun', e); }
       const _procOne = async (rn, j) => {
         if (_bulkCancel) return;
         if (j > 0) await _bulkSleep(180 * j);   // バッチ内の同時発火を少しずらす（バースト抑制）
@@ -7898,7 +7978,7 @@ async function _bulkFetchRun(monthsList, label) {
       }
     }
     // first3f・ペース自動補完（今回保存分に効く）＋基準タイム系のキャッシュ無効化（データ増を反映）
-    try { backfillPaceLabels(); backfillPaceType(); } catch(e) {}
+    try { backfillPaceLabels(); backfillPaceType(); } catch(e) { _kvSwallow('_procOne', e); }
     window._f3BenchCache = null; window._leadFrontBench = null; window._frontBaseCache = null; window._comboStatsCache = null; window._jcMapsCache = null; window._evMapsCache = null; window._asOfComboCache = null; window._asOfAgariCache = null; window._asOfF3BenchCache = null;
     loadSavedData();
     if (typeof initAnalysisDateSelect === 'function') initAnalysisDateSelect();
@@ -8545,7 +8625,7 @@ function resolveMlLiveWeightsWithProvenance() {
       const p = JSON.parse(rec.memo);
       if (p && p.fullAdopt && p.eff) return { payload: p, source: c.source, sourceKey: c.sourceKey };
     }
-  } catch(e) {}
+  } catch(e) { _kvSwallow('resolveMlLiveWeightsWithProvenance', e); }
   return { payload: KV_ML_WEIGHTS_DEFAULT, source: 'shipped_default', sourceKey: null };
 }
 function getMlLiveWeights() {
@@ -8704,7 +8784,7 @@ try {
   if (typeof window.KV_OPPONENT_SHADOW_ENABLED !== 'boolean') {
     window.KV_OPPONENT_SHADOW_ENABLED = KV_OPPONENT_SHADOW_DEFAULT;
   }
-} catch (e) {}
+} catch (e) { _kvSwallow('listForwardRankingSnapshots', e); }
 const OPPONENT_SHADOW_RESULT_SCHEMA = 'opponent_shadow_result/v1';
 const OPPONENT_SHADOW_SNAPSHOT_SCHEMA = 'opponent_shadow_snapshot/v1';
 const _opponentShadowModels = new Map();
@@ -8802,7 +8882,7 @@ function _opponentShadowInput(raceNo, scored, options) {
     Object.freeze(clean.raceInfo); Object.freeze(clean.market);
     clean.runners.forEach(r => { Object.freeze(r.x); if (r.vnextRaw) Object.freeze(r.vnextRaw); Object.freeze(r); });
     Object.freeze(clean.runners); if (clean.anchor) Object.freeze(clean.anchor); Object.freeze(clean);
-  } catch (e) {}
+  } catch (e) { _kvSwallow('_opponentShadowInput', e); }
   return clean;
 }
 
@@ -9692,7 +9772,7 @@ function _aiSeisekiMonthKey(dateSlash) { return dateSlash.slice(0, 7).replace('/
 // 直近最大AI_SEISEKI_MAX_RACES件を集計（差分マージ・分割実行でUIブロック回避）。
 // 完了・部分失敗・致命的失敗のいずれでも必ずcbを呼び、画面を「集計中」のまま残さない。
 function _aiSeisekiBuildOrUpdate(cb, onProgress) {
-  const notify = info => { try { if (typeof onProgress === 'function') onProgress(info); } catch (e) {} };
+  const notify = info => { try { if (typeof onProgress === 'function') onProgress(info); } catch (e) { _kvSwallow('_aiSeisekiBuildOrUpdate', e); } };
   const model = buildRankingModelIdentity();
   const ctx = _aiSeisekiCacheContext(model);
   const cache = _aiSeisekiReadCache(ctx);
@@ -10139,7 +10219,7 @@ function _paceOfRecordV2(r, distNum) {
     if (key === 'high') return 'ハイ';
     if (key === 'slow') return 'スロー';
     if (key === 'middle') return '平均';
-  } catch (e) {}
+  } catch (e) { _kvSwallow('_paceOfRecordV2', e); }
   const effCls = getEffectiveClass(r.raceClass || '');
   const standard = getStandardF3(distNum, effCls, r.cond);
   if (standard != null && Number.isFinite(r.first3f)) {
@@ -10362,7 +10442,7 @@ function showDebanDateList() {
 function showDebanRaceView() {
   document.getElementById('deban-date-list-card')?.classList.add('hidden');
   document.getElementById('race-layout-wrap')?.classList.remove('hidden');
-  try { renderDebanBias(); } catch (e) {}
+  try { renderDebanBias(); } catch (e) { _kvSwallow('showDebanRaceView', e); }
 }
 
 /** 本日の好走傾向：読込中の日の確定結果から馬場バイアス（前残り/内外/ペース）を出馬表内に自動表示。 */
@@ -10445,11 +10525,11 @@ function _gotoAnaForDay() {
   const sel = document.getElementById('ana-date-select');
   if (sel && typeof currentDate !== 'undefined' && currentDate) {
     const want = `${currentDate}__${currentBaba}`;
-    if (![...sel.options].some(o => o.value === want)) { try { initAnalysisDateSelect(); } catch (e) {} }
+    if (![...sel.options].some(o => o.value === want)) { try { initAnalysisDateSelect(); } catch (e) { _kvSwallow('_gotoAnaForDay', e); } }
     if ([...sel.options].some(o => o.value === want)) sel.value = want;
   }
   switchPage('bunseki');
-  setTimeout(() => { try { renderAnalysis(); } catch (e) {} }, 0);
+  setTimeout(() => { try { renderAnalysis(); } catch (e) { _kvSwallow('_gotoAnaForDay#2', e); } }, 0);
 }
 
 async function restoreFromSaved(date, baba, silent) {
@@ -10475,7 +10555,7 @@ async function restoreFromSaved(date, baba, silent) {
       : Object.entries(lsData).filter(([k,v])=>v.type==='horse'&&k.startsWith(hp));
     const horses=horseEntries.sort((a,b)=>(parseInt(a[0].replace(hp,''))||0)-(parseInt(b[0].replace(hp,''))||0)).map(([k,v])=>{const umaBan=parseInt(k.replace(hp,''));return{chakujun:v.chakujun||'',wakuBan:v.wakuBan||String(Math.ceil(umaBan/2)),umaBan,horseName:v.horseName||`馬番${umaBan}`,belong:v.belong||'',sexAge:v.sexAge||'',kinryo:v.kinryo||'',jockey:v.jockey||'',trainer:v.trainer||'',weight:v.weight||'',ninki:v.ninki||'',odds:v.odds||'',time:v.time||'',diff:v.diff||'',agari3f:v.agari3f||'',corner:v.corner||'',first3f:v.first3f||'',paceType:v.paceType||'',mukaeShoumen:v.mukaeShoumen||'',shoumenStraight:v.shoumenStraight||'',postComment:v.postComment||'',lineageLoginCode:v.lineageLoginCode||''};});
     let _lapTimes = raceVal.lapTimes || null;
-    if (!_lapTimes && raceVal.lap_times) { try { _lapTimes = JSON.parse(raceVal.lap_times); } catch(e){} }
+    if (!_lapTimes && raceVal.lap_times) { try { _lapTimes = JSON.parse(raceVal.lap_times); } catch(e){ _kvSwallow('restoreFromSaved', e); } }
     // ⛔保存データ側にも無いときだけ、同梱のユーザー手計測ラップで埋める(2026-07-28)。
     if (!_lapTimes || !_lapTimes.some(v => v != null)) _lapTimes = userLapsFor(date, rn) || _lapTimes;
     allRacesData[rn]={raceInfo:{raceDate:date,raceNo:rn,babaCode:baba,raceName:raceVal.race_name||`第${rn}レース`,distance:raceVal.distance||'',raceClass:migrateRaceClass(raceVal.race_class||raceVal.raceClass||'',raceVal.race_name||''),trackCond:raceVal.track_cond||raceVal.trackCond||'',first3f:raceVal.first3f||'',first3fSource:raceVal.first3fSource||raceVal.first3f_source||'',agari4f:raceVal.agari4f||'',agari3f_race:raceVal.agari3f_race||'',paceType:raceVal.paceType||raceVal.pace_type||'',memo:raceVal.memo||'',lapTimes:_lapTimes},horses};
@@ -10529,7 +10609,7 @@ async function _refetchEmptyRaces(date, baba, rns) {
         if (currentRaceNo === rn) switchRaceTab(rn);   // 表示中のレースなら即再描画
         fixed++;
       }
-    } catch(e) {}
+    } catch(e) { _kvSwallow('_refetchEmptyRaces', e); }
   }
   if (st) { st.textContent = fixed ? `✅ 保存に馬が無かった ${fixed}レースを再取得しました` : ''; setTimeout(()=>{ if(st.textContent.startsWith('✅')) st.textContent=''; }, 4000); }
 }
@@ -11770,25 +11850,25 @@ function closeHorseModal(){destroyHorseOddsHistoryChart();const m=document.getEl
   function returnFocus(){
     // focus は preventScroll で行い、unlockScroll が戻したスクロール位置を維持する（focusの自動スクロールを抑止）。
     if (visible(_returnTarget) && (naturallyFocusable(_returnTarget) || _returnTarget.getAttribute('tabindex') != null)){
-      try { _returnTarget.focus({ preventScroll: true }); return; } catch(e){}
+      try { _returnTarget.focus({ preventScroll: true }); return; } catch(e){ _kvSwallow('returnFocus', e); }
     }
     // 起点が日付/レース変更で消えた等 → 安全な代替先（body へは無条件に当てない）
     var alt = document.querySelector('.header-nav-btn.active')
            || document.getElementById('kvx-toggle-btn')
            || document.querySelector('#kvx-deban-v2 [data-kvx-detail]')
            || document.querySelector('.header-nav-btn');
-    if (visible(alt)){ try { alt.focus({ preventScroll: true }); return; } catch(e){} }
+    if (visible(alt)){ try { alt.focus({ preventScroll: true }); return; } catch(e){ _kvSwallow('returnFocus#2', e); } }
     var region = document.getElementById('race-content-area') || document.querySelector('.app-main');
-    if (region){ region.setAttribute('tabindex', '-1'); try { region.focus({ preventScroll: true }); } catch(e){} }
+    if (region){ region.setAttribute('tabindex', '-1'); try { region.focus({ preventScroll: true }); } catch(e){ _kvSwallow('returnFocus#3', e); } }
   }
   function onOpen(){
     _open = true; _returnTarget = _trigger;   // このオープンの起点を確定
     lockScroll();
-    if (typeof window.kvxOnModalOpen === 'function') { try { window.kvxOnModalOpen(_trigger); } catch(e){} }   // 【seam】kvx起点ならAI内訳を注入（管理者/flag/identityはkvx側で判定）
+    if (typeof window.kvxOnModalOpen === 'function') { try { window.kvxOnModalOpen(_trigger); } catch(e){ _kvSwallow('onOpen', e); } }   // 【seam】kvx起点ならAI内訳を注入（管理者/flag/identityはkvx側で判定）
     var m = modalEl(), c = m ? m.querySelector('.horse-modal-close') : null;
-    if (c){ try { c.focus({ preventScroll: true }); } catch(e){} }   // 開いたら閉じるボタンへフォーカス
+    if (c){ try { c.focus({ preventScroll: true }); } catch(e){ _kvSwallow('onOpen#2', e); } }   // 開いたら閉じるボタンへフォーカス
   }
-  function onClose(){ _open = false; unlockScroll(); returnFocus(); _returnTarget = null; if (typeof window.kvxOnModalClose === 'function') { try { window.kvxOnModalClose(); } catch(e){} } }   // 【seam】内訳DOMを破棄
+  function onClose(){ _open = false; unlockScroll(); returnFocus(); _returnTarget = null; if (typeof window.kvxOnModalClose === 'function') { try { window.kvxOnModalClose(); } catch(e){ _kvSwallow('onClose', e); } } }   // 【seam】内訳DOMを破棄
 
   // hidden クラス遷移を監視（✕/overlay/Escape すべてが最終的にここを通る）
   var mo = new MutationObserver(function(){
@@ -12383,7 +12463,7 @@ function _renderOfficialSection(parsed, code, horseName) {
       const labels = sortedW.map(e=>e.d);
       const vals   = sortedW.map(e=>e.w);
       const isWins = sortedW.map(e=>e.c<=3);
-      if(window._hmOfficialWeightChart){ try{window._hmOfficialWeightChart.destroy();}catch(e){} }
+      if(window._hmOfficialWeightChart){ try{window._hmOfficialWeightChart.destroy();}catch(e){ _kvSwallow('drawOfficialWeightChart', e); } }
       window._hmOfficialWeightChart = new Chart(canvas,{
         type:'line',
         data:{

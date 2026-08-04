@@ -1003,7 +1003,7 @@ function initLapChartDistSelect() {
     if (targetDate && v.race_date !== targetDate) return false;
     if (targetBaba && v.baba_code !== targetBaba) return false;
     let laps = v.lapTimes;
-    if (!laps && v.lap_times) { try { laps = JSON.parse(v.lap_times); } catch(e){} }
+    if (!laps && v.lap_times) { try { laps = JSON.parse(v.lap_times); } catch(e){ window._kvSwallow && window._kvSwallow('initLapChartDistSelect', e); } }
     return laps && laps.some(x => x != null);
   }).forEach(v => {
     if (v.distance) dists.add(v.distance);
@@ -1141,7 +1141,7 @@ function _doRenderLapChart() {
     if (targetDate && v.race_date !== targetDate) return;
     if (targetBaba && v.baba_code !== targetBaba) return;
     let laps = v.lapTimes;
-    if (!laps && v.lap_times) { try { laps = JSON.parse(v.lap_times); } catch(e){} }
+    if (!laps && v.lap_times) { try { laps = JSON.parse(v.lap_times); } catch(e){ window._kvSwallow && window._kvSwallow('_doRenderLapChart', e); } }
     if (!laps || !laps.some(x => x != null)) return;
     if (distF && v.distance !== distF) return;
     // クラスフィルター
@@ -1163,7 +1163,7 @@ function _doRenderLapChart() {
   Object.values(lsData).filter(v => v.type === 'race').forEach(v => {
     if (targetDate && v.race_date === targetDate && v.baba_code === targetBaba) return;
     let laps = v.lapTimes;
-    if (!laps && v.lap_times) { try { laps = JSON.parse(v.lap_times); } catch(e){} }
+    if (!laps && v.lap_times) { try { laps = JSON.parse(v.lap_times); } catch(e){ window._kvSwallow && window._kvSwallow('_doRenderLapChart#2', e); } }
     if (!laps || !laps.some(x => x != null)) return;
     const matchDist = distF || (todayRaces.length > 0 ? todayRaces[0].dist : '');
     if (matchDist && v.distance !== matchDist) return;
@@ -2619,7 +2619,7 @@ function kvxNormDate(d){ return String(d == null ? '' : d).replace(/\//g, '-').t
 // localStorage(kvx_deban_v2) は「管理者プレビュー専用flag」であり、一般公開の信頼源には決して使わない
 // （閲覧者が任意に書き換え可能なため）。URLパラメータでも有効化しない（一切参照しない）。
 var KVX_PUBLIC_UI_DEFAULT = true;   // ← 一般公開switch。一般公開ON（2026-07-12）。緊急停止は false に戻して再デプロイ（README参照）。
-try { window.KVX_PUBLIC_UI_DEFAULT = KVX_PUBLIC_UI_DEFAULT; } catch(e){}
+try { window.KVX_PUBLIC_UI_DEFAULT = KVX_PUBLIC_UI_DEFAULT; } catch(e){ window._kvSwallow && window._kvSwallow('kvxNormDate', e); }
 function publicRolloutEnabled(){ try { return window.KVX_PUBLIC_UI_DEFAULT === true; } catch(e){ try { return KVX_PUBLIC_UI_DEFAULT === true; } catch(_){ return false; } } }
 window.publicRolloutEnabled = publicRolloutEnabled;
 // 新UI有効判定 = 一般公開ON（deploy定数）｜｜（管理者 かつ プレビューflag）。
@@ -2639,10 +2639,10 @@ function kvxApplyShell(){
     var on = kvxV2Enabled();
     document.body.classList.toggle('kvx-shell-on', on);
     if (!on) {                                                          // kill/OFF/閲覧者化：新UI DOMを撤去し既存UIへ復帰
-      try { if (typeof kvxClearHide === 'function' && _kvxShown) kvxClearHide(); } catch(_){}       // kvx表/カード＋snapshot clear
-      try { var brk = document.getElementById('kvx-ai-breakdown'); if (brk && brk.parentNode) brk.parentNode.removeChild(brk); } catch(_){}  // モーダルが開いていてもAI内訳だけ除去
+      try { if (typeof kvxClearHide === 'function' && _kvxShown) kvxClearHide(); } catch(_){ window._kvSwallow && window._kvSwallow('kvxApplyShell', _); }       // kvx表/カード＋snapshot clear
+      try { var brk = document.getElementById('kvx-ai-breakdown'); if (brk && brk.parentNode) brk.parentNode.removeChild(brk); } catch(_){ window._kvSwallow && window._kvSwallow('kvxApplyShell#2', _); }  // モーダルが開いていてもAI内訳だけ除去
     }
-  } catch(e){ try { document.body.classList.remove('kvx-shell-on'); } catch(_){} }
+  } catch(e){ try { document.body.classList.remove('kvx-shell-on'); } catch(_){ window._kvSwallow && window._kvSwallow('kvxApplyShell#3', _); } }
 }
 window.kvxApplyShell = kvxApplyShell;
 function kvxClearHide(){ var c = document.getElementById('kvx-deban-v2'); if (c) { c.innerHTML = ''; c.hidden = true; } _kvxShown = false; _kvxKey = null; _kvxSnap = null; }
@@ -2675,7 +2675,7 @@ function kvxSetSticky(){
     var w0 = hm.getBoundingClientRect().width, w1 = hn.getBoundingClientRect().width;
     var nums = t.querySelectorAll('.kvx-c-num'); for (var i = 0; i < nums.length; i++) nums[i].style.left = w0 + 'px';
     var names = t.querySelectorAll('.kvx-c-name'); for (var j = 0; j < names.length; j++) names[j].style.left = (w0 + w1) + 'px';
-  } catch(e){}
+  } catch(e){ window._kvSwallow && window._kvSwallow('kvxSetSticky', e); }
 }
 // 単一の #kvx-deban-v2 を現在レースの「AI予想」サブタブ内スロット(kvx-yoso-slot)へ移す。
 // これで出馬表タブとの縦並びを解消し、サブタブのdisplay切替で自動的に排他表示になる（要素・listenerは使い回し＝二重描画/二重計算なし）。
@@ -2687,7 +2687,7 @@ function kvxPlaceInYosoSlot(raceNo, hasData){
     if (slot && c && c.parentNode !== slot) slot.appendChild(c);   // 現在レースのスロットへ移動
     var empty = document.getElementById('kvx-yoso-empty-' + raceNo);
     if (empty) empty.hidden = !!hasData;
-  } catch(e){}
+  } catch(e){ window._kvSwallow && window._kvSwallow('kvxPlaceInYosoSlot', e); }
 }
 function kvxRenderDebanV2(raceNo, scored, horseMarkMap, renderDate){
   var c = document.getElementById('kvx-deban-v2');
@@ -2801,7 +2801,7 @@ async function kvxAttachOddsMoveBadges(raceNo, raceDateSlash, renderKey) {
       const hist = byUma[span.dataset.uma];
       if (hist && hist.length >= 2) span.innerHTML = oddsMoveBadgeHtml(hist);
     });
-  } catch (e) {}
+  } catch (e) { window._kvSwallow && window._kvSwallow('kvxAttachOddsMoveBadges', e); }
 }
 function kvxOnClick(e){
   var b = (e.target && e.target.closest) ? e.target.closest('[data-kvx-detail]') : null;
@@ -2935,23 +2935,23 @@ function kvxOnModalOpen(trigger){
   sec.id = 'kvx-ai-breakdown'; sec.className = 'kvx-brk'; sec.setAttribute('aria-label', 'AI総合指数の内訳（管理者限定）');   // 管理者限定はJSゲート(上のisAdminMode)で担保。CSS .admin-only は body.public-mode と衝突し隠れるため付けない。
   sec.innerHTML = kvxBreakdownHtml(entry, _kvxSnap);
   mc.insertBefore(sec, mc.firstChild);                                           // 過去成績より上
-  if (!entry.ok) { try { console.warn('[kvx-breakdown] reconstruct-fail', { date: _kvxSnap.normalizedDate, race: _cr, umaBan: entry.umaBan, diff: entry.reconstructionDiff }); } catch(e){} }   // 馬名等は出さない
+  if (!entry.ok) { try { console.warn('[kvx-breakdown] reconstruct-fail', { date: _kvxSnap.normalizedDate, race: _cr, umaBan: entry.umaBan, diff: entry.reconstructionDiff }); } catch(e){ window._kvSwallow && window._kvSwallow('kvxOnModalOpen', e); } }   // 馬名等は出さない
 }
 function kvxOnModalClose(){ var old = document.getElementById('kvx-ai-breakdown'); if (old && old.parentNode) old.parentNode.removeChild(old); }
 window.kvxOnModalOpen = kvxOnModalOpen; window.kvxOnModalClose = kvxOnModalClose;
 
 function kvxSafeRenderDebanV2(raceNo, scored, horseMarkMap, renderDate){   // 例外隔離：kvxの失敗で既存パネルを落とさない
   try { kvxRenderDebanV2(raceNo, scored, horseMarkMap, renderDate); }
-  catch(err){ try { console.error('[kvx] preview render failed (既存パネルは維持):', err); } catch(e){} try { kvxClearHide(); } catch(e2){} }
+  catch(err){ try { console.error('[kvx] preview render failed (既存パネルは維持):', err); } catch(e){ window._kvSwallow && window._kvSwallow('kvxSafeRenderDebanV2', e); } try { kvxClearHide(); } catch(e2){ window._kvSwallow && window._kvSwallow('kvxSafeRenderDebanV2#2', e2); } }
 }
 window.kvxSafeRenderDebanV2 = kvxSafeRenderDebanV2;
 function kvxToggleV2(){
   if (typeof isAdminMode !== 'function' || !isAdminMode()) { kvxClearHide(); return; }   // 管理者のみ
   var next = (localStorage.getItem('kvx_deban_v2') === '1') ? '0' : '1';
-  try { localStorage.setItem('kvx_deban_v2', next); } catch(e){}
+  try { localStorage.setItem('kvx_deban_v2', next); } catch(e){ window._kvSwallow && window._kvSwallow('kvxToggleV2', e); }
   var btn = document.getElementById('kvx-toggle-btn');
   if (btn) { btn.setAttribute('aria-pressed', next === '1' ? 'true' : 'false'); btn.textContent = 'AI予想ランキング：' + (next === '1' ? 'ON' : 'OFF'); }
-  if (next === '1') { if (typeof currentRaceNo !== 'undefined' && currentRaceNo && typeof renderPredictionPanel === 'function') { try { renderPredictionPanel(currentRaceNo); } catch(e){} } }
+  if (next === '1') { if (typeof currentRaceNo !== 'undefined' && currentRaceNo && typeof renderPredictionPanel === 'function') { try { renderPredictionPanel(currentRaceNo); } catch(e){ window._kvSwallow && window._kvSwallow('kvxToggleV2#2', e); } } }
   else { kvxClearHide(); }   // ON→OFF：コンテナ hidden＋内容破棄
   kvxApplyShell();   // シェル外観もflagに同期
 }
@@ -3207,7 +3207,7 @@ function _longshotFieldSize(run, store) {
     if (entry && entry.horseKeys) {
       for (const horseKey of entry.horseKeys) if (_longshotStarter(store[horseKey])) size++;
     }
-  } catch (_) {}
+  } catch (_) { window._kvSwallow && window._kvSwallow('_longshotFieldSize', _); }
   if (size < 2) size = Math.max(parseInt(run.umaBan) || 0, parseInt(run.chakujun) || 0, 6);
   _longshotFieldSizeCache.set(key, size);
   return size;
@@ -3295,7 +3295,7 @@ function computeLongshotCandidateRows(raceNo, scored, selectedCondition) {
     const store = lsRead();
     factRows = scored.map(scoredRunner => {
       let raw = null;
-      try { if (typeof window.kvVnextRawForScored === 'function') raw = window.kvVnextRawForScored(raceNo, scoredRunner); } catch (_) {}
+      try { if (typeof window.kvVnextRawForScored === 'function') raw = window.kvVnextRawForScored(raceNo, scoredRunner); } catch (_) { window._kvSwallow && window._kvSwallow('computeLongshotCandidateRows', _); }
       if (!raw) raw = _longshotDirectRaw(raceNo, scoredRunner, condition, store);
       return { scoredRunner, raw };
     });
@@ -3810,7 +3810,7 @@ function renderPredictionPanel(raceNo) {
   const _jraTransferShadow = _viewMode !== 'after' && !raceHasResult && window.KvJraTransferShadow?.scoreRace
     ? window.KvJraTransferShadow.scoreRace(scored) : null;
   if (_jraTransferShadow && window.KvJraTransferShadow?.recordLive) {
-    try { window.KvJraTransferShadow.recordLive(raceNo, _jraTransferShadow); } catch (_) {}
+    try { window.KvJraTransferShadow.recordLive(raceNo, _jraTransferShadow); } catch (_) { window._kvSwallow && window._kvSwallow('_row', _); }
   }
   const jraTransferShadowHtml = _viewMode !== 'after' && typeof isAdminMode === 'function' && isAdminMode() &&
     window.KvJraTransferShadow?.buildAdminHtml

@@ -2844,6 +2844,18 @@ const KV_APP_CSS = [
     </p>
   </section>
 
+  <section class="search-card">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <h2 class="section-title" style="margin-bottom:0;font-size:14px"><i class="fas fa-triangle-exclamation"></i> 伏せた不具合の記録</h2>
+      <button type="button" class="btn btn-sm ks-btn-ghost" style="margin-left:auto" onclick="renderSwallowLog()"><i class="fas fa-rotate"></i> 更新</button>
+    </div>
+    <div id="kv-swallow-log"></div>
+    <p style="font-size:11px;color:var(--text-muted);margin:8px 0 0;line-height:1.7">
+      画面が止まらないよう、内部でそのまま処理を続けた不具合の記録です。ここが空なら何も起きていません。
+      同じ場所で同じ内容が続いた場合はまとめて回数で表示します。記録はページを開き直すと消えます。
+    </p>
+  </section>
+
   <div id="ks-years"></div>
 
   <p style="font-size:11px;color:var(--text-muted);margin:0 4px 8px;line-height:1.8">
@@ -3002,7 +3014,7 @@ const KV_APP_CSS = [
 
 <!-- ユーザー手計測の区間ラップ(259レース)。app-main より先に window.KOCHI_USER_LAPS を用意する -->
 <script defer src="data/kochi-user-laps.js?v=20260728-v1"></script>
-<script defer src="modules/app-main.js?v=20260804-perf1"></script>
+<script defer src="modules/app-main.js?v=20260804-obs1"></script>
 <script defer src="modules/race-video.js?v=20260803-v1"></script>
 <script defer src="modules/paddock-clips.js?v=20260803-v1"></script>
 <!-- 計測管理(管理者専用)。app-main の kvSupabaseReadConfig を使うので後に読む -->

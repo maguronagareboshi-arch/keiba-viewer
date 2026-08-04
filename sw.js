@@ -1,7 +1,7 @@
-const CACHE = 'kochi-viewer-v24';
-const REQUIRED = ['./index.html', './manifest.webmanifest', './modules/app-main.js?v=20260804-perf1'];
+const CACHE = 'kochi-viewer-v25';
+const REQUIRED = ['./index.html', './manifest.webmanifest', './modules/app-main.js?v=20260804-obs1'];
 const CORE = [
-  './modules/ai-insights.js?v=20260801-cloud2',
+  './modules/ai-insights.js?v=20260804-obs1',
   './modules/performance-observer.js',
   './modules/first3f-autofill.js?v=20260725-v1',
   './modules/track-bias-v2.js?v=20260726-v2',
