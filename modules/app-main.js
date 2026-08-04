@@ -114,6 +114,14 @@ const _kvLibSpecs = {
     src: 'data/kochi-roster-baselines.js?v=20260725',
     ready: () => !!window.KOCHI_ROSTER_BASELINES?.seasons,
   },
+  // 予想AI v3（MLの再ランク・forward shadow）。⛔印は変えない。新旧の並走記録だけ。
+  // 特徴の定義は ドキュメント\高知競馬ビューア改善\research\viewer-ai-v2\phase3_rebuild.py と1:1。
+  // 片方だけ直すと学習と本番がズレる。差し替え時は parity_test.js で不一致0を確認すること。
+  viewerAiV3Shadow: {
+    src: 'modules/viewer-ai-v3-shadow.js?v=20260805-v1',
+    ready: () => typeof window.kvCaptureViewerAiV3 === 'function' &&
+      window.KvViewerAiV3?.contract?.status === 'forward_shadow_only',
+  },
 };
 
 function _kvLoadLibrary(key) {
@@ -3706,6 +3714,10 @@ async function _kvTickOpponentShadowCapture() {
           try { kvCaptureEraDriftShadow(target.raceNo, computed.scored); }
           catch (e) { console.warn('[eraDriftShadow capture]', e); }
         }
+        // 予想AI v3（MLの再ランク）。⛔印は変えない。新旧の◎○▲を並べて記録するだけ。
+        _kvLoadLibrary('viewerAiV3Shadow')
+          .then(() => window.kvCaptureViewerAiV3(target.raceNo, computed.scored))
+          .catch(e => console.warn('[viewerAiV3 capture]', e));
         if (typeof kvCaptureVnextMarketBlendShadow === 'function') {
           try { kvCaptureVnextMarketBlendShadow(target.raceNo, computed.scored); }
           catch (e) { console.warn('[vnextMarketBlendShadow capture]', e); }

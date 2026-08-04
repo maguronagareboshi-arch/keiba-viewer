@@ -2,6 +2,9 @@
 .nojekyll
 CNAME
 data/3f/
+data/kochi-ai-v3-constants.json
+data/kochi-ai-v3-p3.json
+data/kochi-ai-v3-win.json
 data/kochi-horse-f3-bench.js
 data/kochi-pace-baselines-v2.js
 data/kochi-roster-baselines.js
@@ -34,4 +37,5 @@ modules/race-video.js
 modules/track-bias-v2.js
 modules/umaren-distortion-shadow.js
 modules/value-t10-shadow.js
+modules/viewer-ai-v3-shadow.js
 sw.js
