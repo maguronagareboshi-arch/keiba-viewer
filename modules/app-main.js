@@ -7063,15 +7063,24 @@ function _putRaceRow(row) {
   const _serverHasFirst3f = String(row.first3f || '').trim() !== '';
   const _first3f = _serverHasFirst3f ? row.first3f : (_existing?.first3f || '');
   const _first3fSource = _serverHasFirst3f ? (row.first3f_source || '') : (_existing?.first3fSource || _existing?.first3f_source || '');
+  // ⛔ローカルで計算した値をサーバー行で消さない（2026-08-04）。
+  //   paceTypeAuto / paceDevAuto は keiba_races に列が存在しない純ローカル値。ここで引き継がないと
+  //   Phase1の直近1,000件取り直しと差分同期のたびに消え、backfillPaceLabels は Phase2 完走時
+  //   （＝30日に1回）しか走らないため復活しなかった。実測: 4,281レース → 再読込後 3,509レース。
+  //   paceType は「サーバーに値があればサーバー優先／空ならローカルを残す」= first3f と同じ方針。
+  const _paceType = String(row.pace_type || '').trim() !== '' ? row.pace_type : (_existing?.paceType || _existing?.pace_type || '');
   const _newVal = {
     type:'race', race_date:row.race_date, race_no:row.race_no, baba_code:row.baba_code,
     race_name:row.race_name||'', distance:row.distance||'', race_class:row.race_class||'',
     track_cond:row.track_cond||'', first3f:_first3f, first3fSource:_first3fSource, agari4f:row.agari4f||'',
-    agari3f_race:row.agari3f_race||'', paceType:row.pace_type||'', memo:row.memo||'',
+    agari3f_race:row.agari3f_race||'', paceType:_paceType, memo:row.memo||'',
     lap_times:row.lap_times||'', lapTimes:lapTimesArr,
     _apiSaved:true,
     savedAt:new Date(row.updated_at||row.created_at||Date.now()).toISOString()
   };
+  // 自動ペースラベルは完全にローカル専用（手入力の paceType とは別フィールド）。値がある時だけ引き継ぐ。
+  if (_existing?.paceTypeAuto != null) _newVal.paceTypeAuto = _existing.paceTypeAuto;
+  if (_existing?.paceDevAuto  != null) _newVal.paceDevAuto  = _existing.paceDevAuto;
   if (_rowUnchanged(_existing, _newVal)) return;
   idbPut(key, _newVal);
 }
@@ -7404,6 +7413,11 @@ async function initDB() {
       try {
         await Promise.all([loadWeeklySchedule(), _runIncrementalSync(_fullSyncMeta)]);
         backfillFirst3fFrom1400m();
+        // 自動ペースラベルはここでも付ける（2026-08-04）。Phase1と差分同期で取り直した
+        // 新しいレースには付いていないが、従来は Phase2 完走時（＝30日に1回）しか
+        // 走らなかったため、それまでラベルが欠けたままだった。値が変わらない行は
+        // backfill 側が書き込みを飛ばすので、毎回走らせても実質ただの走査で済む。
+        backfillPaceLabels(); backfillPaceType();
       }
       catch(e) { console.warn('[initDB] 差分同期失敗:', e); }
     }, 2500);
