@@ -4461,7 +4461,21 @@ function updateRacePace(raceNo) {
   if (isNaN(f3)) {
     data.raceInfo.first3f = '';
     if (!data.raceInfo.manualPace) {
-      badge.textContent = '－'; badge.className = 'pace-badge pace-none'; data.raceInfo.paceType = '';
+      // 前半3Fが無い古いレース（2014〜2021年）でも、保存済みの自動ペースラベルがあれば
+      // 「－」ではなくそれを出す（2026-08-04）。backfillPaceLabels が同条件の基準と比べて
+      // 付けた値で、15,416レース中14,925レースに入っている。
+      // ⛔ data.raceInfo.paceType には入れない。保存時にサーバーへ書かれて手入力と
+      //    区別が付かなくなるため、表示だけに使う。
+      const _saved = lsRead()[`race_31_${data.raceInfo.raceDate}_${raceNo}`];
+      const _auto = _saved?.paceTypeAuto || '';
+      if (_auto) {
+        badge.textContent = _auto;
+        badge.className = `pace-badge ${getPaceBadgeClass(_auto)} is-estimated`;
+        badge.title = '前半3Fが記録されていないため、同じ距離・クラス・馬場の基準と比べて推定した値です';
+      } else {
+        badge.textContent = '－'; badge.className = 'pace-badge pace-none'; badge.title = '';
+      }
+      data.raceInfo.paceType = '';
     }
     return;
   }
@@ -6541,6 +6555,25 @@ async function _ensureFullIDBCache() {
     if (window.kvResetVnextPartnerLiveIndex) window.kvResetVnextPartnerLiveIndex();
     _idbFullReady = true;
     console.log(`[IDB] AI・分析用の全履歴を準備 ${keys.length}件`);
+    // 前半3Fが無い古いレース（2014〜2021年の約11,000本）のペースラベルは、先頭の前半区間から
+    // 逆算する getFrontPaceLabel でしか付かず、これは馬行がメモリに載っている必要がある。
+    // 通常の起動時（レースだけが載っている状態）では付けられないので、全履歴が揃ったこの1回だけ
+    // 付け直す（2026-08-04）。値が変わらない行は backfill 側が書き込みを飛ばす。
+    if (!window._kvPaceLabelsFullPassDone) {
+      window._kvPaceLabelsFullPassDone = true;
+      _kvScheduleIdle(() => {
+        try {
+          // ⛔基準表を捨ててから計算する。getRaceLeadFrontBench() は window._leadFrontBench に
+          //   結果を溜め込むが、この無効化はどこにも書かれていなかった（idbPut のキャッシュ破棄
+          //   リストにも入っていない）。そのため「レースしか載っていない起動直後」に一度空で
+          //   計算されると、その空の表が使われ続け、古いレースのラベルが永久に付かなかった。
+          window._leadFrontBench = null;
+          window._f3BenchCache = null;
+          const n = backfillPaceLabels();
+          if (n > 0) console.log(`[paceLabels] 全履歴が揃ったので古いレースにも付与: ${n}件`);
+        } catch (e) { _kvSwallow('paceLabels:fullPass', e); }
+      }, 1200);
+    }
     return result;
   })().catch(e => {
     _idbFullLoadPromise = null;
