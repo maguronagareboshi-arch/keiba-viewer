@@ -47,9 +47,249 @@ SECRET_PATTERNS = (
 )
 TEXT_SUFFIXES = {"", ".html", ".js", ".json", ".webmanifest", ".yml", ".yaml", ".py", ".txt", ".md"}
 
+# 先に読まれるモジュールが、遅延ロードのモジュールでしか定義されない名前を「裸で」参照すると、
+# その行に到達した瞬間 ReferenceError で落ちる。2026-08-04 に馬場ページが例外も出さずに
+# 真っ白になった故障（dateDiffDays が ai-analysis.js にしか無かった）がまさにこれで、
+# 人のレビューでは見つからなかったため機械で検出する。
+# typeof ガードがある行と、try で囲まれた行は落ちないので対象外。
+#
+# 下は 2026-08-04 時点の既存分を登録したベースライン。目的は「これ以上増やさない」ことで、
+# 登録済みが安全だと保証するものではない。いずれも呼び出し元が先に
+# _ensureAiAnalysisModule() 等でモジュールを読む作りになっているが、
+# 実測で確かめたのは horseTagBadgesHtml（openHorseModal 経由）だけ。
+# 実際に落ちれば _kvSwallow が記録するので、計測管理ページの「伏せた不具合の記録」で分かる。
+# 新しく名前を足したくなったら、まず typeof ガードか定義の移設を検討すること。
+MODULE_DEP_ALLOW = {
+    # switchPage('bunseki') は needsAiModule=true 付きで呼ぶため、描画時にはロード済み
+    ("modules/app-main.js", "renderAnalysis"),
+    # renderAbilityTable / openHorseModal はどちらも先に _ensureAiAnalysisModule() を待つ
+    # （2026-08-04 実測: openHorseModal 実行後に computeYosoScored が定義済みになる）
+    ("modules/app-main.js", "horseTagBadgesHtml"),
+    # 以下は AI 予想まわりの経路。_ensureRaceIntelligence() を通ってから呼ばれる想定。
+    ("modules/app-main.js", "computeYosoScored"),
+    ("modules/app-main.js", "renderPredictionPanel"),
+    ("modules/app-main.js", "lookupJockeyStats"),
+    # 管理者が公式DataRoomを取得する時だけ。admin-horse-data.js を _kvLoadLibrary してから使う
+    ("modules/app-main.js", "storeOfficialRacesAsHorseEntries"),
+}
+
 
 def fail(errors: list[str], message: str) -> None:
     errors.append(message)
+
+
+_REGEX_PRECEDERS = set("(,=:[!&|?{};+-*%~^<>")
+_REGEX_KEYWORDS = {"return", "typeof", "case", "in", "of", "new", "delete", "void",
+                   "do", "else", "yield", "await", "instanceof"}
+
+
+def strip_js_noise(src: str) -> str:
+    """コメント・文字列・正規表現リテラルを潰した JS を返す。
+    行番号を保つため、消す部分は改行以外を空白に置き換える。
+    テンプレートリテラルは ${} の中が本物のコードなので、literal 部分だけ潰す。
+
+    ⛔正規表現リテラルを飛ばさないと `/`/` のようなコードで状態が壊れ、
+    以降のファイル全体が空白になって検査が黙って何も見なくなる（2026-08-04 に実際に踏んだ）。
+    そのため終端状態は check_module_dependencies 側で必ず検証する。"""
+    out: list[str] = []
+    n = len(src)
+    i = 0
+    tpl_stack: list[int] = []        # テンプレート内 ${} の深さ（入れ子対応）
+    last_code = ""                   # 直前の意味のあるコード文字（正規表現判定用）
+
+    def blank(ch: str) -> None:
+        out.append("\n" if ch == "\n" else " ")
+
+    def regex_allowed() -> bool:
+        if not last_code or last_code in _REGEX_PRECEDERS:
+            return True
+        tail = "".join(out)[-12:]
+        word = re.search(r"([A-Za-z_$][\w$]*)\s*$", tail)
+        return bool(word and word.group(1) in _REGEX_KEYWORDS)
+
+    while i < n:
+        ch = src[i]
+        nxt = src[i + 1] if i + 1 < n else ""
+
+        if tpl_stack and tpl_stack[-1] == 0:      # テンプレートの literal 部分
+            if ch == "\\":
+                blank(ch)
+                if i + 1 < n:
+                    blank(src[i + 1])
+                i += 2
+                continue
+            if ch == "`":
+                tpl_stack.pop()
+                out.append(" ")
+                last_code = "`"
+                i += 1
+                continue
+            if ch == "$" and nxt == "{":
+                tpl_stack[-1] = 1
+                out.append("  ")
+                i += 2
+                continue
+            blank(ch)
+            i += 1
+            continue
+
+        if ch == "/" and nxt == "/":              # 行コメント
+            while i < n and src[i] != "\n":
+                out.append(" ")
+                i += 1
+            continue
+        if ch == "/" and nxt == "*":              # ブロックコメント
+            out.append("  ")
+            i += 2
+            while i < n and not (src[i] == "*" and i + 1 < n and src[i + 1] == "/"):
+                blank(src[i])
+                i += 1
+            out.append("  ")
+            i += 2
+            continue
+        if ch in "'\"":                           # 文字列
+            out.append(" ")
+            i += 1
+            while i < n:
+                if src[i] == "\\":
+                    blank(src[i])
+                    if i + 1 < n:
+                        blank(src[i + 1])
+                    i += 2
+                    continue
+                if src[i] == ch:
+                    out.append(" ")
+                    i += 1
+                    break
+                blank(src[i])
+                i += 1
+            last_code = "x"
+            continue
+        if ch == "`":                             # テンプレート開始
+            tpl_stack.append(0)
+            out.append(" ")
+            i += 1
+            continue
+        if ch == "/" and regex_allowed():         # 正規表現リテラル
+            out.append(" ")
+            i += 1
+            in_class = False
+            while i < n and src[i] != "\n":
+                if src[i] == "\\":
+                    out.append("  ")
+                    i += 2
+                    continue
+                if src[i] == "[":
+                    in_class = True
+                elif src[i] == "]":
+                    in_class = False
+                elif src[i] == "/" and not in_class:
+                    out.append(" ")
+                    i += 1
+                    break
+                out.append(" ")
+                i += 1
+            while i < n and src[i].isalpha():     # フラグ
+                out.append(" ")
+                i += 1
+            last_code = "x"
+            continue
+
+        if tpl_stack:                             # ${} の中のコード
+            if ch == "{":
+                tpl_stack[-1] += 1
+            elif ch == "}":
+                tpl_stack[-1] -= 1
+                if tpl_stack[-1] == 0:
+                    out.append(" ")
+                    i += 1
+                    continue
+        out.append(ch)
+        if not ch.isspace():
+            last_code = ch
+        i += 1
+
+    return "".join(out)
+
+
+_GLOBAL_DEF = re.compile(
+    r"^(?:async\s+)?function\s+([A-Za-z_$][\w$]*)"
+    r"|^(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*="
+    r"|^class\s+([A-Za-z_$][\w$]*)",
+    re.M,
+)
+_ANY_DEF = re.compile(
+    r"(?:async\s+)?function\s+([A-Za-z_$][\w$]*)"
+    r"|(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*="
+    r"|class\s+([A-Za-z_$][\w$]*)"
+)
+
+
+def _names(pattern: re.Pattern, src: str) -> set[str]:
+    return {m.group(1) or m.group(2) or m.group(3) for m in pattern.finditer(src)}
+
+
+def check_module_dependencies(root: Path, errors: list[str]) -> None:
+    index_path = root / "index.html"
+    modules_dir = root / "modules"
+    if not index_path.is_file() or not modules_dir.is_dir():
+        return
+    index = index_path.read_text(encoding="utf-8", errors="replace")
+    eager = sorted(set(re.findall(r'<script[^>]+src="(modules/[^"?]+)', index)))
+    every = sorted(f"modules/{path.name}" for path in modules_dir.glob("*.js"))
+    lazy = [name for name in every if name not in eager]
+    if not eager or not lazy:
+        return
+
+    sources = {}
+    for name in every:
+        path = root / name
+        if not path.is_file():
+            continue
+        raw = path.read_text(encoding="utf-8", errors="replace")
+        stripped = strip_js_noise(raw)
+        # ⛔自己検査: 文字列/テンプレートの解釈が途中でずれると、以降が丸ごと空白になり
+        #   「違反0件」と嘘の合格を返す。末尾に目印を足して生き残るかを必ず確かめる。
+        canary = "\nvar __kv_canary_ok__ = 1;\n"
+        if "__kv_canary_ok__" not in strip_js_noise(raw + canary):
+            fail(errors, f"module dependency check cannot parse {name}; "
+                         f"the scan would silently see nothing (fix strip_js_noise)")
+            return
+        if stripped.count("\n") != raw.count("\n"):
+            fail(errors, f"module dependency check changed line count for {name}")
+            return
+        sources[name] = stripped
+
+    eager_globals: set[str] = set()
+    for name in eager:
+        eager_globals |= _names(_GLOBAL_DEF, sources.get(name, ""))
+    owners: dict[str, list[str]] = {}
+    for name in lazy:
+        for symbol in _names(_GLOBAL_DEF, sources.get(name, "")):
+            owners.setdefault(symbol, []).append(name)
+    risky = {symbol: mods for symbol, mods in owners.items() if symbol not in eager_globals}
+
+    for module in eager:
+        src = sources.get(module, "")
+        lines = src.split("\n")
+        local = _names(_ANY_DEF, src)
+        for symbol, mods in sorted(risky.items()):
+            if symbol in local or (module, symbol) in MODULE_DEP_ALLOW:
+                continue
+            guard = re.compile(r"typeof\s+" + re.escape(symbol) + r"\b")
+            for hit in re.finditer(r"(?<![.\w$])" + re.escape(symbol) + r"\b", src):
+                # オブジェクトのキー（median: ...）は参照ではない
+                if re.match(r"\s*:(?!:)", src[hit.end():hit.end() + 4]):
+                    continue
+                line_no = src.count("\n", 0, hit.start()) + 1
+                line = lines[line_no - 1]
+                if guard.search(line) or re.search(r"\btry\s*\{", line):
+                    continue
+                fail(
+                    errors,
+                    f"{module}:{line_no} references '{symbol}', defined only in lazily loaded "
+                    f"{', '.join(mods)}; guard it with typeof or move the definition",
+                )
 
 
 def normalize(line: str) -> str:
@@ -170,6 +410,8 @@ def validate(root: Path, require_tracked: bool) -> tuple[list[str], list[str]]:
     manifest_path = root / "manifest.webmanifest"
     if manifest_path.is_file() and "高知" not in manifest_path.read_text(encoding="utf-8", errors="replace"):
         fail(errors, "manifest.webmanifest does not identify the Kochi app")
+
+    check_module_dependencies(root, errors)
 
     return errors, deployment_files
 

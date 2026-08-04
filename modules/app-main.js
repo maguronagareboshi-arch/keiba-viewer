@@ -1166,7 +1166,13 @@ function _bnDelete(id) { if (!confirm('この記録を削除しますか？')) r
 function _bnSetPayout(id, val) { const p = parseInt(val); if (isNaN(p) || p < 0) return; const bets = _betsRead(); const b = bets.find(x => x.id === id); if (b) { b.payout = p; _betsWrite(bets); renderBetsPage(); } }
 function _bnRenderChart(labels, pts) {
   const cv = document.getElementById('bn-chart'); if (!cv) return;
-  if (typeof Chart === 'undefined') { ensureChartJs(() => _bnRenderChart(labels, pts)); return; }
+  // ensureChartJs は ai-analysis.js（遅延ロード）にしか無く、収支ノートはそのモジュールを
+  // 待たないため ReferenceError になっていた（2026-08-04 実測）。中身は _kvLoadLibrary('chart')
+  // の薄いラッパで本体はこのファイルにあるので、そちらを直接呼ぶ。
+  if (typeof Chart === 'undefined') {
+    _kvLoadLibrary('chart').then(() => _bnRenderChart(labels, pts)).catch(e => _kvSwallow('_bnRenderChart:chart', e));
+    return;
+  }
   if (window._bnChart) { try { window._bnChart.destroy(); } catch (e) { _kvSwallow('_bnRenderChart', e); } window._bnChart = null; }
   const ctx = cv.getContext('2d');
   if (!pts.length) { ctx.clearRect(0, 0, cv.width, cv.height); return; }
@@ -6279,7 +6285,8 @@ async function renderHorseOddsHistory(containerId, raceDateSlash, raceNo, umaBan
     <div class="hm-odds-chart-wrap"><canvas id="hm-odds-canvas-${raceNo}-${umaBan}"></canvas></div>
     <div class="hm-odds-note">単勝オッズの推移を表示しています。購入判断には使用していません。</div>
   </div>`;
-  ensureChartJs(() => {
+  // ensureChartJs は ai-analysis.js にしか無い（上の _bnRenderChart と同じ理由でこちらを使う）
+  _kvLoadLibrary('chart').then(() => {
     const canvas = document.getElementById(`hm-odds-canvas-${raceNo}-${umaBan}`);
     if (!canvas || !window.Chart) return;
     const labels = rows.map(r => new Date(r.captured_at).toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'}));
@@ -6290,7 +6297,7 @@ async function renderHorseOddsHistory(containerId, raceDateSlash, raceNo, umaBan
       options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
         scales: { y: { title: { display: true, text: '倍', font: { size: 10 } } }, x: { ticks: { font: { size: 9 }, maxRotation: 45 } } } }
     });
-  });
+  }).catch(e => _kvSwallow('renderHorseOddsHistory:chart', e));
 }
 
 // Cloudflare Worker書込。Tokenは管理者セッション中だけ保持する。
@@ -12499,7 +12506,8 @@ function _renderOfficialSection(parsed, code, horseName) {
         }
       });
     });
-    ensureChartJs(drawOfficialWeightChart);
+    // ensureChartJs は ai-analysis.js にしか無いので、本体の _kvLoadLibrary を直接呼ぶ
+    _kvLoadLibrary('chart').then(drawOfficialWeightChart).catch(e => _kvSwallow('drawOfficialWeightChart:chart', e));
   }
 
   // ── キャッシュ保存 ──

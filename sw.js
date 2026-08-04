@@ -1,5 +1,5 @@
-const CACHE = 'kochi-viewer-v25';
-const REQUIRED = ['./index.html', './manifest.webmanifest', './modules/app-main.js?v=20260804-obs1'];
+const CACHE = 'kochi-viewer-v26';
+const REQUIRED = ['./index.html', './manifest.webmanifest', './modules/app-main.js?v=20260804-obs2'];
 const CORE = [
   './modules/ai-insights.js?v=20260804-obs1',
   './modules/performance-observer.js',
