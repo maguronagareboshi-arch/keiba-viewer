@@ -6486,6 +6486,7 @@ function _mergeIDBCachePairs(pairs) {
 }
 
 async function _readIDBPrefix(prefix) {
+  await _idbFlushWrites();   // 溜めた書き込みを先に反映してから読む（読み書きの整合性）
   const db = await openIDB();
   const tx = db.transaction(IDB_STORE, 'readonly');
   const store = tx.objectStore(IDB_STORE);
@@ -6519,6 +6520,7 @@ async function _ensureFullIDBCache() {
   if (_idbFullReady) return _idbCache;
   if (_idbFullLoadPromise) return _idbFullLoadPromise;
   _idbFullLoadPromise = (async () => {
+    await _idbFlushWrites();   // 溜めた書き込みを先に反映（未反映のまま全置換すると取りこぼす）
     const db = await openIDB();
     const tx = db.transaction(IDB_STORE, 'readonly');
     const store = tx.objectStore(IDB_STORE);
@@ -6550,6 +6552,7 @@ async function _ensureFullIDBCache() {
 
 /** 馬名索引から必要な馬だけを読み、全履歴getAll（約15万件）を避ける。 */
 async function _readIndexedHorsePairs(names) {
+  await _idbFlushWrites();   // 溜めた書き込みを先に反映してから読む（読み書きの整合性）
   const db = await openIDB(), tx = db.transaction(IDB_STORE, 'readonly'), store = tx.objectStore(IDB_STORE);
   if (!store.indexNames.contains(IDB_HORSE_INDEX)) return [];
   const idx = store.index(IDB_HORSE_INDEX);
@@ -6645,6 +6648,7 @@ function openIDB() {
 async function loadIDBCache() {
   if (_idbReady) return;
   try {
+    await _idbFlushWrites();
     const db    = await openIDB();
     const tx    = db.transaction(IDB_STORE, 'readonly');
     const store = tx.objectStore(IDB_STORE);
@@ -6775,10 +6779,7 @@ function idbPut(key, val) {
       window._asOfF3BenchCache = null;
     }, 150);
   }
-  openIDB().then(db => {
-    const tx    = db.transaction(IDB_STORE, 'readwrite');
-    tx.objectStore(IDB_STORE).put(val, key);
-  }).catch(e => console.warn('[IDB] put失敗:', key, e));
+  _idbEnqueueWrite(key, val);
 }
 
 /** キー1件を IDB から削除する（非同期・ノーウェイト） */
@@ -6803,11 +6804,56 @@ function idbDelete(key) {
   window._asOfComboCache = null;
   window._asOfAgariCache = null;
   window._asOfF3BenchCache = null;
-  openIDB().then(db => {
-    const tx = db.transaction(IDB_STORE, 'readwrite');
-    tx.objectStore(IDB_STORE).delete(key);
-  }).catch(e => console.warn('[IDB] delete失敗:', key, e));
+  _idbEnqueueWrite(key, null);
 }
+
+// ── IDB書き込みのまとめ（2026-08-04 導入）────────────────────────────────
+// idbPut / idbDelete は1件ごとに readwrite トランザクションを作っていた。ペースラベル補完
+// (backfillPaceLabels 約4,200件 + backfillPaceType 約3,300件) のような連続書き込みでは
+// 7,500件のトランザクションが並び、後から作られた readonly がその全部の後ろに詰まる。
+// そのせいで「AI・分析用の全履歴」を読むだけで **82秒** 待たされていた（2026-08-04 実測）。
+// メモリキャッシュ(_idbCache)は idbPut の先頭で同期更新済みなので、IDBへの反映だけを
+// 短時間まとめて1トランザクションで流す。読む前には必ず _idbFlushWrites() で吐き出す。
+const _IDB_WRITE_BATCH_MAX = 500;      // 1トランザクションに詰める上限
+let _idbWriteQueue = [];               // [key, val] （val===null は削除）。順序を保つ
+let _idbWriteScheduled = false;
+let _idbWriteInFlight = Promise.resolve();
+
+function _idbEnqueueWrite(key, val) {
+  _idbWriteQueue.push([key, val]);
+  if (_idbWriteQueue.length >= _IDB_WRITE_BATCH_MAX) { _idbFlushWrites(); return; }
+  // ⛔setTimeout ではなく queueMicrotask。まとめたいのは「ひと続きの同期処理の中の書き込み」
+  //   だけで、次のタスクまで持ち越すとページ離脱で取りこぼす（2026-08-04 に実測で500件失った）。
+  //   同期ループが終わった直後に流れるので、1件ずつ書いていた頃と同じ速さでIDBへ向かう。
+  if (!_idbWriteScheduled) {
+    _idbWriteScheduled = true;
+    queueMicrotask(() => { _idbWriteScheduled = false; _idbFlushWrites(); });
+  }
+}
+
+/** 溜まっている書き込みを1トランザクションで流す。IDBを読む前に必ず待つこと。 */
+function _idbFlushWrites() {
+  if (!_idbWriteQueue.length) return _idbWriteInFlight;
+  const batch = _idbWriteQueue;
+  _idbWriteQueue = [];
+  const prev = _idbWriteInFlight;
+  _idbWriteInFlight = prev.catch(() => {}).then(() => openIDB()).then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    const store = tx.objectStore(IDB_STORE);
+    for (const [key, val] of batch) {
+      if (val === null) store.delete(key); else store.put(val, key);
+    }
+    tx.oncomplete = resolve;
+    tx.onerror = e => reject(e.target.error || new Error('IDB一括書き込み失敗'));
+  })).catch(e => _kvSwallow('_idbFlushWrites', e));
+  return _idbWriteInFlight;
+}
+window._idbFlushWrites = _idbFlushWrites;
+// タブを離れる時に取りこぼさない（1件ずつ書いていた頃と同じ耐性を保つ）
+window.addEventListener('pagehide', () => { try { _idbFlushWrites(); } catch (e) { _kvSwallow('pagehide:flush', e); } });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') { try { _idbFlushWrites(); } catch (e) { _kvSwallow('visibilitychange:flush', e); } }
+});
 
 /** 旧API互換：同期的に見えるが内部はメモリキャッシュを参照 */
 function lsWrite(key, val) { idbPut(key, val); }
@@ -7058,6 +7104,7 @@ function _putHorseRow(row) {
 /** Supabaseの馬1ページを1トランザクションで保存。hydrate=falseなら未表示の過去馬をメモリへ載せない。 */
 async function _putHorseRowsBatch(rows, hydrate) {
   if (!Array.isArray(rows) || !rows.length) return;
+  await _idbFlushWrites();   // 個別書き込みとの順序を保つ
   const pairs = rows.map(_horseRowKV);
   pairs.forEach(([, v]) => _sanDeep(v));
   const db = await openIDB();
