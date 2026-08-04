@@ -4089,10 +4089,19 @@ function renderHorseRows(raceNo, horses) {
     const _first3fHtml=escapeHTML(horse.first3f||'');
     const _paceTypeHtml=escapeHTML(horse.paceType||'');
     // 手入力が無い馬は、同じ距離×クラス×馬場の基準と比べた自動判定を「推定」印付きで出す。
-    // 手入力(paceType)には触れず、別フィールド(paceTypeAuto)を読むだけ。
-    const _paceAuto = (!horse.paceType && horse.paceTypeAuto) ? String(horse.paceTypeAuto) : '';
+    // 手入力(paceType)には触れない。保存済みの値が無ければその場で判定する（同梱の基準表が
+    // あるので、全履歴を展開していない端末でも出る＝開く画面の順番に依存しない）。
+    let _paceAuto = '', _paceAutoDev = null;
+    if (!horse.paceType) {
+      if (horse.paceTypeAuto) { _paceAuto = String(horse.paceTypeAuto); _paceAutoDev = horse.paceDevAuto; }
+      else if (horse.first3f) {
+        const _ri = allRacesData[raceNo]?.raceInfo;
+        const _pr = getHorsePaceLabel(horse.first3f, _ri?.distance, _ri?.raceClass, _ri?.trackCond);
+        if (_pr) { _paceAuto = _pr.label; _paceAutoDev = _pr.z; }
+      }
+    }
     const _paceAutoHtml = _paceAuto
-      ? `<span class="pace-auto ${getPaceDotClass(_paceAuto)}" title="${escapeHTML(`同じ距離・クラス・馬場の基準と比べた推定です（基準との差 ${horse.paceDevAuto != null ? (horse.paceDevAuto > 0 ? '+' : '') + horse.paceDevAuto : '—'}σ）`)}">${escapeHTML(_paceAuto)}</span>`
+      ? `<span class="pace-auto ${getPaceDotClass(_paceAuto)}" title="${escapeHTML(`同じ距離・クラス・馬場の基準と比べた推定です（基準との差 ${_paceAutoDev != null ? (_paceAutoDev > 0 ? '+' : '') + _paceAutoDev : '—'}σ）`)}">${escapeHTML(_paceAuto)}</span>`
       : '';
     const _raced=/^\d+$/.test(String(horse.chakujun));
     return `<tr class="horse-row">
@@ -9700,10 +9709,17 @@ const _HORSE_F3_BENCH_KEY = 'kv_horse_f3_bench_v1';
 function getHorseF3BenchTable() {
   if (window._horseF3Bench) return window._horseF3Bench;
   if (!_idbFullReady) {
+    // ①この端末で全履歴から作った表 → ②同梱の表（data/kochi-horse-f3-bench.js）
+    // ⛔②が無いと「一度も分析画面を開いていない端末ではペースが出ない」という
+    //   無言の不発になる（2026-08-04にユーザー環境で実際に起きた）。
     try {
       const saved = JSON.parse(localStorage.getItem(_HORSE_F3_BENCH_KEY) || 'null');
-      if (saved && saved.cell) { window._horseF3Bench = saved; return saved; }
+      if (saved && saved.cell && Object.keys(saved.cell).length) { window._horseF3Bench = saved; return saved; }
     } catch (e) { _kvSwallow('getHorseF3BenchTable:load', e); }
+    if (window.KV_HORSE_F3_BENCH && window.KV_HORSE_F3_BENCH.cell) {
+      window._horseF3Bench = window.KV_HORSE_F3_BENCH;
+      return window._horseF3Bench;
+    }
     return { cell: {}, fb: {} };     // 基準を作れない＝ラベルも付けない
   }
   const store = lsRead();
@@ -9733,10 +9749,19 @@ function getHorseF3BenchTable() {
     }
     return out;
   };
-  window._horseF3Bench = { cell: summarize(cell), fb: summarize(fb), at: Date.now() };
-  try { localStorage.setItem(_HORSE_F3_BENCH_KEY, JSON.stringify(window._horseF3Bench)); }
+  const _computed = { cell: summarize(cell), fb: summarize(fb), at: Date.now() };
+  // ⛔同期が終わる前に全履歴展開が起きると、少ない馬から貧弱な表ができる（2026-08-04に実測で
+  //   55セル→2セルまで痩せた）。同梱の表より条件数が少ないなら採用も保存もしない。
+  const _shipped = window.KV_HORSE_F3_BENCH;
+  if (_shipped && _shipped.cell &&
+      Object.keys(_computed.cell).length < Object.keys(_shipped.cell).length) {
+    window._horseF3Bench = _shipped;
+    return _shipped;
+  }
+  window._horseF3Bench = _computed;
+  try { localStorage.setItem(_HORSE_F3_BENCH_KEY, JSON.stringify(_computed)); }
   catch (e) { _kvSwallow('getHorseF3BenchTable:save', e); }
-  return window._horseF3Bench;
+  return _computed;
 }
 
 /** 馬1頭の前半3F → 同条件の基準と比べた {label, z, dev}。基準が無い条件では null。 */
