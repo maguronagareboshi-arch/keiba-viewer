@@ -141,6 +141,11 @@
   // while the full local history is available; official odds are deliberately
   // added only by the Worker at the checkpoint.
   function buildUmarenCloudInput(raceNo, scored) {
+    // 2026-08-06 畳んだ: 馬連の期待値路線は閉じた(詳細は app-main.js の同名の注記)。
+    // Worker へ渡す入力の生成を止める。⛔Worker 側の評価コードは無傷なので、
+    // 完全に止めるには cloudflare-worker.js の該当部を外して再デプロイが要る。
+    // 🔑戻し方 = window.KV_UMAREN_DISTORTION_SHADOW = true
+    if (global.KV_UMAREN_DISTORTION_SHADOW !== true) return null;
     try {
       const model = global.KvUmarenDistortionShadow;
       if (!model || typeof model.buildVnextRanks !== 'function') return null;

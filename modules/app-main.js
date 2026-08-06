@@ -3581,6 +3581,13 @@ function _kvUmarenCaptureSlot(minutesBeforeStart) {
 
 /** T10で軸を固定し、T5で公式馬連全組合せを取得して前向き判定を保存する。 */
 async function _kvTickUmarenDistortionCapture() {
+  // 2026-08-06 畳んだ: 馬連の期待値路線は検証で閉じた。パリミュチュエルで埋めるべき量は
+  // log(1/(1-控除率))=0.294 nats だが、確定オッズの板に対する我々のエッジは全体で+0.0083、
+  // レース前に見分けられる最良の層でも+0.029(必要量の9.7%)しかない=桁が2つ足りない。
+  // 到達できない仮説の前向き記録を止める。研究の全数値は
+  // ドキュメント\高知競馬ビューア改善\research\umaren-asof\README.md
+  // 🔑戻し方 = window.KV_UMAREN_DISTORTION_SHADOW = true の1行(モデル本体は無傷で残してある)
+  if (window.KV_UMAREN_DISTORTION_SHADOW !== true) return;
   if (_kvUmarenCaptureBusy || typeof isAdminMode !== 'function' || !isAdminMode() ||
       typeof _currentPage === 'undefined' || _currentPage !== 'deban' ||
       String(currentBaba || '') !== '31' || currentDate !== _kvTodaySlash()) return;
