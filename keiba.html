@@ -988,16 +988,43 @@ async function sbGet(pathq, timeoutMs = FETCH_TIMEOUT_MS) {
   if (!res.ok) throw new Error(`supabase ${res.status}`);
   return res.json();
 }
-async function sbGetPaged(pathq, pageSize = 1000, maxRows = 20000) {
+function sbCursorFilter(columns, values, directions) {
+  const branches = columns.map((column, index) => {
+    const equals = columns.slice(0, index).map((prev, prevIndex) =>
+      `${prev}.eq.${encodeURIComponent(values[prevIndex])}`);
+    const op = directions[index] === 'desc' ? 'lt' : 'gt';
+    const next = `${column}.${op}.${encodeURIComponent(values[index])}`;
+    return equals.length ? `and(${[...equals, next].join(',')})` : next;
+  });
+  return `or=(${branches.join(',')})`;
+}
+async function sbGetPaged(pathq, pageSize = 1000, maxRows = 20000,
+                          cursorSpec = { columns: ['race_id'], directions: ['asc'] }) {
   const rows = [];
   const joiner = pathq.includes('?') ? '&' : '?';
-  for (let offset = 0; offset < maxRows; offset += pageSize) {
-    const page = await sbGet(`${pathq}${joiner}limit=${pageSize}&offset=${offset}`);
-    rows.push(...page);
-    if (page.length < pageSize) return rows;
+  const columns = cursorSpec.columns || [];
+  const directions = cursorSpec.directions || columns.map(() => 'asc');
+  if (!columns.length || columns.length !== directions.length) {
+    throw new Error('カーソル列の指定が不正です');
   }
-  // 件数が上限のちょうど倍数でも誤って超過扱いにしない。1行だけ先を確認する。
-  const overflow = await sbGet(`${pathq}${joiner}limit=1&offset=${maxRows}`);
+  let cursor = null;
+  while (rows.length < maxRows) {
+    const limit = Math.min(pageSize, maxRows - rows.length);
+    const filter = cursor ? `&${sbCursorFilter(columns, cursor, directions)}` : '';
+    const page = await sbGet(`${pathq}${joiner}limit=${limit}${filter}`);
+    rows.push(...page);
+    if (page.length < limit) return rows;
+    const next = columns.map((column) => page[page.length - 1][column]);
+    if (next.some((value) => value == null)) {
+      throw new Error(`カーソル列（${columns.join(', ')}）が取得結果にありません`);
+    }
+    if (cursor && next.every((value, index) => String(value) === String(cursor[index]))) {
+      throw new Error('取得カーソルが進みませんでした');
+    }
+    cursor = next;
+  }
+  // 上限ちょうどで終わった場合だけ、同じカーソルの1行先を確認する。
+  const overflow = await sbGet(`${pathq}${joiner}limit=1&${sbCursorFilter(columns, cursor, directions)}`);
   if (!overflow.length) return rows;
   throw new Error(`取得件数が安全上限（${maxRows}件）に達しました。条件を絞ってください。`);
 }
@@ -1168,7 +1195,10 @@ const providers = {
     },
     // 全期間分（過去の月をさかのぼる用）。PostgRESTの行上限で欠けないようページングする。
     async listDatesFull(track = state.track) {
-      const rows = await sbGetPaged(`chihou_races?select=race_id,race_date,race_no,track,klass,race_name,distance_m,going,weather,hasso_time,pace&track=eq.${encodeURIComponent(track)}&order=race_date.desc,race_no.asc`, 1000, 30000).catch(() => []);
+      // 表示側で日付・R番号順に再構成するため、取得自体は一意なrace_id順にして
+      // offsetを使わないカーソルページングを成立させる。
+      const rows = await sbGetPaged(`chihou_races?select=race_id,race_date,race_no,track,klass,race_name,distance_m,going,weather,hasso_time,pace&track=eq.${encodeURIComponent(track)}&order=race_id.asc`, 1000, 30000,
+        { columns: ['race_id'], directions: ['asc'] }).catch(() => []);
       const remote = this._rowsToDates(rows);
       if (staticArchive.enabled(track)) {
         const archive = await staticArchive.listDates(track).catch(() => null);
@@ -1238,7 +1268,10 @@ const providers = {
     async loadHistory(horseIds) {
       if (!horseIds.length) return {};
       const idlist = horseIds.map(encodeURIComponent).join(',');
-      const rows = await sbGetPaged(`chihou_results?horse_id=in.(${idlist})&select=horse_id,umaban,finish,pop,first3f,last3f,time_sec,kinryo,sex_age,passing,corner4_pos,comment,time_str,margin,body_weight,jockey,race_id,chihou_races(race_date,distance_m,going,pace,klass,race_name,soubi:extra->>馬装具,laps:extra->laps)&order=chihou_races(race_date).desc,race_id.desc`, 1000, 20000).catch(() => []);
+      // 走歴は下でrace_date順に並べ直す。DB取得は複合主キー順に固定し、
+      // ページ境界が同一race_idの途中でもumabanで続きを取得する。
+      const rows = await sbGetPaged(`chihou_results?horse_id=in.(${idlist})&select=horse_id,umaban,finish,pop,first3f,last3f,time_sec,kinryo,sex_age,passing,corner4_pos,comment,time_str,margin,body_weight,jockey,race_id,chihou_races(race_date,distance_m,going,pace,klass,race_name,soubi:extra->>馬装具,laps:extra->laps)&order=race_id.desc,umaban.asc`, 1000, 20000,
+        { columns: ['race_id', 'umaban'], directions: ['desc', 'asc'] }).catch(() => []);
       const archived = staticArchive.enabled() ? await staticArchive.loadHistory(horseIds).catch(() => ({})) : {};
       const map = Object.fromEntries(Object.entries(archived).map(([id, runs]) => [id, [...runs]]));
       for (const r of rows) {
@@ -2694,7 +2727,8 @@ function renderDanwaPastInto(wrap, hid, rawRows, curRid) {
 // 1頭分の過去コメントをSupabaseから取得（個別クリック・一括表示の両方が使う共通フェッチ）
 async function fetchDanwaPast(hid, hname, curRid) {
   const filt = hid ? `horse_id=eq.${encodeURIComponent(hid)}` : `horse_name=eq.${encodeURIComponent(hname)}`;
-  const rows = await sbGetPaged(`chihou_danwa?${filt}&select=race_id,headline,trainer,comment,raw&order=race_id.desc`, 200, 2000);
+  const rows = await sbGetPaged(`chihou_danwa?${filt}&select=race_id,umaban,headline,trainer,comment,raw&order=race_id.desc,umaban.asc`, 200, 2000,
+    { columns: ['race_id', 'umaban'], directions: ['desc', 'asc'] });
   return sortRowsByRaceDateDesc(rows).filter((r) => r.race_id !== curRid).slice(0, 8);
 }
 async function fetchDanwaPastBatch(items) {
@@ -2702,9 +2736,11 @@ async function fetchDanwaPastBatch(items) {
   const names = [...new Set(items.filter(({ btn }) => !btn.dataset.hid).map(({ btn }) => btn.dataset.hname).filter(Boolean))];
   const queries = [];
   if (ids.length) queries.push(sbGetPaged(
-    `chihou_danwa?horse_id=in.(${ids.map(encodeURIComponent).join(',')})&select=horse_id,horse_name,race_id,headline,trainer,comment,raw&order=race_id.desc`, 500, 5000));
+    `chihou_danwa?horse_id=in.(${ids.map(encodeURIComponent).join(',')})&select=horse_id,horse_name,race_id,umaban,headline,trainer,comment,raw&order=race_id.desc,umaban.asc`, 500, 5000,
+    { columns: ['race_id', 'umaban'], directions: ['desc', 'asc'] }));
   if (names.length) queries.push(sbGetPaged(
-    `chihou_danwa?horse_name=in.(${names.map(encodeURIComponent).join(',')})&select=horse_id,horse_name,race_id,headline,trainer,comment,raw&order=race_id.desc`, 500, 5000));
+    `chihou_danwa?horse_name=in.(${names.map(encodeURIComponent).join(',')})&select=horse_id,horse_name,race_id,umaban,headline,trainer,comment,raw&order=race_id.desc,umaban.asc`, 500, 5000,
+    { columns: ['race_id', 'umaban'], directions: ['desc', 'asc'] }));
   const rows = (await Promise.all(queries)).flat();
   const byId = {}, byName = {};
   for (const row of rows) {
@@ -4834,7 +4870,8 @@ async function openHorseModal(nameOrId, byId, displayName) {
     sortRowsByRaceDateDesc(results);
     const name = displayName || (results[0] && results[0].horse_name) || (byId ? null : nameOrId);
     const cyokyo = name
-      ? await withTimeout(sbGetPaged(`chihou_cyokyo?horse_name=eq.${encodeURIComponent(name)}&select=race_id,works&order=race_id.desc`, 200, 2000), 10000)
+      ? await withTimeout(sbGetPaged(`chihou_cyokyo?horse_name=eq.${encodeURIComponent(name)}&select=race_id,umaban,works&order=race_id.desc,umaban.asc`, 200, 2000,
+        { columns: ['race_id', 'umaban'], directions: ['desc', 'asc'] }), 10000)
         .then((rows) => sortRowsByRaceDateDesc(rows).slice(0, 20)).catch(() => [])
       : [];
     if (name) $('horseModalTitle').textContent = name + ' の成績・調教';
@@ -5384,7 +5421,8 @@ async function loadNokenDebut() {
   for (let i = 0; i < ids.length; i += 100) {
     const chunk = ids.slice(i, i + 100).map(encodeURIComponent).join(',');
     try {
-      const rows = await sbGetPaged(`chihou_results?horse_id=in.(${chunk})&select=horse_id&order=horse_id.asc`, 1000, 20000);
+      const rows = await sbGetPaged(`chihou_results?horse_id=in.(${chunk})&select=horse_id,race_id,umaban&order=horse_id.asc,race_id.asc,umaban.asc`, 1000, 20000,
+        { columns: ['horse_id', 'race_id', 'umaban'], directions: ['asc', 'asc', 'asc'] });
       for (const r of rows) raced.add(r.horse_id);
     } catch (e) { /* 取れなかった分は「出走あり」に倒して未出走の誤表示を避ける */
       ids.slice(i, i + 100).forEach((id) => raced.add(id));
@@ -5584,30 +5622,38 @@ function initRaceFinder() {
 async function runRaceFinder(more) {
   const box = $('finderResult');
   const dist = $('fDist').value, klass = $('fClass').value, going = $('fGoing').value, year = $('fYear').value;
-  if (!more) state.finderOffset = 0;
+  if (!more) { state.finderCursor = null; state.finderScanned = 0; }
   box.innerHTML = '<div class="empty">探しています…</div>';
   try {
     const pageSize = klass ? 500 : 60;
     const targetCount = 60;
     const maxScan = 30000;
-    let offset = state.finderOffset || 0;
+    let cursor = state.finderCursor || null;
+    let scanned = state.finderScanned || 0;
     let rows = [], hasMore = false;
     do {
       const q = [`track=eq.${encodeURIComponent(state.track)}`,
         'select=race_id,race_date,race_no,klass,race_name,distance_m,going,pace',
-        'order=race_date.desc,race_no.asc', `limit=${pageSize}`, `offset=${offset}`];
+        'order=race_date.desc,race_no.asc,race_id.asc', `limit=${pageSize}`];
       if (dist) q.push(`distance_m=eq.${dist}`);
       if (going) q.push(`going=eq.${encodeURIComponent(going)}`);
       if (year) q.push(`race_date=gte.${year}-01-01`, `race_date=lte.${year}-12-31`);
+      if (cursor) q.push(sbCursorFilter(
+        ['race_date', 'race_no', 'race_id'], cursor, ['desc', 'asc', 'asc']));
       const page = await sbGet(`chihou_races?${q.join('&')}`);
-      offset += page.length;
+      scanned += page.length;
+      if (page.length) {
+        const tail = page[page.length - 1];
+        cursor = [tail.race_date, tail.race_no, tail.race_id];
+      }
       const matched = klass ? page.filter((r) =>
         (classMajor(r.race_name) || classGroup((r.klass || '') + (r.race_name || ''))) === klass) : page;
       rows.push(...matched);
-      hasMore = page.length === pageSize && offset < maxScan;
+      hasMore = page.length === pageSize && scanned < maxScan;
       if (!klass || !hasMore || rows.length >= targetCount) break;
-    } while (offset < maxScan);
-    state.finderOffset = offset;
+    } while (scanned < maxScan);
+    state.finderCursor = cursor;
+    state.finderScanned = scanned;
     state.finderHasMore = hasMore;
     const html = rows.map((r) => `<div class="finder-row" data-rid="${esc(r.race_id)}" data-rd="${esc(r.race_date)}">
       <b>${mmdd(r.race_date)}</b><b>${r.race_no}R</b>
@@ -5874,13 +5920,13 @@ async function init() {
     }
   });
 
-  const dates = Object.keys(state.dates);
+  const dates = Object.keys(state.dates).sort().reverse();
   if (!(await applyHash())) {
-    // 初期日付: 前回選択（場別に記憶） → 今日 → 最新 の優先順
-    let saved = null;
-    try { saved = localStorage.getItem(`nk_last_date_${trackCfg().prefix}`); } catch (e) { /* 無視 */ }
+    // 初期日付: 今日 → 最新 の優先順。前回の古い開催日を残すと、直近DBを
+    // 静的アーカイブへ結合した後も新開催が「入っていない」ように見える。
+    // 過去日を明示したURLハッシュは上のapplyHash()で引き続き尊重する。
     const today = jstToday();
-    setDeckDate((saved && state.dates[saved]) ? saved : (state.dates[today] ? today : dates[0]));
+    setDeckDate(state.dates[today] ? today : dates[0]);
     await switchView('race');
   }
   // ブラウザの戻る/進むボタンでレース間を移動できるように
