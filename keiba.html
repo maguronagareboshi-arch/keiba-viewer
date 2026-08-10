@@ -1091,7 +1091,7 @@ const staticArchive = {
   },
   async loadRace(raceId, track = state.track) {
     const row = await this.pack(raceId, track);
-    return row ? { race: row.race || {}, results: row.results || [], payouts: [] } : null;
+    return row ? { race: row.race || {}, results: row.results || [], payouts: row.payouts || [] } : null;
   },
   async loadEntries(raceId, track = state.track) {
     const row = await this.pack(raceId, track);
@@ -1100,6 +1100,24 @@ const staticArchive = {
   async loadCyokyo(raceId, track = state.track) {
     const row = await this.pack(raceId, track);
     return row ? (row.cyokyo || []).map((horse) => ({ ...horse, race_id: raceId })) : [];
+  },
+  async loadNouryoku(raceId, track = state.track) {
+    const row = await this.pack(raceId, track);
+    return row ? (row.nouryoku || []).map((horse) => horse.data ? {
+      ...horse, race_id: horse.race_id || raceId,
+    } : {
+      race_id: raceId, umaban: horse.umaban, horse_name: horse.horse_name || horse.name, rt: horse.rt,
+      data: {
+        pedigree: horse.pedigree, stable: horse.stable, seiseki: horse.seiseki,
+        jockey_stats: horse.jockey_stats, runs: horse.runs,
+      },
+    }) : [];
+  },
+  async loadDanwa(raceId, track = state.track) {
+    const row = await this.pack(raceId, track);
+    return row ? (row.danwa || []).map((horse) => ({
+      ...horse, race_id: horse.race_id || raceId,
+    })) : [];
   },
   async loadHistory(horseIds, track = state.track) {
     if (!this.enabled(track)) return {};
@@ -1208,16 +1226,25 @@ const providers = {
       return rows.length ? remote : null;
     },
     async loadRace(raceId) {
-      try {
-        const [races, results, payouts] = await Promise.all([
-          sbGet(`chihou_races?race_id=eq.${raceId}&select=*`),
-          sbGet(`chihou_results?race_id=eq.${raceId}&select=*&order=finish.asc.nullslast`),
-          // chihou_payoutsは後発テーブル（未作成/未backfillの環境もある）なので失敗しても静かに空扱い
-          sbGet(`chihou_payouts?race_id=eq.${raceId}&select=ticket_type,combination,official_payout_per_100,popularity`).catch(() => []),
-        ]);
-        if (races.length) return { race: races[0], results, payouts };
-      } catch (e) { /* 静的アーカイブへ */ }
-      return (await staticArchive.loadRace(raceId).catch(() => null)) || { race: {}, results: [], payouts: [] };
+      // 親raceの有無で子テーブルのfallbackを打ち切らない。直近DBに各データがあればそれを優先し、
+      // 空または個別取得失敗の項目だけを同一レースの静的packで補う。
+      const [races, results, payouts] = await Promise.all([
+        sbGet(`chihou_races?race_id=eq.${raceId}&select=*`).catch(() => []),
+        sbGet(`chihou_results?race_id=eq.${raceId}&select=*&order=finish.asc.nullslast`).catch(() => []),
+        // chihou_payoutsは後発テーブル（未作成/未backfillの環境もある）なので項目単位で退避する
+        sbGet(`chihou_payouts?race_id=eq.${raceId}&select=ticket_type,combination,official_payout_per_100,popularity`).catch(() => []),
+      ]);
+      if (races.length && results.length && payouts.length) {
+        return { race: races[0], results, payouts };
+      }
+      const archived = staticArchive.enabled()
+        ? await staticArchive.loadRace(raceId).catch(() => null)
+        : null;
+      return {
+        race: races[0] || (archived && archived.race) || {},
+        results: results.length ? results : ((archived && archived.results) || []),
+        payouts: payouts.length ? payouts : ((archived && archived.payouts) || []),
+      };
     },
     async loadDayResults(raceIds) {
       if (!raceIds.length) return {};
@@ -1256,6 +1283,10 @@ const providers = {
         const rows = await sbGet(`chihou_nouryoku?race_id=eq.${raceId}&select=*&order=umaban.asc`);
         if (rows.length) return rows;
       } catch (e) { /* 次へ */ }
+      if (staticArchive.enabled()) {
+        const rows = await staticArchive.loadNouryoku(raceId).catch(() => []);
+        if (rows.length) return rows;
+      }
       return providers.local.loadNouryoku(raceId);
     },
     async loadDanwa(raceId) {
@@ -1263,6 +1294,10 @@ const providers = {
         const rows = await sbGet(`chihou_danwa?race_id=eq.${raceId}&select=*&order=umaban.asc`);
         if (rows.length) return rows;
       } catch (e) { /* テーブル未作成 → ローカルへ */ }
+      if (staticArchive.enabled()) {
+        const rows = await staticArchive.loadDanwa(raceId).catch(() => []);
+        if (rows.length) return rows;
+      }
       return providers.local.loadDanwa(raceId);
     },
     async loadHistory(horseIds) {
