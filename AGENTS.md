@@ -47,7 +47,7 @@
 push すると `.github/workflows/pages.yml` → `validate-production.py` が走り、**検証に落ちると公開されない**。
 
 1. **新しい公開ファイルは `.production-files` に登録必須**(ソート順・重複なし)。登録漏れ=本番に出ない。
-2. **追跡ファイル = `.production-files` + `.preserved-production-files` + SUPPORT_FILES と完全一致**が強制される。repo に一時ファイル・未登録ファイルを置かない(他場の deploy.sh が `git add -A` するため巻き込まれて CI が落ちる)。
+2. **追跡ファイル = `.production-files` + `.preserved-production-files` + SUPPORT_FILES と完全一致**が強制される。repo に一時ファイル・未登録ファイルを置かない(門別・南関の公開同期も差分をallowlist検証するため、未登録ファイルがあると CI が落ちる)。
 3. 秘密情報スキャンあり(鍵・トークンをコード/文書に書かない)・1ファイル2MB上限。
 4. push 前にローカルで確認: `py -X utf8 .github/scripts/validate-production.py .`
 5. モジュールを更新したら index.html の `?v=` キャッシュバスターも更新する。
@@ -85,7 +85,7 @@ push すると `.github/workflows/pages.yml` → `validate-production.py` が走
 
 - **映像計測**(3F/ラップの生産): `デスクトップ\高知競馬\01_高知映像計測\auto3f` — `newday.py` が fetch→OCR→DB を自動化。出力がこの repo の `data/` に入る。
 - **研究・データ生成**: `ドキュメント\高知競馬ビューア改善` — 上の「0. 研究・データ生成の置き場」参照。
-- **門別/南関ソース**: `デスクトップ\他場` — `bash deploy.sh` がこの repo へコピーして push する。
+- **門別/南関ソース**: `C:\Users\skmg2\OneDrive\ドキュメント\門別大井ビューア` — 旧 `デスクトップ\他場` と廃止済み `deploy.sh` は使わない。静的archiveは `scraper/sync_viewer_archive.py` で検証後、このrepoへ差分だけ同期する。
 - **DB**: Supabase(project jcrcftvrsgmsewwdkqha)。ビューアは匿名キーで読むだけ。書き込みはローカルスクリプト経由のみ。
 - **オッズ自動記録**: ローカル `capture_odds.py` + Windows タスクスケジューラ。
 - **旧UIテスト資産**: `高知競馬\tests\ui`(Playwright 約200件)。モノリシック時代の index.html が対象で、現行のモジュール構成に対しては要改修。

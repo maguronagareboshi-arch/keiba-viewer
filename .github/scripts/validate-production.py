@@ -28,6 +28,7 @@ SUPPORT_FILES = {
     "tests/test_kochi_worker_scope.js",
     "tests/test_kochi_worker_precompute.js",
     "tests/test_kochi_worker_unit.js",
+    "tests/test_nankan_public_stability.py",
     "tests/test_umaren_cloud_equivalence.js",
     "wrangler.toml",
 }

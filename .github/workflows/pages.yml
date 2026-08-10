@@ -3,6 +3,8 @@ name: Protected Pages deploy
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -11,8 +13,9 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  # mainの連続pushは古い検証・デプロイを残さず、PR同士は番号ごとに分離する。
+  group: pages-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   validate-and-build:
@@ -23,14 +26,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Test Monbetsu and Nankan public stability
+        run: python -m unittest discover -s tests -p "test_nankan_public_stability.py"
       - name: Validate production allowlist
         run: python .github/scripts/validate-production.py . --stage ../_site
       - uses: actions/configure-pages@v5
+        if: github.event_name != 'pull_request'
       - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
         with:
           path: ../_site
 
   deploy:
+    if: github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
