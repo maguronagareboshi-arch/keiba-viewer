@@ -5874,13 +5874,13 @@ async function init() {
     }
   });
 
-  const dates = Object.keys(state.dates);
+  const dates = Object.keys(state.dates).sort().reverse();
   if (!(await applyHash())) {
-    // 初期日付: 前回選択（場別に記憶） → 今日 → 最新 の優先順
-    let saved = null;
-    try { saved = localStorage.getItem(`nk_last_date_${trackCfg().prefix}`); } catch (e) { /* 無視 */ }
+    // 初期日付: 今日 → 最新 の優先順。前回の古い開催日を残すと、直近DBを
+    // 静的アーカイブへ結合した後も新開催が「入っていない」ように見える。
+    // 過去日を明示したURLハッシュは上のapplyHash()で引き続き尊重する。
     const today = jstToday();
-    setDeckDate((saved && state.dates[saved]) ? saved : (state.dates[today] ? today : dates[0]));
+    setDeckDate(state.dates[today] ? today : dates[0]);
     await switchView('race');
   }
   // ブラウザの戻る/進むボタンでレース間を移動できるように
