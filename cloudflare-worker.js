@@ -20,6 +20,8 @@ const ALLOWED_ORIGINS = new Set([
   'https://yukochi.com',
   'https://www.yukochi.com',
   'https://maguronagareboshi-arch.github.io',
+  'https://nar.yukochi.com',   // 統合ビューアの管理者モード(admin read 経路のみ使う)
+  'http://localhost:8940',     // 統合ビューアのローカル検品(serve.py の既定ポート)
 ]);
 const PROXY_HOSTS = new Set(['www.keiba.go.jp', 'keiba.rakuten.co.jp']);
 const PROXY_PATHS = [
@@ -1031,6 +1033,41 @@ export default {
       return new Response(JSON.stringify({ ok:true, release_sha:env.RELEASE_SHA || '' }), {
         status:200, headers:Object.assign({'Content-Type':'application/json'}, corsWrite(request)),
       });
+    }
+
+    // 4) admin read: 競馬ブック由来の本文(厩舎の話・調教)。2026-08 に anon の SELECT を DB 権限で
+    //    閉鎖したため、管理者(X-Write-Token 保持者)だけがこの口から読む。表・列・並びは固定=
+    //    任意クエリは通さない。閲覧者に出す経路はどこにも無い。
+    if (request.method === 'GET' && url.pathname === '/rpc/admin-chihou-own') {
+      const rid = String(url.searchParams.get('race_id') || '');
+      if (!/^\d{1,20}$/.test(rid)) return new Response('Invalid race id', { status:400, headers:corsWrite(request) });
+      try {
+        const [danwa, cyokyo] = await Promise.all([
+          supabaseServiceGet(env, '/rest/v1/chihou_danwa?select=umaban,horse_id,headline,trainer,comment&race_id=eq.' + rid + '&order=umaban.asc'),
+          supabaseServiceGet(env, '/rest/v1/chihou_cyokyo?select=umaban,arrow,tanpyo,works&race_id=eq.' + rid + '&order=umaban.asc'),
+        ]);
+        return new Response(JSON.stringify({ ok:true, danwa, cyokyo }), {
+          status:200, headers:Object.assign({'Content-Type':'application/json','Cache-Control':'no-store'}, corsWrite(request)),
+        });
+      } catch (error) {
+        return new Response(JSON.stringify({ ok:false, error:String(error && error.message || error) }), {
+          status:502, headers:Object.assign({'Content-Type':'application/json'}, corsWrite(request)),
+        });
+      }
+    }
+    if (request.method === 'GET' && url.pathname === '/rpc/admin-danwa-history') {
+      const code = String(url.searchParams.get('horse_id') || '');
+      if (!/^\d{1,12}$/.test(code)) return new Response('Invalid horse id', { status:400, headers:corsWrite(request) });
+      try {
+        const rows = await supabaseServiceGet(env, '/rest/v1/chihou_danwa?select=race_id,umaban,headline,trainer,comment&horse_id=eq.' + code + '&order=race_id.desc&limit=60');
+        return new Response(JSON.stringify({ ok:true, rows }), {
+          status:200, headers:Object.assign({'Content-Type':'application/json','Cache-Control':'no-store'}, corsWrite(request)),
+        });
+      } catch (error) {
+        return new Response(JSON.stringify({ ok:false, error:String(error && error.message || error) }), {
+          status:502, headers:Object.assign({'Content-Type':'application/json'}, corsWrite(request)),
+        });
+      }
     }
 
     if (request.method === 'POST' && url.pathname === '/rpc/save-keiba-race-bundle') {
