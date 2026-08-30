@@ -38,6 +38,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # ⛔#1 の失敗の原因はここ: `cloudflare-worker.js` は 1行目で `@cloudflare/puppeteer` を import しており、
+      #   deploy の前に依存を入れる必要がある。wrangler-action は lockfile を見て**勝手に pnpm を選ぶ**が、
+      #   runner に pnpm が入っておらず "Unable to locate executable file: pnpm" で落ちた。
+      #   ⛔このリポジトリは pnpm(pnpm-lock.yaml の lockfileVersion 9.0)なので pnpm で揃える。
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: 依存を入れる(@cloudflare/puppeteer)
+        run: pnpm install --frozen-lockfile
+
       - name: 確認の入力を検査する
         shell: bash
         run: |
@@ -65,6 +79,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}   # 未設定なら空= wrangler が自分で決める
+          packageManager: pnpm                                # ⛔上で入れたものと揃える(既定の自動判定に任せない)
           command: deploy
 
       # ⛔出したあとに同じ検査をして、変わったことを数で見せる
