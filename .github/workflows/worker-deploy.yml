@@ -5,11 +5,13 @@
 # 使う前に一度だけ要る設定(ユーザーの手番・鍵は私からは触れません):
 #   1) Cloudflare → 右上のアイコン → My Profile → API Tokens → Create Token
 #      → テンプレート「Edit Cloudflare Workers」→ Account/Zone は既定のまま → Create → **表示された値をコピー**
-#   2) Cloudflare のダッシュボード右下(または Workers のページ)にある **Account ID** をコピー
-#   3) GitHub の keiba-deploy → Settings → Secrets and variables → Actions → New repository secret を2つ
-#        CLOUDFLARE_API_TOKEN  = 1 の値
-#        CLOUDFLARE_ACCOUNT_ID = 2 の値
-#   4) Actions タブ → 「Deploy worker」→ Run workflow
+#   2) GitHub の keiba-deploy → Settings → Secrets and variables → Actions → New repository secret
+#        CLOUDFLARE_API_TOKEN = 1 の値   ← **これ1つだけでよい**
+#   3) Actions タブ → 「Deploy worker」→ Run workflow(confirm に deploy)
+#
+#   ⚠ もし deploy が「アカウントが特定できない」と言って落ちたときだけ、失敗ログに出るアカウントの ID を
+#      CLOUDFLARE_ACCOUNT_ID という名前でもう1つ Secret に足して、もう一度 Run workflow を押す。
+#      ⛔アカウントが1つしか無いなら**要りません**。
 #
 # ⛔ wrangler.toml は `keep_vars = true` なので、既に入れてある Secret(ADMIN_WRITE_TOKEN など)は消えません。
 # ⛔ 出す中身は main の cloudflare-worker.js。出す前に「いま出ているものと違うか」を必ず表示します。
@@ -55,11 +57,14 @@ jobs:
             | grep -i '^HTTP\|access-control-allow-origin' || true
           echo "(allow-origin が https://yukochi.com なら §58 は未デプロイ / nar.yukochi.com なら反映済み)"
 
+      # ⛔accountId は**任意**。トークンが1つのアカウントにしか使えないなら wrangler が自分で決める。
+      #   複数アカウントを持っていて wrangler が迷ったときだけ CLOUDFLARE_ACCOUNT_ID を足せばよい
+      #   (そのときは失敗ログにアカウントの一覧と ID が出る)。
       - name: wrangler deploy
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}   # 未設定なら空= wrangler が自分で決める
           command: deploy
 
       # ⛔出したあとに同じ検査をして、変わったことを数で見せる
