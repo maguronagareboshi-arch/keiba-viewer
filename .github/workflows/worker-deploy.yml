@@ -1,0 +1,84 @@
+# Worker(keiba-proxydeploy)を GitHub から手で出す。
+# ⛔このPCに node/npx が入っていないので `npx wrangler deploy` は手元で打てない(2026-08-30 実測)。
+#   ここに置くと **Actions の画面のボタン1つ**で出せる= PC を閉じていても出せる。
+#
+# 使う前に一度だけ要る設定(ユーザーの手番・鍵は私からは触れません):
+#   1) Cloudflare → 右上のアイコン → My Profile → API Tokens → Create Token
+#      → テンプレート「Edit Cloudflare Workers」→ Account/Zone は既定のまま → Create → **表示された値をコピー**
+#   2) Cloudflare のダッシュボード右下(または Workers のページ)にある **Account ID** をコピー
+#   3) GitHub の keiba-deploy → Settings → Secrets and variables → Actions → New repository secret を2つ
+#        CLOUDFLARE_API_TOKEN  = 1 の値
+#        CLOUDFLARE_ACCOUNT_ID = 2 の値
+#   4) Actions タブ → 「Deploy worker」→ Run workflow
+#
+# ⛔ wrangler.toml は `keep_vars = true` なので、既に入れてある Secret(ADMIN_WRITE_TOKEN など)は消えません。
+# ⛔ 出す中身は main の cloudflare-worker.js。出す前に「いま出ているものと違うか」を必ず表示します。
+name: Deploy worker
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: '本番の Worker を出します。deploy と入力してください'
+        required: true
+        default: ''
+
+concurrency:
+  group: worker-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 確認の入力を検査する
+        shell: bash
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "deploy" ]; then
+            echo "confirm に deploy と入力されていないので中止します"
+            exit 1
+          fi
+
+      # ⛔出す前に「いま本番で動いているもの」を見る。CORS の許可 origin で新旧を見分けられる
+      #   (§58 で nar.yukochi.com を足したので、出ていれば Access-Control-Allow-Origin がそれを返す)
+      - name: いまの本番の状態を見る(出す前)
+        shell: bash
+        run: |
+          echo "--- Origin: https://nar.yukochi.com を付けて OPTIONS ---"
+          curl -s -i -X OPTIONS -H 'Origin: https://nar.yukochi.com' \
+            'https://keiba-proxydeploy.maguronagareboshi.workers.dev/rpc/admin-chihou-own?race_id=1' \
+            | grep -i '^HTTP\|access-control-allow-origin' || true
+          echo "(allow-origin が https://yukochi.com なら §58 は未デプロイ / nar.yukochi.com なら反映済み)"
+
+      - name: wrangler deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
+
+      # ⛔出したあとに同じ検査をして、変わったことを数で見せる
+      - name: 出したあとの状態を見る(検算)
+        shell: bash
+        run: |
+          sleep 10
+          echo "--- Origin: https://nar.yukochi.com を付けて OPTIONS ---"
+          out=$(curl -s -i -X OPTIONS -H 'Origin: https://nar.yukochi.com' \
+            'https://keiba-proxydeploy.maguronagareboshi.workers.dev/rpc/admin-chihou-own?race_id=1')
+          echo "$out" | grep -i '^HTTP\|access-control-allow-origin' || true
+          if echo "$out" | grep -qi 'access-control-allow-origin: https://nar.yukochi.com'; then
+            echo "OK: §58 の admin read 経路が nar.yukochi.com を許可しています"
+          else
+            echo "⚠ まだ nar.yukochi.com を許可していません。ALLOWED_ORIGINS を確認してください"
+            exit 1
+          fi
+          echo "--- トークン無しの GET は 401 のままか(閲覧者に漏れていないこと) ---"
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            'https://keiba-proxydeploy.maguronagareboshi.workers.dev/rpc/admin-chihou-own?race_id=1')
+          echo "status=$code"
+          [ "$code" = "401" ] || { echo "⚠ 401 ではありません。中止して調べてください"; exit 1; }
