@@ -1043,8 +1043,8 @@ export default {
       if (!/^\d{1,20}$/.test(rid)) return new Response('Invalid race id', { status:400, headers:corsWrite(request) });
       try {
         const [danwa, cyokyo] = await Promise.all([
-          supabaseServiceGet(env, '/rest/v1/chihou_danwa?select=umaban,horse_id,headline,trainer,comment&race_id=eq.' + rid + '&order=umaban.asc'),
-          supabaseServiceGet(env, '/rest/v1/chihou_cyokyo?select=umaban,arrow,tanpyo,works&race_id=eq.' + rid + '&order=umaban.asc'),
+          supabaseServiceGet(env, '/rest/v1/chihou_danwa?select=umaban,horse_id,horse_name,headline,trainer,comment,updated_at&race_id=eq.' + rid + '&order=umaban.asc'),
+          supabaseServiceGet(env, '/rest/v1/chihou_cyokyo?select=umaban,horse_name,arrow,tanpyo,works,updated_at&race_id=eq.' + rid + '&order=umaban.asc'),
         ]);
         return new Response(JSON.stringify({ ok:true, danwa, cyokyo }), {
           status:200, headers:Object.assign({'Content-Type':'application/json','Cache-Control':'no-store'}, corsWrite(request)),
