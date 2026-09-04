@@ -19,6 +19,7 @@ SUPPORT_FILES = {
     ".github/workflows/odds-capture.yml",
     ".github/workflows/pages.yml",
     ".github/workflows/worker-check.yml",
+    ".github/workflows/worker-deploy.yml",
     "AGENTS.md",
     "CLAUDE.md",
     "cloudflare-worker.js",
