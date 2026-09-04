@@ -14,7 +14,7 @@ import puppeteer from '@cloudflare/puppeteer';
  */
 
 const SUPABASE_URL = 'https://jcrcftvrsgmsewwdkqha.supabase.co';
-const ALLOWED_TABLES = new Set(['keiba_races', 'keiba_horses', 'keiba_day_settings', 'keiba_odds_snapshots', 'keiba_market_checkpoints', 'keiba_ai_predictions', 'keiba_value_t10_ledger', 'keiba_official_histories']);
+const ALLOWED_TABLES = new Set(['keiba_races', 'keiba_horses', 'keiba_day_settings', 'keiba_odds_snapshots', 'keiba_market_checkpoints', 'keiba_ai_predictions', 'keiba_value_t10_ledger', 'keiba_official_histories', 'site_news']);   // site_news= 統合ビューア §93 お知らせ(2026-09-04)
 // Allowed browser origins for the write proxy (custom domain yukochi.com + legacy github.io).
 const ALLOWED_ORIGINS = new Set([
   'https://yukochi.com',
@@ -1116,7 +1116,7 @@ export default {
       });
     }
 
-    if (!['POST', 'DELETE'].includes(request.method)) {
+    if (!['POST', 'DELETE', 'PATCH'].includes(request.method)) {
       return new Response('Method Not Allowed', { status: 405, headers: corsWrite(request) });
     }
 
@@ -1124,8 +1124,8 @@ export default {
     if (!tableMatch || !ALLOWED_TABLES.has(tableMatch[1])) {
       return new Response('Forbidden', { status: 403, headers: corsWrite(request) });
     }
-    if (request.method === 'DELETE' && !url.searchParams.has('id')) {
-      return new Response('DELETE requires an id filter', { status:400, headers:corsWrite(request) });
+    if ((request.method === 'DELETE' || request.method === 'PATCH') && !url.searchParams.has('id')) {
+      return new Response(request.method + ' requires an id filter', { status:400, headers:corsWrite(request) });
     }
 
     const supaHeaders = {
@@ -1139,7 +1139,7 @@ export default {
     const supaRes = await fetch(SUPABASE_URL + url.pathname + url.search, {
       method: request.method,
       headers: supaHeaders,
-      body: request.method === 'POST' ? await request.arrayBuffer() : undefined,
+      body: (request.method === 'POST' || request.method === 'PATCH') ? await request.arrayBuffer() : undefined,
     });
 
     const body = await supaRes.arrayBuffer();
