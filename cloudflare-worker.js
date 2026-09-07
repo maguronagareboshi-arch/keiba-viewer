@@ -682,6 +682,19 @@ async function recordT10Coverage(env, captureResult) {
   return { rows:rows.length };
 }
 
+// §121(2026-09-07) 新DB(nar-official)の**管理者だけの表**を service key で読む。⛔閲覧者経路には出さない。
+//   鍵は env.NAR_SUPABASE_SERVICE_KEY(worker-deploy.yml が GitHub Secret から wrangler secret put で入れる)。
+const NAR_SUPABASE_URL = 'https://qgsnsdjvzzeazbazjlwa.supabase.co';
+async function narServiceGet(env, path) {
+  if (!env.NAR_SUPABASE_SERVICE_KEY) throw new Error('NAR_SUPABASE_SERVICE_KEY is not set');
+  const response = await fetch(NAR_SUPABASE_URL + path, { headers:{
+    'apikey':env.NAR_SUPABASE_SERVICE_KEY, 'Authorization':'Bearer ' + env.NAR_SUPABASE_SERVICE_KEY,
+  }});
+  if (!response.ok) throw new Error('nar read failed: ' + response.status + ' ' + (await response.text()).slice(0,200));
+  const body = await response.json();
+  return Array.isArray(body) ? body : [];
+}
+
 async function supabaseServiceGet(env, path) {
   const response = await fetch(SUPABASE_URL + path, { headers:{
     'apikey':env.SUPABASE_SERVICE_KEY, 'Authorization':'Bearer ' + env.SUPABASE_SERVICE_KEY,
@@ -1060,6 +1073,36 @@ export default {
       if (!/^\d{1,12}$/.test(code)) return new Response('Invalid horse id', { status:400, headers:corsWrite(request) });
       try {
         const rows = await supabaseServiceGet(env, '/rest/v1/chihou_danwa?select=race_id,umaban,headline,trainer,comment&horse_id=eq.' + code + '&order=race_id.desc&limit=60');
+        return new Response(JSON.stringify({ ok:true, rows }), {
+          status:200, headers:Object.assign({'Content-Type':'application/json','Cache-Control':'no-store'}, corsWrite(request)),
+        });
+      } catch (error) {
+        return new Response(JSON.stringify({ ok:false, error:String(error && error.message || error) }), {
+          status:502, headers:Object.assign({'Content-Type':'application/json'}, corsWrite(request)),
+        });
+      }
+    }
+
+    // §121 福ちゃん競馬新聞(高知)の陣営談話= 私的利用・管理者(X-Write-Token)だけ。表 kochi_paper_talks は
+    //   新DB(nar-official)にあり anon は select も不可。引き方は 3 つだけ(日+R / 日だけ / 馬名)。列と並びは固定。
+    if (request.method === 'GET' && url.pathname === '/rpc/admin-kochi-paper') {
+      const cols = 'paper_date,race_no,umaban,horse_name,talk,matched,source_file';
+      const date = String(url.searchParams.get('date') || '');
+      const raceNo = String(url.searchParams.get('race_no') || '');
+      const horse = String(url.searchParams.get('horse') || '');
+      let path;
+      if (horse) {
+        if (horse.length > 40 || /[,()"'&?%\\]/.test(horse)) return new Response('Invalid horse', { status:400, headers:corsWrite(request) });
+        path = '/rest/v1/kochi_paper_talks?select=' + cols + '&horse_name=eq.' + encodeURIComponent(horse) + '&order=paper_date.desc,race_no.asc&limit=200';
+      } else if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        if (raceNo && !/^\d{1,2}$/.test(raceNo)) return new Response('Invalid race no', { status:400, headers:corsWrite(request) });
+        path = '/rest/v1/kochi_paper_talks?select=' + cols + '&paper_date=eq.' + date +
+          (raceNo ? '&race_no=eq.' + raceNo : '') + '&order=race_no.asc,umaban.asc&limit=400';
+      } else {
+        return new Response('Invalid query', { status:400, headers:corsWrite(request) });
+      }
+      try {
+        const rows = await narServiceGet(env, path);
         return new Response(JSON.stringify({ ok:true, rows }), {
           status:200, headers:Object.assign({'Content-Type':'application/json','Cache-Control':'no-store'}, corsWrite(request)),
         });
