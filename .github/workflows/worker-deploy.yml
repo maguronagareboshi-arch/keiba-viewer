@@ -74,13 +74,20 @@ jobs:
       # ⛔accountId は**任意**。トークンが1つのアカウントにしか使えないなら wrangler が自分で決める。
       #   複数アカウントを持っていて wrangler が迷ったときだけ CLOUDFLARE_ACCOUNT_ID を足せばよい
       #   (そのときは失敗ログにアカウントの一覧と ID が出る)。
+      # 2026-09-08(#531・統合ビューア): GitHub Secret ADMIN_WRITE_TOKEN があるときだけ、同じ値を Worker の
+      #   Secret ADMIN_WRITE_TOKEN にも入れる(wrangler-action の secrets 入力= `wrangler secret put` 相当)。
+      #   統合ビューアの高知 結果自動保存(nar-jobs の KOCHI_WRITE_TOKEN)と値をそろえるため。無ければ今までどおり触らない。
       - name: wrangler deploy
         uses: cloudflare/wrangler-action@v3
+        env:
+          ADMIN_WRITE_TOKEN: ${{ secrets.ADMIN_WRITE_TOKEN }}
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}   # 未設定なら空= wrangler が自分で決める
           packageManager: pnpm                                # ⛔上で入れたものと揃える(既定の自動判定に任せない)
           command: deploy
+          secrets: |
+            ADMIN_WRITE_TOKEN
 
       # ⛔出したあとに同じ検査をして、変わったことを数で見せる
       - name: 出したあとの状態を見る(検算)
