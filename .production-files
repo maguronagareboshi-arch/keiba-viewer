@@ -1,6 +1,7 @@
 # 高知プロジェクト専用。門別・大井の公開物は「他場」プロジェクトが所有する。
 .nojekyll
 CNAME
+ads.txt
 data/3f/
 data/kochi-ai-v3-constants.json
 data/kochi-ai-v3-p3.json
