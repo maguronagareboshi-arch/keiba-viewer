@@ -53,7 +53,7 @@ const path = require('path');
   assert.strictEqual(moduleLoads,1,'AI insights module must be loaded before its cloud entry point is called');
   assert.strictEqual(injectedToken,'admin-secret');
   assert.strictEqual(timezone,'Asia/Tokyo');
-  assert(targetUrl.startsWith('https://yukochi.com/?sim=1&date=2026%2F08%2F01'));
+  assert(targetUrl.startsWith('https://kochi.yukochi.com/?sim=1&date=2026%2F08%2F01'));
   assert.strictEqual(audit.id,'precompute_31_20260801');
   assert.strictEqual(audit.baba_code,'31');
   assert.strictEqual(audit.status,'success');

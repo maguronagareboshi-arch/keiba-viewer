@@ -16,7 +16,9 @@ import puppeteer from '@cloudflare/puppeteer';
 const SUPABASE_URL = 'https://jcrcftvrsgmsewwdkqha.supabase.co';
 const ALLOWED_TABLES = new Set(['keiba_races', 'keiba_horses', 'keiba_day_settings', 'keiba_odds_snapshots', 'keiba_market_checkpoints', 'keiba_ai_predictions', 'keiba_value_t10_ledger', 'keiba_official_histories', 'site_news']);   // site_news= 統合ビューア §93 お知らせ(2026-09-04)
 // Allowed browser origins for the write proxy (custom domain yukochi.com + legacy github.io).
+// 2026-09-19: 高知ビューアは kochi.yukochi.com へ移り、根 yukochi.com は統合ビューア(本体)になる
 const ALLOWED_ORIGINS = new Set([
+  'https://kochi.yukochi.com',
   'https://yukochi.com',
   'https://www.yukochi.com',
   'https://maguronagareboshi-arch.github.io',
@@ -257,7 +259,7 @@ async function getSharedHorseHistory(env, lineage, horseName) {
 // Build CORS headers for the write proxy, echoing the request Origin when it is allow-listed.
 function corsWrite(request) {
   const origin = request.headers.get('Origin') || '';
-  const allow = ALLOWED_ORIGINS.has(origin) ? origin : 'https://yukochi.com';
+  const allow = ALLOWED_ORIGINS.has(origin) ? origin : 'https://kochi.yukochi.com';
   return {
     'Access-Control-Allow-Origin': allow,
     'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
@@ -270,7 +272,7 @@ const CORS_ANY = { 'Access-Control-Allow-Origin': '*' };
 const BABA = '31';               // Kochi
 const CAPTURE_MINUTES = new Set([10, 5]); // Low-volume, model-required checkpoints only.
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
-const CLOUD_PRECOMPUTE_URL = 'https://yukochi.com/';
+const CLOUD_PRECOMPUTE_URL = 'https://kochi.yukochi.com/';
 const CLOUD_PRECOMPUTE_RETRY_MS = 60 * 60 * 1000;
 
 // Exact server-side port of kochi-umaren-distortion-shadow-v1.  Ability
